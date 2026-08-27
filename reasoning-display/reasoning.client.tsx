@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Icon,
   type PluginSurfaceProps,
   type PluginTimelineItemProps,
   useAgent,
@@ -285,7 +286,7 @@ function ThinkingBody({ text, styles }: { text: string; styles: MarkdownStyles }
 function useMarkdownStyles(theme: PluginTimelineItemProps["theme"]): MarkdownStyles {
   return useMemo(
     () => ({
-      container: { gap: 6, padding: 10 },
+      container: { gap: 6, paddingBottom: 10, paddingHorizontal: 13, paddingTop: 4 },
       paragraph: { color: theme.colors.foreground, fontSize: 14, lineHeight: 20 },
       heading: { color: theme.colors.foreground, fontSize: 15, fontWeight: "700", lineHeight: 22 },
       bullet: { color: theme.colors.foregroundMuted, minWidth: 24, lineHeight: 20 },
@@ -343,31 +344,88 @@ export function ReasoningTimelineItem({
   const isExpanded = isStreaming || expanded;
   const cardStyle = useMemo(
     () => ({
-      borderColor: theme.colors.border,
-      borderRadius: 8,
-      borderWidth: 1,
-      backgroundColor: theme.colors.surface1,
+      marginHorizontal: -13,
       marginVertical: 4,
     }),
-    [theme],
+    [],
+  );
+  const pressableStyle = useMemo(
+    () => ({
+      borderColor: "transparent",
+      borderRadius: 8,
+      borderWidth: 1,
+      overflow: "hidden" as const,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    }),
+    [],
+  );
+  const pressableExpandedStyle = useMemo(
+    () => ({
+      backgroundColor: theme.colors.surface1,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
+      borderColor: theme.colors.border,
+    }),
+    [theme.colors.border, theme.colors.surface1],
   );
   const headerStyle = useMemo(
     () => ({
       alignItems: "center" as const,
       flexDirection: "row" as const,
-      justifyContent: "space-between" as const,
-      paddingHorizontal: 10,
-      paddingVertical: 8,
+    }),
+    [],
+  );
+  const labelRowStyle = useMemo(
+    () => ({
+      alignItems: "center" as const,
+      flex: 1,
+      flexDirection: "row" as const,
+      overflow: "hidden" as const,
+    }),
+    [],
+  );
+  const iconBadgeStyle = useMemo(
+    () => ({
+      alignItems: "center" as const,
+      borderRadius: 11,
+      height: 22,
+      justifyContent: "center" as const,
+      marginRight: 4,
+      width: 22,
     }),
     [],
   );
   const headerTitleStyle = useMemo(
-    () => ({ color: theme.colors.foreground, fontWeight: "700" as const }),
+    () => ({ color: theme.colors.foregroundMuted, fontSize: 14 }),
+    [theme.colors.foregroundMuted],
+  );
+  const headerTitleActiveStyle = useMemo(
+    () => ({ color: theme.colors.foreground }),
     [theme.colors.foreground],
   );
-  const headerIconStyle = useMemo(
-    () => ({ color: theme.colors.foregroundMuted }),
-    [theme.colors.foregroundMuted],
+  const chevronStyle = useMemo(
+    () => ({
+      flexShrink: 0 as const,
+      marginLeft: -4,
+      transform: isExpanded
+        ? [{ scale: 1.3 }, { rotate: "90deg" as const }]
+        : [{ scale: 1.3 }],
+    }),
+    [isExpanded],
+  );
+  const detailStyle = useMemo(
+    () => ({
+      borderBottomLeftRadius: 8,
+      borderBottomRightRadius: 8,
+      borderColor: theme.colors.border,
+      borderWidth: 1,
+      borderTopWidth: 0,
+      flexShrink: 1,
+      minWidth: 0,
+      overflow: "hidden" as const,
+    }),
+    [theme.colors.border],
   );
 
   return (
@@ -376,12 +434,29 @@ export function ReasoningTimelineItem({
         accessibilityLabel={`${isExpanded ? "Collapse" : "Expand"} thinking`}
         accessibilityRole="button"
         onPress={toggleExpanded}
-        style={headerStyle}
+        style={[pressableStyle, isExpanded && pressableExpandedStyle]}
       >
-        <Text style={headerTitleStyle}>Thinking</Text>
-        <Text style={headerIconStyle}>{isExpanded ? "⌃" : "⌄"}</Text>
+        <View style={headerStyle}>
+          <View style={labelRowStyle}>
+            <View style={iconBadgeStyle}>
+              <Icon
+                color={isExpanded ? theme.colors.foreground : theme.colors.foregroundMuted}
+                name="Brain"
+                size={18}
+              />
+            </View>
+            <Text style={[headerTitleStyle, isExpanded && headerTitleActiveStyle]}>Thinking</Text>
+          </View>
+          <View style={chevronStyle}>
+            <Icon color={theme.colors.foregroundMuted} name="ChevronRight" size={12} />
+          </View>
+        </View>
       </Pressable>
-      {isExpanded ? <ThinkingBody text={item.data.text} styles={styles} /> : null}
+      {isExpanded ? (
+        <View style={detailStyle}>
+          <ThinkingBody text={item.data.text} styles={styles} />
+        </View>
+      ) : null}
     </View>
   );
 }
