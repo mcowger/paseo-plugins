@@ -22,6 +22,7 @@ import {
 import type { z } from "zod";
 import {
   DEFAULT_REASONING_DISPLAY_MODE,
+  getLatestReasoningQueryKey,
   getReasoningExpansionState,
   getReasoningSettingsRpc,
   reasoningItemDataSchema,
@@ -33,7 +34,6 @@ import {
 
 const TIMELINE_PAGE_LIMIT = 100;
 const MAX_REASONING_HEIGHT = 400;
-const LATEST_REASONING_QUERY_KEY = ["reasoning-display", "latest-reasoning"] as const;
 const DISPLAY_MODES = reasoningDisplayModeSchema.options;
 const DISPLAY_MODE_LABELS: Record<ReasoningDisplayMode, string> = {
   collapsed: "Collapsed",
@@ -110,11 +110,10 @@ function useReasoningMode(): ReasoningDisplayMode {
 function useIsLatestReasoning(agentId: string, timestamp: Date): boolean {
   const paseo = usePaseo();
   const agent = useMemo(() => paseo.agents.ref(agentId), [agentId, paseo]);
-  const agentUpdatedAt = useAgent(agentId, ({ updatedAt }) => updatedAt);
   const queryClient = useQueryClient();
-  const queryKey = useMemo(() => [...LATEST_REASONING_QUERY_KEY, agentId] as const, [agentId]);
+  const queryKey = useMemo(() => getLatestReasoningQueryKey(agentId), [agentId]);
   const { data } = useQuery({
-    queryKey: [...queryKey, agentUpdatedAt] as const,
+    queryKey,
     queryFn: () => findLatestReasoning(agent),
     staleTime: 250,
   });
@@ -345,7 +344,7 @@ export function ReasoningTimelineItem({
   const cardStyle = useMemo(
     () => ({
       marginHorizontal: -13,
-      marginVertical: 4,
+      marginVertical: 2,
     }),
     [],
   );
@@ -356,7 +355,7 @@ export function ReasoningTimelineItem({
       borderWidth: 1,
       overflow: "hidden" as const,
       paddingHorizontal: 8,
-      paddingVertical: 4,
+      paddingVertical: 0,
     }),
     [],
   );
@@ -388,16 +387,16 @@ export function ReasoningTimelineItem({
   const iconBadgeStyle = useMemo(
     () => ({
       alignItems: "center" as const,
-      borderRadius: 11,
-      height: 22,
+      borderRadius: 10,
+      height: 20,
       justifyContent: "center" as const,
       marginRight: 4,
-      width: 22,
+      width: 20,
     }),
     [],
   );
   const headerTitleStyle = useMemo(
-    () => ({ color: theme.colors.foregroundMuted, fontSize: 14 }),
+    () => ({ color: theme.colors.foregroundMuted, fontSize: 14, lineHeight: 20 }),
     [theme.colors.foregroundMuted],
   );
   const headerTitleActiveStyle = useMemo(
@@ -442,7 +441,7 @@ export function ReasoningTimelineItem({
               <Icon
                 color={isExpanded ? theme.colors.foreground : theme.colors.foregroundMuted}
                 name="Brain"
-                size={18}
+                size={16}
               />
             </View>
             <Text style={[headerTitleStyle, isExpanded && headerTitleActiveStyle]}>Thinking</Text>

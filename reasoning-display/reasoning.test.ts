@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatThinkingText,
+  getLatestReasoningQueryKey,
   getReasoningExpansionState,
   transformReasoning,
 } from "./reasoning.shared";
@@ -39,5 +40,13 @@ describe("reasoning display timeline plugin", () => {
     expect(getReasoningExpansionState(false, true)).toBe(true);
     expect(getReasoningExpansionState(true, false)).toBe(true);
     expect(getReasoningExpansionState(false, false)).toBe(false);
+  });
+
+  it("uses a stable query key for latest reasoning", () => {
+    expect(getLatestReasoningQueryKey("agent-1")).toEqual([
+      "reasoning-display",
+      "latest-reasoning",
+      "agent-1",
+    ]);
   });
 });
