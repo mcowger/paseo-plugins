@@ -32,6 +32,13 @@ export const REASONING_RENDERER_KIND = "reasoning-display";
 export const REASONING_RENDERER_VERSION = 1;
 export const reasoningSettingsQueryKey = ["reasoning-display", "settings"] as const;
 
+export function getReasoningExpansionState(
+  preferredExpanded: boolean,
+  isStreaming: boolean,
+): boolean {
+  return preferredExpanded || isStreaming;
+}
+
 export function formatThinkingText(text: string): string {
   if (!text || typeof text !== "string") return "";
 

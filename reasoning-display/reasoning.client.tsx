@@ -21,6 +21,7 @@ import {
 import type { z } from "zod";
 import {
   DEFAULT_REASONING_DISPLAY_MODE,
+  getReasoningExpansionState,
   getReasoningSettingsRpc,
   reasoningItemDataSchema,
   reasoningSettingsQueryKey,
@@ -328,18 +329,18 @@ export function ReasoningTimelineItem({
 }: PluginTimelineItemProps<ReasoningItemData>) {
   const mode = useReasoningMode();
   const isLatest = useIsLatestReasoning(agentId, timestamp);
+  const agentStatus = useAgent(agentId, ({ status }) => status);
+  const isStreaming = agentStatus === "running" && isLatest;
   const preferredExpanded = mode === "expanded" || (mode === "expand_last" && isLatest);
-  const [expanded, setExpanded] = useState(false);
-  const previousPreferredExpanded = useRef(preferredExpanded);
+  const [expanded, setExpanded] = useState(preferredExpanded || isStreaming);
   const styles = useMarkdownStyles(theme);
 
   useEffect(() => {
-    if (previousPreferredExpanded.current === preferredExpanded) return;
-    previousPreferredExpanded.current = preferredExpanded;
-    setExpanded(preferredExpanded);
-  }, [preferredExpanded]);
+    setExpanded(getReasoningExpansionState(preferredExpanded, isStreaming));
+  }, [isStreaming, preferredExpanded]);
 
   const toggleExpanded = useCallback(() => setExpanded((value) => !value), []);
+  const isExpanded = isStreaming || expanded;
   const cardStyle = useMemo(
     () => ({
       borderColor: theme.colors.border,
@@ -372,15 +373,15 @@ export function ReasoningTimelineItem({
   return (
     <View style={cardStyle}>
       <Pressable
-        accessibilityLabel={`${expanded ? "Collapse" : "Expand"} thinking`}
+        accessibilityLabel={`${isExpanded ? "Collapse" : "Expand"} thinking`}
         accessibilityRole="button"
         onPress={toggleExpanded}
         style={headerStyle}
       >
         <Text style={headerTitleStyle}>Thinking</Text>
-        <Text style={headerIconStyle}>{expanded ? "⌃" : "⌄"}</Text>
+        <Text style={headerIconStyle}>{isExpanded ? "⌃" : "⌄"}</Text>
       </Pressable>
-      {expanded ? <ThinkingBody text={item.data.text} styles={styles} /> : null}
+      {isExpanded ? <ThinkingBody text={item.data.text} styles={styles} /> : null}
     </View>
   );
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatThinkingText, transformReasoning } from "./reasoning.shared";
+import {
+  formatThinkingText,
+  getReasoningExpansionState,
+  transformReasoning,
+} from "./reasoning.shared";
 
 function reasoning(text: string) {
   return { type: "reasoning" as const, text };
@@ -29,5 +33,11 @@ describe("reasoning display timeline plugin", () => {
   it("does not split ordinary prose bold spans", () => {
     const text = "Use **AgentStreamView** and **MarkdownRenderer** for this change.";
     expect(formatThinkingText(text)).toBe(text);
+  });
+
+  it("keeps the latest reasoning block expanded until a newer block starts", () => {
+    expect(getReasoningExpansionState(false, true)).toBe(true);
+    expect(getReasoningExpansionState(true, false)).toBe(true);
+    expect(getReasoningExpansionState(false, false)).toBe(false);
   });
 });
