@@ -7,12 +7,20 @@ import {
   usePaseo,
   useRpc,
 } from "@getpaseo/plugin";
-import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Pressable,
   ScrollView,
   Text,
   View,
+  type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type StyleProp,
@@ -34,6 +42,7 @@ import {
 
 const TIMELINE_PAGE_LIMIT = 100;
 const MAX_REASONING_HEIGHT = 400;
+const THINKING_BODY_LOG = "[reasoning-display] thinking body";
 const DISPLAY_MODES = reasoningDisplayModeSchema.options;
 const DISPLAY_MODE_LABELS: Record<ReasoningDisplayMode, string> = {
   collapsed: "Collapsed",
@@ -71,6 +80,21 @@ interface ReasoningSettingsStyles {
   optionText: StyleProp<TextStyle>;
   selectedOptionText: StyleProp<TextStyle>;
   status: StyleProp<TextStyle>;
+}
+
+let nextThinkingBodyInstanceId = 1;
+
+function logThinkingBody(
+  event: string,
+  agentId: string,
+  itemTimestamp: string,
+  instanceId: number,
+  textLength: number,
+  dimensions?: string,
+): void {
+  console.log(
+    `${THINKING_BODY_LOG} event=${event} instanceId=${instanceId} agentId=${agentId} itemTimestamp=${itemTimestamp} textLength=${textLength}${dimensions ? ` ${dimensions}` : ""}`,
+  );
 }
 
 async function findLatestReasoning(agent: PaseoAgent): Promise<LatestReasoning | null> {
@@ -255,23 +279,69 @@ function MarkdownContent({ text, styles }: { text: string; styles: MarkdownStyle
   return <View style={styles.container}>{blocks}</View>;
 }
 
-function ThinkingBody({ text, styles }: { text: string; styles: MarkdownStyles }) {
+function ThinkingBody({
+  agentId,
+  itemTimestamp,
+  text,
+  styles,
+}: {
+  agentId: string;
+  itemTimestamp: string;
+  text: string;
+  styles: MarkdownStyles;
+}) {
   const scrollRef = useRef<ScrollView | null>(null);
   const isNearBottom = useRef(true);
+  const instanceIdRef = useRef<number | null>(null);
+  const initialMetadata = useRef({ agentId, itemTimestamp, textLength: text.length });
+  if (instanceIdRef.current === null) instanceIdRef.current = nextThinkingBodyInstanceId++;
+  const instanceId = instanceIdRef.current;
+
+  useEffect(() => {
+    const { agentId, itemTimestamp, textLength } = initialMetadata.current;
+    logThinkingBody("mount", agentId, itemTimestamp, instanceId, textLength);
+    return () => {
+      logThinkingBody("unmount", agentId, itemTimestamp, instanceId, textLength);
+    };
+  }, [instanceId]);
+
+  useEffect(() => {
+    logThinkingBody("text-update", agentId, itemTimestamp, instanceId, text.length);
+  }, [agentId, instanceId, itemTimestamp, text.length]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     isNearBottom.current = layoutMeasurement.height + contentOffset.y >= contentSize.height - 32;
   }, []);
-  const handleContentSizeChange = useCallback(() => {
+  const handleContentSizeChange = useCallback((contentWidth: number, contentHeight: number) => {
+    logThinkingBody(
+      "content-size",
+      agentId,
+      itemTimestamp,
+      instanceId,
+      text.length,
+      `contentWidth=${contentWidth} contentHeight=${contentHeight}`,
+    );
     if (isNearBottom.current) scrollRef.current?.scrollToEnd({ animated: false });
-  }, []);
+  }, [agentId, instanceId, itemTimestamp, text.length]);
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    const { height, width } = event.nativeEvent.layout;
+    logThinkingBody(
+      "viewport-layout",
+      agentId,
+      itemTimestamp,
+      instanceId,
+      text.length,
+      `width=${width} height=${height}`,
+    );
+  }, [agentId, instanceId, itemTimestamp, text.length]);
 
   return (
     <ScrollView
       ref={scrollRef}
       nestedScrollEnabled
       onContentSizeChange={handleContentSizeChange}
+      onLayout={handleLayout}
       onScroll={handleScroll}
       scrollEventThrottle={16}
       showsVerticalScrollIndicator
@@ -453,7 +523,12 @@ export function ReasoningTimelineItem({
       </Pressable>
       {isExpanded ? (
         <View style={detailStyle}>
-          <ThinkingBody text={item.data.text} styles={styles} />
+          <ThinkingBody
+            agentId={agentId}
+            itemTimestamp={timestamp.toISOString()}
+            text={item.data.text}
+            styles={styles}
+          />
         </View>
       ) : null}
     </View>
