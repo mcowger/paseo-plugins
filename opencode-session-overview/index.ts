@@ -11,7 +11,7 @@ export default function contribute(plugin: PluginContext) {
     Component: OpenCodeSessionOverviewPanel,
   });
   plugin.addCommandCenterItem({
-    id: "opencode-session-overview.open",
+    id: "opencode-session-overview-open",
     title: "Open OpenCode session overview",
     icon: "Activity",
     keywords: ["opencode", "session", "usage", "context"],
