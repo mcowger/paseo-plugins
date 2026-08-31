@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="152" viewBox="0 0 1024 152" role="img" aria-labelledby="title desc">
+  <title id="title">Command Center entry for the OpenCode session overview</title>
+  <desc id="desc">The Command Center search shows the OpenCode session overview command.</desc>
+  <rect width="1024" height="152" fill="#0d1117"/>
+  <rect x="6" y="0" width="1018" height="62" fill="#0d1117" stroke="#30363d"/>
+  <text x="32" y="39" fill="#7d8590" font-family="ui-sans-serif, system-ui, sans-serif" font-size="16" letter-spacing=".4">opencode-session-overview</text>
+  <rect x="6" y="63" width="1018" height="57" fill="#1b2028"/>
+  <path d="M34 94h4l4-13 6 24 6-18 5 7h7" fill="none" stroke="#8b949e" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+  <text x="78" y="98" fill="#e6edf3" font-family="ui-sans-serif, system-ui, sans-serif" font-size="20">Open OpenCode session overview</text>
+  <path d="M6 120h1018" stroke="#21262d"/>
+</svg>
