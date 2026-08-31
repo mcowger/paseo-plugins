@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="337" height="768" viewBox="0 0 337 768" role="img" aria-labelledby="title desc">
+  <title id="title">OpenCode session activity pane</title>
+  <desc id="desc">An OpenCode session overview with session, project, tasks, and context source cards.</desc>
+  <rect width="337" height="768" fill="#0d1117"/>
+  <rect x="7" y="2" width="126" height="24" rx="5" fill="#1b2028"/>
+  <path d="M14 14h2l2-5 3 10 3-7 3 3h3" fill="none" stroke="#8b949e" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+  <text x="33" y="17" fill="#8b949e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="9">OpenCode session</text>
+  <text x="146" y="18" fill="#58a6ff" font-family="ui-sans-serif, system-ui, sans-serif" font-size="16">+</text>
+  <text x="306" y="18" fill="#8b949e" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14">⋯</text>
+  <path d="M307 10h6v6M313 10l-6 6" fill="none" stroke="#58a6ff" stroke-width="1"/>
+  <text x="17" y="65" fill="#e6edf3" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700">When using the opencode-</text>
+  <text x="17" y="86" fill="#e6edf3" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700">session-overview plugin and</text>
+  <text x="17" y="107" fill="#e6edf3" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700">clicking</text>
+  <text x="17" y="122" fill="#7d8590" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9">/home/matt.cowger/workspace/paseo-worktrees/0e...</text>
+  <path d="M312 52h3l3-9 4 17 4-13 4 5h3" fill="none" stroke="#56d364" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <rect x="17" y="131" width="308" height="126" rx="8" fill="#1b2028" stroke="#3d444d"/>
+    <text x="29" y="151" fill="#e6edf3" font-size="13" font-weight="700">Session</text>
+    <text x="286" y="151" fill="#56d364" font-size="12">idle</text>
+    <text x="29" y="174" fill="#7d8590" font-size="10">Context</text><text x="242" y="174" fill="#e6edf3" font-size="11">3% · 28.2k</text>
+    <text x="29" y="195" fill="#7d8590" font-size="10">Last turn cost</text><text x="280" y="195" fill="#e6edf3" font-size="11">$0.02</text>
+    <text x="29" y="216" fill="#7d8590" font-size="10">Last turn tokens</text><text x="259" y="216" fill="#e6edf3" font-size="11">1.1k · 13</text>
+    <text x="29" y="237" fill="#7d8590" font-size="10">OpenCode session</text><text x="229" y="237" fill="#e6edf3" font-size="11">ses_fa67af5d</text>
+
+    <rect x="17" y="266" width="308" height="180" rx="8" fill="#1b2028" stroke="#3d444d"/>
+    <text x="29" y="287" fill="#e6edf3" font-size="13" font-weight="700">Project</text>
+    <text x="29" y="310" fill="#7d8590" font-size="10">Repository</text><text x="221" y="310" fill="#e6edf3" font-size="11">paseo-plugins</text>
+    <text x="29" y="331" fill="#7d8590" font-size="10">Directory</text><text x="155" y="331" fill="#e6edf3" font-size="11">/home/matt.cowger/workspace/pas...</text>
+    <text x="29" y="352" fill="#7d8590" font-size="10">Branch</text><text x="121" y="352" fill="#e6edf3" font-size="11">fix-opencode-session-overvie...</text>
+    <text x="29" y="373" fill="#7d8590" font-size="10">Ahead / behind</text><text x="257" y="373" fill="#e6edf3" font-size="11">↑0 · ↓0</text>
+    <text x="29" y="394" fill="#7d8590" font-size="10">Workspace diff</text><text x="301" y="394" fill="#e6edf3" font-size="11">—</text>
+
+    <rect x="17" y="455" width="308" height="115" rx="8" fill="#1b2028" stroke="#3d444d"/>
+    <text x="29" y="476" fill="#e6edf3" font-size="13" font-weight="700">Tasks</text><text x="292" y="476" fill="#8b949e" font-size="12">3/3</text>
+    <text x="29" y="499" fill="#56d364" font-size="12">✓</text><text x="46" y="499" fill="#8b949e" font-size="11">Trace the plugin install flow and</text>
+    <text x="46" y="513" fill="#8b949e" font-size="11">Command Center item registration</text>
+    <text x="29" y="534" fill="#56d364" font-size="12">✓</text><text x="46" y="534" fill="#8b949e" font-size="11">Implement the smallest fix and add</text>
+    <text x="46" y="548" fill="#8b949e" font-size="11">regression coverage if appropriate</text>
+    <text x="29" y="562" fill="#56d364" font-size="12">✓</text>
+
+    <rect x="17" y="579" width="308" height="41" rx="8" fill="#1b2028" stroke="#3d444d"/>
+    <text x="29" y="604" fill="#e6edf3" font-size="13" font-weight="700">Context sources</text><text x="159" y="604" fill="#8b949e" font-size="12">7 skills · 15 commands</text>
+  </g>
+</svg>
