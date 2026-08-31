@@ -81,6 +81,21 @@ describe("subagent activity selectors", () => {
     expect(nodes.map(({ agent: item }) => item.id)).toEqual(["b"]);
   });
 
+  it("ignores empty parent labels", () => {
+    const nodes = getDescendantTree(
+      [
+        { ...agent("empty", null, "2026-08-31T01:00:00.000Z"), labels: { [PARENT_LABEL]: "  " } },
+        {
+          ...agent("non-string", null, "2026-08-31T02:00:00.000Z"),
+          labels: { [PARENT_LABEL]: 42 } as unknown as Record<string, string>,
+        },
+      ],
+      "parent",
+    );
+
+    expect(nodes).toEqual([]);
+  });
+
   it("orders tool calls newest first and caps the result", () => {
     const entries = Array.from({ length: 12 }, (_, index) =>
       toolCall(

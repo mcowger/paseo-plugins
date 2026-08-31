@@ -4,11 +4,11 @@ import type {
   AgentUsage,
   ToolCallTimelineItem,
 } from "@getpaseo/protocol/agent-types";
-import { getParentAgentIdFromLabels } from "@getpaseo/protocol/agent-labels";
 
 export const MAX_RECENT_TOOL_CALLS = 10;
 
 const DISPLAY_NAME_FALLBACK = "Unnamed subagent";
+const PARENT_AGENT_ID_LABEL = "paseo.parent-agent-id";
 const TOOL_SUMMARY_LIMIT = 160;
 
 export type AgentRecord = PaseoAgent;
@@ -48,7 +48,8 @@ export interface AgentTreeNode {
 }
 
 export function getParentId(agent: AgentRecord): string | null {
-  return getParentAgentIdFromLabels(agent.labels);
+  const value = agent.labels?.[PARENT_AGENT_ID_LABEL];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 export function isArchived(agent: AgentRecord): boolean {
