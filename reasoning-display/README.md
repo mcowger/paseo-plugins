@@ -1,17 +1,25 @@
-# Reasoning display plugin
+# Reasoning display
 
-This plugin replaces Paseo's built-in reasoning rows with a collapsible Markdown renderer. It
-supports three display modes:
+This Paseo plugin replaces built-in agent reasoning blocks with an expandable Markdown renderer matching Paseo's native tool-call cards.
 
-- **Collapsed** — reasoning starts collapsed.
-- **Expand last** — only the newest reasoning row starts expanded.
-- **Always expand** — every reasoning row starts expanded.
+## Features
 
-The plugin adds a **Reasoning Display** sidebar surface for changing the mode. The selection is
-stored in `$PASEO_HOME/plugin-data/reasoning-display.json` through the plugin's own RPC handler.
+- **Paced streaming**: Renders thinking text smoothly as it streams using `@getpaseo/plugin/react-native`'s `useRevealedText`.
+- **Collapsible timeline cards**: Seamlessly toggle thinking blocks open or closed with matching monospace typography and attached container styling.
+- **Three display modes**:
+  - **Expand last** (default) — only the newest reasoning block starts expanded; previous blocks automatically stay collapsed.
+  - **Collapsed** — all reasoning blocks start collapsed.
+  - **Always expand** — every reasoning block starts fully expanded.
+- **Persistent configuration**: Settings are managed via the **Reasoning Display** sidebar surface and persisted in `$PASEO_HOME/plugin-data/reasoning-display.json`.
+- **Developer diagnostics**: Includes an optional debug toggle to log timeline render ticks, phase transitions, and state updates to the console for troubleshooting.
 
-The plugin does not modify Paseo core code. Install its dependencies, typecheck it, then install it
-as a directory source:
+## Screenshot
+
+The **Reasoning Display** settings surface lets you configure timeline expansion behavior and diagnostics:
+
+![Reasoning Display settings](./images/reasoning-display.png)
+
+## Install
 
 ```bash
 cd /absolute/path/to/reasoning-display
@@ -21,5 +29,19 @@ paseo plugin install "$PWD"
 paseo plugin reload reasoning-display
 ```
 
-The renderer uses only modules supplied to plugin client bundles. It implements the small Markdown
-subset needed for thinking text instead of importing Paseo's private Markdown components.
+## Settings
+
+1. In the Paseo sidebar, click the **Brain icon** (**Reasoning Display**).
+2. Choose your preferred **Display mode** from the dropdown:
+   - **Expand last**
+   - **Collapsed**
+   - **Always expand**
+3. Optionally toggle **Debug logging** under **Diagnostics** to enable verbose console logging.
+
+## Development
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+```
