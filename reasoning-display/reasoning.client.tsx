@@ -3,16 +3,16 @@ import {
   Icon,
   type PluginSurfaceProps,
   type PluginTimelineItemProps,
-  useAgent,
-  usePaseo,
   useRpc,
 } from "@getpaseo/plugin";
+import { useRevealedText } from "@getpaseo/plugin/react-native";
 import React, {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
@@ -20,7 +20,6 @@ import {
   ScrollView,
   Text,
   View,
-  type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type StyleProp,
@@ -29,34 +28,49 @@ import {
 } from "react-native";
 import type { z } from "zod";
 import {
-  DEFAULT_REASONING_DISPLAY_MODE,
-  getLatestReasoningQueryKey,
-  getReasoningExpansionState,
+  DEFAULT_REASONING_SETTINGS,
   getReasoningSettingsRpc,
   reasoningItemDataSchema,
   reasoningSettingsQueryKey,
-  reasoningDisplayModeSchema,
   setReasoningSettingsRpc,
   type ReasoningDisplayMode,
+  type ReasoningSettings,
 } from "./reasoning.shared";
 
-const TIMELINE_PAGE_LIMIT = 100;
 const MAX_REASONING_HEIGHT = 400;
-const THINKING_BODY_LOG = "[reasoning-display] thinking body";
-const DISPLAY_MODES = reasoningDisplayModeSchema.options;
-const DISPLAY_MODE_LABELS: Record<ReasoningDisplayMode, string> = {
-  collapsed: "Collapsed",
-  expand_last: "Expand last",
-  expanded: "Always expand",
+const DISPLAY_MODE_INFO: Record<
+  ReasoningDisplayMode,
+  { label: string; description: string; icon: string }
+> = {
+  expand_last: {
+    label: "Expand last",
+    description: "Newest reasoning block starts expanded; older blocks stay collapsed.",
+    icon: "Sparkles",
+  },
+  collapsed: {
+    label: "Collapsed",
+    description: "All reasoning blocks start collapsed by default.",
+    icon: "Minimize2",
+  },
+  expanded: {
+    label: "Always expand",
+    description: "Every reasoning block starts fully expanded.",
+    icon: "Maximize2",
+  },
 };
 
-type ReasoningItemData = z.output<typeof reasoningItemDataSchema>;
-type PaseoApi = ReturnType<typeof usePaseo>;
-type PaseoAgent = ReturnType<PaseoApi["agents"]["ref"]>;
+const LOG_PREFIX = "[reasoning-display]";
+let isDebugLoggingEnabled = false;
 
-interface LatestReasoning {
-  timestamp: number;
+function logReasoning(event: string, details: Record<string, unknown>): void {
+  if (!isDebugLoggingEnabled) return;
+  const formatted = Object.entries(details)
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ");
+  console.log(`${LOG_PREFIX} event=${event} ${formatted}`);
 }
+
+type ReasoningItemData = z.output<typeof reasoningItemDataSchema>;
 
 interface MarkdownStyles {
   container: StyleProp<ViewStyle>;
@@ -74,84 +88,74 @@ interface MarkdownStyles {
 interface ReasoningSettingsStyles {
   screen: StyleProp<ViewStyle>;
   title: StyleProp<TextStyle>;
+  sectionTitle: StyleProp<TextStyle>;
   description: StyleProp<TextStyle>;
-  option: StyleProp<ViewStyle>;
-  selectedOption: StyleProp<ViewStyle>;
-  optionText: StyleProp<TextStyle>;
-  selectedOptionText: StyleProp<TextStyle>;
+  fieldGroup: StyleProp<ViewStyle>;
+  fieldLabel: StyleProp<TextStyle>;
+  selectTrigger: StyleProp<ViewStyle>;
+  selectTriggerOpen: StyleProp<ViewStyle>;
+  selectTriggerText: StyleProp<TextStyle>;
+  dropdownMenu: StyleProp<ViewStyle>;
+  dropdownOption: StyleProp<ViewStyle>;
+  dropdownOptionSelected: StyleProp<ViewStyle>;
+  dropdownOptionContent: StyleProp<ViewStyle>;
+  dropdownOptionLabel: StyleProp<TextStyle>;
+  dropdownOptionLabelSelected: StyleProp<TextStyle>;
+  dropdownOptionDescription: StyleProp<TextStyle>;
+  toggleCard: StyleProp<ViewStyle>;
+  toggleCardActive: StyleProp<ViewStyle>;
+  toggleTextContainer: StyleProp<ViewStyle>;
+  toggleTitle: StyleProp<TextStyle>;
+  toggleDescription: StyleProp<TextStyle>;
   status: StyleProp<TextStyle>;
 }
 
-let nextThinkingBodyInstanceId = 1;
+const latestReasoningTimestamps = new Map<string, number>();
+const latestReasoningListeners = new Set<() => void>();
 
-function logThinkingBody(
-  event: string,
-  agentId: string,
-  itemTimestamp: string,
-  instanceId: number,
-  textLength: number,
-  dimensions?: string,
-): void {
-  console.log(
-    `${THINKING_BODY_LOG} event=${event} instanceId=${instanceId} agentId=${agentId} itemTimestamp=${itemTimestamp} textLength=${textLength}${dimensions ? ` ${dimensions}` : ""}`,
-  );
-}
-
-async function findLatestReasoning(agent: PaseoAgent): Promise<LatestReasoning | null> {
-  let page = await agent.timeline.refetch({
-    direction: "tail",
-    limit: TIMELINE_PAGE_LIMIT,
-    projection: "projected",
-  });
-
-  for (;;) {
-    for (let index = page.entries.length - 1; index >= 0; index -= 1) {
-      const entry = page.entries[index];
-      if (entry?.item.type === "reasoning") {
-        return { timestamp: Date.parse(entry.timestamp) };
-      }
+function updateLatestReasoningTimestamp(agentId: string, timestamp: number): void {
+  const current = latestReasoningTimestamps.get(agentId) ?? 0;
+  if (timestamp > current) {
+    latestReasoningTimestamps.set(agentId, timestamp);
+    logReasoning("store-update", { agentId, prev: current, next: timestamp });
+    for (const listener of latestReasoningListeners) {
+      listener();
     }
-
-    if (!page.hasOlder || !page.startCursor) return null;
-    page = await agent.timeline.refetch({
-      direction: "before",
-      cursor: page.startCursor,
-      limit: TIMELINE_PAGE_LIMIT,
-      projection: "projected",
-    });
   }
 }
 
-function useReasoningMode(): ReasoningDisplayMode {
+function subscribeLatestReasoning(listener: () => void): () => void {
+  latestReasoningListeners.add(listener);
+  return () => {
+    latestReasoningListeners.delete(listener);
+  };
+}
+
+function useReasoningSettings(): ReasoningSettings {
   const getSettings = useRpc(getReasoningSettingsRpc);
   const { data } = useQuery({
     queryKey: reasoningSettingsQueryKey,
     queryFn: () => getSettings({}),
   });
-  return data?.mode ?? DEFAULT_REASONING_DISPLAY_MODE;
+  const settings = data ?? DEFAULT_REASONING_SETTINGS;
+  isDebugLoggingEnabled = Boolean(settings.debug);
+  return settings;
 }
 
-function useIsLatestReasoning(agentId: string, timestamp: Date): boolean {
-  const paseo = usePaseo();
-  const agent = useMemo(() => paseo.agents.ref(agentId), [agentId, paseo]);
-  const queryClient = useQueryClient();
-  const queryKey = useMemo(() => getLatestReasoningQueryKey(agentId), [agentId]);
-  const { data } = useQuery({
-    queryKey,
-    queryFn: () => findLatestReasoning(agent),
-    staleTime: 250,
-  });
+function useIsLatestReasoning(agentId: string, timestamp: Date, isStreaming: boolean): boolean {
+  const itemTime = timestamp.getTime();
+  if (isStreaming || itemTime > (latestReasoningTimestamps.get(agentId) ?? 0)) {
+    updateLatestReasoningTimestamp(agentId, itemTime);
+  }
 
-  useEffect(() => {
-    return agent.timeline.subscribe((event) => {
-      if (event.event.type === "timeline") {
-        void queryClient.invalidateQueries({ queryKey });
-      }
-    });
-  }, [agent, queryClient, queryKey]);
+  const latestTime = useSyncExternalStore(
+    subscribeLatestReasoning,
+    () => latestReasoningTimestamps.get(agentId) ?? 0,
+    () => 0,
+  );
 
-  if (!data) return false;
-  return data.timestamp === timestamp.getTime();
+  const isLatest = isStreaming || (latestTime > 0 && itemTime >= latestTime);
+  return isLatest;
 }
 
 function renderInlineMarkdown(text: string, styles: MarkdownStyles): ReactNode[] {
@@ -280,74 +284,44 @@ function MarkdownContent({ text, styles }: { text: string; styles: MarkdownStyle
 }
 
 function ThinkingBody({
-  agentId,
-  itemTimestamp,
   text,
+  phase,
   styles,
 }: {
-  agentId: string;
-  itemTimestamp: string;
   text: string;
+  phase: "streaming" | "complete";
   styles: MarkdownStyles;
 }) {
+  const revealedText = useRevealedText(text, phase);
   const scrollRef = useRef<ScrollView | null>(null);
   const isNearBottom = useRef(true);
-  const instanceIdRef = useRef<number | null>(null);
-  const initialMetadata = useRef({ agentId, itemTimestamp, textLength: text.length });
-  if (instanceIdRef.current === null) instanceIdRef.current = nextThinkingBodyInstanceId++;
-  const instanceId = instanceIdRef.current;
 
   useEffect(() => {
-    const { agentId, itemTimestamp, textLength } = initialMetadata.current;
-    logThinkingBody("mount", agentId, itemTimestamp, instanceId, textLength);
+    logReasoning("body-mount", { phase, textLength: text.length });
     return () => {
-      logThinkingBody("unmount", agentId, itemTimestamp, instanceId, textLength);
+      logReasoning("body-unmount", { phase, textLength: text.length });
     };
-  }, [instanceId]);
-
-  useEffect(() => {
-    logThinkingBody("text-update", agentId, itemTimestamp, instanceId, text.length);
-  }, [agentId, instanceId, itemTimestamp, text.length]);
+  }, [phase, text.length]);
 
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     isNearBottom.current = layoutMeasurement.height + contentOffset.y >= contentSize.height - 32;
   }, []);
-  const handleContentSizeChange = useCallback((contentWidth: number, contentHeight: number) => {
-    logThinkingBody(
-      "content-size",
-      agentId,
-      itemTimestamp,
-      instanceId,
-      text.length,
-      `contentWidth=${contentWidth} contentHeight=${contentHeight}`,
-    );
+  const handleContentSizeChange = useCallback(() => {
     if (isNearBottom.current) scrollRef.current?.scrollToEnd({ animated: false });
-  }, [agentId, instanceId, itemTimestamp, text.length]);
-  const handleLayout = useCallback((event: LayoutChangeEvent) => {
-    const { height, width } = event.nativeEvent.layout;
-    logThinkingBody(
-      "viewport-layout",
-      agentId,
-      itemTimestamp,
-      instanceId,
-      text.length,
-      `width=${width} height=${height}`,
-    );
-  }, [agentId, instanceId, itemTimestamp, text.length]);
+  }, []);
 
   return (
     <ScrollView
       ref={scrollRef}
       nestedScrollEnabled
       onContentSizeChange={handleContentSizeChange}
-      onLayout={handleLayout}
       onScroll={handleScroll}
       scrollEventThrottle={16}
       showsVerticalScrollIndicator
       style={styles.scroll}
     >
-      <MarkdownContent text={text} styles={styles} />
+      <MarkdownContent text={revealedText} styles={styles} />
     </ScrollView>
   );
 }
@@ -355,10 +329,27 @@ function ThinkingBody({
 function useMarkdownStyles(theme: PluginTimelineItemProps["theme"]): MarkdownStyles {
   return useMemo(
     () => ({
-      container: { gap: 6, paddingBottom: 10, paddingHorizontal: 13, paddingTop: 4 },
-      paragraph: { color: theme.colors.foreground, fontSize: 14, lineHeight: 20 },
-      heading: { color: theme.colors.foreground, fontSize: 15, fontWeight: "700", lineHeight: 22 },
-      bullet: { color: theme.colors.foregroundMuted, minWidth: 24, lineHeight: 20 },
+      container: { gap: 6, paddingBottom: 12, paddingHorizontal: 13, paddingTop: 8 },
+      paragraph: {
+        color: theme.colors.foreground,
+        fontSize: 13,
+        lineHeight: 20,
+        fontFamily: "monospace",
+      },
+      heading: {
+        color: theme.colors.foreground,
+        fontSize: 14,
+        fontWeight: "700",
+        lineHeight: 20,
+        fontFamily: "monospace",
+      },
+      bullet: {
+        color: theme.colors.foregroundMuted,
+        minWidth: 20,
+        lineHeight: 20,
+        fontFamily: "monospace",
+        fontSize: 13,
+      },
       bulletRow: { flexDirection: "row", gap: 4, alignItems: "flex-start" },
       quote: {
         borderLeftWidth: 2,
@@ -366,19 +357,24 @@ function useMarkdownStyles(theme: PluginTimelineItemProps["theme"]): MarkdownSty
         color: theme.colors.foregroundMuted,
         paddingLeft: 8,
         lineHeight: 20,
+        fontFamily: "monospace",
+        fontSize: 13,
       },
       code: {
         backgroundColor: theme.colors.surface2,
         color: theme.colors.foreground,
         fontFamily: "monospace",
+        fontSize: 12,
         paddingHorizontal: 3,
       },
       codeBlock: {
-        backgroundColor: theme.colors.surface2,
+        backgroundColor: theme.colors.surface1,
+        borderColor: theme.colors.border,
         borderRadius: 6,
+        borderWidth: 1,
         color: theme.colors.foreground,
         fontFamily: "monospace",
-        fontSize: 13,
+        fontSize: 12,
         lineHeight: 18,
         padding: 10,
       },
@@ -397,20 +393,48 @@ export function ReasoningTimelineItem({
   theme,
   timestamp,
 }: PluginTimelineItemProps<ReasoningItemData>) {
-  const mode = useReasoningMode();
-  const isLatest = useIsLatestReasoning(agentId, timestamp);
-  const agentStatus = useAgent(agentId, ({ status }) => status);
-  const isStreaming = agentStatus === "running" && isLatest;
-  const preferredExpanded = mode === "expanded" || (mode === "expand_last" && isLatest);
-  const [expanded, setExpanded] = useState(preferredExpanded || isStreaming);
+  const settings = useReasoningSettings();
+  const mode = settings.mode;
+  const isStreaming = item.data.phase === "streaming";
+  const isLatest = useIsLatestReasoning(agentId, timestamp, isStreaming);
+  const preferredExpanded =
+    mode === "expanded" || (mode === "expand_last" && isLatest);
+  const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+  const isExpanded = isStreaming || (userExpanded !== null ? userExpanded : preferredExpanded);
   const styles = useMarkdownStyles(theme);
 
   useEffect(() => {
-    setExpanded(getReasoningExpansionState(preferredExpanded, isStreaming));
-  }, [isStreaming, preferredExpanded]);
+    logReasoning("item-mount", {
+      agentId,
+      timestamp: timestamp.toISOString(),
+      phase: item.data.phase,
+    });
+    return () => {
+      logReasoning("item-unmount", {
+        agentId,
+        timestamp: timestamp.toISOString(),
+        phase: item.data.phase,
+      });
+    };
+  }, [agentId, item.data.phase, timestamp]);
 
-  const toggleExpanded = useCallback(() => setExpanded((value) => !value), []);
-  const isExpanded = isStreaming || expanded;
+  logReasoning("item-render", {
+    agentId,
+    timestamp: timestamp.toISOString(),
+    phase: item.data.phase,
+    mode,
+    isStreaming,
+    isLatest,
+    preferredExpanded,
+    userExpanded: userExpanded === null ? "auto" : userExpanded,
+    isExpanded,
+  });
+
+  const toggleExpanded = useCallback(() => {
+    const nextState = !isExpanded;
+    logReasoning("user-toggle", { agentId, from: isExpanded, to: nextState });
+    setUserExpanded(nextState);
+  }, [agentId, isExpanded]);
   const cardStyle = useMemo(
     () => ({
       marginHorizontal: -13,
@@ -425,7 +449,7 @@ export function ReasoningTimelineItem({
       borderWidth: 1,
       overflow: "hidden" as const,
       paddingHorizontal: 8,
-      paddingVertical: 0,
+      paddingVertical: 3,
     }),
     [],
   );
@@ -445,15 +469,6 @@ export function ReasoningTimelineItem({
     }),
     [],
   );
-  const labelRowStyle = useMemo(
-    () => ({
-      alignItems: "center" as const,
-      flex: 1,
-      flexDirection: "row" as const,
-      overflow: "hidden" as const,
-    }),
-    [],
-  );
   const iconBadgeStyle = useMemo(
     () => ({
       alignItems: "center" as const,
@@ -466,25 +481,21 @@ export function ReasoningTimelineItem({
     [],
   );
   const headerTitleStyle = useMemo(
-    () => ({ color: theme.colors.foregroundMuted, fontSize: 14, lineHeight: 20 }),
+    () => ({
+      color: theme.colors.foregroundMuted,
+      fontFamily: "monospace",
+      fontSize: 13,
+      lineHeight: 20,
+    }),
     [theme.colors.foregroundMuted],
   );
   const headerTitleActiveStyle = useMemo(
     () => ({ color: theme.colors.foreground }),
     [theme.colors.foreground],
   );
-  const chevronStyle = useMemo(
-    () => ({
-      flexShrink: 0 as const,
-      marginLeft: -4,
-      transform: isExpanded
-        ? [{ scale: 1.3 }, { rotate: "90deg" as const }]
-        : [{ scale: 1.3 }],
-    }),
-    [isExpanded],
-  );
   const detailStyle = useMemo(
     () => ({
+      backgroundColor: theme.colors.surface0,
       borderBottomLeftRadius: 8,
       borderBottomRightRadius: 8,
       borderColor: theme.colors.border,
@@ -494,7 +505,7 @@ export function ReasoningTimelineItem({
       minWidth: 0,
       overflow: "hidden" as const,
     }),
-    [theme.colors.border],
+    [theme.colors.border, theme.colors.surface0],
   );
 
   return (
@@ -506,27 +517,21 @@ export function ReasoningTimelineItem({
         style={[pressableStyle, isExpanded && pressableExpandedStyle]}
       >
         <View style={headerStyle}>
-          <View style={labelRowStyle}>
-            <View style={iconBadgeStyle}>
-              <Icon
-                color={isExpanded ? theme.colors.foreground : theme.colors.foregroundMuted}
-                name="Brain"
-                size={16}
-              />
-            </View>
-            <Text style={[headerTitleStyle, isExpanded && headerTitleActiveStyle]}>Thinking</Text>
+          <View style={iconBadgeStyle}>
+            {isExpanded ? (
+              <Icon color={theme.colors.foreground} name="ChevronDown" size={12} />
+            ) : (
+              <Icon color={theme.colors.foregroundMuted} name="Brain" size={12} />
+            )}
           </View>
-          <View style={chevronStyle}>
-            <Icon color={theme.colors.foregroundMuted} name="ChevronRight" size={12} />
-          </View>
+          <Text style={[headerTitleStyle, isExpanded && headerTitleActiveStyle]}>Thinking</Text>
         </View>
       </Pressable>
       {isExpanded ? (
         <View style={detailStyle}>
           <ThinkingBody
-            agentId={agentId}
-            itemTimestamp={timestamp.toISOString()}
             text={item.data.text}
+            phase={item.data.phase}
             styles={styles}
           />
         </View>
@@ -547,84 +552,291 @@ export function ReasoningDisplaySettings({ theme, layout }: PluginSurfaceProps) 
     mutationFn: setSettings,
     onSuccess: (settings) => queryClient.setQueryData(reasoningSettingsQueryKey, settings),
   });
-  const mode = data?.mode ?? DEFAULT_REASONING_DISPLAY_MODE;
+  const settings = data ?? DEFAULT_REASONING_SETTINGS;
+  const mode = settings.mode;
+  const debug = Boolean(settings.debug);
+
   const styles = useMemo<ReasoningSettingsStyles>(
     () => ({
       screen: {
         backgroundColor: theme.colors.surface0,
         flex: 1,
-        gap: 16,
+        gap: 20,
+        maxWidth: 640,
         padding: layout.compact ? 16 : 24,
       },
-      title: { color: theme.colors.foreground, fontSize: layout.compact ? 20 : 24 },
-      description: { color: theme.colors.foregroundMuted, lineHeight: 20 },
-      option: {
+      title: {
+        color: theme.colors.foreground,
+        fontSize: layout.compact ? 20 : 24,
+        fontWeight: "700" as const,
+      },
+      sectionTitle: {
+        color: theme.colors.foreground,
+        fontSize: layout.compact ? 15 : 16,
+        fontWeight: "600" as const,
+      },
+      description: {
+        color: theme.colors.foregroundMuted,
+        fontSize: 13,
+        lineHeight: 18,
+      },
+      fieldGroup: {
+        gap: 8,
+      },
+      fieldLabel: {
+        color: theme.colors.foreground,
+        fontSize: 14,
+        fontWeight: "600" as const,
+      },
+      selectTrigger: {
+        alignItems: "center" as const,
+        backgroundColor: theme.colors.surface1,
         borderColor: theme.colors.border,
         borderRadius: 8,
         borderWidth: 1,
-        padding: 14,
+        flexDirection: "row" as const,
+        justifyContent: "space-between" as const,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
       },
-      selectedOption: { backgroundColor: theme.colors.surface1, borderColor: theme.colors.accent },
-      optionText: { color: theme.colors.foreground, fontSize: 15 },
-      selectedOptionText: { color: theme.colors.accent, fontWeight: "700" as const },
-      status: { color: theme.colors.foregroundMuted },
+      selectTriggerOpen: {
+        borderColor: theme.colors.accent,
+      },
+      selectTriggerText: {
+        color: theme.colors.foreground,
+        fontSize: 14,
+        fontWeight: "500" as const,
+      },
+      dropdownMenu: {
+        backgroundColor: theme.colors.surface1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        borderWidth: 1,
+        marginTop: 4,
+        overflow: "hidden" as const,
+      },
+      dropdownOption: {
+        alignItems: "center" as const,
+        backgroundColor: theme.colors.surface1,
+        flexDirection: "row" as const,
+        justifyContent: "space-between" as const,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+      },
+      dropdownOptionSelected: {
+        backgroundColor: theme.colors.surface2,
+      },
+      dropdownOptionContent: {
+        flex: 1,
+        gap: 2,
+      },
+      dropdownOptionLabel: {
+        color: theme.colors.foreground,
+        fontSize: 14,
+        fontWeight: "500" as const,
+      },
+      dropdownOptionLabelSelected: {
+        color: theme.colors.accent,
+        fontWeight: "600" as const,
+      },
+      dropdownOptionDescription: {
+        color: theme.colors.foregroundMuted,
+        fontSize: 12,
+      },
+      toggleCard: {
+        alignItems: "center" as const,
+        backgroundColor: theme.colors.surface1,
+        borderColor: theme.colors.border,
+        borderRadius: 8,
+        borderWidth: 1,
+        flexDirection: "row" as const,
+        justifyContent: "space-between" as const,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+      },
+      toggleCardActive: {
+        borderColor: theme.colors.accent,
+      },
+      toggleTextContainer: {
+        flex: 1,
+        gap: 2,
+        paddingRight: 12,
+      },
+      toggleTitle: {
+        color: theme.colors.foreground,
+        fontSize: 14,
+        fontWeight: "500" as const,
+      },
+      toggleDescription: {
+        color: theme.colors.foregroundMuted,
+        fontSize: 12,
+        lineHeight: 16,
+      },
+      status: {
+        color: theme.colors.statusDanger,
+        fontSize: 13,
+      },
     }),
     [layout.compact, theme],
   );
+
   const handleModeChange = useCallback(
-    (nextMode: ReasoningDisplayMode) => mutation.mutate({ mode: nextMode }),
-    [mutation],
+    (nextMode: ReasoningDisplayMode) => mutation.mutate({ mode: nextMode, debug }),
+    [debug, mutation],
+  );
+  const handleDebugToggle = useCallback(
+    () => mutation.mutate({ mode, debug: !debug }),
+    [debug, mode, mutation],
   );
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Thinking display</Text>
+      <Text style={styles.title}>Reasoning Display</Text>
       <Text style={styles.description}>
-        Choose how reasoning blocks appear in the agent timeline.
+        Configure how model reasoning and chain-of-thought blocks appear in the agent timeline.
       </Text>
-      {DISPLAY_MODES.map((option) => {
-        const selected = mode === option;
-        return (
-          <ReasoningModeOption
-            key={option}
-            disabled={isPending || mutation.isPending}
-            mode={option}
-            onSelect={handleModeChange}
-            selected={selected}
-            styles={styles}
-          />
-        );
-      })}
+
+      <ReasoningSelectDropdown
+        disabled={isPending || mutation.isPending}
+        mode={mode}
+        onSelect={handleModeChange}
+        styles={styles}
+        theme={theme}
+      />
+
+      <View style={styles.fieldGroup}>
+        <Text style={styles.sectionTitle}>Diagnostics</Text>
+        <Text style={styles.description}>
+          Output verbose state transition logs to the developer console for troubleshooting.
+        </Text>
+        <Pressable
+          accessibilityLabel={`Debug logging, ${debug ? "enabled" : "disabled"}`}
+          accessibilityRole="switch"
+          aria-checked={debug}
+          disabled={isPending || mutation.isPending}
+          onPress={handleDebugToggle}
+          style={[styles.toggleCard, debug && styles.toggleCardActive]}
+        >
+          <View style={styles.toggleTextContainer}>
+            <Text style={styles.toggleTitle}>Debug logging</Text>
+            <Text style={styles.toggleDescription}>
+              Log timeline render ticks, streaming phase transitions, and expansion events
+            </Text>
+          </View>
+          <View
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 6,
+              borderWidth: 1.5,
+              borderColor: debug ? theme.colors.accent : theme.colors.border,
+              backgroundColor: debug ? theme.colors.accent : "transparent",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {debug ? <Icon color={theme.colors.accentForeground} name="Check" size={14} /> : null}
+          </View>
+        </Pressable>
+      </View>
+
       {mutation.error ? <Text style={styles.status}>{mutation.error.message}</Text> : null}
     </View>
   );
 }
 
-function ReasoningModeOption({
+function ReasoningSelectDropdown({
   disabled,
   mode,
   onSelect,
-  selected,
+  theme,
   styles,
 }: {
   disabled: boolean;
   mode: ReasoningDisplayMode;
   onSelect: (mode: ReasoningDisplayMode) => void;
-  selected: boolean;
+  theme: PluginSurfaceProps["theme"];
   styles: ReasoningSettingsStyles;
 }) {
-  const handlePress = useCallback(() => onSelect(mode), [mode, onSelect]);
+  const [isOpen, setIsOpen] = useState(false);
+  const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
+  const selectedInfo = DISPLAY_MODE_INFO[mode];
+
+  const handleSelectOption = useCallback(
+    (optionMode: ReasoningDisplayMode) => {
+      onSelect(optionMode);
+      setIsOpen(false);
+    },
+    [onSelect],
+  );
+
   return (
-    <Pressable
-      accessibilityLabel={`${DISPLAY_MODE_LABELS[mode]}${selected ? ", selected" : ""}`}
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={handlePress}
-      style={selected ? styles.selectedOption : styles.option}
-    >
-      <Text style={selected ? styles.selectedOptionText : styles.optionText}>
-        {DISPLAY_MODE_LABELS[mode]}
-      </Text>
-    </Pressable>
+    <View style={styles.fieldGroup}>
+      <Text style={styles.fieldLabel}>Display mode</Text>
+      <Pressable
+        accessibilityLabel={`Display mode: ${selectedInfo.label}. Click to ${isOpen ? "close" : "open"} dropdown`}
+        accessibilityRole="combobox"
+        aria-expanded={isOpen}
+        disabled={disabled}
+        onPress={toggleOpen}
+        style={[styles.selectTrigger, isOpen && styles.selectTriggerOpen]}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+          <Icon color={theme.colors.accent} name={selectedInfo.icon} size={16} />
+          <Text style={styles.selectTriggerText}>{selectedInfo.label}</Text>
+        </View>
+        <Icon
+          color={theme.colors.foregroundMuted}
+          name={isOpen ? "ChevronUp" : "ChevronDown"}
+          size={16}
+        />
+      </Pressable>
+
+      {isOpen ? (
+        <View style={styles.dropdownMenu}>
+          {(["expand_last", "collapsed", "expanded"] as const).map((optionMode, index) => {
+            const isSelected = mode === optionMode;
+            const optionInfo = DISPLAY_MODE_INFO[optionMode];
+            return (
+              <Pressable
+                key={optionMode}
+                accessibilityLabel={`${optionInfo.label}${isSelected ? ", selected" : ""}`}
+                accessibilityRole="button"
+                onPress={() => handleSelectOption(optionMode)}
+                style={[
+                  styles.dropdownOption,
+                  isSelected && styles.dropdownOptionSelected,
+                  index > 0 && { borderTopWidth: 1, borderTopColor: theme.colors.border },
+                ]}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                  <Icon
+                    color={isSelected ? theme.colors.accent : theme.colors.foregroundMuted}
+                    name={optionInfo.icon}
+                    size={16}
+                  />
+                  <View style={styles.dropdownOptionContent}>
+                    <Text
+                      style={[
+                        styles.dropdownOptionLabel,
+                        isSelected && styles.dropdownOptionLabelSelected,
+                      ]}
+                    >
+                      {optionInfo.label}
+                    </Text>
+                    <Text style={styles.dropdownOptionDescription}>
+                      {optionInfo.description}
+                    </Text>
+                  </View>
+                </View>
+                {isSelected ? (
+                  <Icon color={theme.colors.accent} name="Check" size={16} />
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
   );
 }

@@ -16,7 +16,7 @@ export default function contribute(plugin: PluginContext) {
   plugin.addSurface("settings", ReasoningDisplaySettings);
   plugin.addSidebarItem({
     id: "settings",
-    title: "Thinking display",
+    title: "Reasoning Display",
     icon: "Brain",
     surface: "settings",
   });

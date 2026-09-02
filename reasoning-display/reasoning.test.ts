@@ -3,6 +3,7 @@ import {
   formatThinkingText,
   getLatestReasoningQueryKey,
   getReasoningExpansionState,
+  reasoningSettingsSchema,
   transformReasoning,
 } from "./reasoning.shared";
 
@@ -11,14 +12,31 @@ function reasoning(text: string) {
 }
 
 describe("reasoning display timeline plugin", () => {
-  it("replaces reasoning rows with formatted plugin items", () => {
-    expect(transformReasoning({ item: reasoning("**Plan****Result**") })).toEqual({
+  it("replaces reasoning rows with formatted plugin items preserving streaming phase", () => {
+    expect(
+      transformReasoning({ item: reasoning("**Plan****Result**"), phase: "streaming" }),
+    ).toEqual({
       items: [
         {
           type: "plugin",
           kind: "reasoning-display",
           version: 1,
-          data: { text: "**Plan**\n\n**Result**" },
+          data: { text: "**Plan**\n\n**Result**", phase: "streaming" },
+        },
+      ],
+    });
+  });
+
+  it("replaces reasoning rows with formatted plugin items for completed phase", () => {
+    expect(
+      transformReasoning({ item: reasoning("**Plan****Result**"), phase: "complete" }),
+    ).toEqual({
+      items: [
+        {
+          type: "plugin",
+          kind: "reasoning-display",
+          version: 1,
+          data: { text: "**Plan**\n\n**Result**", phase: "complete" },
         },
       ],
     });
@@ -48,5 +66,20 @@ describe("reasoning display timeline plugin", () => {
       "latest-reasoning",
       "agent-1",
     ]);
+  });
+
+  it("defaults debug to false in settings schema", () => {
+    expect(reasoningSettingsSchema.parse({})).toEqual({
+      mode: "expand_last",
+      debug: false,
+    });
+    expect(reasoningSettingsSchema.parse({ mode: "collapsed" })).toEqual({
+      mode: "collapsed",
+      debug: false,
+    });
+    expect(reasoningSettingsSchema.parse({ mode: "expanded", debug: true })).toEqual({
+      mode: "expanded",
+      debug: true,
+    });
   });
 });

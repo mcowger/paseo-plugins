@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import {
-  DEFAULT_REASONING_DISPLAY_MODE,
+  DEFAULT_REASONING_SETTINGS,
   reasoningSettingsSchema,
   type ReasoningSettings,
 } from "./reasoning.shared";
@@ -24,16 +24,16 @@ async function readSettings(): Promise<ReasoningSettings> {
     raw = await readFile(settingsPath, "utf8");
   } catch (error) {
     if (isMissingFile(error)) {
-      return { mode: DEFAULT_REASONING_DISPLAY_MODE };
+      return { ...DEFAULT_REASONING_SETTINGS };
     }
     throw error;
   }
 
   try {
     const parsed = reasoningSettingsSchema.safeParse(JSON.parse(raw) as unknown);
-    return parsed.success ? parsed.data : { mode: DEFAULT_REASONING_DISPLAY_MODE };
+    return parsed.success ? parsed.data : { ...DEFAULT_REASONING_SETTINGS };
   } catch {
-    return { mode: DEFAULT_REASONING_DISPLAY_MODE };
+    return { ...DEFAULT_REASONING_SETTINGS };
   }
 }
 

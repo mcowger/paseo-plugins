@@ -7,8 +7,14 @@ export type ReasoningDisplayMode = z.output<typeof reasoningDisplayModeSchema>;
 
 export const DEFAULT_REASONING_DISPLAY_MODE: ReasoningDisplayMode = "expand_last";
 
+export const DEFAULT_REASONING_SETTINGS = {
+  mode: DEFAULT_REASONING_DISPLAY_MODE,
+  debug: false,
+} as const;
+
 export const reasoningSettingsSchema = z.object({
-  mode: reasoningDisplayModeSchema,
+  mode: reasoningDisplayModeSchema.default(DEFAULT_REASONING_DISPLAY_MODE),
+  debug: z.boolean().default(false),
 });
 export type ReasoningSettings = z.output<typeof reasoningSettingsSchema>;
 
@@ -26,6 +32,7 @@ export const setReasoningSettingsRpc = defineRpc({
 
 export const reasoningItemDataSchema = z.object({
   text: z.string(),
+  phase: z.enum(["streaming", "complete"]),
 });
 
 export const REASONING_RENDERER_KIND = "reasoning-display";
@@ -57,13 +64,13 @@ export function formatThinkingText(text: string): string {
 
 type ReasoningTransformer = PluginTimelineTransformerContribution<"reasoning">["transform"];
 
-export const transformReasoning: ReasoningTransformer = ({ item }) => ({
+export const transformReasoning: ReasoningTransformer = ({ item, phase }) => ({
   items: [
     {
       type: "plugin",
       kind: REASONING_RENDERER_KIND,
       version: REASONING_RENDERER_VERSION,
-      data: { text: formatThinkingText(item.text) },
+      data: { text: formatThinkingText(item.text), phase },
     },
   ],
 });
