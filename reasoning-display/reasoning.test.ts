@@ -5,7 +5,7 @@ import {
   getReasoningExpansionState,
   reasoningSettingsSchema,
   transformReasoning,
-} from "./reasoning.shared";
+} from "./shared/reasoning";
 
 function reasoning(text: string) {
   return { type: "reasoning" as const, text };

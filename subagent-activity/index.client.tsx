@@ -1,8 +1,8 @@
-import type { PluginAgentCommandContext, PluginContext } from "@getpaseo/plugin";
-import { SubagentActivityPanel } from "./subagent-activity.client";
+import type { PluginAgentCommandContext, PluginClientContext } from "@getpaseo/plugin";
+import { SubagentActivityPanel } from "./client/subagent-activity";
 
-export default function contribute(plugin: PluginContext) {
-  plugin.addWorkspacePanel({
+export default function contribute(client: PluginClientContext) {
+  client.addWorkspacePanel({
     id: "subagent-activity",
     title: "Subagent activity",
     icon: "Bot",
@@ -11,7 +11,7 @@ export default function contribute(plugin: PluginContext) {
     Component: SubagentActivityPanel,
   });
 
-  plugin.addCommandCenterItem({
+  client.addCommandCenterItem({
     id: "subagent-activity-open",
     title: "Open subagent activity",
     icon: "Bot",

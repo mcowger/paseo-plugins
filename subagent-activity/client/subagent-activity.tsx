@@ -1,4 +1,5 @@
-import { Icon, useAgent } from "@getpaseo/plugin";
+import { useAgent } from "@getpaseo/plugin";
+import { Icon } from "@getpaseo/plugin/react-native";
 import type { PluginAgentPanelProps, PluginTheme } from "@getpaseo/plugin";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useEffect, useMemo, useState } from "react";
@@ -12,8 +13,8 @@ import {
   type AgentTreeNode,
   type ProviderSubagentActivity,
   type ToolCallActivity,
-} from "./subagent-activity.shared";
-import { useSubagentActivity } from "./subagent-activity-state.client";
+} from "../shared/subagent-activity";
+import { useSubagentActivity } from "./subagent-activity-state";
 
 const STATUS_SYMBOLS = {
   initializing: "◌",

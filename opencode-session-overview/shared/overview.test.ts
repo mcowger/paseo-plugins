@@ -5,7 +5,7 @@ import {
   extractTasks,
   formatCost,
   formatTokens,
-} from "./overview.shared";
+} from "./overview";
 
 describe("OpenCode session overview", () => {
   it("formats token and cost values for compact cards", () => {

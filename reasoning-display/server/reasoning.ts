@@ -6,7 +6,7 @@ import {
   DEFAULT_REASONING_SETTINGS,
   reasoningSettingsSchema,
   type ReasoningSettings,
-} from "./reasoning.shared";
+} from "../shared/reasoning";
 
 const settingsPath = path.join(
   process.env.PASEO_HOME ?? path.join(homedir(), ".paseo"),

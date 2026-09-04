@@ -1,8 +1,8 @@
-import type { PluginAgentCommandContext, PluginContext } from "@getpaseo/plugin";
-import { OpenCodeSessionOverviewPanel } from "./overview.client";
+import type { PluginAgentCommandContext, PluginClientContext } from "@getpaseo/plugin";
+import { OpenCodeSessionOverviewPanel } from "./client/overview";
 
-export default function contribute(plugin: PluginContext) {
-  plugin.addWorkspacePanel({
+export default function contribute(client: PluginClientContext) {
+  client.addWorkspacePanel({
     id: "opencode-session-overview",
     title: "OpenCode session",
     icon: "Activity",
@@ -10,7 +10,7 @@ export default function contribute(plugin: PluginContext) {
     locations: ["workspace", "explorer"],
     Component: OpenCodeSessionOverviewPanel,
   });
-  plugin.addCommandCenterItem({
+  client.addCommandCenterItem({
     id: "opencode-session-overview-open",
     title: "Open OpenCode session overview",
     icon: "Activity",

@@ -1,14 +1,13 @@
-import type { PluginClientContext, PluginContext } from "@getpaseo/plugin";
-import { PiTaskList, PiTasksPanel, PiTasksPill } from "./pi-tasks.client";
-import { openPiTasksPopup } from "./pi-tasks-popup.client";
+import type { PluginClientContext } from "@getpaseo/plugin";
+import { PiTasksPill } from "./pi-tasks";
+import { openPiTasksPopup } from "./pi-tasks-popup";
 import {
   getPiTaskSnapshot,
   hasActiveSnapshot,
   subscribePiTaskSnapshot,
   updatePiTaskAgentStatus,
   watchPiTasks,
-} from "./pi-tasks-state.client";
-import { piTaskListSchema, transformPiTodoToolCall } from "./pi-tasks";
+} from "./pi-tasks-state";
 
 const AGENT_PAGE_SIZE = 200;
 const AGENT_SUBSCRIPTION_ID = "pi-tasks-agents";
@@ -127,28 +126,4 @@ async function listAgents(client: PluginClientContext): Promise<AgentRegistratio
     cursor = response.pageInfo.hasMore ? (response.pageInfo.nextCursor ?? undefined) : undefined;
   } while (cursor);
   return agents;
-}
-
-export default function contribute(plugin: PluginContext) {
-  plugin.addTimelineTransformer({
-    id: "pi-tasks",
-    query: { itemType: "tool_call" },
-    transform: transformPiTodoToolCall,
-  });
-  plugin.addTimelineRenderer({
-    kind: "pi-task-list",
-    version: 1,
-    schema: piTaskListSchema,
-    Component: PiTaskList,
-  });
-  plugin.addWorkspacePanel({
-    id: "pi-tasks",
-    title: "Active Pi tasks",
-    icon: "ListChecks",
-    context: "agent",
-    locations: ["workspace", "explorer"],
-    Component: PiTasksPanel,
-  });
-  plugin.addClientSide(contributeClient);
-  return () => {};
 }

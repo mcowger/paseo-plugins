@@ -1,8 +1,8 @@
 import type { PaseoApi } from "@getpaseo/client";
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { useSyncExternalStore } from "react";
-import type { PiTask } from "./pi-tasks";
-import { hasActivePiTasks, parsePiTodoToolCall } from "./pi-tasks";
+import type { PiTask } from "../shared/pi-tasks";
+import { hasActivePiTasks, parsePiTodoToolCall } from "../shared/pi-tasks";
 
 const TIMELINE_PAGE_SIZE = 200;
 const TASK_REFRESH_INTERVAL_MS = 10_000;

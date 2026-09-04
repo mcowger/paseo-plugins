@@ -106,7 +106,7 @@ export function getToolCallActivities(
 ): readonly ToolCallActivity[] {
   return entries
     .filter(
-    (entry): entry is TimelineEntry & { readonly item: ToolCallItem } => isToolCall(entry.item),
+      (entry): entry is TimelineEntry & { readonly item: ToolCallItem } => isToolCall(entry.item),
     )
     .map((entry) => toToolCallActivity(entry.item, entry.timestamp))
     .sort((left, right) => timestampValue(right.timestamp) - timestampValue(left.timestamp))

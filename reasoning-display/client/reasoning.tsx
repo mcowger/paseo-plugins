@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Icon,
   type PluginSurfaceProps,
   type PluginTimelineItemProps,
   useRpc,
 } from "@getpaseo/plugin";
-import { useRevealedText } from "@getpaseo/plugin/react-native";
+import { Icon, useRevealedText } from "@getpaseo/plugin/react-native";
 import React, {
   useCallback,
   useEffect,
@@ -35,7 +34,7 @@ import {
   setReasoningSettingsRpc,
   type ReasoningDisplayMode,
   type ReasoningSettings,
-} from "./reasoning.shared";
+} from "../shared/reasoning";
 
 const MAX_REASONING_HEIGHT = 400;
 const DISPLAY_MODE_INFO: Record<

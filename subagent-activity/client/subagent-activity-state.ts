@@ -16,7 +16,7 @@ import {
   type ProviderSubagentActivity,
   type TimelineEntry,
   type ToolCallActivity,
-} from "./subagent-activity.shared";
+} from "../shared/subagent-activity";
 
 const AGENT_PAGE_SIZE = 200;
 const TIMELINE_PAGE_SIZE = 100;

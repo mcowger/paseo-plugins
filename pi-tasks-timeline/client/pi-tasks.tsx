@@ -3,14 +3,13 @@ import type {
   PluginComposerPillProps,
   PluginTimelineItemProps,
 } from "@getpaseo/plugin";
-import { Icon } from "@getpaseo/plugin";
-import { Modal } from "@getpaseo/plugin/react-native";
+import { Icon, Modal } from "@getpaseo/plugin/react-native";
 import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { z } from "zod";
-import { closePiTasksPopup, usePiTasksPopup } from "./pi-tasks-popup.client";
-import { activeTasks, usePiTaskSnapshot } from "./pi-tasks-state.client";
-import { piTaskListSchema } from "./pi-tasks";
+import { closePiTasksPopup, usePiTasksPopup } from "./pi-tasks-popup";
+import { activeTasks, usePiTaskSnapshot } from "./pi-tasks-state";
+import { piTaskListSchema } from "../shared/pi-tasks";
 
 type TaskListData = z.output<typeof piTaskListSchema>;
 type PiTask = TaskListData["tasks"][number];

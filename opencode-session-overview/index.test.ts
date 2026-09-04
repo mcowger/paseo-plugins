@@ -1,20 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PluginContext } from "@getpaseo/plugin";
-import contribute from "./index";
+import type { PluginClientContext } from "@getpaseo/plugin";
+import contribute from "./index.client";
 
-vi.mock("./overview.client", () => ({
+vi.mock("./client/overview", () => ({
   OpenCodeSessionOverviewPanel: () => null,
 }));
 
 describe("OpenCode session overview registration", () => {
   it("registers a valid Command Center item ID", () => {
     const addCommandCenterItem = vi.fn();
-    const plugin = {
+    const client = {
       addCommandCenterItem,
       addWorkspacePanel: vi.fn(),
-    } as unknown as PluginContext;
+    } as unknown as PluginClientContext;
 
-    contribute(plugin);
+    contribute(client);
 
     expect(addCommandCenterItem).toHaveBeenCalledWith(expect.objectContaining({
       id: "opencode-session-overview-open",

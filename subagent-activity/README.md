@@ -1,6 +1,6 @@
 # Subagent activity
 
-This Paseo `v0.7.0-beta.2` plugin adds an agent-scoped activity pane for monitoring managed Paseo
+This Paseo `v0.8` plugin adds an agent-scoped activity pane for monitoring managed Paseo
 descendants and provider-native subagent activity.
 
 The panel displays:
@@ -20,7 +20,7 @@ The activity pane shows managed descendants and provider-native activity observe
 
 ## Install
 
-The plugin targets Paseo `v0.7.0-beta.2`.
+The plugin targets Paseo `v0.8`.
 
 ```bash
 cd /absolute/path/to/subagent-activity
