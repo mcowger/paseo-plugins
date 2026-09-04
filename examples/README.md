@@ -1,8 +1,9 @@
 # Paseo plugin reference index
 
 Reviewed public projects to consult alongside the official examples. Treat their current Paseo SDK
-versions and any internal-host integration as implementation details; prefer documented APIs and the
-guidance in [`../AGENTS.md`](../AGENTS.md).
+versions, legacy single-entry structures (`index.ts`), and any internal-host integration as
+implementation details; prefer documented Paseo v0.8 APIs and the guidance in
+[`../AGENTS.md`](../AGENTS.md).
 
 ## Surfaces, panels, and rendering
 
@@ -30,7 +31,7 @@ guidance in [`../AGENTS.md`](../AGENTS.md).
 
 | Project | Study for | Caveat |
 | --- | --- | --- |
-| [paseo-processes](https://github.com/mjakl/paseo-processes) | Initial timeline fetch plus subscriptions, state folding, stable process IDs, stale-response rejection, and timer cleanup. | It consumes timeline data in a panel; it does not demonstrate a timeline transformer/renderer or solve live transformed-row remounting. |
+| [paseo-processes](https://github.com/mjakl/paseo-processes) | Initial timeline fetch plus subscriptions, state folding, stable process IDs, stale-response rejection, and timer cleanup. | It consumes timeline data in a panel; it does not demonstrate a timeline transformer/renderer. Note that live streaming transformation without remounting is natively supported in Paseo v0.8. |
 | [agent-paint](https://github.com/jzlosman/agent-paint) | Static `addTheme` registrations, deterministic generation, contrast validation, and checked-in generated artifacts. | Do not hand-edit generated theme output. |
 | [paseo-display-switcher](https://github.com/nerveband/paseo-display-switcher) | Keyboard shortcut normalization, idempotent async UI actions, and listener cleanup. | Its DOM selectors, synthetic events, and persisted-store access are private-host workarounds; do not treat them as portable APIs. |
 | [paseo-plugins (sleeyax)](https://github.com/sleeyax/paseo-plugins) | Static multi-theme registration and platform-specific React Native behavior. | CLI scraping and Discord IPC are integration-specific server adapters. |
@@ -39,5 +40,25 @@ guidance in [`../AGENTS.md`](../AGENTS.md).
 
 - [Paseo timeline-items example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/timeline-items)
   shows the supported `addTimelineTransformer` and `addTimelineRenderer` contribution shape.
-- Current plugin renderers should preserve native `running` timeline entries. Paseo needs live-reducer
-  transformation plus stable source IDs before custom streaming rows can update without remounting.
+- Paseo v0.8 natively supports live streaming timeline transformation and rendering:
+  - Transformers receive `{ item, phase }`, where `phase` is `"streaming"` or `"complete"`.
+  - Paseo memoizes by source-item reference and derives replacement identities from the source item,
+    preserving mounted component identity across streaming deltas without remounting.
+  - Custom streaming text can be paced with `useRevealedText(text, phase)` from `@getpaseo/plugin/react-native`.
+  - Extension notifications (Pi `ctx.ui.notify()` and OpenCode notices) are unified as first-class
+    `type: "notification"` timeline items with log levels mapped to activity log styling.
+  - Server handlers can append canonical plugin timeline rows using
+    `await paseo.agents.ref(agentId).timeline.append({ type: "plugin", id, kind, version, data })`
+    (capped at 64 KiB; advertised via `server_info.features.pluginTimelineItems`).
+
+## Official provider reference (Paseo v0.8)
+
+- [Paseo provider-direct example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/provider-direct)
+  demonstrates registering a full coding agent via `server.registerProvider()` implementing `ProviderRegistration`,
+  including models/modes catalog, session lifecycles, composer toggle/select settings, prompts, turns,
+  steering, persistence replay, and provider-emitted custom timeline items.
+- [Paseo provider-acp-transformer example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/provider-acp-transformer)
+  demonstrates wrapping a command-backed ACP agent with `runAcpProvider()` from `@getpaseo/plugin/acp` and
+  applying focused `AcpTransformer` hooks.
+- [Paseo inline-thinking example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/inline-thinking)
+  shows that custom timeline renderers operate independently of provider implementations.
