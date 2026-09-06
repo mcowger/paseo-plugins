@@ -99,8 +99,6 @@ function useStyles(theme: PluginTheme, compact: boolean) {
       toolName: { color: theme.colors.foreground, fontFamily: "monospace", flex: 1 },
       toolCount: { color: theme.colors.foreground, fontFamily: "monospace", fontWeight: "600" as const },
       statsCard: { paddingVertical: compact ? 8 : 10 },
-      statsSingleLine: { alignItems: "center" as const, flexDirection: "row" as const, gap: 8 },
-      statsValues: { flex: 1, flexDirection: "row" as const, gap: 10, justifyContent: "flex-end" as const, minWidth: 0 },
       statsValue: { color: theme.colors.foregroundMuted, flexShrink: 1, fontFamily: "monospace", fontSize: compact ? 11 : 12 },
       compactThought: { gap: 5 },
       compactThoughtCard: { flex: 1, minHeight: 110 },
@@ -206,15 +204,22 @@ function SessionStatsCard({ stats, styles }: { stats: SessionStats; styles: Retu
 
   return (
     <View style={[styles.card, styles.statsCard]}>
-      <View style={styles.statsSingleLine}>
-        <Icon name="Activity" size={16} color={styles.active.color} />
-        <Text style={styles.heading}>Session Statistics</Text>
-        <View style={styles.statsValues}>
-          <Text numberOfLines={1} style={styles.statsValue}>Context {contextLabel}</Text>
-          <Text numberOfLines={1} style={styles.statsValue}>
-            Last ↑{formatTokenCount(lastTurnUsage?.inputTokens)} ↓{formatTokenCount(lastTurnUsage?.outputTokens)} C{formatTokenCount(lastTurnUsage?.cachedInputTokens)}
-          </Text>
+      <View style={styles.headingRow}>
+        <View style={styles.headingStart}>
+          <Icon name="Activity" size={16} color={styles.active.color} />
+          <Text style={styles.heading}>Tokens</Text>
         </View>
+      </View>
+      <View style={styles.divider} />
+      <View style={styles.row}>
+        <Text style={styles.muted}>Context</Text>
+        <Text numberOfLines={1} style={styles.statsValue}>{contextLabel}</Text>
+      </View>
+      <View style={styles.row}>
+        <Text style={styles.muted}>Last turn</Text>
+        <Text numberOfLines={1} style={styles.statsValue}>
+          ↑{formatTokenCount(lastTurnUsage?.inputTokens)} ↓{formatTokenCount(lastTurnUsage?.outputTokens)} C{formatTokenCount(lastTurnUsage?.cachedInputTokens)}
+        </Text>
       </View>
     </View>
   );

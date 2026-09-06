@@ -1,0 +1,23 @@
+{
+  "version": "0.8.0",
+  "localRepository": "~/workspace/paseo",
+  "packages": {
+    "@getpaseo/protocol": "packages/protocol",
+    "@getpaseo/relay": "packages/relay",
+    "@getpaseo/client": "packages/client",
+    "@getpaseo/plugin": "packages/plugin"
+  },
+  "directPackages": [
+    "@getpaseo/client",
+    "@getpaseo/plugin",
+    "@getpaseo/protocol"
+  ],
+  "plugins": [
+    "session-summary",
+    "pi-tasks-timeline",
+    "subagent-activity",
+    "reasoning-display",
+    "opencode-session-overview"
+  ],
+  "snapshot": "sdk/paseo-sdk-api.json"
+}
