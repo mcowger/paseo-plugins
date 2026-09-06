@@ -1,6 +1,18 @@
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { describe, expect, it } from "vitest";
-import { formatThinkingText, reduceTimeline, tasksFromTimelineItem } from "./summary";
+import {
+  cacheHitRate,
+  elapsedDuration,
+  formatDuration,
+  formatPercent,
+  formatThinkingText,
+  formatTokenCount,
+  lastTurnDuration,
+  reduceTimeline,
+  tasksFromTimelineItem,
+  usageDelta,
+  usageForTurn,
+} from "./summary";
 
 describe("session summary timeline reduction", () => {
   it("summarizes the initial prompt, deduplicated tool calls, reasoning, and final outcome", () => {
@@ -117,5 +129,40 @@ describe("session summary timeline reduction", () => {
     expect(formatThinkingText("**Inspect** **Implement**\n`**inline**`\n```\n**code** **stays**\n```")).toBe(
       "**Inspect**\n\n**Implement**\n`**inline**`\n```\n**code** **stays**\n```",
     );
+  });
+
+  it("derives token deltas and cache hit rates", () => {
+    const current = { inputTokens: 900, cachedInputTokens: 300, outputTokens: 120 };
+    const previous = { inputTokens: 500, cachedInputTokens: 100, outputTokens: 40 };
+
+    expect(usageDelta(current, previous)).toEqual({
+      inputTokens: 400,
+      cachedInputTokens: 200,
+      outputTokens: 80,
+    });
+    expect(usageForTurn(current, previous)).toEqual({
+      inputTokens: 400,
+      cachedInputTokens: 200,
+      outputTokens: 80,
+    });
+    expect(usageForTurn({ inputTokens: 12, outputTokens: 8 }, { inputTokens: 100, outputTokens: 50 })).toEqual({
+      inputTokens: 12,
+      outputTokens: 8,
+    });
+    expect(cacheHitRate(current)).toBe(0.25);
+    expect(formatTokenCount(1_250)).toBe("1.3k");
+    expect(formatPercent(0.25)).toBe("25%");
+  });
+
+  it("derives the previous turn duration and active elapsed duration", () => {
+    const entries = [
+      { item: { type: "user_message", text: "first" }, timestamp: "2026-01-01T00:00:00.000Z", turnId: "turn-1" },
+      { item: { type: "assistant_message", text: "done" }, timestamp: "2026-01-01T00:00:07.000Z", turnId: "turn-1" },
+      { item: { type: "user_message", text: "second" }, timestamp: "2026-01-01T00:01:00.000Z", turnId: "turn-2" },
+    ] as const;
+
+    expect(lastTurnDuration(entries, "turn-2")).toBe(7_000);
+    expect(elapsedDuration("2026-01-01T00:00:00.000Z", Date.parse("2026-01-01T00:00:12.000Z"))).toBe(12_000);
+    expect(formatDuration(7_000)).toBe("7s");
   });
 });

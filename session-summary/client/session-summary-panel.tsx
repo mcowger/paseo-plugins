@@ -9,7 +9,17 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import type { SessionSummary, SummaryTaskStatus, ToolFrequency } from "../shared/summary";
+import {
+  cacheHitRate,
+  elapsedDuration,
+  formatDuration,
+  formatPercent,
+  formatTokenCount,
+  type SessionStats,
+  type SessionSummary,
+  type SummaryTaskStatus,
+  type ToolFrequency,
+} from "../shared/summary";
 import { MarkdownContent, MarkdownPreview, useMarkdownStyles } from "./markdown";
 import { useSummaryData } from "./use-summary-data";
 
@@ -85,6 +95,13 @@ function useStyles(theme: PluginTheme, compact: boolean) {
       completedTaskText: { color: theme.colors.foregroundMuted, flex: 1, lineHeight: 19 },
       toolName: { color: theme.colors.foreground, fontFamily: "monospace", flex: 1 },
       toolCount: { color: theme.colors.foreground, fontFamily: "monospace", fontWeight: "600" as const },
+      statsCard: { gap: compact ? 8 : 10 },
+      statsGrid: { flexDirection: "row" as const, flexWrap: "wrap" as const, rowGap: 9 },
+      statsMetric: { width: "50%" as const, gap: 2, paddingRight: 6 },
+      statsMetricHeading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5 },
+      statsMetricLabel: { color: theme.colors.foregroundMuted, fontSize: 11 },
+      statsMetricValue: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 13 },
+      statsSectionLabel: { color: theme.colors.foreground, fontSize: 12, fontWeight: "600" as const },
       thoughtLog: { maxHeight: THOUGHT_LOG_MAX_HEIGHT },
       thoughtBlock: { marginVertical: 2 },
       thoughtHeader: {
@@ -152,6 +169,78 @@ function toolColor(appearance: ToolAppearance, styles: ReturnType<typeof useStyl
   if (appearance.color === "warning") return styles.warning.color;
   if (appearance.color === "accent") return styles.active.color;
   return styles.muted.color;
+}
+
+type StatsMetricProps = {
+  readonly icon: string;
+  readonly label: string;
+  readonly value: string;
+  readonly styles: ReturnType<typeof useStyles>;
+};
+
+function StatsMetric({ icon, label, value, styles }: StatsMetricProps) {
+  return (
+    <View style={styles.statsMetric}>
+      <View style={styles.statsMetricHeading}>
+        <Icon name={icon} size={13} color={styles.muted.color} />
+        <Text style={styles.statsMetricLabel}>{label}</Text>
+      </View>
+      <Text style={styles.statsMetricValue}>{value}</Text>
+    </View>
+  );
+}
+
+function SessionStatsCard({ stats, styles }: { stats: SessionStats; styles: ReturnType<typeof useStyles> }) {
+  const [now, setNow] = useState(() => Date.now());
+  const hasCurrentTurn = stats.currentTurnStartedAt !== null;
+
+  useEffect(() => {
+    if (!hasCurrentTurn) return;
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [hasCurrentTurn]);
+
+  const totalUsage = stats.totalUsage;
+  const lastTurnUsage = stats.lastTurnUsage;
+  const currentDuration = elapsedDuration(stats.currentTurnStartedAt, now);
+
+  return (
+    <View style={[styles.card, styles.statsCard]}>
+      <View style={styles.headingStart}>
+        <Icon name="Activity" size={16} color={styles.active.color} />
+        <Text style={styles.heading}>Session Statistics</Text>
+      </View>
+      <View style={styles.divider} />
+      <Text style={styles.statsSectionLabel}>Total</Text>
+      <View style={styles.statsGrid}>
+        <StatsMetric icon="ArrowUp" label="Up" value={formatTokenCount(totalUsage?.inputTokens)} styles={styles} />
+        <StatsMetric icon="ArrowDown" label="Down" value={formatTokenCount(totalUsage?.outputTokens)} styles={styles} />
+        <StatsMetric icon="Database" label="Cache tokens" value={formatTokenCount(totalUsage?.cachedInputTokens)} styles={styles} />
+        <StatsMetric icon="Gauge" label="Cache hit rate" value={formatPercent(cacheHitRate(totalUsage))} styles={styles} />
+      </View>
+      <Text style={styles.statsSectionLabel}>Last Turn</Text>
+      <View style={styles.statsGrid}>
+        <StatsMetric icon="ArrowUp" label="Up" value={formatTokenCount(lastTurnUsage?.inputTokens)} styles={styles} />
+        <StatsMetric icon="ArrowDown" label="Down" value={formatTokenCount(lastTurnUsage?.outputTokens)} styles={styles} />
+        <StatsMetric icon="Database" label="Cache tokens" value={formatTokenCount(lastTurnUsage?.cachedInputTokens)} styles={styles} />
+        <StatsMetric icon="Gauge" label="Cache hit rate" value={formatPercent(cacheHitRate(lastTurnUsage))} styles={styles} />
+      </View>
+      <View style={styles.row}>
+        <View style={styles.toolRow}>
+          <Icon name="Clock" size={13} color={styles.muted.color} />
+          <Text style={styles.statsMetricLabel}>Last Turn Duration</Text>
+        </View>
+        <Text style={styles.statsMetricValue}>{formatDuration(stats.lastTurnDurationMs)}</Text>
+      </View>
+      <View style={styles.row}>
+        <View style={styles.toolRow}>
+          <Icon name="Timer" size={13} color={hasCurrentTurn ? styles.active.color : styles.muted.color} />
+          <Text style={styles.statsMetricLabel}>Current Turn Duration</Text>
+        </View>
+        <Text style={styles.statsMetricValue}>{hasCurrentTurn ? formatDuration(currentDuration) : "None"}</Text>
+      </View>
+    </View>
+  );
 }
 
 function PromptCard({ prompt, styles, markdownStyles }: {
@@ -373,6 +462,7 @@ export function SessionSummaryPanel({ theme, layout, agentId, host }: PluginAgen
       {data.error ? <Text style={styles.error}>Could not refresh: {data.error}</Text> : null}
       <View style={styles.grid}>
         <View style={styles.toolsColumn}>
+          <SessionStatsCard stats={data.stats} styles={styles} />
           <TasksCard summary={summary} styles={styles} />
           <ToolsCard summary={summary} styles={styles} />
         </View>

@@ -1,4 +1,4 @@
-import type { AgentTaskItem, AgentTimelineItem, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
+import type { AgentTaskItem, AgentTimelineItem, AgentUsage, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
 
 export type SummaryTaskStatus = "pending" | "in_progress" | "completed";
 
@@ -29,9 +29,138 @@ export interface SessionSummary {
   readonly outcome: string | null;
 }
 
+export interface SessionStats {
+  readonly totalUsage: AgentUsage | null;
+  readonly lastTurnUsage: AgentUsage | null;
+  readonly lastTurnDurationMs: number | null;
+  readonly currentTurnStartedAt: string | null;
+}
+
+export interface SummaryTimelineEntry {
+  readonly item: AgentTimelineItem;
+  readonly timestamp: string;
+  readonly turnId?: string;
+  readonly seq?: number;
+}
+
+export const EMPTY_SESSION_STATS: SessionStats = {
+  totalUsage: null,
+  lastTurnUsage: null,
+  lastTurnDurationMs: null,
+  currentTurnStartedAt: null,
+};
+
 const TASK_TOOL_NAMES = new Set(["todo", "todowrite", "update_plan", "updateplan"]);
 const COMPLETED_STATUS = "completed";
 const IN_PROGRESS_STATUS = "in_progress";
+
+const USAGE_FIELDS = ["inputTokens", "cachedInputTokens", "outputTokens", "totalCostUsd"] as const;
+
+export function usageDelta(current: AgentUsage | null, previous: AgentUsage | null): AgentUsage | null {
+  if (!current) return null;
+  const result: AgentUsage = { ...current };
+  for (const field of USAGE_FIELDS) {
+    const value = current[field];
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    const prior = previous?.[field];
+    result[field] = Math.max(0, value - (typeof prior === "number" ? prior : 0));
+  }
+  return result;
+}
+
+export function usageForTurn(current: AgentUsage | null, previous: AgentUsage | null): AgentUsage | null {
+  if (!current || !previous) return current;
+  const comparableFields = USAGE_FIELDS.filter(
+    (field) => typeof current[field] === "number" && typeof previous[field] === "number",
+  );
+  const isCumulative = comparableFields.length > 0 && comparableFields.every((field) => {
+    const currentValue = current[field];
+    const previousValue = previous[field];
+    return typeof currentValue === "number" && typeof previousValue === "number" && currentValue >= previousValue;
+  });
+  return isCumulative ? usageDelta(current, previous) : current;
+}
+
+function durationBetween(start: string | null, end: string): number | null {
+  if (!start) return null;
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  return Number.isNaN(startMs) || Number.isNaN(endMs) ? null : Math.max(0, endMs - startMs);
+}
+
+export function lastTurnDuration(
+  entries: readonly SummaryTimelineEntry[],
+  activeTurnId: string | null,
+): number | null {
+  const turns: { id: string; start: string | null; end: string }[] = [];
+  let current: { id: string; start: string | null; end: string } | null = null;
+  let legacyTurn = 0;
+
+  for (const entry of entries) {
+    const id: string = entry.turnId
+      ?? (entry.item.type === "user_message" ? `legacy:${legacyTurn++}` : current?.id ?? `orphan:${legacyTurn}`);
+    if (!current || current.id !== id) {
+      if (current) turns.push(current);
+      current = {
+        id,
+        start: entry.item.type === "user_message" ? entry.timestamp : null,
+        end: entry.timestamp,
+      };
+      continue;
+    }
+    current.end = entry.timestamp;
+  }
+  if (current) turns.push(current);
+
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    if (!turn || turn.id === activeTurnId) continue;
+    const durationMs = durationBetween(turn.start, turn.end);
+    if (durationMs !== null) return durationMs;
+  }
+  return null;
+}
+
+export function elapsedDuration(startedAt: string | null, now = Date.now()): number | null {
+  if (!startedAt) return null;
+  const startMs = Date.parse(startedAt);
+  return Number.isNaN(startMs) ? null : Math.max(0, now - startMs);
+}
+
+export function formatTokenCount(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value >= 1_000_000) return `${trimNumber(value / 1_000_000)}m`;
+  if (value >= 1_000) return `${trimNumber(value / 1_000)}k`;
+  return String(Math.round(value));
+}
+
+export function cacheHitRate(usage: AgentUsage | null | undefined): number | null {
+  if (!usage) return null;
+  const inputTokens = usage.inputTokens ?? 0;
+  const cachedInputTokens = usage.cachedInputTokens ?? 0;
+  const totalInputTokens = inputTokens + cachedInputTokens;
+  return totalInputTokens > 0 ? cachedInputTokens / totalInputTokens : null;
+}
+
+export function formatPercent(value: number | null): string {
+  return value === null ? "—" : `${Math.round(value * 100)}%`;
+}
+
+export function formatDuration(durationMs: number | null): string {
+  if (durationMs === null || !Number.isFinite(durationMs)) return "—";
+  const totalSeconds = Math.floor(Math.max(0, durationMs) / 1_000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
+}
+
+function trimNumber(value: number): string {
+  return value.toFixed(1).replace(/\.0$/, "");
+}
 
 type UnknownRecord = Record<string, unknown>;
 
