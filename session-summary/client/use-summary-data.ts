@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   EMPTY_SESSION_STATS,
   lastTurnDuration,
+  usageChanged,
   usageForTurn,
   reduceTimeline,
   type SessionStats,
@@ -110,6 +111,8 @@ export function useSummaryData(agentId: string): SummaryDataState {
     let previousUsage: AgentUsage | null = null;
     let activeTurnId: string | null = null;
     let turnBaselineUsage: AgentUsage | null = null;
+    let completedTurnId: string | null = null;
+    let completedTurnBaseline: AgentUsage | null = null;
 
     const publishStats = () => setState((current) => ({ ...current, stats }));
     const updateAgentStats = () => {
@@ -121,25 +124,44 @@ export function useSummaryData(agentId: string): SummaryDataState {
         stats = {
           ...stats,
           totalUsage: usage,
-          lastTurnUsage: activeTurn ? null : stats.lastTurnUsage ?? usage,
+          lastTurnUsage: activeTurn ? null : stats.lastTurnUsage,
         };
       }
 
       if (activeTurn && activeTurn.turnId !== activeTurnId) {
-        activeTurnId = activeTurn.turnId;
-        turnBaselineUsage = usage ?? previousUsage ?? {};
+        if (activeTurn.turnId !== completedTurnId) {
+          activeTurnId = activeTurn.turnId;
+          turnBaselineUsage = usage ?? previousUsage ?? {};
+          completedTurnId = null;
+          completedTurnBaseline = null;
+        }
+      }
+
+      if (completedTurnId && usageChanged(usage, completedTurnBaseline)) {
+        stats = {
+          ...stats,
+          lastTurnUsage: usageForTurn(usage, completedTurnBaseline) ?? usage,
+        };
+        completedTurnBaseline = null;
       }
 
       if (!activeTurn && activeTurnId && agent && agent.status !== "running") {
         const finalUsage = usage ?? previousUsage;
+        const completedUsage = usageChanged(finalUsage, turnBaselineUsage)
+          ? usageForTurn(finalUsage, turnBaselineUsage)
+          : null;
         stats = {
           ...stats,
-          lastTurnUsage: usageForTurn(finalUsage, turnBaselineUsage) ?? finalUsage,
+          lastTurnUsage: completedTurnId === activeTurnId
+            ? stats.lastTurnUsage ?? completedUsage
+            : completedUsage ?? stats.lastTurnUsage,
           lastTurnDurationMs: lastTurnDuration(timelineEntries, activeTurnId),
           currentTurnStartedAt: null,
         };
         activeTurnId = null;
         turnBaselineUsage = null;
+        completedTurnId = null;
+        completedTurnBaseline = null;
       }
 
       if (usage && usage !== previousUsage) {
@@ -148,7 +170,9 @@ export function useSummaryData(agentId: string): SummaryDataState {
       }
       stats = {
         ...stats,
-        currentTurnStartedAt: activeTurn?.startedAt ?? stats.currentTurnStartedAt,
+        currentTurnStartedAt: activeTurn?.turnId === completedTurnId
+          ? null
+          : activeTurn?.startedAt ?? stats.currentTurnStartedAt,
       };
       publishStats();
     };
@@ -157,6 +181,8 @@ export function useSummaryData(agentId: string): SummaryDataState {
       if (event.type === "turn_started") {
         activeTurnId = event.turnId ?? activeTurnId;
         turnBaselineUsage = agentHandle.current()?.lastUsage ?? previousUsage ?? {};
+        completedTurnId = null;
+        completedTurnBaseline = null;
         stats = { ...stats, currentTurnStartedAt: timestamp };
         publishStats();
         return;
@@ -166,18 +192,22 @@ export function useSummaryData(agentId: string): SummaryDataState {
         event.type === "turn_failed" ||
         event.type === "turn_canceled"
       ) {
-        const completedTurnId = event.turnId ?? activeTurnId;
+        const finishedTurnId = event.turnId ?? activeTurnId;
         const currentUsage = agentHandle.current()?.lastUsage ?? null;
         const eventUsage = event.type === "turn_completed" ? event.usage ?? null : null;
-        const finalUsage = eventUsage ?? currentUsage ?? previousUsage;
+        completedTurnId = finishedTurnId;
+        completedTurnBaseline = turnBaselineUsage;
+        const resolvedEventUsage = eventUsage
+          ?? (usageChanged(currentUsage, turnBaselineUsage) ? currentUsage : null);
         stats = {
           ...stats,
-          lastTurnUsage: usageForTurn(eventUsage ?? finalUsage, turnBaselineUsage) ?? finalUsage,
-          lastTurnDurationMs: lastTurnDuration(timelineEntries, completedTurnId),
+          ...(resolvedEventUsage
+            ? { lastTurnUsage: usageForTurn(resolvedEventUsage, turnBaselineUsage) ?? resolvedEventUsage }
+            : {}),
+          lastTurnDurationMs: lastTurnDuration(timelineEntries, finishedTurnId),
           currentTurnStartedAt: null,
         };
-        activeTurnId = null;
-        turnBaselineUsage = null;
+        if (resolvedEventUsage) completedTurnBaseline = null;
         publishStats();
         return;
       }

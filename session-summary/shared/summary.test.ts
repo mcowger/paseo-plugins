@@ -52,6 +52,10 @@ describe("session summary timeline reduction", () => {
       { name: "bash", count: 1 },
       { name: "read", count: 1 },
     ]);
+    expect(summary.recentToolCalls).toEqual([
+      { id: "bash-1", name: "bash", summary: "npm test", status: "completed" },
+      { id: "read-1", name: "read", summary: "AGENTS.md", status: "completed" },
+    ]);
     expect(summary.thoughts).toEqual([
       { id: "thought:0", title: "Inspect APIs", text: "# Inspect APIs\nI will inspect the plugin SDK first." },
     ]);
@@ -129,6 +133,20 @@ describe("session summary timeline reduction", () => {
     expect(formatThinkingText("**Inspect** **Implement**\n`**inline**`\n```\n**code** **stays**\n```")).toBe(
       "**Inspect**\n\n**Implement**\n`**inline**`\n```\n**code** **stays**\n```",
     );
+  });
+
+  it("coalesces adjacent reasoning deltas into one thought", () => {
+    const summary = reduceTimeline([
+      { type: "reasoning", text: "# Clarifying " },
+      { type: "reasoning", text: "snapshot details\n\nI should be precise." },
+      { type: "tool_call", callId: "read-1", name: "read", status: "completed", error: null, detail: { type: "read", filePath: "README.md" } },
+      { type: "reasoning", text: "A separate thought." },
+    ] satisfies AgentTimelineItem[]);
+
+    expect(summary.thoughts).toEqual([
+      { id: "thought:0", title: "Clarifying snapshot details", text: "# Clarifying snapshot details\n\nI should be precise." },
+      { id: "thought:1", title: null, text: "A separate thought." },
+    ]);
   });
 
   it("derives token deltas and cache hit rates", () => {

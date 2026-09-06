@@ -10,10 +10,6 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import {
-  cacheHitRate,
-  elapsedDuration,
-  formatDuration,
-  formatPercent,
   formatTokenCount,
   type SessionStats,
   type SessionSummary,
@@ -23,7 +19,7 @@ import {
 import { MarkdownContent, MarkdownPreview, useMarkdownStyles } from "./markdown";
 import { useSummaryData } from "./use-summary-data";
 
-const THOUGHT_LOG_MAX_HEIGHT = 320;
+const THOUGHT_BLOCK_MAX_HEIGHT = 320;
 const PROMPT_PREVIEW_LINES = 2;
 
 type ToolAppearance = {
@@ -46,6 +42,7 @@ function useStyles(theme: PluginTheme, compact: boolean) {
     () => ({
       screen: {
         flex: 1,
+        flexGrow: 1,
         gap: compact ? 10 : 14,
         padding: compact ? 12 : 20,
         backgroundColor: theme.colors.surface0,
@@ -68,8 +65,14 @@ function useStyles(theme: PluginTheme, compact: boolean) {
       promptHeading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
       promptPreview: { paddingHorizontal: compact ? 10 : 14, paddingBottom: compact ? 10 : 14, paddingTop: 8 },
       promptBody: { borderTopWidth: 1, borderTopColor: theme.colors.border, padding: compact ? 10 : 14 },
-      grid: { flexDirection: compact ? "column" as const : "row" as const, gap: compact ? 10 : 14 },
-      toolsColumn: { flex: compact ? undefined : 1, gap: compact ? 10 : 14 },
+      grid: {
+        flex: compact ? undefined : 1,
+        flexDirection: compact ? "column" as const : "row" as const,
+        gap: compact ? 10 : 14,
+        minHeight: compact ? undefined : 0,
+      },
+      compactOverview: { flex: 1, gap: 10, minHeight: 0 },
+      toolsColumn: { flex: compact ? undefined : 1, gap: compact ? 10 : 14, minHeight: compact ? undefined : 0 },
       card: {
         gap: compact ? 8 : 10,
         borderWidth: 1,
@@ -79,7 +82,7 @@ function useStyles(theme: PluginTheme, compact: boolean) {
         backgroundColor: theme.colors.surface1,
       },
       toolsCard: { flex: compact ? undefined : 1 },
-      thoughtCard: { flex: compact ? undefined : 2 },
+      thoughtCard: { flex: compact ? undefined : 2, minHeight: compact ? undefined : 0 },
       headingRow: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, gap: 8 },
       headingStart: { flexDirection: "row" as const, alignItems: "center" as const, gap: 7, flexShrink: 1 },
       title: { color: theme.colors.foreground, fontSize: compact ? 18 : 21, fontWeight: "600" as const },
@@ -95,14 +98,22 @@ function useStyles(theme: PluginTheme, compact: boolean) {
       completedTaskText: { color: theme.colors.foregroundMuted, flex: 1, lineHeight: 19 },
       toolName: { color: theme.colors.foreground, fontFamily: "monospace", flex: 1 },
       toolCount: { color: theme.colors.foreground, fontFamily: "monospace", fontWeight: "600" as const },
-      statsCard: { gap: compact ? 8 : 10 },
-      statsGrid: { flexDirection: "row" as const, flexWrap: "wrap" as const, rowGap: 9 },
-      statsMetric: { width: "50%" as const, gap: 2, paddingRight: 6 },
-      statsMetricHeading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5 },
-      statsMetricLabel: { color: theme.colors.foregroundMuted, fontSize: 11 },
-      statsMetricValue: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 13 },
-      statsSectionLabel: { color: theme.colors.foreground, fontSize: 12, fontWeight: "600" as const },
-      thoughtLog: { maxHeight: THOUGHT_LOG_MAX_HEIGHT },
+      statsCard: { paddingVertical: compact ? 8 : 10 },
+      statsSingleLine: { alignItems: "center" as const, flexDirection: "row" as const, gap: 8 },
+      statsValues: { flex: 1, flexDirection: "row" as const, gap: 10, justifyContent: "flex-end" as const, minWidth: 0 },
+      statsValue: { color: theme.colors.foregroundMuted, flexShrink: 1, fontFamily: "monospace", fontSize: compact ? 11 : 12 },
+      compactThought: { gap: 5 },
+      compactThoughtCard: { flex: 1, minHeight: 110 },
+      compactThoughtText: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: compact ? 12 : 13, lineHeight: compact ? 17 : 19 },
+      compactToolList: { gap: 5 },
+      compactToolRow: { alignItems: "center" as const, flexDirection: "row" as const, gap: 7 },
+      compactToolName: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 12, width: 58 },
+      compactToolSummary: { color: theme.colors.foregroundMuted, flex: 1, fontFamily: "monospace", fontSize: 12 },
+      thoughtLog: {
+        flex: compact ? undefined : 1,
+        maxHeight: compact ? THOUGHT_BLOCK_MAX_HEIGHT : undefined,
+        minHeight: 0,
+      },
       thoughtBlock: { marginVertical: 2 },
       thoughtHeader: {
         alignItems: "center" as const,
@@ -126,7 +137,7 @@ function useStyles(theme: PluginTheme, compact: boolean) {
         borderColor: theme.colors.border,
         borderTopWidth: 0,
         borderWidth: 1,
-        maxHeight: THOUGHT_LOG_MAX_HEIGHT,
+        maxHeight: THOUGHT_BLOCK_MAX_HEIGHT,
         padding: 10,
       },
       thoughtLabel: { color: theme.colors.foregroundMuted, fontFamily: "monospace", fontSize: 13, flex: 1 },
@@ -139,6 +150,20 @@ function useStyles(theme: PluginTheme, compact: boolean) {
         gap: 8,
         backgroundColor: theme.colors.surface1,
       },
+      detailsSection: { gap: compact ? 10 : 14 },
+      detailsToggle: {
+        alignItems: "center" as const,
+        backgroundColor: theme.colors.surface1,
+        borderColor: theme.colors.border,
+        borderRadius: 10,
+        borderWidth: 1,
+        flexDirection: "row" as const,
+        gap: 8,
+        justifyContent: "space-between" as const,
+        padding: compact ? 10 : 14,
+      },
+      detailsToggleStart: { alignItems: "center" as const, flexDirection: "row" as const, gap: 7 },
+      detailsContent: { gap: compact ? 10 : 14 },
       success: { color: theme.colors.statusSuccess },
       active: { color: theme.colors.accent },
       warning: { color: theme.colors.statusWarning },
@@ -171,73 +196,25 @@ function toolColor(appearance: ToolAppearance, styles: ReturnType<typeof useStyl
   return styles.muted.color;
 }
 
-type StatsMetricProps = {
-  readonly icon: string;
-  readonly label: string;
-  readonly value: string;
-  readonly styles: ReturnType<typeof useStyles>;
-};
-
-function StatsMetric({ icon, label, value, styles }: StatsMetricProps) {
-  return (
-    <View style={styles.statsMetric}>
-      <View style={styles.statsMetricHeading}>
-        <Icon name={icon} size={13} color={styles.muted.color} />
-        <Text style={styles.statsMetricLabel}>{label}</Text>
-      </View>
-      <Text style={styles.statsMetricValue}>{value}</Text>
-    </View>
-  );
-}
-
 function SessionStatsCard({ stats, styles }: { stats: SessionStats; styles: ReturnType<typeof useStyles> }) {
-  const [now, setNow] = useState(() => Date.now());
-  const hasCurrentTurn = stats.currentTurnStartedAt !== null;
-
-  useEffect(() => {
-    if (!hasCurrentTurn) return;
-    const timer = setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(timer);
-  }, [hasCurrentTurn]);
-
-  const totalUsage = stats.totalUsage;
-  const lastTurnUsage = stats.lastTurnUsage;
-  const currentDuration = elapsedDuration(stats.currentTurnStartedAt, now);
+  const contextUsage = stats.totalUsage?.contextWindowUsedTokens ?? stats.lastTurnUsage?.contextWindowUsedTokens;
+  const contextLimit = stats.totalUsage?.contextWindowMaxTokens ?? stats.lastTurnUsage?.contextWindowMaxTokens;
+  const lastTurnUsage = stats.lastTurnUsage ?? stats.totalUsage;
+  const contextLabel = contextLimit === undefined
+    ? formatTokenCount(contextUsage)
+    : `${formatTokenCount(contextUsage)} / ${formatTokenCount(contextLimit)}`;
 
   return (
     <View style={[styles.card, styles.statsCard]}>
-      <View style={styles.headingStart}>
+      <View style={styles.statsSingleLine}>
         <Icon name="Activity" size={16} color={styles.active.color} />
         <Text style={styles.heading}>Session Statistics</Text>
-      </View>
-      <View style={styles.divider} />
-      <Text style={styles.statsSectionLabel}>Total</Text>
-      <View style={styles.statsGrid}>
-        <StatsMetric icon="ArrowUp" label="Up" value={formatTokenCount(totalUsage?.inputTokens)} styles={styles} />
-        <StatsMetric icon="ArrowDown" label="Down" value={formatTokenCount(totalUsage?.outputTokens)} styles={styles} />
-        <StatsMetric icon="Database" label="Cache tokens" value={formatTokenCount(totalUsage?.cachedInputTokens)} styles={styles} />
-        <StatsMetric icon="Gauge" label="Cache hit rate" value={formatPercent(cacheHitRate(totalUsage))} styles={styles} />
-      </View>
-      <Text style={styles.statsSectionLabel}>Last Turn</Text>
-      <View style={styles.statsGrid}>
-        <StatsMetric icon="ArrowUp" label="Up" value={formatTokenCount(lastTurnUsage?.inputTokens)} styles={styles} />
-        <StatsMetric icon="ArrowDown" label="Down" value={formatTokenCount(lastTurnUsage?.outputTokens)} styles={styles} />
-        <StatsMetric icon="Database" label="Cache tokens" value={formatTokenCount(lastTurnUsage?.cachedInputTokens)} styles={styles} />
-        <StatsMetric icon="Gauge" label="Cache hit rate" value={formatPercent(cacheHitRate(lastTurnUsage))} styles={styles} />
-      </View>
-      <View style={styles.row}>
-        <View style={styles.toolRow}>
-          <Icon name="Clock" size={13} color={styles.muted.color} />
-          <Text style={styles.statsMetricLabel}>Last Turn Duration</Text>
+        <View style={styles.statsValues}>
+          <Text numberOfLines={1} style={styles.statsValue}>Context {contextLabel}</Text>
+          <Text numberOfLines={1} style={styles.statsValue}>
+            Last ↑{formatTokenCount(lastTurnUsage?.inputTokens)} ↓{formatTokenCount(lastTurnUsage?.outputTokens)} C{formatTokenCount(lastTurnUsage?.cachedInputTokens)}
+          </Text>
         </View>
-        <Text style={styles.statsMetricValue}>{formatDuration(stats.lastTurnDurationMs)}</Text>
-      </View>
-      <View style={styles.row}>
-        <View style={styles.toolRow}>
-          <Icon name="Timer" size={13} color={hasCurrentTurn ? styles.active.color : styles.muted.color} />
-          <Text style={styles.statsMetricLabel}>Current Turn Duration</Text>
-        </View>
-        <Text style={styles.statsMetricValue}>{hasCurrentTurn ? formatDuration(currentDuration) : "None"}</Text>
       </View>
     </View>
   );
@@ -350,6 +327,55 @@ function ToolsCard({ summary, styles }: { summary: SessionSummary; styles: Retur
   );
 }
 
+function ToolsSummaryCard({ summary, styles }: { summary: SessionSummary; styles: ReturnType<typeof useStyles> }) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.headingRow}>
+        <View style={styles.headingStart}>
+          <Icon name="Wrench" size={16} color={styles.warning.color} />
+          <Text style={styles.heading}>Tools</Text>
+        </View>
+        <Text style={styles.pill}>{summary.totalToolCalls} {summary.totalToolCalls === 1 ? "call" : "calls"}</Text>
+      </View>
+      {summary.recentToolCalls.length > 0 ? (
+        <View style={styles.compactToolList}>
+          {summary.recentToolCalls.slice(0, 2).map((call) => {
+            const appearance = toolAppearance({ name: call.name, count: 1 });
+            return (
+              <View key={call.id} style={styles.compactToolRow}>
+                <Icon name={appearance.icon} size={13} color={toolColor(appearance, styles)} />
+                <Text numberOfLines={1} style={styles.compactToolName}>{call.name}</Text>
+                <Text numberOfLines={1} style={styles.compactToolSummary}>{call.summary}</Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ThoughtPreviewCard({ summary, styles, markdownStyles }: {
+  summary: SessionSummary;
+  styles: ReturnType<typeof useStyles>;
+  markdownStyles: ReturnType<typeof useMarkdownStyles>;
+}) {
+  const latestThought = summary.thoughts.at(-1);
+  return (
+    <View style={[styles.card, styles.compactThoughtCard]}>
+      <View style={styles.headingStart}>
+        <Icon name="Brain" size={16} color={styles.active.color} />
+        <Text style={styles.heading}>Thought Log</Text>
+      </View>
+      {latestThought ? (
+        <View style={styles.compactThought}>
+          <MarkdownPreview text={latestThought.text} styles={markdownStyles} numberOfLines={4} />
+        </View>
+      ) : <Text style={styles.muted}>No reasoning entries yet.</Text>}
+    </View>
+  );
+}
+
 function ThinkingBlock({ label, text, expanded, onToggle, styles, markdownStyles }: {
   label: string;
   text: string;
@@ -441,6 +467,54 @@ function ThoughtLogCard({ summary, styles, markdownStyles }: {
   );
 }
 
+function OutcomeCard({ summary, styles, markdownStyles }: {
+  summary: SessionSummary;
+  styles: ReturnType<typeof useStyles>;
+  markdownStyles: ReturnType<typeof useMarkdownStyles>;
+}) {
+  return (
+    <View style={styles.outcome}>
+      <View style={styles.headingStart}>
+        <Icon name="Sparkles" size={16} color={styles.success.color} />
+        <Text style={styles.heading}>Outcome / Summary of Changes</Text>
+      </View>
+      {summary.outcome ? <MarkdownContent text={summary.outcome} styles={markdownStyles} /> : <Text style={styles.muted}>The agent has not produced a final response yet.</Text>}
+    </View>
+  );
+}
+
+function DetailsSection({ summary, styles, markdownStyles }: {
+  summary: SessionSummary;
+  styles: ReturnType<typeof useStyles>;
+  markdownStyles: ReturnType<typeof useMarkdownStyles>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <View style={styles.detailsSection}>
+      <Pressable
+        accessibilityLabel={`${expanded ? "Collapse" : "Expand"} session details`}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={() => setExpanded((current) => !current)}
+        style={styles.detailsToggle}
+      >
+        <View style={styles.detailsToggleStart}>
+          <Icon name="List" size={16} color={styles.active.color} />
+          <Text style={styles.heading}>Details</Text>
+        </View>
+        <Icon name={expanded ? "ChevronUp" : "ChevronDown"} size={16} color={styles.muted.color} />
+      </Pressable>
+      {expanded ? (
+        <View style={styles.detailsContent}>
+          <ToolsCard summary={summary} styles={styles} />
+          <ThoughtLogCard summary={summary} styles={styles} markdownStyles={markdownStyles} />
+          <OutcomeCard summary={summary} styles={styles} markdownStyles={markdownStyles} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function SessionSummaryPanel({ theme, layout, agentId, host }: PluginAgentPanelProps) {
   const data = useSummaryData(agentId);
   const styles = useStyles(theme, layout.compact);
@@ -460,21 +534,27 @@ export function SessionSummaryPanel({ theme, layout, agentId, host }: PluginAgen
       <PromptCard prompt={summary.initialPrompt} styles={styles} markdownStyles={bodyMarkdownStyles} />
       {data.historyTruncated ? <Text style={styles.muted}>Older timeline entries were capped to keep this dashboard responsive.</Text> : null}
       {data.error ? <Text style={styles.error}>Could not refresh: {data.error}</Text> : null}
-      <View style={styles.grid}>
-        <View style={styles.toolsColumn}>
+      {layout.compact ? (
+        <View style={styles.compactOverview}>
           <SessionStatsCard stats={data.stats} styles={styles} />
           <TasksCard summary={summary} styles={styles} />
-          <ToolsCard summary={summary} styles={styles} />
+          <ThoughtPreviewCard summary={summary} styles={styles} markdownStyles={thoughtMarkdownStyles} />
+          <ToolsSummaryCard summary={summary} styles={styles} />
+          <DetailsSection summary={summary} styles={styles} markdownStyles={thoughtMarkdownStyles} />
         </View>
-        <ThoughtLogCard summary={summary} styles={styles} markdownStyles={thoughtMarkdownStyles} />
-      </View>
-      <View style={styles.outcome}>
-        <View style={styles.headingStart}>
-          <Icon name="Sparkles" size={16} color={styles.success.color} />
-          <Text style={styles.heading}>Outcome / Summary of Changes</Text>
-        </View>
-        {summary.outcome ? <MarkdownContent text={summary.outcome} styles={bodyMarkdownStyles} /> : <Text style={styles.muted}>The agent has not produced a final response yet.</Text>}
-      </View>
+      ) : (
+        <>
+          <View style={styles.grid}>
+            <View style={styles.toolsColumn}>
+              <SessionStatsCard stats={data.stats} styles={styles} />
+              <TasksCard summary={summary} styles={styles} />
+              <ToolsCard summary={summary} styles={styles} />
+            </View>
+            <ThoughtLogCard summary={summary} styles={styles} markdownStyles={thoughtMarkdownStyles} />
+          </View>
+          <OutcomeCard summary={summary} styles={styles} markdownStyles={bodyMarkdownStyles} />
+        </>
+      )}
     </ScrollView>
   );
 }

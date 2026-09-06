@@ -13,6 +13,13 @@ export interface ToolFrequency {
   readonly count: number;
 }
 
+export interface SummaryToolCall {
+  readonly id: string;
+  readonly name: string;
+  readonly summary: string;
+  readonly status: ToolCallTimelineItem["status"];
+}
+
 export interface SummaryThought {
   readonly id: string;
   readonly title: string | null;
@@ -26,6 +33,7 @@ export interface SessionSummary {
   readonly tasks: readonly SummaryTask[];
   readonly completedTaskCount: number;
   readonly thoughts: readonly SummaryThought[];
+  readonly recentToolCalls: readonly SummaryToolCall[];
   readonly outcome: string | null;
 }
 
@@ -55,6 +63,10 @@ const COMPLETED_STATUS = "completed";
 const IN_PROGRESS_STATUS = "in_progress";
 
 const USAGE_FIELDS = ["inputTokens", "cachedInputTokens", "outputTokens", "totalCostUsd"] as const;
+
+export function usageChanged(current: AgentUsage | null, previous: AgentUsage | null): boolean {
+  return USAGE_FIELDS.some((field) => current?.[field] !== previous?.[field]);
+}
 
 export function usageDelta(current: AgentUsage | null, previous: AgentUsage | null): AgentUsage | null {
   if (!current) return null;
@@ -268,13 +280,55 @@ function uniqueToolCalls(items: readonly AgentTimelineItem[]): ToolCallTimelineI
   return [...calls.values()];
 }
 
+function toolCallSummary(call: ToolCallTimelineItem): string {
+  switch (call.detail.type) {
+    case "shell":
+      return truncate(call.detail.command, 72);
+    case "read":
+    case "edit":
+    case "write":
+      return call.detail.filePath;
+    case "search":
+      return truncate(call.detail.query, 72);
+    case "fetch":
+      return truncate(call.detail.url, 72);
+    case "worktree_setup":
+      return call.detail.branchName;
+    case "sub_agent":
+      return truncate(call.detail.description || call.detail.subAgentType || "provider subagent", 72);
+    case "plain_text":
+      return truncate(call.detail.label || call.detail.text || "message", 72);
+    case "plan":
+      return truncate(call.detail.text, 72);
+    case "unknown":
+      return "tool result";
+  }
+}
+
+function truncate(value: string, limit: number): string {
+  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
+}
+
+function coalesceReasoningItems(items: readonly AgentTimelineItem[]): AgentTimelineItem[] {
+  const result: AgentTimelineItem[] = [];
+  for (const item of items) {
+    const previous = result.at(-1);
+    if (previous?.type === "reasoning" && item.type === "reasoning") {
+      result[result.length - 1] = { type: "reasoning", text: `${previous.text}${item.text}` };
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
 export function reduceTimeline(items: readonly AgentTimelineItem[]): SessionSummary {
   let initialPrompt: string | null = null;
   let latestTasks: SummaryTask[] = [];
   let outcome: string | null = null;
   const thoughts: SummaryThought[] = [];
 
-  for (const item of items) {
+  for (const item of coalesceReasoningItems(items)) {
     if (item.type === "user_message" && initialPrompt === null) initialPrompt = textValue(item.text);
     if (item.type === "assistant_message") outcome = textValue(item.text) ?? outcome;
     if (item.type === "reasoning") {
@@ -286,7 +340,8 @@ export function reduceTimeline(items: readonly AgentTimelineItem[]): SessionSumm
   }
 
   const frequencies = new Map<string, number>();
-  for (const call of uniqueToolCalls(items)) {
+  const toolCalls = uniqueToolCalls(items);
+  for (const call of toolCalls) {
     const name = textValue(call.name)?.toLowerCase() ?? "unknown";
     frequencies.set(name, (frequencies.get(name) ?? 0) + 1);
   }
@@ -301,6 +356,12 @@ export function reduceTimeline(items: readonly AgentTimelineItem[]): SessionSumm
     tasks: latestTasks,
     completedTaskCount: latestTasks.filter((task) => task.status === COMPLETED_STATUS).length,
     thoughts,
+    recentToolCalls: toolCalls.slice(-3).reverse().map((call) => ({
+      id: call.callId,
+      name: textValue(call.name)?.toLowerCase() ?? "unknown",
+      summary: toolCallSummary(call),
+      status: call.status,
+    })),
     outcome,
   };
 }
