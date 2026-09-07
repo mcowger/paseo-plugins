@@ -17,7 +17,8 @@
     "pi-tasks-timeline",
     "subagent-activity",
     "reasoning-display",
-    "opencode-session-overview"
+    "opencode-session-overview",
+    "pi-plugin-mcowger"
   ],
   "snapshot": "sdk/paseo-sdk-api.json"
 }
