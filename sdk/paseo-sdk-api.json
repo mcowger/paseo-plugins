@@ -21,7 +21,7 @@
         "dist/chat/rpc-schemas.d.ts": "593fa1660564e3017da9146842b234bdd388005390559973d8bd633b6b64c90b",
         "dist/chat/types.d.ts": "a0b9f66cabb15161e679c4957542123f462e36581af8ea10d7775347d7f22c0d",
         "dist/check-traits.d.ts": "63b1312dd5fc06f477caebb59fe0ca1446fe85a27014cf02cfc2018939f8fcc2",
-        "dist/client-capabilities.d.ts": "7c0176271296dd32f452da6c4debe1c1f2cbd1c70eb3b99335a5459cee95895d",
+        "dist/client-capabilities.d.ts": "425fe01e7ec6ac4a9e343438d2a8d7b89b779d94704fad519bd0bdd4912cfa75",
         "dist/connection-offer.d.ts": "09498329e4e3d58aafb73d064ef1e7579faf0e797c727d273644a11c3f6abb78",
         "dist/daemon-endpoints.d.ts": "bb4bf23d5da9ea66535ee51e44360050ed55d4eb4d402f5b9ab1dded771a1e8d",
         "dist/error-utils.d.ts": "4f03a3f0a9d906fe9877ee0a43e100d97b0b872144b704ebc6c28d332d879ba7",
@@ -33,10 +33,11 @@
         "dist/host-connection-schema.d.ts": "68074c8fd8cdcdc66d24552f9c35cab30386b7ff07dc8f026f300ef8c971de14",
         "dist/literal-union.d.ts": "6ece06b6c06fa4f78c566b5c479911ee38def6690150e7213ac8d56ab9294ff8",
         "dist/loop/rpc-schemas.d.ts": "e88605e3bab6a98819f3480a5ce958d395c2e24cc1bd7f24dae71e1f8aa2cedf",
-        "dist/messages.d.ts": "690135eada0d55ab86127b6d12b90defd925d8b6f1d2ea71edec77357f42ab8f",
+        "dist/messages.d.ts": "6fb8b19868c9fde3f1f4254f5b21a09dd782f9bc39f61e47a1399f7f8c9b6130",
         "dist/paseo-config-schema.d.ts": "cca82722dea170cfa64862c802784d78b12b2d6ebb0ddbfda0f0ff720ced3724",
         "dist/paseo-tool-call-detail.d.ts": "7311c6bd62d24210860149410e4ed2c1536fb5ae720cf1ce653be67e18e1b2b0",
         "dist/path-utils.d.ts": "163a4195c67c82191c3f02a5239d50412803c6c4a17857649ab05ad96035f381",
+        "dist/plugin-requirements.d.ts": "66680264504834ca96907e568f2ab7bfbef1410515acfa6de7bd3a023cb18d81",
         "dist/plugin-source-reference.d.ts": "6e315bdb2150c5a2edf155eed9ebca8d3adea8967798ac692d7de97060ca24a3",
         "dist/provider-config.d.ts": "85821d0b47f5c2dfb41df1f8743784622012999e5e3ee61bdd4a6b3fbd150775",
         "dist/provider-icon-names.d.ts": "6f9ed57da4fff48ef87351453fe258ee12a3b0934f14d7884f81882b3098206a",
@@ -58,7 +59,7 @@
         "dist/timeline-identity.d.ts": "e86b10f84013d8cf47bb8e042620f882aa73a2a51b6c8b8256c289d10176a092",
         "dist/tool-call-display.d.ts": "65eab1c35406d30d63b758bbcb7816c7d9e0d94ab3000a0c8f303f8ac37060d5",
         "dist/tool-name-normalization.d.ts": "ec5576c9e0c6bf5101c954856606e2cc09e24e16d376331e65b6e8af86a01704",
-        "dist/validation/ws-outbound-schema-metadata.d.ts": "d5c678e6ec11ca1ef0f9ed39f9fbfd97c5e5f53c7f6ed741901d73206df9cd4b",
+        "dist/validation/ws-outbound-schema-metadata.d.ts": "f40e6c5f6a9940de3c73658c6824080ab6f7d3b4b15d4f0f849bfd56799c68aa",
         "dist/validation/ws-outbound.d.ts": "de572c566da707cc0324b3477a85a1245375a9d55af9e54e08f04ab71bcc8401",
         "dist/workspace-labels.d.ts": "3591448c764c26990bc3bb6aca1318e898967e8fa1e4f520afd2b43b938f2ea1"
       }
@@ -77,16 +78,17 @@
     },
     "@getpaseo/client": {
       "declarations": {
-        "dist/compat/normalize-provider-models.d.ts": "5d77c5e02a5accacb2cf66126a899a020ba8eafc56eb0b7ad99254e21505adad",
+        "dist/compat/normalize-provider-models.d.ts": "e5f29c8bca46ce2428bac532dc83d8bb8548e9da7d37d46c19445c4306c7016e",
         "dist/daemon-client-relay-e2ee-transport.d.ts": "e60bd2b8095722d7f1661bedc866b96ae6f02f8e4cf9ad870ef9c9e0e1b4091f",
         "dist/daemon-client-runtime-metrics.d.ts": "37a94e4b68d524b73e711f3045f86f5e9b72a1b162786d2ba4d035cd73b32ef4",
         "dist/daemon-client-transport-types.d.ts": "94963ddf1bd16cf75e2b5e9d11eed532d556187aea4104acb7aca85dc3c732e6",
         "dist/daemon-client-transport-utils.d.ts": "89e59ad6b83ef78d2d08b4810f9839a7f141254b93ac8cf3d64865daa8b2afeb",
         "dist/daemon-client-transport.d.ts": "b0ff08a428d7b3db571594e0a06ddf8b46fa1272b539cea9d8b19e0909ae1aa6",
         "dist/daemon-client-websocket-transport.d.ts": "26dd8c837362dcaa3cfedc5ce9eb49e62bd47909a8fc51f42fade1d0a21b2bc0",
-        "dist/daemon-client.d.ts": "c6043ea256e5cb02833529fc6aa108da0b986c9d76cccfd9691aa9e41d7a666f",
-        "dist/index.d.ts": "02b8a67f114da7642e7f92ba047eded3abbdeaad30423d1d8a2fd266a5dd4bcf",
-        "dist/terminal-stream-router.d.ts": "1016c823141d8f91f4ad028f68ca550a2f55d110141daf322d43a6593184a265"
+        "dist/daemon-client.d.ts": "098f5e1e9973cdb8e6b2030c8318328db90f36770f6d0971c7cb1a7d4b85d9f5",
+        "dist/index.d.ts": "5feb28c30acb006f5005d95498baf57ef7d811e7e67964129ae764b5948711b2",
+        "dist/terminal-stream-router.d.ts": "1016c823141d8f91f4ad028f68ca550a2f55d110141daf322d43a6593184a265",
+        "dist/terminals/index.d.ts": "e2b935f11f85a0d720118cfa8193ddcea0d7004dda182529410368271241ec3d"
       }
     },
     "@getpaseo/plugin": {
@@ -95,17 +97,19 @@
         "dist/acp.d.ts": "90ed0241f9974d2ced50ecd561e9a82b369aade792d52f440c2db56b3c0aeca4",
         "dist/attachments.d.ts": "ff388e10bffd3e9e8f422ff9d11bbcca3659b79d27a4d7b853e708d2b5f049d4",
         "dist/client-state.d.ts": "145ce8e4d0571f6ea0fe74a4ff55a3c4f4683d7b655ff4a5f05459bcef2ed405",
-        "dist/contracts.d.ts": "b29cb066a5316ea813f8770140030d2385d677f9392ff6016e35424e973a1969",
-        "dist/host.d.ts": "c9530186cbed190a566948106eb98f6e7d7a1971e86686e731882abc07b3e2ef",
-        "dist/index.d.ts": "4486a5417e7819a025aac3e788bf10cc76bc15db2f398293cbe171bb8d0146fd",
+        "dist/contracts.d.ts": "89fdc6f44d8ffa46be777f8f8e8fc269954427d53a6bf65eadbd0111d6ced688",
+        "dist/host.d.ts": "d505817b92cc78c8728acaa86bfffd4c1dbcf67cf1f6f00eae001b37d52e7011",
+        "dist/index.d.ts": "7625ec192ce584978cc3b9328afb9f4fe020618d71f80dc4cf7c6cdd48641879",
         "dist/paseo-context.d.ts": "350686b015094b3fba210e85098882d497de3b055458241212b514d7da4c7de3",
         "dist/provider.d.ts": "ba3fc5383d999d49d33347f9944414ca4b86028e1651e04e1aee9e4077ad2da5",
-        "dist/react-native.d.ts": "e6b1ab989e30256bef02a6e98a8c934625208bbf827358df4d1dd456e916417c",
+        "dist/react-native.d.ts": "5b0c857db0a5a49f241ae73bde04ec0ac064bea13aad965113803b6aaf150d25",
         "dist/rpc-context.d.ts": "42e7ce50569e4a4720eff61c3cd96eba4224e250042efff9c019f9687ca4a336",
         "dist/rpc.d.ts": "cb18344168cbdb253d3b690ca71cb81a67bb59160676077f5aa0af968183fe58",
         "dist/runtime-context-bridge.d.ts": "27bfe800f24757a6358f829f15f9f71f6a331c7603a398ab4afda3183ccd4e21",
         "dist/server.d.ts": "c93c2540f1a4ebaba58613b67392bce96673df0a134f834b68595950919e1fbc",
-        "dist/shallow.d.ts": "4d9c4bcf81883d3acf3e7c8e1fa2cd6c62d80a538de79b21476096b44ffa95fe"
+        "dist/settings.d.ts": "da82ab59368244fdaf4ca08d935f7dc1c792e11907b5fa93a9805df27ecca97a",
+        "dist/shallow.d.ts": "4d9c4bcf81883d3acf3e7c8e1fa2cd6c62d80a538de79b21476096b44ffa95fe",
+        "dist/ui.d.ts": "05ae088641a2d8153311fdbcd3bf989066fd9c2450812a2ab42b07712f60b697"
       }
     }
   }
