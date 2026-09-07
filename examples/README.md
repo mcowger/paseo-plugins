@@ -36,23 +36,12 @@ implementation details; prefer documented Paseo v0.8 APIs and the guidance in
 | [paseo-display-switcher](https://github.com/nerveband/paseo-display-switcher) | Keyboard shortcut normalization, idempotent async UI actions, and listener cleanup. | Its DOM selectors, synthetic events, and persisted-store access are private-host workarounds; do not treat them as portable APIs. |
 | [paseo-plugins (sleeyax)](https://github.com/sleeyax/paseo-plugins) | Static multi-theme registration and platform-specific React Native behavior. | CLI scraping and Discord IPC are integration-specific server adapters. |
 
-## Official timeline reference
+## Official Paseo v0.8 Plugin Examples
 
-- [Paseo timeline-items example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/timeline-items)
-  shows the supported `addTimelineTransformer` and `addTimelineRenderer` contribution shape.
-- Paseo v0.8 natively supports live streaming timeline transformation and rendering:
-  - Transformers receive `{ item, phase }`, where `phase` is `"streaming"` or `"complete"`.
-  - Paseo memoizes by source-item reference and derives replacement identities from the source item,
-    preserving mounted component identity across streaming deltas without remounting.
-  - Custom streaming text can be paced with `useRevealedText(text, phase)` from `@getpaseo/plugin/react-native`.
-  - Extension notifications (Pi `ctx.ui.notify()` and OpenCode notices) are unified as first-class
-    `type: "notification"` timeline items with log levels mapped to activity log styling.
-  - Server handlers can append canonical plugin timeline rows using
-    `await paseo.agents.ref(agentId).timeline.append({ type: "plugin", id, kind, version, data })`
-    (capped at 64 KiB; advertised via `server_info.features.pluginTimelineItems`).
-
-## Official provider reference (Paseo v0.8)
-
+- [Paseo settings example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/settings) demonstrates contributing dedicated settings screens via `client.addSettingsScreen()`.
+- [Paseo modal-ui example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/modal-ui) demonstrates modal layouts, scrolling (`scrollable={false}` with custom `ScrollView`), and clipboard actions (`client.clipboard.copyText`).
+- [Paseo lifecycle-actions and lifecycle-logger examples](https://github.com/getpaseo/paseo/tree/main/plugin-examples) demonstrate observing and customizing agent and workspace lifecycle events (`server.agents.onAgentCreate`, archiving hooks).
+- [Paseo agent-configuration example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/agent-configuration) shows customizing agent parameters and config on the server.
 - [Paseo provider-direct example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/provider-direct)
   demonstrates registering a full coding agent via `server.registerProvider()` implementing `ProviderRegistration`,
   including models/modes catalog, session lifecycles, composer toggle/select settings, prompts, turns,
@@ -62,3 +51,5 @@ implementation details; prefer documented Paseo v0.8 APIs and the guidance in
   applying focused `AcpTransformer` hooks.
 - [Paseo inline-thinking example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/inline-thinking)
   shows that custom timeline renderers operate independently of provider implementations.
+- [Paseo timeline-items example](https://github.com/getpaseo/paseo/tree/main/plugin-examples/timeline-items)
+  shows the supported `addTimelineTransformer` and `addTimelineRenderer` contribution shape.

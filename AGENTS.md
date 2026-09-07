@@ -4,8 +4,8 @@ This repository contains Paseo plugins. Use the following Paseo resources as the
 when creating or changing a plugin:
 
 The current target host and SDK baseline is **Paseo v0.8**. Pin `@getpaseo/client`,
-`@getpaseo/plugin`, and `@getpaseo/protocol` to that exact version unless a plugin explicitly
-targets another host release.
+`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.8.0. Declare compatibility in `paseo-plugin.json`
+via `requirements: { "paseo": ">=0.8.0" }` to enforce version checks at startup.
 
 - [Plugin guide](https://paseo.sh/docs/plugins.md): setup, installation, development workflow,
   lifecycle, and debugging.
@@ -65,6 +65,8 @@ Patterns observed across Paseo plugins:
 - Match the contribution scope to the task:
   - Global surfaces (`client.addSurface`) and sidebar items (`client.addSidebarItem`) for host-wide workflows.
   - Workspace and agent panels (`client.addWorkspacePanel`) declaring `locations: ["workspace", "explorer"]`.
+  - Dedicated settings screens (`client.addSettingsScreen({ id, title, icon, Component })`) under Settings.
+  - Agent and workspace lifecycle hooks & customization (`server.agents.onAgentCreate`, lifecycle observation, and archiving hooks for closed agents).
   - Contextual commands (`client.addCommandCenterItem` for `global`, `workspace`, or `agent` contexts).
   - Message composer slash commands (`client.addSlashCommand` with `context: "workspace" | "agent"`).
   - Composer pills (`client.addComposerPill`) managed during the client entry lifecycle.
@@ -118,7 +120,7 @@ Patterns observed across Paseo plugins:
   Never hardcode hex colors or rely on React Native's default text colors.
 - Use Paseo host UI components from `@getpaseo/plugin/react-native`:
   - `<Icon name="..." />` for Lucide icons (unknown names safely render nothing; do not import `lucide-react-native`).
-  - Controlled `<Modal title="..." icon={...} open={open} onOpenChange={setOpen}><Modal.Content>...</Modal.Content></Modal>`.
+  - Controlled `<Modal title="..." icon={...} open={open} onOpenChange={setOpen}><Modal.Content>...</Modal.Content></Modal>` supporting custom body layout, `scrollable={false}` with `ScrollView`, and clipboard actions (`client.clipboard.copyText`).
   - `useToast()` (`show(message, options)`, `error(message)`).
 - Keep presentation-model transformations—labels, sorting, grouping, filtering, and compact
   summaries—in `shared/`; keep `client/` components focused on rendering.
