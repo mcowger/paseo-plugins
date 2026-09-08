@@ -39,6 +39,7 @@ import {
   clampThinkingLevel,
   mapPiModel,
   normalizePiThinkingLevel,
+  parsePiModelReference,
   supportedThinkingLevels,
   thinkingOptionsForModel,
 } from "./thinking.js";
@@ -71,11 +72,6 @@ function stripAnsi(text: string): string {
 interface PiPromptPayload {
   text: string;
   images?: PiImageContent[];
-}
-
-interface PiModelReference {
-  provider?: string;
-  id: string;
 }
 
 interface PiCapturedEntry {
@@ -160,25 +156,8 @@ function modelToId(model: PiModel | null | undefined): string | null {
   return model?.provider && model.id ? `${model.provider}/${model.id}` : null;
 }
 
-function parseModelReference(modelId: string | null): PiModelReference | null {
-  if (!modelId) {
-    return null;
-  }
-  if (modelId.includes("/")) {
-    const [provider, ...rest] = modelId.split("/");
-    const id = rest.join("/");
-    if (provider && id) {
-      return { provider, id };
-    }
-  }
-  if (modelId.includes(":")) {
-    const [provider, ...rest] = modelId.split(":");
-    const id = rest.join(":");
-    if (provider && id) {
-      return { provider, id };
-    }
-  }
-  return { id: modelId };
+function parseModelReference(modelId: string | null) {
+  return parsePiModelReference(modelId);
 }
 
 function parseExtensionMarkerPayload(

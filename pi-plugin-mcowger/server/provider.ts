@@ -21,7 +21,8 @@ import {
   type PiRuntimeSession,
 } from "./runtime.js";
 import { PiProviderSession } from "./session.js";
-import { mapPiModel, normalizePiThinkingLevel } from "./thinking.js";
+import { mapPiModel, normalizePiThinkingLevel, parsePiModelReference } from "./thinking.js";
+import type { ProviderSessionConfig } from "@getpaseo/plugin/server/provider";
 
 export const PI_PROVIDER_ID = "pi-plugin-mcowger";
 export const PI_PROVIDER_LABEL = "Pi (mcowger)";
@@ -42,6 +43,7 @@ interface ProviderState {
   emit(event: ProviderEvent): void;
   capabilities: readonly string[];
   runtime: PiCliRuntime;
+  versionChecked: boolean;
   versionError: Error | null;
   mcpAdapterSupported: boolean | null;
 }
@@ -70,6 +72,7 @@ function createConnection(capabilities: readonly string[]): ProviderConnection {
     sessions: new Map(),
     capabilities,
     runtime: new PiCliRuntime(),
+    versionChecked: false,
     versionError: null,
     mcpAdapterSupported: null,
     emit(event) {
@@ -121,6 +124,10 @@ function createConnection(capabilities: readonly string[]): ProviderConnection {
 
 function toProviderError(error: unknown): ProviderError {
   return { message: error instanceof Error ? error.message : String(error) };
+}
+
+function logStep(message: string): void {
+  console.log(`[pi-plugin-mcowger] ${message}`);
 }
 
 async function dispatch(input: ProviderInput, state: ProviderState): Promise<void> {
@@ -180,7 +187,29 @@ function requireSession(state: ProviderState, sessionId: string): PiProviderSess
   return session;
 }
 
+async function applyRequestedSelection(
+  runtimeSession: PiRuntimeSession,
+  sessionId: string,
+  config: ProviderSessionConfig,
+): Promise<void> {
+  if (config.model) {
+    const reference = parsePiModelReference(config.model);
+    if (reference?.provider) {
+      await runtimeSession.setModel(reference.provider, reference.id);
+      logStep(`session.open ${sessionId}: applied model ${config.model}`);
+    }
+  }
+  const thinkingLevel = normalizePiThinkingLevel(config.thinkingOption);
+  if (thinkingLevel) {
+    await runtimeSession.setThinkingLevel(thinkingLevel);
+    logStep(`session.open ${sessionId}: applied thinking ${thinkingLevel}`);
+  }
+}
+
 async function ensurePiVersion(state: ProviderState): Promise<void> {
+  if (state.versionChecked) {
+    return;
+  }
   if (state.versionError) {
     throw state.versionError;
   }
@@ -193,6 +222,7 @@ async function ensurePiVersion(state: ProviderState): Promise<void> {
       );
       throw state.versionError;
     }
+    state.versionChecked = true;
   } catch (error) {
     if (state.versionError) {
       throw state.versionError;
@@ -212,9 +242,11 @@ async function handleCatalog(
 ): Promise<void> {
   try {
     await ensurePiVersion(state);
+    logStep(`catalog: probing pi in ${input.cwd ?? homedir()}`);
     const probe = await state.runtime.startSession({
       cwd: input.cwd ?? homedir(),
       noSession: true,
+      requestLog: logStep,
     });
     let models: PiModel[];
     let hasPresetCommand = false;
@@ -249,7 +281,7 @@ async function detectMcpAdapter(state: ProviderState, cwd: string): Promise<bool
   }
   let probe: PiRuntimeSession | null = null;
   try {
-    probe = await state.runtime.startSession({ cwd, noSession: true });
+    probe = await state.runtime.startSession({ cwd, noSession: true, requestLog: logStep });
     const commands = await probe.getCommands();
     state.mcpAdapterSupported = commands.some(
       (command) =>
@@ -300,17 +332,17 @@ async function handleSessionOpen(
       mcpConfig = createPiMcpConfigFile(mcpServers, {
         piGlobalConfigEnv: config.env as Record<string, string>,
       });
+      logStep(`session.open ${input.sessionId}: wrote merged MCP config (${Object.keys(mcpServers).length} servers)`);
     }
     extension = createPiPaseoExtensionFile(config.systemPrompt);
+    logStep(`session.open ${input.sessionId}: starting pi (cwd=${config.cwd}, model=${config.model ?? "default"})`);
 
-    const thinkingLevel = normalizePiThinkingLevel(config.thinkingOption);
+    // Never pass --model/--thinking on the command line: pi resolves CLI model
+    // and thinking overrides through a slow path (~30s here). Spawning plain
+    // and applying both via RPC right after start takes milliseconds.
     const runtimeSession = await state.runtime.startSession({
       cwd: config.cwd,
       env: config.env as Record<string, string>,
-      ...(config.model ? { model: config.model } : {}),
-      // Omit --thinking unless the user explicitly selected a level; pi then
-      // picks its own model-specific default.
-      ...(thinkingLevel ? { thinkingLevel } : {}),
       ...(config.persist === false
         ? { noSession: true }
         : persistedSessionFile
@@ -318,7 +350,11 @@ async function handleSessionOpen(
           : {}),
       ...(mcpConfig ? { mcpConfigPath: mcpConfig.path } : {}),
       extensionPaths: [extension.path],
+      requestLog: logStep,
     });
+    logStep(`session.open ${input.sessionId}: pi process started`);
+
+    await applyRequestedSelection(runtimeSession, input.sessionId, config);
 
     const initialState = await runtimeSession.getState();
     const piModels = await runtimeSession.getAvailableModels().catch(() => [] as PiModel[]);

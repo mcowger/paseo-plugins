@@ -25,6 +25,7 @@ export interface PiStartSessionInput {
   mcpConfigPath?: string;
   extensionPaths?: string[];
   extraArgs?: string[];
+  requestLog?: PiRequestLog;
 }
 
 export interface PiRuntimeSession {
@@ -86,17 +87,23 @@ export interface PiCliRuntimeOptions {
   requestTimeoutMs?: number;
 }
 
+type PiRequestLog = (message: string) => void;
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+
 export class PiCliRuntime {
   private readonly command: string;
-  private readonly requestTimeoutMs?: number;
+  private readonly requestTimeoutMs: number;
 
   constructor(options: PiCliRuntimeOptions = {}) {
     this.command = options.command ?? DEFAULT_PI_COMMAND;
-    this.requestTimeoutMs = options.requestTimeoutMs;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   async startSession(input: PiStartSessionInput): Promise<PiRuntimeSession> {
     const [command, ...args] = buildPiLaunchArgv(this.command, input);
+    const log = input.requestLog;
+    log?.(`spawn: ${command} ${args.join(" ")} (cwd=${input.cwd})`);
     const process = new JsonlRpcProcess({
       launch: { command, args, cwd: input.cwd, env: input.env },
       diagnosticName: "Pi RPC",
@@ -105,7 +112,7 @@ export class PiCliRuntime {
         console.warn(`[pi-plugin-mcowger] Ignoring invalid Pi RPC frame: ${problem}`);
       },
     });
-    return new PiCliRuntimeSession(process);
+    return new PiCliRuntimeSession(process, log);
   }
 
   async probeVersion(): Promise<string> {
@@ -143,15 +150,21 @@ export function compareVersions(left: string, right: string): number {
 
 class PiCliRuntimeSession implements PiRuntimeSession {
   private readonly subscribers = new Set<(event: PiRuntimeEvent) => void>();
+  private readonly log?: PiRequestLog;
 
-  constructor(private readonly process: JsonlRpcProcess) {
+  constructor(process: JsonlRpcProcess, log?: PiRequestLog) {
+    this.process = process;
+    this.log = log;
     process.onMessage((message) => {
       this.emit(message as PiRuntimeEvent);
     });
     process.onExit(({ error }) => {
+      this.log?.(`pi process exited: ${error.message.split("\n")[0]}`);
       this.emit({ type: "process_exit", error: error.message });
     });
   }
+
+  private readonly process: JsonlRpcProcess;
 
   onEvent(callback: (event: PiRuntimeEvent) => void): () => void {
     this.subscribers.add(callback);
@@ -251,7 +264,22 @@ class PiCliRuntimeSession implements PiRuntimeSession {
   }
 
   request(command: PiRpcCommand, timeoutMs?: number | null): Promise<unknown> {
-    return this.process.request(command, timeoutMs);
+    const startedAt = Date.now();
+    this.log?.(`rpc -> ${command.type}`);
+    return this.process.request(command, timeoutMs).then(
+      (data) => {
+        this.log?.(`rpc <- ${command.type} ok in ${Date.now() - startedAt}ms`);
+        return data;
+      },
+      (error) => {
+        this.log?.(
+          `rpc <- ${command.type} failed in ${Date.now() - startedAt}ms: ${
+            error instanceof Error ? error.message.split("\n")[0] : String(error)
+          }`,
+        );
+        throw error;
+      },
+    );
   }
 
   respondToExtensionUiRequest(

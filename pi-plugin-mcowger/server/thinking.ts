@@ -122,6 +122,32 @@ export function normalizePiModelLabel(label: string): string {
   return normalizedLabel.slice(vendorSeparatorIndex + 2).trim();
 }
 
+export interface PiModelReference {
+  provider?: string;
+  id: string;
+}
+
+export function parsePiModelReference(modelId: string | null): PiModelReference | null {
+  if (!modelId) {
+    return null;
+  }
+  if (modelId.includes("/")) {
+    const [provider, ...rest] = modelId.split("/");
+    const id = rest.join("/");
+    if (provider && id) {
+      return { provider, id };
+    }
+  }
+  if (modelId.includes(":")) {
+    const [provider, ...rest] = modelId.split(":");
+    const id = rest.join(":");
+    if (provider && id) {
+      return { provider, id };
+    }
+  }
+  return { id: modelId };
+}
+
 export function mapPiModel(model: PiModel): ProviderModel {
   const fullId = `${model.provider}/${model.id}`;
   const rawLabel = `${model.provider}/${model.name ?? model.id}`;
@@ -131,7 +157,7 @@ export function mapPiModel(model: PiModel): ProviderModel {
   return {
     id: fullId,
     label: tail && rawLabel.includes("/") ? normalizePiModelLabel(tail) : rawLabel,
-    description: rawLabel,
+    description: fullId,
     metadata: {
       provider: model.provider,
       modelId: model.id,

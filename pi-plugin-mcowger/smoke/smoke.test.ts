@@ -17,6 +17,29 @@ import { compareVersions, MIN_PI_VERSION, PiCliRuntime } from "../server/runtime
 const runtime = new PiCliRuntime();
 
 describe("real pi smoke", () => {
+  it("applies model + thinking via RPC in under 5s (CLI flags are slow)", async () => {
+    const { mkdtempSync } = await import("node:fs");
+    const cwd = mkdtempSync(join(tmpdir(), "pi-smoke-fast-open-"));
+    const startedAt = Date.now();
+    try {
+      const session = await runtime.startSession({ cwd, noSession: true });
+      try {
+        const model = process.env.PI_SMOKE_MODEL ?? "plexus/gemini-3.5-flash-lite";
+        const [provider, ...rest] = model.split("/");
+        await session.setModel(provider, rest.join("/"));
+        await session.setThinkingLevel("high");
+        const state = await session.getState();
+        expect(state.model?.id).toBe(rest.join("/"));
+        expect(state.thinkingLevel).toBe("high");
+      } finally {
+        await session.close();
+      }
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+    expect(Date.now() - startedAt).toBeLessThan(5_000);
+  });
+
   it("probes a compatible pi version", async () => {
     const version = await runtime.probeVersion();
     expect(compareVersions(version, MIN_PI_VERSION)).toBeGreaterThanOrEqual(0);
