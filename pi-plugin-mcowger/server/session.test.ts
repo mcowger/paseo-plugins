@@ -366,6 +366,41 @@ describe("PiProviderSession presets as modes", () => {
   });
 });
 
+describe("PiProviderSession shutdown", () => {
+  it("does not report runtime failure when the process exit follows our own close", async () => {
+    const runtime = new FakeRuntimeSession();
+    const failures: unknown[] = [];
+    const session = new PiProviderSession({
+      sessionId: "s-close",
+      runtimeSession: runtime,
+      config: { cwd: "/tmp/work", env: {}, mcpServers: {}, settings: {}, persist: true },
+      initialState: runtime.state,
+      piModels: [],
+      emit: () => {},
+      onRuntimeFailed: (error) => failures.push(error),
+    });
+    await session.close();
+    runtime.emitEvent({ type: "process_exit", error: "Pi RPC process exited with code 143" });
+    expect(failures).toEqual([]);
+  });
+
+  it("reports runtime failure on unexpected process exit", () => {
+    const runtime = new FakeRuntimeSession();
+    const failures: unknown[] = [];
+    new PiProviderSession({
+      sessionId: "s-crash",
+      runtimeSession: runtime,
+      config: { cwd: "/tmp/work", env: {}, mcpServers: {}, settings: {}, persist: true },
+      initialState: runtime.state,
+      piModels: [],
+      emit: () => {},
+      onRuntimeFailed: (error) => failures.push(error),
+    });
+    runtime.emitEvent({ type: "process_exit", error: "segmentation fault" });
+    expect(failures).toEqual([{ message: "segmentation fault" }]);
+  });
+});
+
 describe("PiProviderSession steering", () => {
   it("steers an active turn", async () => {
     const { runtime, session, events } = createHarness();

@@ -1480,6 +1480,11 @@ export class PiProviderSession {
   private handleProcessExit(error: string): void {
     this.rejectAllExtensionResults(new Error(error));
     this.interruptingTurn = null;
+    // Deliberate shutdown (session.close, connection close): the exit is
+    // expected — never report it as a runtime failure.
+    if (this.closed) {
+      return;
+    }
     if (!this.activeTurnId && !this.activeTurnStarted) {
       this.onRuntimeFailed({ message: error });
       return;
