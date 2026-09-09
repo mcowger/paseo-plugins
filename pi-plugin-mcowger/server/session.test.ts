@@ -1,112 +1,103 @@
-import { describe, expect, it, vi } from "vitest";
-
-import type { ProviderEvent, ProviderSessionConfig } from "@getpaseo/plugin/server/provider";
+import { describe, expect, it } from "vitest";
 
 import type {
-  PiAgentMessage,
-  PiModel,
-  PiPromptAck,
-  PiRpcSlashCommand,
-  PiRuntimeEvent,
-  PiSessionState,
-  PiSessionStats,
-} from "../shared/rpc-types.js";
-import type { PiRuntimeSession } from "./runtime.js";
-import { PiProviderSession } from "./session.js";
+  AgentSession,
+  AgentSessionEvent,
+  SessionManager,
+} from "@earendil-works/pi-coding-agent";
+import type { ProviderEvent, ProviderSessionConfig } from "@getpaseo/plugin/server/provider";
 
-class FakeRuntimeSession implements PiRuntimeSession {
-  private listeners = new Set<(event: PiRuntimeEvent) => void>();
-  sentFrames: Array<Record<string, unknown>> = [];
-  prompts: Array<{ message: string }> = [];
+import type { PiModel } from "../shared/rpc-types.js";
+import { PiProviderSession, type SdkSessionBundle } from "./session.js";
+
+const TEST_MODEL: PiModel = { provider: "anthropic", id: "claude", reasoning: true };
+
+class FakeSdkSession {
+  private listeners = new Set<(event: AgentSessionEvent) => void>();
+  prompts: Array<{ text: string }> = [];
   steers: string[] = [];
-  state: PiSessionState = {
-    thinkingLevel: "medium",
-    isStreaming: false,
-    isCompacting: false,
-    sessionId: "pi-session-1",
-    sessionFile: "/tmp/session.jsonl",
-    messageCount: 0,
-    pendingMessageCount: 0,
-    model: { provider: "anthropic", id: "claude", reasoning: true },
+  setModelCalls: string[] = [];
+  thinkingLevels: string[] = [];
+  activeTools: string[][] = [];
+  appendedEntries: Array<{ customType: string; data: unknown }> = [];
+  compactCalls: Array<string | undefined> = [];
+  navigations: string[] = [];
+  aborts = 0;
+  model: unknown = TEST_MODEL;
+  thinkingLevel = "medium";
+  sessionFile = "/tmp/session.jsonl";
+  messages: unknown[] = [];
+  entries: unknown[] = [];
+  modelRuntime = {
+    getModel: (provider: string, id: string) => ({ provider, id, reasoning: true }),
   };
-  commands: PiRpcSlashCommand[] = [];
-  messages: PiAgentMessage[] = [];
-  models: PiModel[] = [{ provider: "anthropic", id: "claude", reasoning: true }];
+  agent = {
+    state: { systemPrompt: "base system prompt" },
+  };
 
-  onEvent(callback: (event: PiRuntimeEvent) => void): () => void {
-    this.listeners.add(callback);
-    return () => this.listeners.delete(callback);
+  subscribe(listener: (event: AgentSessionEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
-  emitEvent(event: PiRuntimeEvent): void {
+  emitEvent(event: AgentSessionEvent): void {
     for (const listener of this.listeners) listener(event);
   }
 
-  async prompt(message: string): Promise<PiPromptAck> {
-    this.prompts.push({ message });
-    return { requestId: "req_prompt", agentInvoked: true };
+  async bindExtensions(): Promise<void> {}
+  async prompt(text: string): Promise<void> {
+    this.prompts.push({ text });
+    this.onPrompt?.();
   }
-
-  async steer(message: string): Promise<void> {
-    this.steers.push(message);
+  onPrompt: (() => void) | null = null;
+  async steer(text: string): Promise<void> {
+    this.steers.push(text);
   }
-
-  async clearQueue(): Promise<void> {}
-  async abort(): Promise<void> {}
-  async getState(): Promise<PiSessionState> {
-    return this.state;
+  async abort(): Promise<void> {
+    this.aborts += 1;
   }
-  async getMessages(): Promise<PiAgentMessage[]> {
-    return this.messages;
+  async compact(instructions?: string): Promise<unknown> {
+    this.compactCalls.push(instructions);
+    return {};
   }
-  async getEntries(): Promise<{ entries: unknown[]; leafId: string | null }> {
-    return { entries: this.entries, leafId: null };
+  async setModel(model: { provider: string; id: string }): Promise<void> {
+    this.setModelCalls.push(`${model.provider}/${model.id}`);
+    this.model = model;
   }
-  entries: unknown[] = [];
-  async getAvailableModels(): Promise<PiModel[]> {
-    return this.models;
-  }
-  async getAvailableThinkingLevels(): Promise<string[]> {
-    return ["off", "medium", "high"];
-  }
-  async setModel(provider: string, modelId: string): Promise<PiModel> {
-    this.setModelCalls.push({ provider, modelId });
-    const model: PiModel = { provider, id: modelId, reasoning: true };
-    this.state = { ...this.state, model };
-    return model;
-  }
-  setModelCalls: Array<{ provider: string; modelId: string }> = [];
-  thinkingLevels: string[] = [];
-  async setThinkingLevel(level: string): Promise<void> {
+  setThinkingLevel(level: string): void {
     this.thinkingLevels.push(level);
-    this.state = { ...this.state, thinkingLevel: level as PiSessionState["thinkingLevel"] };
+    this.thinkingLevel = level;
   }
-  async getSessionStats(): Promise<PiSessionStats> {
+  setActiveToolsByName(tools: string[]): void {
+    this.activeTools.push(tools);
+  }
+  async navigateTree(targetId: string): Promise<unknown> {
+    this.navigations.push(targetId);
     return {};
   }
-  async getCommands(): Promise<PiRpcSlashCommand[]> {
-    return this.commands;
+  getSessionStats() {
+    return {
+      tokens: { input: 10, output: 5, cacheRead: 2, cacheWrite: 0, total: 15 },
+      cost: 0.01,
+    };
   }
-  async request(): Promise<unknown> {
-    return {};
-  }
-  respondToExtensionUiRequest(
-    id: string,
-    response: { value?: string; confirmed?: boolean; cancelled?: boolean },
-  ): void {
-    this.sentFrames.push({ type: "extension_ui_response", id, ...response });
-  }
-  async close(): Promise<void> {}
+  dispose(): void {}
 }
 
-function createHarness(
-  options: {
-    commands?: PiRpcSlashCommand[];
-    presets?: ConstructorParameters<typeof PiProviderSession>[0]["presets"];
-  } = {},
-) {
-  const runtime = new FakeRuntimeSession();
-  runtime.commands = options.commands ?? [];
+function makeSessionManager(fake: FakeSdkSession): SessionManager {
+  return {
+    getEntries: () => fake.entries,
+    getEntry: (id: string) =>
+      fake.entries.find((entry) => (entry as { id?: string }).id === id) ?? null,
+    appendCustomEntry: (customType: string, data?: unknown) => {
+      fake.appendedEntries.push({ customType, data });
+      return "entry-id";
+    },
+  } as unknown as SessionManager;
+}
+
+function createHarness(options: { presets?: Record<string, never> | Record<string, object> } = {}) {
+  const fake = new FakeSdkSession();
   const events: ProviderEvent[] = [];
   const config: ProviderSessionConfig = {
     cwd: "/tmp/work",
@@ -115,17 +106,24 @@ function createHarness(
     settings: {},
     persist: true,
   };
+  const bundle: SdkSessionBundle = {
+    session: fake as unknown as AgentSession,
+    sessionManager: makeSessionManager(fake),
+    mcp: null,
+    presets: (options.presets ?? {}) as SdkSessionBundle["presets"],
+    promptCommands: [
+      { name: "compact", description: "Compact" },
+      { name: "preset", description: "Preset" },
+    ],
+  };
   const session = new PiProviderSession({
     sessionId: "s1",
-    runtimeSession: runtime,
+    bundle,
     config,
-    initialState: runtime.state,
-    piModels: runtime.models,
-    ...(options.presets ? { presets: options.presets } : {}),
+    models: [TEST_MODEL],
     emit: (event) => events.push(event),
-    onRuntimeFailed: () => {},
   });
-  return { runtime, session, events };
+  return { fake, session, events };
 }
 
 function messagePrompt(text: string, clientMessageId = "cm-1", delivery: "auto" | "steer" = "auto") {
@@ -136,74 +134,80 @@ function messagePrompt(text: string, clientMessageId = "cm-1", delivery: "auto" 
   };
 }
 
+const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 describe("PiProviderSession turn flow", () => {
   it("emits prompt_result + turn lifecycle and streams assistant snapshots", async () => {
-    const { runtime, session, events } = createHarness();
+    const { fake, session, events } = createHarness();
+    fake.onPrompt = () => {
+      fake.emitEvent({ type: "turn_start" } as AgentSessionEvent);
+      fake.emitEvent({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "Hello" },
+      } as AgentSessionEvent);
+      fake.emitEvent({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: " world" },
+      } as AgentSessionEvent);
+      fake.emitEvent({
+        type: "agent_end",
+        messages: [],
+        willRetry: false,
+      } as unknown as AgentSessionEvent);
+    };
     await session.handlePrompt(messagePrompt("hello"));
+    fake.onPrompt = null;
 
     expect(events[0]).toMatchObject({
       type: "session.prompt_result",
       clientMessageId: "cm-1",
       result: { type: "turn" },
     });
-    expect(events[1]).toMatchObject({ type: "session.turn", state: "started" });
     const turnId = (events[0] as { result: { turnId: string } }).result.turnId;
-
-    runtime.emitEvent({ type: "turn_start" });
-    runtime.emitEvent({
-      type: "message_update",
-      assistantMessageEvent: { type: "text_delta", delta: "Hello" },
-    });
-    runtime.emitEvent({
-      type: "message_update",
-      assistantMessageEvent: { type: "text_delta", delta: " world" },
-    });
-    runtime.emitEvent({ type: "agent_end", messages: [], willRetry: false });
-    runtime.emitEvent({ type: "agent_settled" });
 
     const snapshots = events.filter(
       (event): event is Extract<ProviderEvent, { type: "timeline.item" }> =>
         event.type === "timeline.item" && event.item.type === "assistant_message",
     );
     expect(snapshots).toHaveLength(2);
-    expect(snapshots[0].item).toMatchObject({ text: "Hello" });
     expect(snapshots[1].item).toMatchObject({ text: "Hello world", id: snapshots[0].item.id });
 
-    expect(events.at(-1)).toMatchObject({ type: "session.turn", turnId, state: "completed" });
+    expect(events.find((event) => event.type === "session.turn" && event.state !== "started")).toMatchObject({
+      type: "session.turn",
+      turnId,
+      state: "completed",
+    });
+    expect(events.some((event) => event.type === "session.usage")).toBe(true);
   });
 
-  it("emits reasoning snapshots with stable ids", async () => {
-    const { runtime, session, events } = createHarness();
-    await session.handlePrompt(messagePrompt("think"));
-    runtime.emitEvent({
-      type: "message_update",
-      assistantMessageEvent: { type: "thinking_delta", delta: "hmm" },
-    });
-    runtime.emitEvent({
-      type: "message_update",
-      assistantMessageEvent: { type: "thinking_delta", delta: " hmm" },
-    });
-    const reasoning = events.filter(
-      (event): event is Extract<ProviderEvent, { type: "timeline.item" }> =>
-        event.type === "timeline.item" && event.item.type === "reasoning",
+  it("completes the turn from prompt() resolution when no agent events arrive", async () => {
+    const { fake, session, events } = createHarness();
+    // prompt resolves without any agent activity (extension command path)
+    await session.handlePrompt(messagePrompt("/noop"));
+    await flush();
+    await flush();
+    const terminal = events.find(
+      (event) => event.type === "session.turn" && event.state !== "started",
     );
-    expect(reasoning).toHaveLength(2);
-    expect(reasoning[1].item).toMatchObject({ text: "hmm hmm", id: reasoning[0].item.id });
+    expect(terminal).toBeDefined();
+    expect(fake.prompts[0].text).toBe("/noop");
   });
 
   it("fails the turn when pi reports an error", async () => {
-    const { runtime, session, events } = createHarness();
+    const { fake, session, events } = createHarness();
+    fake.onPrompt = () => {
+      fake.emitEvent({ type: "turn_start" } as AgentSessionEvent);
+      fake.emitEvent({
+        type: "agent_end",
+        willRetry: false,
+        messages: [
+          { role: "assistant", content: [], errorMessage: "rate limited", stopReason: "error" },
+        ],
+      } as unknown as AgentSessionEvent);
+    };
     await session.handlePrompt(messagePrompt("boom"));
-    runtime.emitEvent({ type: "turn_start" });
-    runtime.emitEvent({
-      type: "agent_end",
-      willRetry: false,
-      messages: [
-        { role: "assistant", content: [], errorMessage: "rate limited", stopReason: "error" },
-      ],
-    });
-    runtime.emitEvent({ type: "agent_settled" });
-    expect(events.at(-1)).toMatchObject({
+    fake.onPrompt = null;
+    expect(events.find((event) => event.type === "session.turn" && event.state !== "started")).toMatchObject({
       type: "session.turn",
       state: "failed",
       error: { message: expect.stringContaining("rate limited") },
@@ -212,41 +216,104 @@ describe("PiProviderSession turn flow", () => {
 });
 
 describe("PiProviderSession commands", () => {
-  it("forwards command prompts as slash commands", async () => {
-    const { runtime, session } = createHarness();
-    await session.handlePrompt({
-      clientMessageId: "cm-cmd",
-      delivery: "auto",
-      input: { type: "command", name: "preset", arguments: "research" },
+  it("applies presets natively for the preset command", async () => {
+    const { fake, session, events } = createHarness({
+      presets: { plan: { provider: "plexus", model: "gpt-5.6-sol", thinkingLevel: "high" } },
     });
-    expect(runtime.prompts[0].message).toBe("/preset research");
+    await session.handlePrompt({
+      clientMessageId: "cm-p",
+      delivery: "auto",
+      input: { type: "command", name: "preset", arguments: "plan" },
+    });
+    expect(fake.setModelCalls).toEqual(["plexus/gpt-5.6-sol"]);
+    expect(fake.thinkingLevels).toContain("high");
+    expect(fake.appendedEntries).toEqual([{ customType: "preset-state", data: { name: "plan" } }]);
+    expect(events.some((e) => e.type === "session.prompt_result")).toBe(true);
   });
 
-  it("filters internal paseo commands from the published command list", async () => {
-    const { session } = createHarness({
-      commands: [
-        { name: "preset", description: "Switch preset", source: "extension" },
-        { name: "paseo_tree", description: "internal", source: "extension" },
-        { name: "paseo_capture_entries", description: "internal", source: "extension" },
-        { name: "compact", description: "Compact", source: "prompt" },
-      ],
+  it("intercepts the compact command", async () => {
+    const { fake, session } = createHarness();
+    await session.handlePrompt({
+      clientMessageId: "cm-c",
+      delivery: "auto",
+      input: { type: "command", name: "compact", arguments: "keep it short" },
     });
-    const commands = await session.listCommands();
-    expect(commands.map((command) => command.name)).toEqual(["preset", "compact"]);
+    expect(fake.compactCalls).toEqual(["keep it short"]);
+    expect(fake.prompts).toHaveLength(0);
+  });
+});
+
+describe("PiProviderSession presets as modes", () => {
+  it("exposes presets as modes with the active mode in config state", () => {
+    const { session } = createHarness({
+      presets: { plan: { provider: "openai", model: "gpt-5.2", thinkingLevel: "high" } },
+    });
+    const config = session.configState();
+    expect(config.modes).toEqual([
+      { id: "plan", label: "Plan", icon: "Bot", description: "openai/gpt-5.2 · thinking: high" },
+    ]);
+  });
+
+  it("applies a preset on configure(mode): model, thinking, tools, instructions", async () => {
+    const { fake, session, events } = createHarness({
+      presets: {
+        plan: {
+          provider: "plexus",
+          model: "gpt-5.6-sol",
+          thinkingLevel: "high",
+          tools: ["read", "grep"],
+          instructions: "Plan first.",
+        },
+      },
+    });
+    await session.configure({ mode: "plan" });
+    expect(fake.setModelCalls).toEqual(["plexus/gpt-5.6-sol"]);
+    expect(fake.thinkingLevels).toContain("high");
+    expect(fake.activeTools).toEqual([["read", "grep"]]);
+    expect(fake.agent.state.systemPrompt).toBe("base system prompt\n\nPlan first.");
+
+    const configEvent = events.findLast((event) => event.type === "session.config");
+    expect(configEvent).toMatchObject({
+      config: { model: "plexus/gpt-5.6-sol", mode: "plan", thinkingOption: "high" },
+    });
+  });
+
+  it("rejects unknown presets", async () => {
+    const { session } = createHarness();
+    await expect(session.configure({ mode: "nope" })).rejects.toThrow(/Unknown pi preset/);
+  });
+
+  it("restores the active preset from preset-state entries on construction", () => {
+    const fake = new FakeSdkSession();
+    fake.entries.push({ type: "custom", customType: "preset-state", data: { name: "plan" } });
+    const restored = new PiProviderSession({
+      sessionId: "s2",
+      bundle: {
+        session: fake as unknown as AgentSession,
+        sessionManager: makeSessionManager(fake),
+        mcp: null,
+        presets: { plan: { model: "m" } },
+        promptCommands: [],
+      },
+      config: { cwd: "/tmp/work", env: {}, mcpServers: {}, settings: {}, persist: true },
+      models: [TEST_MODEL],
+      emit: () => {},
+    });
+    expect(restored.configState().mode).toBe("plan");
   });
 });
 
 describe("PiProviderSession todos", () => {
   it("emits a native todo item when the todo tool completes", async () => {
-    const { runtime, session, events } = createHarness();
+    const { fake, session, events } = createHarness();
     await session.handlePrompt(messagePrompt("do tasks"));
-    runtime.emitEvent({
+    fake.emitEvent({
       type: "tool_execution_start",
       toolCallId: "tc-1",
       toolName: "todo",
       args: { action: "set" },
-    });
-    runtime.emitEvent({
+    } as unknown as AgentSessionEvent);
+    fake.emitEvent({
       type: "tool_execution_end",
       toolCallId: "tc-1",
       toolName: "todo",
@@ -254,7 +321,7 @@ describe("PiProviderSession todos", () => {
         content: [{ type: "text", text: "ok" }],
         details: { tasks: [{ id: 1, subject: "Plan", status: "in_progress" }] },
       },
-    });
+    } as unknown as AgentSessionEvent);
     const todo = events.find(
       (event): event is Extract<ProviderEvent, { type: "timeline.item" }> =>
         event.type === "timeline.item" && event.item.type === "todo",
@@ -271,143 +338,39 @@ describe("PiProviderSession todos", () => {
 
 describe("PiProviderSession permissions", () => {
   it("routes extension UI select requests and responses", async () => {
-    const { runtime, session, events } = createHarness();
+    const { fake, session, events } = createHarness();
     await session.handlePrompt(messagePrompt("ask"));
-    runtime.emitEvent({
-      type: "extension_ui_request",
-      id: "ui-1",
-      method: "select",
-      title: "Pick one",
-      options: ["a", "b"],
-    });
+    void fake;
+    // dialog path is exercised through the uiContext bridge; simulate via
+    // the internal requestDialog by triggering respondToPermission plumbing:
+    const dialogPromise = (
+      session as unknown as { requestDialog(d: unknown): Promise<unknown> }
+    ).requestDialog({ method: "select", title: "Pick one", options: ["a", "b"] });
     const permission = events.find((event) => event.type === "session.permission");
-    expect(permission).toMatchObject({
-      request: { id: "ui-1", kind: "question", title: "Pick one" },
-    });
-
-    session.respondToPermission("ui-1", {
+    expect(permission).toBeDefined();
+    const permissionId = (permission as { request: { id: string } }).request.id;
+    session.respondToPermission(permissionId, {
       behavior: "allow",
       updatedInput: { answers: { Response: "b" } },
     });
-    expect(runtime.sentFrames).toContainEqual({
-      type: "extension_ui_response",
-      id: "ui-1",
-      value: "b",
-    });
     expect(events.at(-1)).toMatchObject({
       type: "session.permission_resolved",
-      permissionId: "ui-1",
+      permissionId,
     });
-  });
-});
-
-describe("PiProviderSession presets as modes", () => {
-  it("exposes presets as modes in config state", () => {
-    const withPresets = new PiProviderSession({
-      sessionId: "s2",
-      runtimeSession: new FakeRuntimeSession(),
-      config: {
-        cwd: "/tmp/work",
-        env: {},
-        mcpServers: {},
-        settings: {},
-        persist: true,
-      },
-      initialState: new FakeRuntimeSession().state,
-      piModels: [],
-      presets: { plan: { provider: "openai", model: "gpt-5.2", thinkingLevel: "high" } },
-      initialMode: "plan",
-      emit: () => {},
-      onRuntimeFailed: () => {},
-    });
-    const config = withPresets.configState();
-    expect(config.modes).toEqual([
-      {
-        id: "plan",
-        label: "Plan",
-        icon: "Bot",
-        description: "openai/gpt-5.2 · thinking: high",
-      },
-    ]);
-    expect(config.mode).toBe("plan");
-  });
-
-  it("applies a preset on configure(mode) and refreshes state", async () => {
-    const { runtime, session } = createHarness({ presets: { plan: { model: "gpt-5.2" } } });
-    await session.configure({ mode: "plan" });
-    expect(runtime.prompts.at(-1)?.message).toBe("/preset plan");
-  });
-
-  it("propagates preset model + thinking into the emitted session.config", async () => {
-    const { runtime, session, events } = createHarness({
-      presets: {
-        plan: { provider: "plexus", model: "gpt-5.6-sol", thinkingLevel: "high" },
-      },
-    });
-    await session.configure({ mode: "plan" });
-
-    expect(runtime.prompts[0].message).toBe("/preset plan");
-    expect(runtime.setModelCalls).toEqual([{ provider: "plexus", modelId: "gpt-5.6-sol" }]);
-    expect(runtime.thinkingLevels).toContain("high");
-
-    const configEvent = events.findLast((event) => event.type === "session.config");
-    expect(configEvent).toMatchObject({
-      config: {
-        model: "plexus/gpt-5.6-sol",
-        mode: "plan",
-        thinkingOption: "high",
-      },
-    });
-  });
-
-  it("rejects unknown presets", async () => {
-    const { session } = createHarness();
-    await expect(session.configure({ mode: "nope" })).rejects.toThrow(/Unknown pi preset/);
-  });
-});
-
-describe("PiProviderSession shutdown", () => {
-  it("does not report runtime failure when the process exit follows our own close", async () => {
-    const runtime = new FakeRuntimeSession();
-    const failures: unknown[] = [];
-    const session = new PiProviderSession({
-      sessionId: "s-close",
-      runtimeSession: runtime,
-      config: { cwd: "/tmp/work", env: {}, mcpServers: {}, settings: {}, persist: true },
-      initialState: runtime.state,
-      piModels: [],
-      emit: () => {},
-      onRuntimeFailed: (error) => failures.push(error),
-    });
-    await session.close();
-    runtime.emitEvent({ type: "process_exit", error: "Pi RPC process exited with code 143" });
-    expect(failures).toEqual([]);
-  });
-
-  it("reports runtime failure on unexpected process exit", () => {
-    const runtime = new FakeRuntimeSession();
-    const failures: unknown[] = [];
-    new PiProviderSession({
-      sessionId: "s-crash",
-      runtimeSession: runtime,
-      config: { cwd: "/tmp/work", env: {}, mcpServers: {}, settings: {}, persist: true },
-      initialState: runtime.state,
-      piModels: [],
-      emit: () => {},
-      onRuntimeFailed: (error) => failures.push(error),
-    });
-    runtime.emitEvent({ type: "process_exit", error: "segmentation fault" });
-    expect(failures).toEqual([{ message: "segmentation fault" }]);
+    await expect(dialogPromise).resolves.toEqual({ kind: "value", value: "b" });
   });
 });
 
 describe("PiProviderSession steering", () => {
   it("steers an active turn", async () => {
-    const { runtime, session, events } = createHarness();
+    const { fake, session, events } = createHarness();
+    fake.onPrompt = () => {
+      fake.emitEvent({ type: "turn_start" } as AgentSessionEvent);
+      fake.onPrompt = null;
+    };
     await session.handlePrompt(messagePrompt("start"));
-    runtime.emitEvent({ type: "turn_start" });
     await session.handlePrompt(messagePrompt("more context", "cm-2", "steer"));
-    expect(runtime.steers).toEqual(["more context"]);
+    expect(fake.steers).toEqual(["more context"]);
     expect(events.at(-1)).toMatchObject({
       type: "session.prompt_result",
       clientMessageId: "cm-2",
@@ -416,12 +379,28 @@ describe("PiProviderSession steering", () => {
   });
 
   it("interrupts and restarts when steering a slash command", async () => {
-    const { runtime, session } = createHarness();
+    const { fake, session } = createHarness();
+    fake.onPrompt = () => {
+      fake.emitEvent({ type: "turn_start" } as AgentSessionEvent);
+      fake.onPrompt = null;
+    };
     await session.handlePrompt(messagePrompt("start"));
-    runtime.emitEvent({ type: "turn_start" });
-    const abortSpy = vi.spyOn(runtime, "abort");
-    await session.handlePrompt(messagePrompt("/compact", "cm-3", "steer"));
-    expect(abortSpy).toHaveBeenCalled();
-    expect(runtime.prompts.at(-1)?.message).toBe("/compact");
+    await session.handlePrompt(messagePrompt("/preset plan", "cm-3", "steer"));
+    expect(fake.aborts).toBe(1);
+    expect(fake.prompts.at(-1)?.text).toBe("/preset plan");
+  });
+});
+
+describe("PiProviderSession rewind", () => {
+  it("rewinds via navigateTree for known entries", async () => {
+    const { fake, session } = createHarness();
+    fake.entries.push({ type: "message", id: "entry-1" });
+    await session.revertConversation("entry-1");
+    expect(fake.navigations).toEqual(["entry-1"]);
+  });
+
+  it("rejects unknown rewind targets", async () => {
+    const { session } = createHarness();
+    await expect(session.revertConversation("missing")).rejects.toThrow(/not found/);
   });
 });

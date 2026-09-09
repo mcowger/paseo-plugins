@@ -1,28 +1,28 @@
 import { homedir } from "node:os";
 
 import {
+  createAgentSession,
+  DefaultResourceLoader,
+  getAgentDir,
+  SessionManager,
+} from "./pi-sdk.js";
+import {
   negotiateProviderCapabilities,
+  type ProviderCommand,
   type ProviderConnection,
   type ProviderError,
   type ProviderEvent,
   type ProviderInput,
-  type ProviderModel,
   type ProviderRegistration,
 } from "@getpaseo/plugin/server/provider";
 
 import type { PiModel } from "../shared/rpc-types.js";
-import { createPiPaseoExtensionFile } from "./extension.js";
-import { createPiMcpConfigFile, type PiTempFile } from "./mcp-config.js";
+import { createMcpBridge } from "./mcp-bridge.js";
+import type { PiModelRuntimeLike } from "../shared/pi-sdk-types.js";
+import { createModelRuntime, listCatalogModels } from "./pi-host.js";
 import { loadPiPresets, presetsToModes } from "./presets.js";
-import {
-  compareVersions,
-  MIN_PI_VERSION,
-  PiCliRuntime,
-  type PiRuntimeSession,
-} from "./runtime.js";
 import { PiProviderSession } from "./session.js";
-import { mapPiModel, normalizePiThinkingLevel, parsePiModelReference } from "./thinking.js";
-import type { ProviderSessionConfig } from "@getpaseo/plugin/server/provider";
+import { normalizePiThinkingLevel, parsePiModelReference } from "./thinking.js";
 
 export const PI_PROVIDER_ID = "pi-plugin-mcowger";
 export const PI_PROVIDER_LABEL = "Pi (mcowger)";
@@ -42,10 +42,7 @@ interface ProviderState {
   sessions: Map<string, PiProviderSession>;
   emit(event: ProviderEvent): void;
   capabilities: readonly string[];
-  runtime: PiCliRuntime;
-  versionChecked: boolean;
-  versionError: Error | null;
-  mcpAdapterSupported: boolean | null;
+  modelRuntimePromise: Promise<PiModelRuntimeLike> | null;
 }
 
 export function createPiProvider(): ProviderRegistration {
@@ -53,7 +50,7 @@ export function createPiProvider(): ProviderRegistration {
     id: PI_PROVIDER_ID,
     label: PI_PROVIDER_LABEL,
     description:
-      "Pi coding agent via its RPC mode, with per-model thinking levels, presets, native todos, and subagent rendering",
+      "Pi coding agent via its in-process SDK, with per-model thinking levels, presets, native todos, and subagent rendering",
     icon: "icon.svg",
     async connect(request) {
       if (!request.versions.includes(1)) {
@@ -71,10 +68,7 @@ function createConnection(capabilities: readonly string[]): ProviderConnection {
   const state: ProviderState = {
     sessions: new Map(),
     capabilities,
-    runtime: new PiCliRuntime(),
-    versionChecked: false,
-    versionError: null,
-    mcpAdapterSupported: null,
+    modelRuntimePromise: null,
     emit(event) {
       if (closed) return;
       for (const listener of listeners) listener(event);
@@ -82,13 +76,18 @@ function createConnection(capabilities: readonly string[]): ProviderConnection {
   };
   let closed = false;
 
+  const modelRuntime = () => {
+    state.modelRuntimePromise ??= createModelRuntime();
+    return state.modelRuntimePromise;
+  };
+
   return {
     version: 1,
     capabilities,
     async send(input) {
       if (closed) throw new Error("Provider connection is closed");
       try {
-        await dispatch(input, state);
+        await dispatch(input, state, modelRuntime);
       } catch (error) {
         const providerError = toProviderError(error);
         if ("requestId" in input && input.requestId) {
@@ -126,20 +125,20 @@ function toProviderError(error: unknown): ProviderError {
   return { message: error instanceof Error ? error.message : String(error) };
 }
 
-function logStep(message: string): void {
-  console.log(`[pi-plugin-mcowger] ${message}`);
-}
-
-async function dispatch(input: ProviderInput, state: ProviderState): Promise<void> {
+async function dispatch(
+  input: ProviderInput,
+  state: ProviderState,
+  getModelRuntime: () => Promise<PiModelRuntimeLike>,
+): Promise<void> {
   switch (input.type) {
     case "catalog":
-      await handleCatalog(input, state);
+      await handleCatalog(input, state, getModelRuntime);
       return;
     case "sessions":
       state.emit({ type: "sessions", requestId: input.requestId, sessions: [] });
       return;
     case "session.open":
-      await handleSessionOpen(input, state);
+      await handleSessionOpen(input, state, getModelRuntime);
       return;
     case "session.prompt":
       await requireSession(state, input.sessionId).handlePrompt(input.prompt);
@@ -187,82 +186,20 @@ function requireSession(state: ProviderState, sessionId: string): PiProviderSess
   return session;
 }
 
-async function applyRequestedSelection(
-  runtimeSession: PiRuntimeSession,
-  sessionId: string,
-  config: ProviderSessionConfig,
-): Promise<void> {
-  if (config.model) {
-    const reference = parsePiModelReference(config.model);
-    if (reference?.provider) {
-      await runtimeSession.setModel(reference.provider, reference.id);
-      logStep(`session.open ${sessionId}: applied model ${config.model}`);
-    }
-  }
-  const thinkingLevel = normalizePiThinkingLevel(config.thinkingOption);
-  if (thinkingLevel) {
-    await runtimeSession.setThinkingLevel(thinkingLevel);
-    logStep(`session.open ${sessionId}: applied thinking ${thinkingLevel}`);
-  }
-}
-
-async function ensurePiVersion(state: ProviderState): Promise<void> {
-  if (state.versionChecked) {
-    return;
-  }
-  if (state.versionError) {
-    throw state.versionError;
-  }
-  try {
-    const version = await state.runtime.probeVersion();
-    if (compareVersions(version, MIN_PI_VERSION) < 0) {
-      state.versionError = new Error(
-        `pi-plugin-mcowger requires pi >= ${MIN_PI_VERSION} (found ${version}). ` +
-          `Upgrade pi and reload the plugin.`,
-      );
-      throw state.versionError;
-    }
-    state.versionChecked = true;
-  } catch (error) {
-    if (state.versionError) {
-      throw state.versionError;
-    }
-    state.versionError = new Error(
-      `pi-plugin-mcowger could not run \`pi --version\`: ${
-        error instanceof Error ? error.message : String(error)
-      }. Install pi >= ${MIN_PI_VERSION} or set PI_COMMAND.`,
-    );
-    throw state.versionError;
-  }
-}
-
 async function handleCatalog(
   input: Extract<ProviderInput, { type: "catalog" }>,
   state: ProviderState,
+  getModelRuntime: () => Promise<PiModelRuntimeLike>,
 ): Promise<void> {
   try {
-    await ensurePiVersion(state);
-    logStep(`catalog: probing pi in ${input.cwd ?? homedir()}`);
-    const probe = await state.runtime.startSession({
-      cwd: input.cwd ?? homedir(),
-      noSession: true,
-      requestLog: logStep,
-    });
-    let models: PiModel[];
-    let hasPresetCommand = false;
-    try {
-      models = await probe.getAvailableModels(null);
-      const commands = await probe.getCommands().catch(() => []);
-      hasPresetCommand = commands.some((command) => command.name === "preset");
-    } finally {
-      await probe.close().catch(() => undefined);
-    }
-    const presets = hasPresetCommand ? loadPiPresets(input.cwd ?? homedir()) : {};
+    const runtime = await getModelRuntime();
+    const models = await listCatalogModels(runtime);
+    const presets = loadPiPresets(input.cwd ?? homedir());
     state.emit({
       type: "catalog",
       requestId: input.requestId,
       catalog: {
-        models: models.map((model): ProviderModel => mapPiModel(model)),
+        models,
         modes: presetsToModes(presets),
       },
     });
@@ -275,37 +212,14 @@ async function handleCatalog(
   }
 }
 
-async function detectMcpAdapter(state: ProviderState, cwd: string): Promise<boolean> {
-  if (state.mcpAdapterSupported !== null) {
-    return state.mcpAdapterSupported;
-  }
-  let probe: PiRuntimeSession | null = null;
-  try {
-    probe = await state.runtime.startSession({ cwd, noSession: true, requestLog: logStep });
-    const commands = await probe.getCommands();
-    state.mcpAdapterSupported = commands.some(
-      (command) =>
-        command.source === "extension" &&
-        /^mcp(?::\d+)?$/.test(command.name) &&
-        (!command.sourceInfo || JSON.stringify(command.sourceInfo).includes("pi-mcp-adapter")),
-    );
-  } catch {
-    state.mcpAdapterSupported = false;
-  } finally {
-    await probe?.close().catch(() => undefined);
-  }
-  return state.mcpAdapterSupported;
-}
-
 async function handleSessionOpen(
   input: Extract<ProviderInput, { type: "session.open" }>,
   state: ProviderState,
+  getModelRuntime: () => Promise<PiModelRuntimeLike>,
 ): Promise<void> {
   if (state.sessions.has(input.sessionId)) {
     throw new Error(`Session already exists: ${input.sessionId}`);
   }
-  await ensurePiVersion(state);
-
   const config = input.config;
   const persistenceData = input.persistence?.data;
   const persistedSessionFile =
@@ -316,114 +230,144 @@ async function handleSessionOpen(
       ? ((persistenceData as Record<string, unknown>).sessionFile as string)
       : null;
 
-  let mcpConfig: PiTempFile | null = null;
-  let extension: PiTempFile | null = null;
-  const cleanup = () => {
-    mcpConfig?.cleanup();
-    extension?.cleanup();
-  };
+  const runtime = await getModelRuntime();
 
+  // Bridge Paseo-injected MCP servers to pi custom tools; failures degrade
+  // per-server and never block the session.
+  let mcp = null;
+  const mcpServers = config.mcpServers ?? {};
+  if (Object.keys(mcpServers).length > 0) {
+    mcp = await createMcpBridge(mcpServers, (message) =>
+      console.log(`[pi-plugin-mcowger] ${message}`),
+    );
+  }
+
+  const systemPrompt = config.systemPrompt;
+  const loader = new DefaultResourceLoader({
+    cwd: config.cwd,
+    agentDir: getAgentDir(),
+    appendSystemPromptOverride: systemPrompt
+      ? (base: string[]) => [...base, systemPrompt]
+      : undefined,
+  });
+  await loader.reload();
+
+  const sessionManager = persistedSessionFile
+    ? SessionManager.open(persistedSessionFile)
+    : config.persist === false
+      ? SessionManager.inMemory(config.cwd)
+      : SessionManager.create(config.cwd);
+
+  let created;
   try {
-    const mcpServers = config.mcpServers ?? {};
-    if (
-      Object.keys(mcpServers).length > 0 &&
-      (await detectMcpAdapter(state, config.cwd))
-    ) {
-      mcpConfig = createPiMcpConfigFile(mcpServers, {
-        piGlobalConfigEnv: config.env as Record<string, string>,
-      });
-      logStep(`session.open ${input.sessionId}: wrote merged MCP config (${Object.keys(mcpServers).length} servers)`);
-    }
-    extension = createPiPaseoExtensionFile(config.systemPrompt);
-    logStep(`session.open ${input.sessionId}: starting pi (cwd=${config.cwd}, model=${config.model ?? "default"})`);
-
-    // Never pass --model/--thinking on the command line: pi resolves CLI model
-    // and thinking overrides through a slow path (~30s here). Spawning plain
-    // and applying both via RPC right after start takes milliseconds.
-    const runtimeSession = await state.runtime.startSession({
+    created = await createAgentSession({
       cwd: config.cwd,
-      env: config.env as Record<string, string>,
-      ...(config.persist === false
-        ? { noSession: true }
-        : persistedSessionFile
-          ? { session: persistedSessionFile }
-          : {}),
-      ...(mcpConfig ? { mcpConfigPath: mcpConfig.path } : {}),
-      extensionPaths: [extension.path],
-      requestLog: logStep,
+      modelRuntime: runtime,
+      sessionManager,
+      resourceLoader: loader,
+      ...(mcp && mcp.tools.length > 0 ? { customTools: mcp.tools } : {}),
     });
-    logStep(`session.open ${input.sessionId}: pi process started`);
+  } catch (error) {
+    await mcp?.close().catch(() => undefined);
+    throw error;
+  }
+  const { session, modelFallbackMessage } = created;
 
-    await applyRequestedSelection(runtimeSession, input.sessionId, config);
-
-    const initialState = await runtimeSession.getState();
-    const piModels = await runtimeSession.getAvailableModels().catch(() => [] as PiModel[]);
-    const rawCommands = await runtimeSession.getCommands().catch(() => []);
-    const presets = rawCommands.some((command) => command.name === "preset")
-      ? loadPiPresets(config.cwd, config.env as Record<string, string>)
-      : {};
-
-    const session = new PiProviderSession({
-      sessionId: input.sessionId,
-      runtimeSession,
-      config,
-      initialState,
-      piModels,
-      presets,
-      initialMode: config.mode ?? null,
-      emit: state.emit,
-      onRuntimeFailed: (error) => {
-        state.sessions.delete(input.sessionId);
-        state.emit({ type: "session.runtime_failed", sessionId: input.sessionId, error });
-      },
-      cleanup,
-    });
-    state.sessions.set(input.sessionId, session);
-
-    state.emit({
-      type: "session.opened",
-      requestId: input.requestId,
-      sessionId: input.sessionId,
-      capabilities: state.capabilities,
-      restoration: "core",
-      persistence: session.persistence,
-      ...(config.title ? { title: config.title } : {}),
-      cwd: config.cwd,
-    });
-    session.emitConfigState();
-
-    const commands = await session.listCommands().catch(() => []);
-    if (commands.length > 0) {
-      state.emit({ type: "session.commands", sessionId: input.sessionId, commands });
-    }
-
-    if (input.history === "replay" && persistedSessionFile) {
-      await session.replayHistory();
-    }
-
-    state.emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
-
-    // On fresh sessions, apply the requested preset. On resume the preset
-    // extension restores instructions itself from preset-state entries, so
-    // only re-sync the displayed mode. Failures leave the session usable.
-    if (Object.keys(presets).length > 0) {
-      try {
-        if (!persistedSessionFile && config.mode) {
-          await session.applyPreset(config.mode);
-          session.emitConfigState();
-        } else {
-          await session.syncPresetFromEntries();
-        }
-      } catch (error) {
-        console.warn(
-          `[pi-plugin-mcowger] Failed to apply preset "${config.mode}": ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
+  // Apply the requested model/thinking after creation (fast, direct).
+  if (config.model) {
+    const reference = parsePiModelReference(config.model);
+    if (reference?.provider) {
+      const model = runtime.getModel(reference.provider, reference.id);
+      if (model) {
+        await session.setModel(model);
       }
     }
-  } catch (error) {
-    cleanup();
-    throw error;
+  }
+  const thinkingLevel = normalizePiThinkingLevel(config.thinkingOption);
+  if (thinkingLevel) {
+    session.setThinkingLevel(thinkingLevel);
+  }
+  if (modelFallbackMessage) {
+    state.emit({
+      type: "timeline.item",
+      sessionId: input.sessionId,
+      item: {
+        type: "notification",
+        id: `fallback:${input.sessionId}`,
+        level: "warning",
+        message: modelFallbackMessage,
+      },
+    });
+  }
+
+  const presets = loadPiPresets(config.cwd, config.env as Record<string, string>);
+  const promptCommands: ProviderCommand[] = [
+    {
+      name: "compact",
+      description: "Manually compact the session context",
+      argumentHint: "[instructions]",
+    },
+    {
+      name: "preset",
+      description: "Activate a pi preset",
+      argumentHint: "<name>",
+    },
+    ...loader
+      .getPrompts()
+      .prompts.map((template) => ({
+        name: template.name,
+        description: template.description ?? "Prompt template",
+      })),
+  ];
+
+  const providerSession = new PiProviderSession({
+    sessionId: input.sessionId,
+    bundle: {
+      session,
+      sessionManager,
+      mcp,
+      presets,
+      promptCommands,
+    },
+    config,
+    models: (await runtime.getAvailable()).map((model: unknown) => model as PiModel),
+    emit: state.emit,
+  });
+  state.sessions.set(input.sessionId, providerSession);
+
+  state.emit({
+    type: "session.opened",
+    requestId: input.requestId,
+    sessionId: input.sessionId,
+    capabilities: state.capabilities,
+    restoration: "core",
+    persistence: providerSession.persistence,
+    ...(config.title ? { title: config.title } : {}),
+    cwd: config.cwd,
+  });
+  providerSession.emitConfigState();
+
+  const commands = providerSession.listCommands();
+  if (commands.length > 0) {
+    state.emit({ type: "session.commands", sessionId: input.sessionId, commands });
+  }
+
+  if (input.history === "replay" && persistedSessionFile) {
+    await providerSession.replayHistory();
+  }
+
+  state.emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
+
+  // Apply a requested preset on fresh sessions. On resume the saved mode is
+  // read back from preset-state entries by the session constructor.
+  if (!persistedSessionFile && config.mode && presets[config.mode]) {
+    try {
+      await providerSession.applyPreset(config.mode);
+      providerSession.emitConfigState();
+    } catch (error) {
+      console.warn(
+        `[pi-plugin-mcowger] Failed to apply preset "${config.mode}": ${toProviderError(error).message}`,
+      );
+    }
   }
 }

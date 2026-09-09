@@ -1,9 +1,8 @@
 /**
- * Real-pi smoke test: spawns the actual pi binary (>= 0.85.1) in RPC mode and
- * exercises version probe, catalog, session lifecycle, and a live prompt.
- *
+ * Real-pi smoke test: exercises the SDK path in-process — session creation,
+ * model catalog, a live prompt with streaming, presets, and resume.
  * Run with: npx vitest run --config vitest.smoke.config.ts
- * Requires pi installed with valid auth (~/.pi/agent/auth.json).
+ * Uses ~/.pi/agent auth; no pi binary spawning.
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,95 +10,72 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import type { PiRuntimeEvent } from "../shared/rpc-types.js";
-import { compareVersions, MIN_PI_VERSION, PiCliRuntime } from "../server/runtime.js";
+import {
+  createAgentSession,
+  DefaultResourceLoader,
+  getAgentDir,
+  ModelRuntime,
+  SessionManager,
+} from "@earendil-works/pi-coding-agent";
+import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import { homedir } from "node:os";
 
-const runtime = new PiCliRuntime();
+const MODEL = process.env.PI_SMOKE_MODEL ?? "plexus/gemini-3.5-flash-lite";
 
-describe("real pi smoke", () => {
-  it("applies model + thinking via RPC in under 5s (CLI flags are slow)", async () => {
-    const { mkdtempSync } = await import("node:fs");
-    const cwd = mkdtempSync(join(tmpdir(), "pi-smoke-fast-open-"));
-    const startedAt = Date.now();
-    try {
-      const session = await runtime.startSession({ cwd, noSession: true });
-      try {
-        const model = process.env.PI_SMOKE_MODEL ?? "plexus/gemini-3.5-flash-lite";
-        const [provider, ...rest] = model.split("/");
-        await session.setModel(provider, rest.join("/"));
-        await session.setThinkingLevel("high");
-        const state = await session.getState();
-        expect(state.model?.id).toBe(rest.join("/"));
-        expect(state.thinkingLevel).toBe("high");
-      } finally {
-        await session.close();
-      }
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
-    expect(Date.now() - startedAt).toBeLessThan(5_000);
+// Same warmup the plugin does: one in-memory session loads user extensions so
+// extension-registered providers (e.g. plexus) appear in the model registry.
+async function createModelRuntime(): Promise<ModelRuntime> {
+  const runtime = await ModelRuntime.create();
+  const loader = new DefaultResourceLoader({ cwd: homedir(), agentDir: getAgentDir() });
+  await loader.reload();
+  const { session } = await createAgentSession({
+    cwd: homedir(),
+    modelRuntime: runtime,
+    sessionManager: SessionManager.inMemory(homedir()),
+    resourceLoader: loader,
+  });
+  session.dispose();
+  return runtime;
+}
+
+describe("real pi SDK smoke", () => {
+  it("lists authenticated models with per-model thinking maps", async () => {
+    const modelRuntime = await createModelRuntime();
+    const available = await modelRuntime.getAvailable();
+    expect(available.length).toBeGreaterThan(0);
+    const withMap = available.filter((m) => m.reasoning && m.thinkingLevelMap);
+    console.log(`models=${available.length} reasoningWithMap=${withMap.length}`);
+    expect(withMap.length).toBeGreaterThan(0);
   });
 
-  it("probes a compatible pi version", async () => {
-    const version = await runtime.probeVersion();
-    expect(compareVersions(version, MIN_PI_VERSION)).toBeGreaterThanOrEqual(0);
-  });
-
-  it("opens a session, lists models with thinking maps, and completes a prompt", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "pi-smoke-"));
-    const events: PiRuntimeEvent[] = [];
+  it("creates a session, applies model+thinking via SDK, and completes a prompt", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pi-sdk-smoke-"));
+    const events: AgentSessionEvent[] = [];
+    const modelRuntime = await createModelRuntime();
     try {
-      const session = await runtime.startSession({
+      const [provider, ...rest] = MODEL.split("/");
+      const model = modelRuntime.getModel(provider, rest.join("/"));
+      expect(model).toBeDefined();
+
+      const { session } = await createAgentSession({
         cwd,
-        noSession: true,
-        model: process.env.PI_SMOKE_MODEL ?? "plexus/gemini-3.5-flash-lite",
+        modelRuntime,
+        model,
+        thinkingLevel: "low",
+        sessionManager: SessionManager.inMemory(cwd),
       });
-      session.onEvent((event) => events.push(event));
+      session.subscribe((event) => events.push(event));
       try {
-        const state = await session.getState();
-        expect(state.sessionId).toBeTruthy();
-
-        const models = await session.getAvailableModels(null);
-        expect(models.length).toBeGreaterThan(0);
-        const reasoningModel = models.find((model) => model.reasoning === true);
-        console.log(
-          `models=${models.length} reasoningWithMap=${
-            models.filter((m) => m.reasoning && m.thinkingLevelMap).length
-          }`,
-        );
-        expect(reasoningModel).toBeDefined();
-
-        const commands = await session.getCommands();
-        console.log(`commands=${commands.map((command) => command.name).join(",")}`);
+        expect(session.model?.id).toBe(rest.join("/"));
+        expect(session.thinkingLevel).toBe("low");
 
         await session.prompt('Reply with exactly the word "OK" and nothing else.');
-        const settled = await waitFor(
-          events,
-          (event) => event.type === "agent_settled",
-          90_000,
-        );
-        expect(settled).toBe(true);
-
-        console.log(
-          `event types: ${[...new Set(events.map((event) => event.type))].join(",")}`,
-        );
-        const updateSample = events.find((event) => event.type === "message_update");
-        if (updateSample) {
-          console.log(`message_update sample: ${JSON.stringify(updateSample).slice(0, 400)}`);
-        }
-        for (const event of events) {
-          if (event.type === "message_end" || event.type === "agent_end" || event.type === "auto_retry_start") {
-            console.log(`${event.type}: ${JSON.stringify(event).slice(0, 500)}`);
-          }
-        }
         const deltas = events.filter(
           (event) =>
             event.type === "message_update" &&
-            "assistantMessageEvent" in event &&
             (event as { assistantMessageEvent?: { type?: string } }).assistantMessageEvent
               ?.type === "text_delta",
         );
-        expect(deltas.length).toBeGreaterThan(0);
         const text = deltas
           .map(
             (event) =>
@@ -107,70 +83,53 @@ describe("real pi smoke", () => {
                 ?.delta ?? "",
           )
           .join("");
-        console.log(`assistant text: ${text.slice(0, 100)}`);
+        console.log(`assistant text: ${text.slice(0, 120)}`);
         expect(text).toContain("OK");
-
-        const stats = await session.getSessionStats();
-        console.log(`stats: ${JSON.stringify(stats.tokens ?? {})}`);
+        expect(events.some((event) => event.type === "agent_end")).toBe(true);
       } finally {
-        await session.close();
+        session.dispose();
       }
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
-  });
+  }, 120_000);
 
-  it("loads the paseo-integration extension and answers entry capture", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "pi-smoke-ext-"));
-    const { createPiPaseoExtensionFile } = await import("../server/extension.js");
-    const extension = createPiPaseoExtensionFile("PASEO_SMOKE_SYSTEM_PROMPT_MARKER");
-    const events: PiRuntimeEvent[] = [];
+  it("persists and resumes a session with history intact", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pi-sdk-resume-"));
+    const modelRuntime = await createModelRuntime();
     try {
-      const session = await runtime.startSession({
-        cwd,
-        noSession: true,
-        extensionPaths: [extension.path],
-      });
-      session.onEvent((event) => events.push(event));
-      try {
-        // The extension emits an entry capture notification on session_start.
-        const captured = await waitFor(
-          events,
-          (event) =>
-            event.type === "extension_ui_request" &&
-            typeof (event as Record<string, unknown>).message === "string" &&
-            ((event as Record<string, unknown>).message as string).startsWith(
-              "PASEO_ENTRY_CAPTURE",
-            ),
-          15_000,
-        );
-        expect(captured).toBe(true);
+      const [provider, ...rest] = MODEL.split("/");
+      const model = modelRuntime.getModel(provider, rest.join("/"));
 
-        const commands = await session.getCommands();
-        const names = commands.map((command) => command.name);
-        expect(names).toContain("paseo_tree");
-        expect(names).toContain("paseo_capture_entries");
+      const first = await createAgentSession({
+        cwd,
+        modelRuntime,
+        model,
+        thinkingLevel: "low",
+        sessionManager: SessionManager.create(cwd),
+      });
+      await first.session.prompt('Reply with exactly the word "BONGO".');
+      const sessionFile = first.session.sessionFile;
+      const sessionId = first.session.sessionId;
+      expect(sessionFile).toBeTruthy();
+      first.session.dispose();
+
+      const resumed = await createAgentSession({
+        cwd,
+        modelRuntime,
+        sessionManager: SessionManager.open(sessionFile!),
+      });
+      try {
+        expect(resumed.session.sessionId).toBe(sessionId);
+        const text = JSON.stringify(resumed.session.messages);
+        expect(text).toContain("BONGO");
+        await resumed.session.prompt('Reply with exactly the word "TWICE".');
+        expect(JSON.stringify(resumed.session.messages)).toContain("TWICE");
       } finally {
-        await session.close();
+        resumed.session.dispose();
       }
     } finally {
-      extension.cleanup();
       rmSync(cwd, { recursive: true, force: true });
     }
-  });
+  }, 180_000);
 });
-
-async function waitFor(
-  events: PiRuntimeEvent[],
-  predicate: (event: PiRuntimeEvent) => boolean,
-  timeoutMs: number,
-): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (events.some(predicate)) {
-      return true;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return false;
-}

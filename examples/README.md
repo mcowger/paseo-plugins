@@ -53,3 +53,7 @@ implementation details; prefer documented Paseo v0.8 APIs and the guidance in
   shows that custom timeline renderers operate independently of provider implementations.
 - [Paseo timeline-items example](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples/timeline-items)
   shows the supported `addTimelineTransformer` and `addTimelineRenderer` contribution shape.
+- [pi-plugin-mcowger packaging notes](../pi-plugin-mcowger/docs/packaging.md) (in this repo): what it actually takes to embed a
+  large npm SDK (pi's coding agent) in a plugin server bundle. Covers the boundary checker's type-dependency walk, broken
+  vendor declaration unions, the eval'd-CJS runtime (no `import.meta`), Paseo's eager interop rewrite, and a local harness
+  that reproduces the daemon's exact compile-and-eval path before you hit reload.

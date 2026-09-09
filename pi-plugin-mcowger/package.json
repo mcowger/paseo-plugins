@@ -6,16 +6,24 @@
   "scripts": {
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "postinstall": "node scripts/postinstall.mjs && node scripts/build-vendor.mjs",
+    "build:vendor": "node scripts/build-vendor.mjs"
   },
   "devDependencies": {
-    "@getpaseo/client": "0.8.0",
-    "@getpaseo/plugin": "0.8.0",
-    "@getpaseo/protocol": "0.8.0",
+    "@getpaseo/client": "0.8.0-beta.1",
+    "@getpaseo/plugin": "0.8.0-beta.1",
+    "@getpaseo/protocol": "0.8.0-beta.1",
     "@types/node": "^20.9.0",
+    "esbuild": "^0.28.2",
     "oxlint": "1.61.0",
     "typescript": "^5.9.3",
+    "undici-types": "^8.10.2",
     "vitest": "^4.1.6",
     "zod": "^4.4.3"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.85.1",
+    "@modelcontextprotocol/sdk": "^1.30.0"
   }
 }

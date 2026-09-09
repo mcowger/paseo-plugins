@@ -1,0 +1,3 @@
+{
+  "ignorePatterns": ["server/vendor/", "node_modules/"]
+}

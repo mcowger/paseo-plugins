@@ -201,6 +201,7 @@ export type PiAgentSessionEvent =
   | { type: "compaction_end"; reason?: string; errorMessage?: string; aborted?: boolean }
   | { type: "agent_end"; messages?: PiAgentMessage[]; willRetry?: boolean }
   | { type: "agent_settled" }
+  | { type: "entry_appended"; entry: unknown }
   | {
       type: "auto_retry_start";
       attempt: number;

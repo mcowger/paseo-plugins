@@ -1,95 +1,103 @@
 # pi-plugin-mcowger
 
 A [Paseo v0.8](https://paseo.sh/docs/plugins/v0.8/providers.md) provider plugin for the
-[pi](https://github.com/earendil-works/pi) coding agent. It talks to `pi --mode rpc`
-(JSONL-RPC over stdin/stdout) and replaces the in-server pi provider with something
-iterable outside Paseo core.
+[pi](https://github.com/earendil-works/pi) coding agent. It embeds pi through its
+**in-process Node SDK** (`createAgentSession` from `@earendil-works/pi-coding-agent`,
+bundled into the plugin) rather than shelling out to the `pi --mode rpc` binary.
 
-Requires **pi ≥ 0.85.1** (probed via `pi --version`; set `PI_COMMAND` to override the binary)
-and **Paseo ≥ 0.8.0**.
+Targets **Paseo ≥ 0.8.0-beta.1**; bundles **pi SDK 0.85.1** (the user's global pi binary
+is not used; `~/.pi/agent` config, auth, models, extensions, and skills are shared).
 
 ## Features
 
-- **Full session lifecycle** — create, resume (pi session JSONL as the persistence handle),
-  history replay, refresh, and conversation rewind (`session.revert.conversation`) via the
-  injected `paseo-integration.mjs` extension.
-- **Per-model thinking levels** — the catalog maps each pi model's `reasoning` +
-  `thinkingLevelMap` into Paseo's per-model `thinkingOptions` (levels mapped to `null` are
-  hidden; `xhigh`/`max` only when explicitly mapped). `--thinking` is omitted unless the user
-  picks a level, so pi chooses its own model default; the effective (pi-clamped) level is
-  re-read from `get_state` after every change. Same semantics as
-  [paseo#4413](https://github.com/getpaseo/paseo/pull/4413).
-- **Presets as a composer mode selector** — presets from `~/.pi/agent/presets.json` merged
-  with `<cwd>/.pi/presets.json` (same semantics as pi's `preset.ts` example extension) are
-  exposed as Paseo **modes** — the same selector opencode uses for its agents. Modes only
-  appear when pi actually has the `preset` command installed (probed via `get_commands`).
-  Selecting a mode forwards `/preset <name>` to pi and re-emits config (a preset can switch
-  model + thinking level). On resume, the active preset is read back from pi's `preset-state`
-  session entries via `get_entries`. The `/preset` slash command also remains available.
-- **Native todos** — `@juicesharp/rpiv-todo` `todo` tool snapshots (`details.tasks`) and the
-  pi example shape (`details.todos`) are emitted as native `type: "todo"` timeline items
-  (stable id, full-snapshot updates), live and during replay.
-- **Native subagent rendering** — `task`/`subagent` delegate calls map to
-  `tool_call { detail: { type: "sub_agent", … } }` with the streamed log. Foreground runs only;
-  detached background runners are out of scope.
-- **Turn parity** — streaming text/reasoning snapshots, steer (`prompt.steer`) with
-  interrupt-and-replace for slash commands, interrupt via `clear_queue` + `abort`, pi
-  extension-UI questions routed to Paseo permission requests, MCP server injection via a
-  merged temp `mcp.json` (when the pi MCP adapter is detected), usage polling
-  (`get_session_stats`), image attachments with a text-only fallback, compaction and
-  notification timeline items.
+- **Full session lifecycle** — create, resume (`SessionManager.open` on the saved session
+  file as the persistence handle), history replay, refresh, and conversation rewind via
+  `session.navigateTree()`.
+- **Per-model thinking levels** — catalog maps each model's `reasoning` + `thinkingLevelMap`
+  into Paseo's per-model `thinkingOptions`; requested levels are applied via
+  `setThinkingLevel` and pi's effective clamped level is reported back.
+- **Presets as a composer mode selector** — `~/.pi/agent/presets.json` merged with
+  `<cwd>/.pi/presets.json` exposed as Paseo **modes**. Selecting a mode applies natively:
+  `setModel` + `setThinkingLevel` + `setActiveToolsByName` + system-prompt instructions,
+  and writes a `preset-state` custom entry (read back on resume). The `/preset` composer
+  command also works. No preset extension required.
+- **Native todos** — `@juicesharp/rpiv-todo` / pi-example `todo` tool snapshots → native
+  `type: "todo"` timeline items, live and during replay.
+- **Native subagent rendering** — `task`/`subagent` delegate calls →
+  `tool_call { detail: { type: "sub_agent", … } }` (foreground).
+- **Paseo MCP servers without mcp.json** — Paseo-injected MCP servers are connected
+  in-process (`@modelcontextprotocol/sdk`) and exposed to pi as custom tools
+  (`mcp_<server>_<tool>`), one client set per session.
+- **Turn parity** — streaming text/reasoning snapshots, steer (`prompt.steer`),
+  interrupt via `session.abort()`, pi extension dialogs (`ctx.ui.select/confirm/input`)
+  bridged to Paseo permission questions, extension `notify` → notification timeline
+  items, compaction items, image attachments with a text-only fallback hint, command
+  interception for `/compact` and `/preset`, usage/cost emission from `getSessionStats()`.
 
-## Layout
+## Architecture
 
 ```
-index.server.ts          provider registration
+index.server.ts            provider registration
 server/
-  provider.ts            ProviderRegistration + connection dispatch, catalog probe,
-                         version floor, session open/close
-  session.ts             per-session turn machine → ProviderEvents
-  runtime.ts             pi process launcher + RPC session wrapper, version probe
-  jsonl-rpc.ts           JSONL frame decoder (incl. v2 chunks) + process bridge
-  thinking.ts            per-model thinking level mapping/clamping
-  tool-call-mapper.ts    pi tool events → ProviderToolCallDetail (+ sub_agent)
-  todo.ts                rpiv-todo snapshots → native todo items
-  presets.ts             presets.json loading/merging → ProviderMode[], preset-state parsing
-  history-mapper.ts      replay of persisted pi history → timeline items
-  usage-poller.ts        token/cost polling
-  mcp-config.ts          merged MCP config temp file
-  extension.ts           paseo-integration.mjs generator (system prompt, entry capture,
-                         paseo_tree rewind bridge)
+  provider.ts              connection dispatch, catalog, session.open wiring
+  session.ts               PiProviderSession: AgentSession events → ProviderEvents,
+                           turn machine, steering, dialogs, todos, presets, rewind
+  pi-host.ts               shared ModelRuntime (with extension warmup so custom
+                           providers like plexus register), catalog mapping
+  pi-ui-context.ts         headless ExtensionUIContext (dialogs → permissions)
+  mcp-bridge.ts            MCP servers → pi custom tools
+  presets.ts               presets.json loading/merging, ProviderMode mapping,
+                           preset-state parsing
+  thinking.ts              per-model thinking level mapping/clamping
+  tool-call-mapper.ts      pi tool events → ProviderToolCallDetail (+ sub_agent)
+  todo.ts                  todo snapshots → native todo items
+  history-mapper.ts        message history → timeline items (replay)
 shared/
-  rpc-types.ts           pi RPC protocol types
-  todo-schemas.ts        Zod schemas for todo snapshot shapes
-smoke/                   real-pi smoke tests (spawns the actual binary)
+  rpc-types.ts             pi event/message types (SDK shapes)
+  todo-schemas.ts          Zod schemas for todo snapshot shapes
+smoke/                     in-process SDK smoke tests (no pi binary needed)
 ```
+
+Key SDK mechanics used: `createAgentSession`, `DefaultResourceLoader` (user extensions
+load as normal — plexus provider, rpiv-todo, pi-subagents), `session.bindExtensions({
+uiContext })`, `entry_appended` events for user-message/revert-token tracking,
+`SessionManager.appendCustomEntry`/`getEntries` for preset state, `getSessionStats()`
+for usage, `setActiveToolsByName` for preset tool sets.
 
 ## Development
 
 ```bash
-# from the repo root: build + link the local 0.8 SDK from ~/workspace/paseo
-npm run sdk:install:local
-
+npm run sdk:install:local        # from repo root: link local 0.8.0-beta.1 SDK
 cd pi-plugin-mcowger
+npm install                      # patches vendor type declarations + builds the CJS vendor bundle
 npm run typecheck
-npm test                                        # unit tests
-npx vitest run --config vitest.smoke.config.ts  # real-pi smoke (needs pi auth)
+npm test                                        # unit tests (faked SDK session)
+npx vitest run --config vitest.smoke.config.ts  # in-process SDK smoke (real auth)
 
 paseo plugin reload pi-plugin-mcowger
 paseo plugin logs pi-plugin-mcowger
 ```
 
-`PI_SMOKE_MODEL` overrides the model used by the smoke prompt (default
-`plexus/gemini-3.5-flash-lite`).
+`PI_SMOKE_MODEL` overrides the smoke-test model (default `plexus/gemini-3.5-flash-lite`).
+
+### The vendor bundle
+
+See [docs/packaging.md](./docs/packaging.md) for the full story (boundary-checker type
+walks, broken vendor declaration probes, eval'd CJS without import.meta, and the eager
+interop rewrite). Short version: `scripts/build-vendor.mjs` pre-bundles pi + the MCP SDK
+as ESM with `import.meta.url` textually stripped, typed by the hand-written
+`server/vendor/pi-sdk.d.mts`; `scripts/postinstall.mjs` patches unresolvable type probes
+in dependency declarations. Both run on `npm install`; `npm run build:vendor` rebuilds
+after dependency updates.
 
 ## Manual verification checklist
 
-- [ ] Catalog shows pi models with per-model thinking levels
-- [ ] Create session, send a prompt, watch streaming text/reasoning
-- [ ] Steer an active turn; interrupt a turn
-- [ ] `/preset <name>` switches model when the preset extension is installed; absent otherwise
+- [ ] Catalog shows pi models (incl. extension providers) with per-model thinking levels
+- [ ] Create session, prompt, watch streaming text/reasoning
+- [ ] Steer an active turn; interrupt a turn; `/compact`
+- [ ] Plan preset flips model + thinking in the composer pickers
 - [ ] rpiv-todo `todo` calls render as native todo items
 - [ ] `task`/`subagent` calls render as native subagent items
 - [ ] Close Paseo, reopen: session resumes with history replay
 - [ ] Rewind a user message
-- [ ] Reload/remove the plugin mid-session: session terminates
+- [ ] Reload/remove the plugin mid-session: session terminates cleanly
