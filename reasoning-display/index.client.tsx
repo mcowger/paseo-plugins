@@ -1,4 +1,4 @@
-import type { PluginClientContext } from "@getpaseo/plugin";
+import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { ReasoningDisplaySettings, ReasoningTimelineItem } from "./client/reasoning";
 import {
   REASONING_RENDERER_KIND,

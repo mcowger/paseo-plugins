@@ -1,4 +1,4 @@
-import type { PluginClientContext } from "@getpaseo/plugin";
+import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { PiTasksPill } from "./pi-tasks";
 import { openPiTasksPopup } from "./pi-tasks-popup";
 import {

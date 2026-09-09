@@ -2,8 +2,8 @@ import type {
   PluginAgentPanelProps,
   PluginComposerPillProps,
   PluginTimelineItemProps,
-} from "@getpaseo/plugin";
-import { Icon, Modal } from "@getpaseo/plugin/react-native";
+} from "@getpaseo/plugin/client";
+import { Icon, Modal } from "@getpaseo/plugin/client/react-native";
 import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { z } from "zod";

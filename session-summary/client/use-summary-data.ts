@@ -1,5 +1,5 @@
 import type { PaseoAgentHandle, PaseoAgentTimelineHandle } from "@getpaseo/client";
-import { usePaseo } from "@getpaseo/plugin";
+import { usePaseo } from "@getpaseo/plugin/client";
 import type { AgentStreamEvent, AgentUsage } from "@getpaseo/protocol/agent-types";
 import { useEffect, useMemo, useState } from "react";
 import {

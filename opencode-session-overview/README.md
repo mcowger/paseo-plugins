@@ -1,7 +1,7 @@
 # OpenCode session overview
 
 This read-only Paseo plugin adds an agent-scoped activity pane for OpenCode agents. It uses the
-public Paseo `0.8` agent SDK to show the native OpenCode session ID, current usage,
+public Paseo `0.8.0-beta.1` agent SDK to show the native OpenCode session ID, current usage,
 context window, tasks, loaded skills/commands, workspace metadata, and observed subagents.
 
 The panel does not connect directly to OpenCode, start a server, or expose provider credentials.
@@ -20,7 +20,7 @@ The activity pane shows the current OpenCode session and workspace details:
 
 ## Install
 
-The plugin targets Paseo `v0.8` and requires an OpenCode agent in Paseo.
+The plugin targets Paseo `v0.8.0-beta.1` and requires an OpenCode agent in Paseo.
 
 ```bash
 cd /absolute/path/to/opencode-session-overview
@@ -41,3 +41,11 @@ After updating the plugin, run `paseo plugin reload opencode-session-overview` t
 
 Usage and context costs are based on the latest usage snapshot provided by Paseo. They are not
 presented as lifetime billing totals when the provider has not supplied those values.
+
+## Development
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+```

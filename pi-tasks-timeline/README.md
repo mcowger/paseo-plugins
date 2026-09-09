@@ -1,6 +1,6 @@
 # Pi tasks timeline
 
-`pi-tasks-timeline` keeps Pi task lists visible in Paseo. It recognizes completed `todo` tool calls,
+`pi-tasks-timeline` keeps Pi task lists visible in Paseo. It targets Paseo `v0.8.0-beta.1` and recognizes completed `todo` tool calls,
 turns them into task-list timeline items, and preserves the task state across the agent's projected
 timeline history.
 
@@ -44,3 +44,11 @@ The plugin currently supports these task producers:
 
 Compatibility is based on the completed `todo` tool-call result shape. Other Pi todo plugins can
 work if they emit one of these supported `details.tasks` or `details.todos` shapes.
+
+## Development
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+```

@@ -1,4 +1,4 @@
-import type { PluginAgentCommandContext, PluginClientContext } from "@getpaseo/plugin";
+import type { PluginAgentCommandContext, PluginClientContext } from "@getpaseo/plugin/client";
 import { OpenCodeSessionOverviewPanel } from "./client/overview";
 
 export default function contribute(client: PluginClientContext) {

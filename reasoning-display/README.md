@@ -1,10 +1,10 @@
 # Reasoning display
 
-This Paseo plugin replaces built-in agent reasoning blocks with an expandable Markdown renderer matching Paseo's native tool-call cards.
+This Paseo plugin targets Paseo `v0.8.0-beta.1` and replaces built-in agent reasoning blocks with an expandable Markdown renderer matching Paseo's native tool-call cards.
 
 ## Features
 
-- **Paced streaming**: Renders thinking text smoothly as it streams using `@getpaseo/plugin/react-native`'s `useRevealedText`.
+- **Paced streaming**: Renders thinking text smoothly as it streams using `@getpaseo/plugin/client/react-native`'s `useRevealedText`.
 - **Collapsible timeline cards**: Seamlessly toggle thinking blocks open or closed with matching monospace typography and attached container styling.
 - **Three display modes**:
   - **Expand last** (default) — only the newest reasoning block starts expanded; previous blocks automatically stay collapsed.

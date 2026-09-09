@@ -3,7 +3,7 @@ import type {
   PaseoAgentUpdate,
   PaseoApi,
 } from "@getpaseo/client";
-import { usePaseo } from "@getpaseo/plugin";
+import { usePaseo } from "@getpaseo/plugin/client";
 import { useEffect, useState } from "react";
 import {
   MAX_RECENT_TOOL_CALLS,

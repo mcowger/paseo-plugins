@@ -1,3 +1,4 @@
 {
-  "id": "opencode-session-overview"
+  "id": "opencode-session-overview",
+  "requirements": { "paseo": ">=0.8.0" }
 }
