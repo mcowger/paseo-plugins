@@ -1,6 +1,7 @@
-import { useAgent } from "@getpaseo/plugin";
-import { Icon } from "@getpaseo/plugin/react-native";
-import type { PluginAgentPanelProps, PluginTheme } from "@getpaseo/plugin";
+import { useAgent } from "@getpaseo/plugin/client";
+import { Icon } from "@getpaseo/plugin/client/react-native";
+import type { PluginTheme } from "@getpaseo/plugin";
+import type { PluginAgentPanelProps } from "@getpaseo/plugin/client";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 import {

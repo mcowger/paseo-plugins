@@ -26,6 +26,7 @@ describe("Pi task timeline example", () => {
           ],
         },
       }),
+      phase: "complete",
     });
 
     expect(result).toEqual({
@@ -56,6 +57,7 @@ describe("Pi task timeline example", () => {
           ],
         },
       }),
+      phase: "complete",
     });
 
     expect(result?.items[0]?.data).toEqual({
@@ -80,10 +82,14 @@ describe("Pi task timeline example", () => {
     expect(
       transformPiTodoToolCall({
         item: { ...completedTodo({ details: { todos: [] } }), name: "write" },
+        phase: "complete",
       }),
     ).toBeUndefined();
     expect(
-      transformPiTodoToolCall({ item: completedTodo({ details: { phases: [] } }) }),
+      transformPiTodoToolCall({
+        item: completedTodo({ details: { phases: [] } }),
+        phase: "complete",
+      }),
     ).toBeUndefined();
   });
 });

@@ -1,5 +1,5 @@
-import type { PluginClientContext, PluginComposerPillProps } from "@getpaseo/plugin";
-import { Icon } from "@getpaseo/plugin/react-native";
+import type { PluginClientContext, PluginComposerPillProps } from "@getpaseo/plugin/client";
+import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useMemo } from "react";
 import { Text } from "react-native";
 import { SessionSummaryPanel } from "./client/session-summary-panel";

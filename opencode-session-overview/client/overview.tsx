@@ -1,7 +1,7 @@
 import type { PaseoAgent, PaseoApi, PaseoWorkspace } from "@getpaseo/client";
-import type { PluginAgentPanelProps } from "@getpaseo/plugin";
-import { useAgent, usePaseo, useWorkspace } from "@getpaseo/plugin";
-import { Icon } from "@getpaseo/plugin/react-native";
+import type { PluginAgentPanelProps } from "@getpaseo/plugin/client";
+import { useAgent, usePaseo, useWorkspace } from "@getpaseo/plugin/client";
+import { Icon } from "@getpaseo/plugin/client/react-native";
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";

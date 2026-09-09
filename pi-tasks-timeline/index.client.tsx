@@ -1,4 +1,4 @@
-import type { PluginClientContext } from "@getpaseo/plugin";
+import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { PiTaskList, PiTasksPanel } from "./client/pi-tasks";
 import { contributeClient } from "./client/pi-tasks-controller";
 import { piTaskListSchema, transformPiTodoToolCall } from "./shared/pi-tasks";

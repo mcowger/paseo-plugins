@@ -3,9 +3,10 @@
 This repository contains Paseo plugins. Use the following Paseo resources as the source of truth
 when creating or changing a plugin:
 
-The current target host and SDK baseline is **Paseo v0.8**. Pin `@getpaseo/client`,
-`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.8.0. Declare compatibility in `paseo-plugin.json`
-via `requirements: { "paseo": ">=0.8.0" }` to enforce version checks at startup.
+The current target host and SDK baseline is **Paseo v0.8.0-beta.1**. Pin `@getpaseo/client`,
+`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.8.0-beta.1. Declare compatibility in
+`paseo-plugin.json` via `requirements: { "paseo": ">=0.8.0" }` to enforce version checks at startup.
+Paseo treats prereleases as satisfying their stable core range, so this requirement accepts beta.1.
 
 - [Plugin guide](https://paseo.sh/docs/plugins.md): setup, installation, development workflow,
   lifecycle, and debugging.
@@ -15,7 +16,7 @@ via `requirements: { "paseo": ">=0.8.0" }` to enforce version checks at startup.
   mixed root entries to explicit client and server runtime entries.
 - [Provider plugin guide](https://paseo.sh/docs/plugins/v0.8/providers.md): direct and ACP coding agent
   providers, session lifecycle, composer settings, and provider timeline renderers.
-- [Official plugin examples](https://github.com/getpaseo/paseo/tree/main/plugin-examples):
+- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples):
   working examples for panels and commands (`local-plugin`), RPC, attachment sources (`linear`),
   themes (`catppuccin`), timeline items (`timeline-items`, `inline-thinking`), direct providers
   (`provider-direct`), and ACP adapter providers (`provider-acp-transformer`).
@@ -42,11 +43,12 @@ via `requirements: { "paseo": ">=0.8.0" }` to enforce version checks at startup.
     returns an idempotent removal function.
   - `index.server.ts` default-exports `contribute(server: PluginServerContext)`. Server cleanup may be async.
 - Import from host-provided module paths:
-  - `@getpaseo/plugin`: contracts (`defineRpc`, `defineAttachmentSource`, `RpcInput`, `RpcOutput`), contexts (`PluginClientContext`, `PluginServerContext`), and data hooks (`useRpc`, `usePaseo`, `useWorkspace`, `useAgent`).
-  - `@getpaseo/plugin/react-native`: Paseo React Native UI components (`Icon`, `Modal`, `useToast`, `useRevealedText`).
-  - `@getpaseo/plugin/server`: handler-only types such as `PluginHandlerContext`.
-  - `@getpaseo/plugin/provider`: provider registration and event contracts (`ProviderRegistration`, `negotiateProviderCapabilities`).
-  - `@getpaseo/plugin/acp`: command-backed ACP adapter (`runAcpProvider`) and `AcpTransformer` hooks.
+  - `@getpaseo/plugin`: shared contracts (`defineRpc`, `defineAttachmentSource`, `RpcInput`, `RpcOutput`).
+  - `@getpaseo/plugin/client`: client contexts, contribution types, hooks, and navigation (`PluginClientContext`, `useRpc`, `usePaseo`, `useWorkspace`, `useAgent`).
+  - `@getpaseo/plugin/client/react-native`: Paseo React Native UI components (`Icon`, `Modal`, `useToast`, `useRevealedText`).
+  - `@getpaseo/plugin/server`: server contexts and handler-only types such as `PluginHandlerContext`.
+  - `@getpaseo/plugin/server/provider`: provider registration and event contracts (`ProviderRegistration`, `negotiateProviderCapabilities`).
+  - `@getpaseo/plugin/server/acp`: command-backed ACP adapter (`runAcpProvider`) and `AcpTransformer` hooks.
 - Cross-platform and mobile guardrails:
   - Omit `"DOM"` from `tsconfig.json` `lib` and never add `/// <reference lib="dom" />`. Browser globals
     (`window`, `document`, `localStorage`) are type errors by default.
@@ -77,8 +79,8 @@ Patterns observed across Paseo plugins:
   - Coding agent providers (`server.registerProvider(provider)`).
 - Coding agent providers (Paseo v0.8):
   - Register providers in `index.server.ts` via `server.registerProvider(createProvider())` implementing
-    `ProviderRegistration` from `@getpaseo/plugin/provider`, or adapt an ACP agent using `runAcpProvider`
-    from `@getpaseo/plugin/acp`.
+    `ProviderRegistration` from `@getpaseo/plugin/server/provider`, or adapt an ACP agent using `runAcpProvider`
+    from `@getpaseo/plugin/server/acp`.
   - Provider SVG icons (`ProviderRegistration.icon`) must be a relative file path to a local SVG file
     (<= 64 KiB), sanitized and self-contained (no scripts, styles, foreignObject, event handlers, or external hrefs).
   - Publish provider catalogs (`models`, `modes`, `thinkingOptions`) to populate the agent form before session
@@ -118,7 +120,7 @@ Patterns observed across Paseo plugins:
   `layout` in one memoized style object; respect `layout.compact` and `layout.platform` (`ios`, `android`, `web`).
 - Color every primary `Text` from `theme.colors.foreground` and secondary text from `theme.colors.foregroundMuted`.
   Never hardcode hex colors or rely on React Native's default text colors.
-- Use Paseo host UI components from `@getpaseo/plugin/react-native`:
+- Use Paseo host UI components from `@getpaseo/plugin/client/react-native`:
   - `<Icon name="..." />` for Lucide icons (unknown names safely render nothing; do not import `lucide-react-native`).
   - Controlled `<Modal title="..." icon={...} open={open} onOpenChange={setOpen}><Modal.Content>...</Modal.Content></Modal>` supporting custom body layout, `scrollable={false}` with `ScrollView`, and clipboard actions (`client.clipboard.copyText`).
   - `useToast()` (`show(message, options)`, `error(message)`).
@@ -137,7 +139,7 @@ Patterns observed across Paseo plugins:
     tool calls or reasoning, and `"complete"` otherwise.
   - Paseo memoizes transformer output by source-item reference and derives replacement keys from the source
     item identity, preserving mounted component identity across streaming deltas.
-  - Use `useRevealedText(text, phase)` from `@getpaseo/plugin/react-native` to pace custom streaming text
+  - Use `useRevealedText(text, phase)` from `@getpaseo/plugin/client/react-native` to pace custom streaming text
     smoothly, matching Paseo's built-in assistant message behavior.
   - Timeline notifications: Pi extension `ctx.ui.notify()` and OpenCode notices are unified as first-class
     `type: "notification"` timeline items with log levels (info, warning, error) mapped to activity log styling.
@@ -163,5 +165,6 @@ Patterns observed across Paseo plugins:
   adapters with fixtures and deterministic clocks. Verify client and server bundle boundaries so
   server-only or Node imports cannot leak into the client bundle.
 
-For the normal local workflow, install dependencies and typecheck from the plugin directory, then
-reload the installed plugin explicitly with `paseo plugin reload <plugin-id>`.
+For the normal local workflow, install dependencies, run `npm run lint`, `npm run typecheck`, and
+`npm test` from the plugin directory, then reload the installed plugin explicitly with
+`paseo plugin reload <plugin-id>`.

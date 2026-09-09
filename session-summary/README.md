@@ -1,6 +1,6 @@
 # Session summary
 
-This Paseo `v0.8` plugin adds an agent-scoped live summary panel for reviewing a coding session.
+This Paseo `v0.8.0-beta.1` plugin adds an agent-scoped live summary panel for reviewing a coding session.
 It uses Paseo's normalized agent and timeline APIs and does not connect directly to provider
 processes or expose provider credentials.
 
@@ -16,7 +16,7 @@ processes or expose provider credentials.
 
 ## Install
 
-The plugin targets Paseo `v0.8`.
+The plugin targets Paseo `v0.8.0-beta.1`.
 
 ```bash
 cd /absolute/path/to/paseo-plugins

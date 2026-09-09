@@ -3,8 +3,8 @@ import {
   type PluginSurfaceProps,
   type PluginTimelineItemProps,
   useRpc,
-} from "@getpaseo/plugin";
-import { Icon, useRevealedText } from "@getpaseo/plugin/react-native";
+} from "@getpaseo/plugin/client";
+import { Icon, useRevealedText } from "@getpaseo/plugin/client/react-native";
 import React, {
   useCallback,
   useEffect,

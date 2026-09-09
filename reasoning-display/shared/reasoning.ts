@@ -1,4 +1,4 @@
-import type { PluginTimelineTransformerContribution } from "@getpaseo/plugin";
+import type { PluginTimelineTransformerContribution } from "@getpaseo/plugin/client";
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 

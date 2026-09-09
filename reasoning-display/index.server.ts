@@ -1,4 +1,4 @@
-import type { PluginServerContext } from "@getpaseo/plugin";
+import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { getReasoningSettings, setReasoningSettings } from "./server/reasoning";
 import { getReasoningSettingsRpc, setReasoningSettingsRpc } from "./shared/reasoning";
 
