@@ -17,7 +17,7 @@ extension-warm model catalogs.
 |---|---|
 | pi source | **Bundle `@earendil-works/pi-coding-agent` 0.85.1** as a plugin dependency; global pi binary, `PI_COMMAND`, and version probe deleted |
 | Host target | Paseo **≥ 0.8.0** (manifest requirement; repo SDK pins at 0.8.0) |
-| Presets | **Native**: presets.json merged (global + project), exposed as Paseo modes; apply via `setModel`/`setThinkingLevel`/`setActiveToolsByName` + system-prompt append; state via `appendCustomEntry("preset-state")` (compatible with preset.ts on resume). `/preset` command also supported natively |
+| Presets | **Paseo-owned**: host-scoped settings edited in a plugin Settings screen, synchronized to the provider through a revisioned RPC, and exposed as Paseo modes; apply via `setModel`/`setThinkingLevel`/tool glob resolution + appended system prompt; state via `appendCustomEntry("preset-state")`. Manual model/thinking changes keep the mode selected but mark it modified. `/preset` command is also supported natively |
 | User extensions | Load normally via `DefaultResourceLoader` (plexus provider, rpiv-todo, pi-subagents, etc.) — verified they register into the shared ModelRuntime after a one-time warmup session |
 | MCP | Paseo-injected MCP servers are connected **in-process** via `@modelcontextprotocol/sdk` and exposed as pi custom tools `mcp_<server>_<tool>`; no mcp.json temp files, no pi-mcp-adapter dependency |
 | Todos | rpiv-todo `details.tasks` (+ pi-example `details.todos`) → native `type:"todo"` timeline items, live + replay |
@@ -37,6 +37,8 @@ extension-warm model catalogs.
 - Foreground-only subagent rendering; detached pi-subagents background runs are out of scope.
 - Project-local extensions that register providers (rare) only appear after that cwd's
   session loads them.
+- Preset settings synchronize to the provider when the Pi Presets settings screen saves or reloads
+  the document.
 - Conversation rewind is disabled until Paseo exposes a way for plugin providers to replace
   adapter history after a rewind.
 - Fork visibility is host-gated by Paseo's global `agentForkContext` feature; the provider plugin

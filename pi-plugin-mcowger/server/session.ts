@@ -24,7 +24,12 @@ import {
   type PiUiDialogRequest,
   type PiUiDialogResponse,
 } from "./pi-ui-context.js";
-import { readActivePresetName, presetsToModes, type PiPresetsConfig } from "./presets.js";
+import {
+  readActivePresetName,
+  presetsToModes,
+  type PiPreset,
+  type PiPresetsConfig,
+} from "./presets.js";
 import {
   getUserMessageText,
   PiHistoryMapper,
@@ -47,6 +52,7 @@ import {
   type PiToolResult,
   type PiTrackedToolCall,
 } from "./tool-call-mapper.js";
+import { hasPiToolGlob, resolvePiToolPatterns } from "./tool-patterns.js";
 import { extractTodoSnapshot, PI_TODO_TIMELINE_ITEM_ID } from "./todo.js";
 
 const QUESTION_RESPONSE_HEADER = "Response";
@@ -68,6 +74,7 @@ export interface PiProviderSessionOptions {
   bundle: SdkSessionBundle;
   config: ProviderSessionConfig;
   models: PiModel[];
+  loadPresets?: () => PiPresetsConfig;
   emit(event: ProviderEvent): void;
   cleanup?: () => void;
 }
@@ -202,13 +209,17 @@ export class PiProviderSession {
   private readonly config: ProviderSessionConfig;
   private readonly emitEvent: (event: ProviderEvent) => void;
   private readonly cleanup?: () => void;
-  private readonly presets: PiPresetsConfig;
+  private presets: PiPresetsConfig;
   private readonly promptCommands: ProviderCommand[];
   private readonly mcp: McpBridgeHandle | null;
+  private readonly loadPresets?: () => PiPresetsConfig;
 
   private models: PiModel[];
   private currentMode: string | null = null;
   private activePresetInstructions: string | null = null;
+  private activePresetDefinitionModified = false;
+  private pendingPresetNotice: string | null = null;
+  private configurationQueue: Promise<unknown> = Promise.resolve();
   private lastConfigStateJson: string | null = null;
   private lastPersistenceJson: string | null = null;
 
@@ -237,10 +248,15 @@ export class PiProviderSession {
     this.mcp = options.bundle.mcp;
     this.config = options.config;
     this.models = options.models;
+    this.loadPresets = options.loadPresets;
     this.emitEvent = options.emit;
     this.cleanup = options.cleanup;
 
     this.currentMode = readActivePresetName(this.sessionManager.getBranch());
+    const restoredPreset = this.currentMode ? this.presets[this.currentMode] : undefined;
+    if (restoredPreset?.appendSystemPrompt) {
+      this.applyPresetInstructions(restoredPreset.appendSystemPrompt);
+    }
 
     void this.sdk.bindExtensions({
       uiContext: createHeadlessUiContext({
@@ -269,12 +285,13 @@ export class PiProviderSession {
   }
 
   configState(): ProviderConfigState {
+    this.refreshPresets();
     const currentModelId = modelToId(this.sdk.model);
     const currentModel = this.currentModel();
     return {
       ...(currentModelId ? { model: currentModelId } : {}),
       models: this.models.map((model) => mapPiModel(model)),
-      modes: presetsToModes(this.presets),
+      modes: presetsToModes(this.presets, this.currentMode, this.currentPresetIsModified()),
       ...(this.currentMode && this.presets[this.currentMode] ? { mode: this.currentMode } : {}),
       thinkingOption: normalizePiThinkingLevel(this.sdk.thinkingLevel) ?? undefined,
       thinkingOptions: currentModel ? (thinkingOptionsForModel(currentModel) ?? []) : [],
@@ -306,6 +323,37 @@ export class PiProviderSession {
   refreshState(): void {
     this.emitConfigState();
     this.emitPersistence();
+  }
+
+  updatePresets(presets: PiPresetsConfig): void {
+    void this.enqueueConfiguration(async () => {
+      const previousPreset = this.currentMode ? this.presets[this.currentMode] : undefined;
+      const previousName = previousPreset?.name ?? this.currentMode;
+      const activeModeRemoved = Boolean(this.currentMode && !presets[this.currentMode]);
+      const activeModeChanged = Boolean(
+        this.currentMode &&
+          presets[this.currentMode] &&
+          JSON.stringify(previousPreset) !== JSON.stringify(presets[this.currentMode]),
+      );
+      this.presets = presets;
+      if (activeModeRemoved) {
+        this.currentMode = null;
+        this.activePresetDefinitionModified = false;
+        if (previousName) {
+          this.emitNotification(
+            `Pi preset "${previousName}" was removed. Its current settings remain active until another preset or model is selected.`,
+            "warning",
+          );
+        }
+      } else if (activeModeChanged) {
+        this.activePresetDefinitionModified = true;
+        this.emitNotification(
+          `Pi preset "${previousName ?? this.currentMode}" changed in Paseo settings. Reselect it to apply the new definition.`,
+          "warning",
+        );
+      }
+      this.emitConfigState();
+    });
   }
 
   listCommands(): ProviderCommand[] {
@@ -394,8 +442,11 @@ export class PiProviderSession {
       return;
     }
 
-    const payload = convertPromptInput(prompt.input, { model: this.currentModel() });
+    let payload = convertPromptInput(prompt.input, { model: this.currentModel() });
     const slashInvocation = this.parseSlashCommandInput(payload.text);
+    if (!slashInvocation) {
+      payload = { ...payload, text: this.consumePresetNotice(payload.text) };
+    }
 
     if (prompt.delivery === "steer" && this.activeTurnId && !slashInvocation) {
       await this.steerActiveTurn(payload, prompt);
@@ -619,8 +670,13 @@ export class PiProviderSession {
   }
 
   async configure(changes: ProviderConfigChanges): Promise<void> {
+    await this.enqueueConfiguration(() => this.configureNow(changes));
+  }
+
+  private async configureNow(changes: ProviderConfigChanges): Promise<void> {
+    this.refreshPresets();
     if (changes.mode) {
-      await this.applyPreset(changes.mode);
+      await this.applyPresetNow(changes.mode, {});
     }
     if (changes.model) {
       const reference = parsePiModelReference(changes.model);
@@ -634,54 +690,65 @@ export class PiProviderSession {
       await this.sdk.setModel(model);
       this.config.model = modelToId(model) ?? this.config.model;
       this.upsertModel(model as unknown as PiModel);
+      this.syncThinkingToCurrentModel();
     }
     if (changes.thinkingOption !== undefined) {
       const level = normalizePiThinkingLevel(changes.thinkingOption) ?? DEFAULT_PI_THINKING_LEVEL;
-      const clamped = this.clampToCurrentModel(level);
-      this.sdk.setThinkingLevel(clamped);
-      this.config.thinkingOption = clamped;
+      this.syncThinkingToCurrentModel(level);
+    }
+    const currentPreset = this.currentMode ? this.presets[this.currentMode] : undefined;
+    if (currentPreset) {
+      this.applyPresetInstructions(currentPreset.appendSystemPrompt ?? null);
     }
     this.refreshState();
   }
 
   /** Activate a pi preset natively: model, thinking, tools, and instructions. */
-  async applyPreset(name: string): Promise<void> {
+  async applyPreset(name: string, options: { announce?: boolean } = {}): Promise<void> {
+    await this.enqueueConfiguration(() => this.applyPresetNow(name, options));
+  }
+
+  private async applyPresetNow(name: string, options: { announce?: boolean }): Promise<void> {
+    this.refreshPresets();
     const preset = this.presets[name];
     if (!preset) {
       const available = Object.keys(this.presets).join(", ") || "(none defined)";
       throw new Error(`Unknown pi preset "${name}". Available: ${available}`);
     }
 
-    if (preset.provider && preset.model) {
-      const model = this.sdk.modelRuntime.getModel(preset.provider, preset.model);
-      if (!model) {
-        throw new Error(`Preset "${name}" model not found: ${preset.provider}/${preset.model}`);
-      }
-      await this.sdk.setModel(model);
-      this.upsertModel(model as unknown as PiModel);
-      this.config.model = modelToId(model) ?? this.config.model;
+    const reference = parsePiModelReference(preset.model);
+    if (!reference?.provider) {
+      throw new Error(`Preset "${name}" model must include a provider: ${preset.model}`);
     }
-    if (preset.thinkingLevel) {
-      const level = normalizePiThinkingLevel(preset.thinkingLevel);
-      if (level) {
-        const clamped = this.clampToCurrentModel(level);
-        this.sdk.setThinkingLevel(clamped);
-        this.config.thinkingOption = clamped;
-      }
+    const model = this.sdk.modelRuntime.getModel(reference.provider, reference.id);
+    if (!model) {
+      throw new Error(`Preset "${name}" model not found: ${preset.model}`);
     }
-    if (preset.tools && preset.tools.length > 0) {
-      this.sdk.setActiveToolsByName(preset.tools);
-    }
-    if (preset.instructions) {
-      this.applyPresetInstructions(preset.instructions);
-    }
+    const activeTools =
+      preset.tools === undefined ? undefined : this.resolvePresetTools(preset.tools);
 
+    await this.sdk.setModel(model);
+    this.upsertModel(model as unknown as PiModel);
+    this.config.model = modelToId(model) ?? this.config.model;
+    this.syncThinkingToCurrentModel(preset.thinkingLevel);
+
+    if (activeTools !== undefined) {
+      this.sdk.setActiveToolsByName(activeTools);
+    }
+    this.applyPresetInstructions(preset.appendSystemPrompt ?? null);
+
+    const changed = this.currentMode !== name;
     this.sessionManager.appendCustomEntry("preset-state", { name });
     this.currentMode = name;
+    this.activePresetDefinitionModified = false;
+    if (options.announce !== false && changed) {
+      this.pendingPresetNotice = this.buildPresetChangeNotice(preset);
+      this.emitNotification(`Pi preset changed to ${preset.name}.`, "info");
+    }
     this.emitConfigState();
   }
 
-  private applyPresetInstructions(instructions: string): void {
+  private applyPresetInstructions(instructions: string | null): void {
     const state = this.sdk.agent.state as { systemPrompt: string };
     let prompt = state.systemPrompt;
     const previous = this.activePresetInstructions;
@@ -691,7 +758,7 @@ export class PiProviderSession {
         prompt = prompt.slice(0, -suffix.length);
       }
     }
-    state.systemPrompt = `${prompt}\n\n${instructions}`;
+    state.systemPrompt = instructions ? `${prompt}\n\n${instructions}` : prompt;
     this.activePresetInstructions = instructions;
   }
 
@@ -745,6 +812,91 @@ export class PiProviderSession {
       this.sdk.dispose();
       this.cleanup?.();
     }
+  }
+
+  private enqueueConfiguration<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.configurationQueue.then(operation, operation);
+    this.configurationQueue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
+  private resolvePresetTools(patterns: readonly string[]): string[] {
+    const availableTools = this.sdk.getAllTools?.().map((tool) => tool.name);
+    if (!availableTools) {
+      if (patterns.some(hasPiToolGlob)) {
+        throw new Error("Pi did not expose its tool list, so preset glob patterns cannot be resolved");
+      }
+      return [...patterns];
+    }
+    return resolvePiToolPatterns(availableTools, patterns);
+  }
+
+  private syncThinkingToCurrentModel(preferredLevel?: string): void {
+    const requested =
+      normalizePiThinkingLevel(preferredLevel) ??
+      normalizePiThinkingLevel(this.sdk.thinkingLevel) ??
+      DEFAULT_PI_THINKING_LEVEL;
+    const clamped = this.clampToCurrentModel(requested);
+    this.sdk.setThinkingLevel(clamped);
+    this.config.thinkingOption = clamped;
+  }
+
+  private refreshPresets(): void {
+    if (this.loadPresets) {
+      this.presets = this.loadPresets();
+    }
+    if (this.currentMode && !this.presets[this.currentMode]) {
+      this.currentMode = null;
+      this.activePresetDefinitionModified = false;
+    }
+  }
+
+  private currentPresetIsModified(): boolean {
+    const preset = this.currentMode ? this.presets[this.currentMode] : undefined;
+    if (!preset) {
+      return false;
+    }
+    if (this.activePresetDefinitionModified) {
+      return true;
+    }
+    if (modelToId(this.sdk.model) !== preset.model) {
+      return true;
+    }
+    const expectedThinking = this.clampToCurrentModel(preset.thinkingLevel);
+    if (normalizePiThinkingLevel(this.sdk.thinkingLevel) !== expectedThinking) {
+      return true;
+    }
+    if ((this.activePresetInstructions ?? null) !== (preset.appendSystemPrompt ?? null)) {
+      return true;
+    }
+    if (preset.tools !== undefined && this.sdk.getActiveToolNames) {
+      const expectedTools = this.resolvePresetTools(preset.tools).sort();
+      const actualTools = [...this.sdk.getActiveToolNames()].sort();
+      if (
+        expectedTools.length !== actualTools.length ||
+        expectedTools.some((tool, index) => tool !== actualTools[index])
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private buildPresetChangeNotice(preset: PiPreset): string {
+    const instructions = preset.appendSystemPrompt ?? "(No additional preset instructions.)";
+    return `NOTE: YOUR PRESET MODE HAS CHANGED TO ${preset.name}. FOLLOW ITS INSTRUCTIONS:\n${instructions}`;
+  }
+
+  private consumePresetNotice(text: string): string {
+    const notice = this.pendingPresetNotice;
+    if (!notice) {
+      return text;
+    }
+    this.pendingPresetNotice = null;
+    return text ? `${notice}\n\n${text}` : notice;
   }
 
   private currentModel(): PiModel | null {

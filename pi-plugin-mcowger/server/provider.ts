@@ -19,11 +19,13 @@ import {
 import { createMcpBridge } from "./mcp-bridge.js";
 import type { PiModelRuntimeLike } from "../shared/pi-sdk-types.js";
 import { buildCatalog, createModelRuntime, listScopedModels } from "./pi-host.js";
-import { loadPiPresets, presetsToModes } from "./presets.js";
+import { PI_PROVIDER_ID as SHARED_PI_PROVIDER_ID } from "../shared/preset-settings.js";
+import { createPiPresetStore, type PiPresetStore } from "./preset-store.js";
+import { presetsToModes } from "./presets.js";
 import { PiProviderSession } from "./session.js";
 import { normalizePiThinkingLevel, parsePiModelReference } from "./thinking.js";
 
-export const PI_PROVIDER_ID = "pi-plugin-mcowger";
+export const PI_PROVIDER_ID = SHARED_PI_PROVIDER_ID;
 export const PI_PROVIDER_LABEL = "Pi (mcowger)";
 
 const SUPPORTED_CAPABILITIES = [
@@ -38,33 +40,42 @@ const SUPPORTED_CAPABILITIES = [
 
 interface ProviderState {
   sessions: Map<string, PiProviderSession>;
+  presetStore: PiPresetStore;
   emit(event: ProviderEvent): void;
   capabilities: readonly string[];
   modelRuntimePromise: Promise<PiModelRuntimeLike> | null;
 }
 
-export function createPiProvider(): ProviderRegistration {
+export function createPiProvider(presetStore = createPiPresetStore()): ProviderRegistration {
   return {
     id: PI_PROVIDER_ID,
     label: PI_PROVIDER_LABEL,
     description:
       "Pi coding agent via its in-process SDK, with per-model thinking levels, presets, native todos, and subagent rendering",
     icon: "icon.svg",
+    async getCatalogCacheKey() {
+      return presetStore.snapshot().revision;
+    },
     async connect(request) {
       if (!request.versions.includes(1)) {
         throw new Error("Provider protocol version 1 is required");
       }
       return createConnection(
         negotiateProviderCapabilities(request.capabilities, SUPPORTED_CAPABILITIES),
+        presetStore,
       );
     },
   };
 }
 
-function createConnection(capabilities: readonly string[]): ProviderConnection {
+function createConnection(
+  capabilities: readonly string[],
+  presetStore: PiPresetStore,
+): ProviderConnection {
   const listeners = new Set<(event: ProviderEvent) => void>();
   const state: ProviderState = {
     sessions: new Map(),
+    presetStore,
     capabilities,
     modelRuntimePromise: null,
     emit(event) {
@@ -73,6 +84,10 @@ function createConnection(capabilities: readonly string[]): ProviderConnection {
     },
   };
   let closed = false;
+  const unsubscribePresetStore = presetStore.subscribe(({ presets }) => {
+    if (closed) return;
+    for (const session of state.sessions.values()) session.updatePresets(presets);
+  });
 
   const modelRuntime = () => {
     state.modelRuntimePromise ??= createModelRuntime();
@@ -114,6 +129,7 @@ function createConnection(capabilities: readonly string[]): ProviderConnection {
       const sessions = [...state.sessions.values()];
       state.sessions.clear();
       await Promise.all(sessions.map((session) => session.close().catch(() => undefined)));
+      unsubscribePresetStore();
       listeners.clear();
     },
   };
@@ -192,7 +208,7 @@ async function handleCatalog(
   try {
     const runtime = await getModelRuntime();
     const baseCatalog = await buildCatalog(runtime, input.cwd ?? homedir());
-    const presets = loadPiPresets(input.cwd ?? homedir());
+    const presets = state.presetStore.snapshot().presets;
     state.emit({
       type: "catalog",
       requestId: input.requestId,
@@ -315,7 +331,7 @@ async function handleSessionOpen(
     });
   }
 
-  const presets = loadPiPresets(config.cwd, config.env as Record<string, string>);
+  const presets = state.presetStore.snapshot().presets;
   const promptCommands: ProviderCommand[] = [
     {
       name: "compact",
@@ -346,6 +362,7 @@ async function handleSessionOpen(
     },
     config,
     models: await listScopedModels(runtime, config.cwd),
+    loadPresets: () => state.presetStore.snapshot().presets,
     emit: state.emit,
   });
   state.sessions.set(input.sessionId, providerSession);
@@ -377,7 +394,7 @@ async function handleSessionOpen(
   // read back from preset-state entries by the session constructor.
   if (!persistedSessionFile && config.mode && presets[config.mode]) {
     try {
-      await providerSession.applyPreset(config.mode);
+      await providerSession.applyPreset(config.mode, { announce: false });
       providerSession.emitConfigState();
     } catch (error) {
       console.warn(

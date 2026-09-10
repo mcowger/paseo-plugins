@@ -64,6 +64,8 @@ export interface PiAgentSessionLike {
   setModel(model: unknown, options?: Record<string, unknown>): Promise<void>;
   setThinkingLevel(level: string, options?: Record<string, unknown>): void;
   setActiveToolsByName(toolNames: string[]): void;
+  getAllTools?(): ReadonlyArray<{ name: string }>;
+  getActiveToolNames?(): string[];
   navigateTree(targetId: string, options?: { summarize?: boolean }): Promise<unknown>;
   getSessionStats(): {
     tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };

@@ -17,8 +17,9 @@ The plugin targets Paseo `v0.8.0`. Paseo's provider API is stable for this relea
 
 - Loads pi models, auth, settings, extensions, skills, and prompt templates from `~/.pi/agent`.
 - Exposes pi models with per-model thinking levels in Paseo's composer.
-- Exposes `presets.json` entries as composer modes. Selecting a preset applies its model, thinking
-  level, tools, and prompt instructions.
+- Stores Pi presets in Paseo host settings and exposes them as composer modes. Manage presets in
+  Settings → Plugins → Pi Presets. Selecting one applies its model, thinking level, tool patterns,
+  and appended system prompt.
 - Emits `@juicesharp/rpiv-todo` results as native Paseo todo items.
 - Maps foreground pi subagent calls to native Paseo subagent tool rows.
 - Bridges pi extension dialogs to Paseo permission questions.
@@ -48,11 +49,12 @@ The plugin uses pi's normal configuration directory, including:
 
 - `~/.pi/agent/settings.json`
 - `~/.pi/agent/auth.json`
-- `~/.pi/agent/presets.json`
 - `~/.pi/agent/extensions/`
 - `~/.pi/agent/packages`
 
-Project-local `.pi` settings and resources are loaded for the active workspace.
+Presets are managed by Paseo in the plugin's host-scoped settings document. The plugin no longer
+reads pi `presets.json` files. Project-local `.pi` settings and resources are loaded for the active
+workspace.
 
 ## Development
 

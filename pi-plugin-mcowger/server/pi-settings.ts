@@ -1,7 +1,20 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve as resolvePath } from "node:path";
 
-import { resolvePiAgentDir } from "./presets.js";
+export function resolvePiAgentDir(env: Record<string, string> | undefined): string {
+  const configured = env?.PI_CODING_AGENT_DIR?.trim() || process.env.PI_CODING_AGENT_DIR?.trim();
+  if (!configured) {
+    return join(homedir(), ".pi", "agent");
+  }
+  if (configured === "~") {
+    return homedir();
+  }
+  if (configured.startsWith("~/")) {
+    return resolvePath(homedir(), configured.slice(2));
+  }
+  return resolvePath(configured);
+}
 
 export interface PiUserSettings {
   enabledModels?: string[];
