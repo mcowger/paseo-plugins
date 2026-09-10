@@ -3,10 +3,9 @@
 This repository contains Paseo plugins. Use the following Paseo resources as the source of truth
 when creating or changing a plugin:
 
-The current target host and SDK baseline is **Paseo v0.8.0-beta.1**. Pin `@getpaseo/client`,
-`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.8.0-beta.1. Declare compatibility in
+The current target host and SDK baseline is **Paseo v0.8.0**. Pin `@getpaseo/client`,
+`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.8.0. Declare compatibility in
 `paseo-plugin.json` via `requirements: { "paseo": ">=0.8.0" }` to enforce version checks at startup.
-Paseo treats prereleases as satisfying their stable core range, so this requirement accepts beta.1.
 
 - [Plugin guide](https://paseo.sh/docs/plugins.md): setup, installation, development workflow,
   lifecycle, and debugging.
@@ -16,7 +15,7 @@ Paseo treats prereleases as satisfying their stable core range, so this requirem
   mixed root entries to explicit client and server runtime entries.
 - [Provider plugin guide](https://paseo.sh/docs/plugins/v0.8/providers.md): direct and ACP coding agent
   providers, session lifecycle, composer settings, and provider timeline renderers.
-- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples):
+- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples):
   working examples for panels and commands (`local-plugin`), RPC, attachment sources (`linear`),
   themes (`catppuccin`), timeline items (`timeline-items`, `inline-thinking`), direct providers
   (`provider-direct`), and ACP adapter providers (`provider-acp-transformer`).
@@ -25,7 +24,7 @@ Paseo treats prereleases as satisfying their stable core range, so this requirem
 
 ## Development reminders
 
-- The plugin API is experimental and may include breaking changes.
+- The Paseo 0.8 plugin API is stable.
 - Plugins are trusted, unsandboxed code. Keep daemon-only work and credentials in server modules;
   client modules run inside Paseo.
 - Paseo v0.8 splits runtime entries into explicit `index.client.tsx` and `index.server.ts`. A mixed

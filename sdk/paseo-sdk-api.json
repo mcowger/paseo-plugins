@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sdkVersion": "0.8.0-beta.1",
+  "sdkVersion": "0.8.0",
   "packages": {
     "@getpaseo/protocol": {
       "declarations": {
@@ -95,10 +95,7 @@
     },
     "@getpaseo/plugin": {
       "declarations": {
-        "dist/acp-internal/connection.d.ts": "8da5502e52d629a1cc5be40a8a80ffa826bfd434c69973e29b086b7690b1154f",
-        "dist/acp.d.ts": "90ed0241f9974d2ced50ecd561e9a82b369aade792d52f440c2db56b3c0aeca4",
         "dist/attachments.d.ts": "3700cf5d3dc538c93daebdb1c45bc1de988093adf891e5f0fe88b37e311540bf",
-        "dist/client-state.d.ts": "145ce8e4d0571f6ea0fe74a4ff55a3c4f4683d7b655ff4a5f05459bcef2ed405",
         "dist/client/buttons.d.ts": "3e79d9ebd77fbcb78e6ccdae59d5cae927a552b341b7c07ee12c3d30aac94fe9",
         "dist/client/client-state.d.ts": "2111601bca7adfc2c22e43125634e73ccc696041188e3d8f5101da40c441869c",
         "dist/client/contracts.d.ts": "19cfcce0ec09c993db595c546621bdbbc686ae7c8383359222aae0a1ca1a75d3",
@@ -111,24 +108,15 @@
         "dist/client/shallow.d.ts": "4d9c4bcf81883d3acf3e7c8e1fa2cd6c62d80a538de79b21476096b44ffa95fe",
         "dist/client/ui.d.ts": "05ae088641a2d8153311fdbcd3bf989066fd9c2450812a2ab42b07712f60b697",
         "dist/contracts.d.ts": "529b247196184c3a56e60cd6915e07d37fea1be688426cbb605d87e7405cffab",
-        "dist/host.d.ts": "d505817b92cc78c8728acaa86bfffd4c1dbcf67cf1f6f00eae001b37d52e7011",
         "dist/index.d.ts": "c43fd2a61b3241aaf3b7384ce061ea7b663fb1a6c05454b5f47fb64c88a777c3",
-        "dist/paseo-context.d.ts": "350686b015094b3fba210e85098882d497de3b055458241212b514d7da4c7de3",
-        "dist/provider.d.ts": "ba3fc5383d999d49d33347f9944414ca4b86028e1651e04e1aee9e4077ad2da5",
-        "dist/react-native.d.ts": "5b0c857db0a5a49f241ae73bde04ec0ac064bea13aad965113803b6aaf150d25",
-        "dist/rpc-context.d.ts": "42e7ce50569e4a4720eff61c3cd96eba4224e250042efff9c019f9687ca4a336",
         "dist/rpc.d.ts": "cb18344168cbdb253d3b690ca71cb81a67bb59160676077f5aa0af968183fe58",
-        "dist/runtime-context-bridge.d.ts": "27bfe800f24757a6358f829f15f9f71f6a331c7603a398ab4afda3183ccd4e21",
-        "dist/server.d.ts": "c93c2540f1a4ebaba58613b67392bce96673df0a134f834b68595950919e1fbc",
         "dist/server/acp-internal/connection.d.ts": "8da5502e52d629a1cc5be40a8a80ffa826bfd434c69973e29b086b7690b1154f",
         "dist/server/acp.d.ts": "90ed0241f9974d2ced50ecd561e9a82b369aade792d52f440c2db56b3c0aeca4",
         "dist/server/contracts.d.ts": "6c37462985fdc118ce4ab9d9dd47bfd3f8e57d77dbeef32b0f8bd6bab780863e",
         "dist/server/index.d.ts": "d19f82447d0b1bd662f839ff6b120a056e22702375b8719f5b4fb00b33d9f7ce",
         "dist/server/lifecycle.d.ts": "551ec9d32a7042895446e9f7aa9106339392f0e8ba27f59f96aeff223b6587be",
         "dist/server/provider.d.ts": "f1a49c24762197ce3839e9e57de3937d8596c2cdc8de3250e4bde1520419e50d",
-        "dist/settings.d.ts": "c1d92cb5d76e97b526fb73854a7aecebe03294917eb42f4f291ab79206da5b0d",
-        "dist/shallow.d.ts": "4d9c4bcf81883d3acf3e7c8e1fa2cd6c62d80a538de79b21476096b44ffa95fe",
-        "dist/ui.d.ts": "05ae088641a2d8153311fdbcd3bf989066fd9c2450812a2ab42b07712f60b697"
+        "dist/settings.d.ts": "c1d92cb5d76e97b526fb73854a7aecebe03294917eb42f4f291ab79206da5b0d"
       }
     }
   }

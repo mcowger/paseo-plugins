@@ -38,20 +38,20 @@ implementation details; prefer documented Paseo v0.8 APIs and the guidance in
 
 ## Official Paseo v0.8 Plugin Examples
 
-- [Paseo settings example](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples/settings) demonstrates contributing dedicated settings screens via `client.addSettingsScreen()`.
-- [Paseo modal-ui example](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples/modal-ui) demonstrates modal layouts, scrolling (`scrollable={false}` with custom `ScrollView`), and clipboard actions (`client.clipboard.copyText`).
-- [Paseo lifecycle-actions and lifecycle-logger examples](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples) demonstrate observing and customizing agent and workspace lifecycle events (`server.agents.onAgentCreate`, archiving hooks).
-- [Paseo agent-configuration example](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples/agent-configuration) shows customizing agent parameters and config on the server.
-- [Paseo provider-direct example](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples/provider-direct)
+- [Paseo settings example](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples/settings) demonstrates contributing dedicated settings screens via `client.addSettingsScreen()`.
+- [Paseo modal-ui example](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples/modal-ui) demonstrates modal layouts, scrolling (`scrollable={false}` with custom `ScrollView`), and clipboard actions (`client.clipboard.copyText`).
+- [Paseo lifecycle-actions and lifecycle-logger examples](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples) demonstrate observing and customizing agent and workspace lifecycle events (`server.agents.onAgentCreate`, archiving hooks).
+- [Paseo agent-configuration example](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples/agent-configuration) shows customizing agent parameters and config on the server.
+- [Paseo provider-direct example](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples/provider-direct)
   demonstrates registering a full coding agent via `server.registerProvider()` implementing `ProviderRegistration`,
   including models/modes catalog, session lifecycles, composer toggle/select settings, prompts, turns,
   steering, persistence replay, and provider-emitted custom timeline items.
-- [Paseo provider-acp-transformer example](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples/provider-acp-transformer)
+- [Paseo provider-acp-transformer example](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples/provider-acp-transformer)
   demonstrates wrapping a command-backed ACP agent with `runAcpProvider()` from `@getpaseo/plugin/server/acp` and
   applying focused `AcpTransformer` hooks.
-- [Paseo inline-thinking example](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples/inline-thinking)
+- [Paseo inline-thinking example](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples/inline-thinking)
   shows that custom timeline renderers operate independently of provider implementations.
-- [Paseo timeline-items example](https://github.com/getpaseo/paseo/tree/v0.8.0-beta.1/plugin-examples/timeline-items)
+- [Paseo timeline-items example](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples/timeline-items)
   shows the supported `addTimelineTransformer` and `addTimelineRenderer` contribution shape.
 - [pi-plugin-mcowger packaging notes](../pi-plugin-mcowger/docs/packaging.md) (in this repo): what it actually takes to embed a
   large npm SDK (pi's coding agent) in a plugin server bundle. Covers the boundary checker's type-dependency walk, broken

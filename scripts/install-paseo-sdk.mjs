@@ -253,7 +253,7 @@ try {
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
-  console.error("Run with --source local or --source tarball when the preview SDK is not published.");
+  console.error("Run with --source local or --source tarball when the SDK is not available online.");
   process.exitCode = 1;
 } finally {
   if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true });

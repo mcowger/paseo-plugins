@@ -16,7 +16,7 @@ extension-warm model catalogs.
 | Topic | Decision |
 |---|---|
 | pi source | **Bundle `@earendil-works/pi-coding-agent` 0.85.1** as a plugin dependency; global pi binary, `PI_COMMAND`, and version probe deleted |
-| Host target | Paseo **≥ 0.8.0-beta.1** (manifest requirement; repo SDK pins at 0.8.0-beta.1) |
+| Host target | Paseo **≥ 0.8.0** (manifest requirement; repo SDK pins at 0.8.0) |
 | Presets | **Native**: presets.json merged (global + project), exposed as Paseo modes; apply via `setModel`/`setThinkingLevel`/`setActiveToolsByName` + system-prompt append; state via `appendCustomEntry("preset-state")` (compatible with preset.ts on resume). `/preset` command also supported natively |
 | User extensions | Load normally via `DefaultResourceLoader` (plexus provider, rpiv-todo, pi-subagents, etc.) — verified they register into the shared ModelRuntime after a one-time warmup session |
 | MCP | Paseo-injected MCP servers are connected **in-process** via `@modelcontextprotocol/sdk` and exposed as pi custom tools `mcp_<server>_<tool>`; no mcp.json temp files, no pi-mcp-adapter dependency |

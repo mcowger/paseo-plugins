@@ -1,6 +1,6 @@
 # Reasoning display
 
-This Paseo plugin targets Paseo `v0.8.0-beta.1` and replaces built-in agent reasoning blocks with an expandable Markdown renderer matching Paseo's native tool-call cards.
+This Paseo plugin targets Paseo `v0.8.0` and replaces built-in agent reasoning blocks with an expandable Markdown renderer matching Paseo's native tool-call cards.
 
 ## Features
 

@@ -1,18 +1,13 @@
 # Pi provider (mcowger)
 
-`pi-plugin-mcowger` is an experimental Paseo provider for the
+`pi-plugin-mcowger` is a Paseo provider for the
 [pi coding agent](https://github.com/earendil-works/pi). It targets Paseo
-`v0.8.0-beta.1` and embeds pi through `@earendil-works/pi-coding-agent` instead of
+`v0.8.0` and embeds pi through `@earendil-works/pi-coding-agent` instead of
 running the `pi` CLI in RPC mode.
 
-## Limitations
+## Status
 
-This plugin is not ready for regular use until
-[getpaseo/paseo#4626](https://github.com/getpaseo/paseo/issues/4626) is fixed and closed.
-That bug leaves agents attached to a closed provider runtime after a plugin reload. The agent cannot
-be refreshed without restarting the daemon.
-
-Expect breaking changes while Paseo's v0.8 provider API is unreleased.
+The plugin targets Paseo `v0.8.0`. Paseo's provider API is stable for this release.
 
 ## Preview
 

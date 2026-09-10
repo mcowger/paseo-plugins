@@ -1,6 +1,6 @@
 # Pi tasks timeline
 
-`pi-tasks-timeline` keeps Pi task lists visible in Paseo. It targets Paseo `v0.8.0-beta.1` and recognizes completed `todo` tool calls,
+`pi-tasks-timeline` keeps Pi task lists visible in Paseo. It targets Paseo `v0.8.0` and recognizes completed `todo` tool calls,
 turns them into task-list timeline items, and preserves the task state across the agent's projected
 timeline history.
 

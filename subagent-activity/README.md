@@ -1,6 +1,6 @@
 # Subagent activity
 
-This Paseo `v0.8.0-beta.1` plugin adds an agent-scoped activity pane for monitoring managed Paseo
+This Paseo `v0.8.0` plugin adds an agent-scoped activity pane for monitoring managed Paseo
 descendants and provider-native subagent activity.
 
 The panel displays:
@@ -10,7 +10,7 @@ The panel displays:
 - the ten most recent tool calls for each managed child;
 - best-effort provider-native subagent activity exposed by the parent timeline.
 
-Provider-native activity is intentionally labeled separately because Paseo 0.8.0-beta.1 does not expose a stable plugin-facing native-child registry. Native rows therefore do not claim model, token, or independent lifecycle data that the timeline does not provide.
+Provider-native activity is intentionally labeled separately because Paseo 0.8.0 does not expose a stable plugin-facing native-child registry. Native rows therefore do not claim model, token, or independent lifecycle data that the timeline does not provide.
 
 ## Screenshot
 
@@ -20,7 +20,7 @@ The activity pane shows managed descendants and provider-native activity observe
 
 ## Install
 
-The plugin targets Paseo `v0.8.0-beta.1`.
+The plugin targets Paseo `v0.8.0`.
 
 ```bash
 cd /absolute/path/to/subagent-activity
