@@ -1,10 +1,10 @@
 import type { PaseoAgent, PaseoApi, PaseoWorkspace } from "@getpaseo/client";
 import type { PluginAgentPanelProps } from "@getpaseo/plugin/client";
 import { useAgent, usePaseo, useWorkspace } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   countCompletedTasks,
   contextPercent,
@@ -243,6 +243,12 @@ function useOverviewStyles(theme: PluginAgentPanelProps["theme"], compact: boole
       taskText: { color: theme.colors.foreground, flex: 1 },
       completedText: { color: theme.colors.foregroundMuted, flex: 1 },
       divider: { height: 1, backgroundColor: theme.colors.border },
+      titleBlock: { flex: 1, gap: 3 },
+      scrollContent: {
+        flexGrow: 1,
+        gap: compact ? 10 : 12,
+        padding: compact ? 12 : 20,
+      },
     }),
     [compact, theme],
   );
@@ -287,8 +293,16 @@ function TaskRows({ tasks, styles }: { tasks: readonly OverviewTask[]; styles: R
 }
 
 export function OpenCodeSessionOverviewPanel({ theme, layout, agentId, workspaceId }: PluginAgentPanelProps) {
-  const agent = useAgent(agentId, (snapshot) => snapshot);
-  const workspace = useWorkspace(workspaceId, (snapshot) => snapshot);
+  const agent = useAgent(agentId, ({ provider, title, cwd, status }) => ({
+    provider,
+    title,
+    cwd,
+    status,
+  }));
+  const workspace = useWorkspace(workspaceId, ({ projectDisplayName, directory }) => ({
+    projectDisplayName,
+    directory,
+  }));
   const isOpenCode = agent ? agent.provider === "opencode" || agent.provider.startsWith("opencode/") : false;
   const overview = useSessionOverview(agentId, workspaceId, isOpenCode);
   const styles = useOverviewStyles(theme, layout.compact);
@@ -308,9 +322,9 @@ export function OpenCodeSessionOverviewPanel({ theme, layout, agentId, workspace
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.screen}>
+    <ScrollView contentContainerStyle={styles.scrollContent} style={styles.screen}>
       <View style={styles.header}>
-        <View style={{ flex: 1, gap: 3 }}>
+        <View style={styles.titleBlock}>
           <Text style={styles.title}>{agent.title ?? "OpenCode session"}</Text>
           <Text numberOfLines={1} style={styles.label}>{agent.cwd}</Text>
         </View>

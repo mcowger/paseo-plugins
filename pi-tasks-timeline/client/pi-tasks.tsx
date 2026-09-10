@@ -40,6 +40,7 @@ function useTaskStyles(theme: PluginAgentPanelProps["theme"], compact: boolean) 
       title: { color: theme.colors.foreground, fontWeight: "600" as const },
       progress: { color: theme.colors.foregroundMuted },
       task: { flexDirection: "row" as const, gap: 8 },
+      taskContent: { flex: 1 },
       completed: { color: theme.colors.statusSuccess },
       inProgress: { color: theme.colors.accent },
       pending: { color: theme.colors.foregroundMuted },
@@ -77,7 +78,7 @@ function TaskRows({
         return (
           <View key={taskKey(task)} style={styles.task}>
             <Text style={markerStyle}>{taskMarker[task.status]}</Text>
-            <View style={{ flex: 1 }}>
+            <View style={styles.taskContent}>
               <Text style={task.status === "completed" ? styles.completedText : styles.taskText}>
                 {task.text}
               </Text>

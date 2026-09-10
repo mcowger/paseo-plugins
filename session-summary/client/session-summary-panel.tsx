@@ -1,12 +1,12 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginAgentPanelProps } from "@getpaseo/plugin/client";
-import { Icon, useRevealedText } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView, useRevealedText } from "@getpaseo/plugin/client/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
-  ScrollView,
   Text,
   View,
+  type ScrollView as NativeScrollView,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
@@ -417,7 +417,7 @@ function ThoughtLogCard({ summary, styles, markdownStyles }: {
   styles: ReturnType<typeof useStyles>;
   markdownStyles: ReturnType<typeof useMarkdownStyles>;
 }) {
-  const thoughtLogRef = useRef<ScrollView | null>(null);
+  const thoughtLogRef = useRef<NativeScrollView | null>(null);
   const shouldFollowTail = useRef(true);
   const latestThoughtId = summary.thoughts.at(-1)?.id ?? null;
   const [expandedThoughtId, setExpandedThoughtId] = useState<string | null>(latestThoughtId);

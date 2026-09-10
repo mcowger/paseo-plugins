@@ -4,7 +4,7 @@ import {
   type PluginTimelineItemProps,
   useRpc,
 } from "@getpaseo/plugin/client";
-import { Icon, useRevealedText } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView, useRevealedText } from "@getpaseo/plugin/client/react-native";
 import React, {
   useCallback,
   useEffect,
@@ -16,9 +16,9 @@ import React, {
 } from "react";
 import {
   Pressable,
-  ScrollView,
   Text,
   View,
+  type ScrollView as NativeScrollView,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type StyleProp,
@@ -94,10 +94,13 @@ interface ReasoningSettingsStyles {
   selectTrigger: StyleProp<ViewStyle>;
   selectTriggerOpen: StyleProp<ViewStyle>;
   selectTriggerText: StyleProp<TextStyle>;
+  selectTriggerContent: StyleProp<ViewStyle>;
   dropdownMenu: StyleProp<ViewStyle>;
   dropdownOption: StyleProp<ViewStyle>;
   dropdownOptionSelected: StyleProp<ViewStyle>;
   dropdownOptionContent: StyleProp<ViewStyle>;
+  dropdownOptionRow: StyleProp<ViewStyle>;
+  dropdownOptionDivider: StyleProp<ViewStyle>;
   dropdownOptionLabel: StyleProp<TextStyle>;
   dropdownOptionLabelSelected: StyleProp<TextStyle>;
   dropdownOptionDescription: StyleProp<TextStyle>;
@@ -106,6 +109,7 @@ interface ReasoningSettingsStyles {
   toggleTextContainer: StyleProp<ViewStyle>;
   toggleTitle: StyleProp<TextStyle>;
   toggleDescription: StyleProp<TextStyle>;
+  checkbox: StyleProp<ViewStyle>;
   status: StyleProp<TextStyle>;
 }
 
@@ -292,7 +296,7 @@ function ThinkingBody({
   styles: MarkdownStyles;
 }) {
   const revealedText = useRevealedText(text, phase);
-  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollRef = useRef<NativeScrollView | null>(null);
   const isNearBottom = useRef(true);
 
   useEffect(() => {
@@ -606,6 +610,12 @@ export function ReasoningDisplaySettings({ theme, layout }: PluginSurfaceProps) 
         fontSize: 14,
         fontWeight: "500" as const,
       },
+      selectTriggerContent: {
+        alignItems: "center" as const,
+        flex: 1,
+        flexDirection: "row" as const,
+        gap: 10,
+      },
       dropdownMenu: {
         backgroundColor: theme.colors.surface1,
         borderColor: theme.colors.border,
@@ -628,6 +638,16 @@ export function ReasoningDisplaySettings({ theme, layout }: PluginSurfaceProps) 
       dropdownOptionContent: {
         flex: 1,
         gap: 2,
+      },
+      dropdownOptionRow: {
+        alignItems: "center" as const,
+        flex: 1,
+        flexDirection: "row" as const,
+        gap: 10,
+      },
+      dropdownOptionDivider: {
+        borderTopColor: theme.colors.border,
+        borderTopWidth: 1,
       },
       dropdownOptionLabel: {
         color: theme.colors.foreground,
@@ -670,6 +690,14 @@ export function ReasoningDisplaySettings({ theme, layout }: PluginSurfaceProps) 
         color: theme.colors.foregroundMuted,
         fontSize: 12,
         lineHeight: 16,
+      },
+      checkbox: {
+        alignItems: "center" as const,
+        borderRadius: 6,
+        borderWidth: 1.5,
+        height: 22,
+        justifyContent: "center" as const,
+        width: 22,
       },
       status: {
         color: theme.colors.statusDanger,
@@ -723,16 +751,13 @@ export function ReasoningDisplaySettings({ theme, layout }: PluginSurfaceProps) 
             </Text>
           </View>
           <View
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 6,
-              borderWidth: 1.5,
-              borderColor: debug ? theme.colors.accent : theme.colors.border,
-              backgroundColor: debug ? theme.colors.accent : "transparent",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            style={[
+              styles.checkbox,
+              {
+                backgroundColor: debug ? theme.colors.accent : "transparent",
+                borderColor: debug ? theme.colors.accent : theme.colors.border,
+              },
+            ]}
           >
             {debug ? <Icon color={theme.colors.accentForeground} name="Check" size={14} /> : null}
           </View>
@@ -780,7 +805,7 @@ function ReasoningSelectDropdown({
         onPress={toggleOpen}
         style={[styles.selectTrigger, isOpen && styles.selectTriggerOpen]}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+        <View style={styles.selectTriggerContent}>
           <Icon color={theme.colors.accent} name={selectedInfo.icon} size={16} />
           <Text style={styles.selectTriggerText}>{selectedInfo.label}</Text>
         </View>
@@ -808,7 +833,7 @@ function ReasoningSelectDropdown({
                   index > 0 && { borderTopWidth: 1, borderTopColor: theme.colors.border },
                 ]}
               >
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                <View style={styles.dropdownOptionRow}>
                   <Icon
                     color={isSelected ? theme.colors.accent : theme.colors.foregroundMuted}
                     name={optionInfo.icon}

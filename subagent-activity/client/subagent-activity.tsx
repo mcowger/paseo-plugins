@@ -1,8 +1,8 @@
 import { useAgent } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginAgentPanelProps } from "@getpaseo/plugin/client";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useEffect, useMemo, useState } from "react";
 import {
   formatRelativeTime,
@@ -81,7 +81,7 @@ export function SubagentActivityPanel({ theme, layout, agentId }: PluginAgentPan
       {state.error ? <Text style={styles.error}>Unable to load subagents: {state.error}</Text> : null}
 
       {!state.loading && !state.error && activeTree.length === 0 ? (
-        <EmptyCard theme={theme} text="No active managed subagents." />
+        <EmptyCard compact={layout.compact} theme={theme} text="No active managed subagents." />
       ) : null}
       {activeTree.map((node) => (
         <ManagedAgentRow
@@ -166,13 +166,13 @@ function ManagedAgentRow({
   theme: PluginTheme;
   compact: boolean;
 }) {
-  const styles = usePanelStyles(theme, compact);
+  const styles = usePanelStyles(theme, compact, node.depth);
   const { agent } = node;
   const status = asStatus(agent.status);
   const toolCalls = activity?.toolCalls ?? [];
   const lastActivityAt = activity?.lastActivityAt || agent.updatedAt;
   return (
-    <View style={[styles.agentCard, { marginLeft: node.depth * (compact ? 12 : 18) }]}>
+    <View style={styles.agentCard}>
       <View style={styles.agentHeader}>
         <View style={styles.agentTitleRow}>
           <Text style={[styles.status, { color: statusColor(theme, status) }]}>{STATUS_SYMBOLS[status]}</Text>
@@ -282,8 +282,8 @@ function ProviderActivityRow({
   );
 }
 
-function EmptyCard({ theme, text }: { theme: PluginTheme; text: string }) {
-  const styles = usePanelStyles(theme, false);
+function EmptyCard({ compact, theme, text }: { compact: boolean; theme: PluginTheme; text: string }) {
+  const styles = usePanelStyles(theme, compact);
   return (
     <View style={styles.emptyCard}>
       <Text style={styles.detail}>{text}</Text>
@@ -291,7 +291,7 @@ function EmptyCard({ theme, text }: { theme: PluginTheme; text: string }) {
   );
 }
 
-function usePanelStyles(theme: PluginTheme, compact: boolean) {
+function usePanelStyles(theme: PluginTheme, compact: boolean, depth = 0) {
   return useMemo(
     () => ({
       content: {
@@ -315,6 +315,7 @@ function usePanelStyles(theme: PluginTheme, compact: boolean) {
       error: { color: theme.colors.statusDanger, fontSize: 13 },
       agentCard: {
         gap: 6,
+        marginLeft: depth * (compact ? 12 : 18),
         borderWidth: 1,
         borderColor: theme.colors.border,
         borderRadius: 10,
