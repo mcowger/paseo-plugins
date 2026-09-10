@@ -13,6 +13,10 @@ The plugin is ready for use with Paseo `v0.8.0`. Paseo's provider API is stable 
 
 ![Pi provider preview](./images/pi-provider.svg)
 
+## Screenshot
+
+![Pi provider in Paseo](./images/pi-provider.png)
+
 ## What it does
 
 - Loads pi models, auth, settings, extensions, skills, and prompt templates from `~/.pi/agent`.
