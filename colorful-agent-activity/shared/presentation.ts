@@ -2,6 +2,7 @@ import { diffLines } from "diff";
 import type { JsonValue, ToolCallDetail, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
 import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization";
 import type { PaletteMode } from "./settings";
+import { exaToolIcon, exaToolKind, exaToolLabel, exaToolSummary } from "./exa";
 
 export const TOOL_CATEGORIES = [
   "shell",
@@ -626,6 +627,15 @@ export function resolveToolCallPresentation(
       }
       if (name === "speak") {
         return { category: "communication", icon: "MicVocal", label: "Speak" };
+      }
+      const exaKind = exaToolKind(item.name);
+      if (exaKind) {
+        return {
+          category: exaKind === "agent" ? "agent" : "search",
+          icon: exaToolIcon(exaKind),
+          label: exaToolLabel(exaKind),
+          summary: exaToolSummary(exaKind, detail.input),
+        };
       }
       const paseoLabel = paseoToolLabel(item.name);
       if (paseoLabel) {

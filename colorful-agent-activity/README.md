@@ -43,6 +43,7 @@ Paseo tool calls use purpose-built cards with readable prompt, configuration, re
 - Vivid, soft, and high-contrast palette modes using the active Paseo theme.
 - Status indicators for running, completed, failed, and canceled calls.
 - Specialized Paseo cards for agents, workspaces, terminals, schedules, providers, permissions, and browser automation instead of raw JSON.
+- Dedicated Exa cards show search queries, result metadata, URLs, and highlights instead of the raw MCP envelope.
 
 ## Install
 

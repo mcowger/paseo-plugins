@@ -22,7 +22,7 @@ import {
 } from "react-native";
 import type { z } from "zod";
 import { useShikiTokens, isDarkSurface, type ShikiToken } from "./highlight";
-import { PaseoToolDetail } from "./paseo";
+import { ExaToolDetail, PaseoToolDetail } from "./paseo";
 import {
   diffLinesForDetail,
   fileIconForPath,
@@ -34,6 +34,7 @@ import {
   type DiffLine,
 } from "../shared/presentation";
 import { parseInlineMarkdown, parseReasoningMarkdown } from "../shared/markdown";
+import { exaToolKind } from "../shared/exa";
 import { activitySettings, DEFAULT_PALETTE_MODE } from "../shared/settings";
 import {
   getActivityExpansionState,
@@ -792,6 +793,17 @@ function DetailBody({
     case "plan":
       return <Text selectable style={styles.detailText}>{detail.text}</Text>;
     case "unknown": {
+      if (exaToolKind(data.name)) {
+        return (
+          <ExaToolDetail
+            toolName={data.name}
+            input={detail.input}
+            output={detail.output}
+            theme={theme}
+            styles={styles}
+          />
+        );
+      }
       if (paseoToolLeafName(data.name)) {
         return (
           <PaseoToolDetail
