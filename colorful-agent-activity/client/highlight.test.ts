@@ -10,6 +10,18 @@ describe("Shiki highlighting", () => {
     expect(tokens?.flat().some((token) => token.color)).toBe(true);
   });
 
+  it("tokenizes arbitrary JSON payloads", async () => {
+    const tokens = await highlightCode(
+      '{\n  "content": [{"type": "text"}]\n}',
+      "json",
+      true,
+    );
+    const content = tokens?.flat().map((token) => token.content).join("");
+    expect(content).toContain('"content"');
+    expect(content).toContain('"text"');
+    expect(tokens?.flat().some((token) => token.color)).toBe(true);
+  });
+
   it("returns a fallback signal for oversized output", async () => {
     await expect(highlightCode("x".repeat(MAX_HIGHLIGHT_CHARS + 1), "ansi", true)).resolves.toBeNull();
   });

@@ -806,10 +806,20 @@ function DetailBody({
       }
       return (
         <>
-          <DetailLabel style={styles.detailLabel}>Input</DetailLabel>
-          <Text selectable style={styles.detailText}>{formatUnknownValue(detail.input)}</Text>
-          <DetailLabel style={styles.detailLabel}>Output</DetailLabel>
-          <Text selectable style={styles.detailText}>{formatUnknownValue(detail.output)}</Text>
+          <ShikiCodeBlock
+            code={formatUnknownValue(detail.input)}
+            language="json"
+            label="Input"
+            styles={styles}
+            theme={theme}
+          />
+          <ShikiCodeBlock
+            code={formatUnknownValue(detail.output)}
+            language="json"
+            label="Output"
+            styles={styles}
+            theme={theme}
+          />
         </>
       );
     }

@@ -89,7 +89,7 @@ paseo plugin reload colorful-agent-activity
 - Paseo's native detail and syntax components are private, so this plugin renders its own details.
 - Shiki uses its JavaScript regex engine in the plugin bundle. It is not a terminal emulator.
 - Unsupported or oversized output falls back to plain monospace text.
-- Unknown provider payloads use a generic JSON fallback.
+- Unknown tool payloads render as syntax-highlighted JSON, with a plain-text fallback for oversized or unsupported output.
 - A transformer that claims the same source row in another plugin can win before this plugin runs.
 - Disable `reasoning-display` when using this plugin because both transform reasoning rows.
 
