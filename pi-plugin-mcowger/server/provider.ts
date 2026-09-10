@@ -24,6 +24,11 @@ import { createPiPresetStore, type PiPresetStore } from "./preset-store.js";
 import { presetsToModes } from "./presets.js";
 import { PiProviderSession } from "./session.js";
 import { normalizePiThinkingLevel, parsePiModelReference } from "./thinking.js";
+import {
+  createPiTodoTool,
+  hasPiTodoExtensionTool,
+  PI_TODO_TOOL_NAME,
+} from "./pi-todo-tool.js";
 
 export const PI_PROVIDER_ID = SHARED_PI_PROVIDER_ID;
 export const PI_PROVIDER_LABEL = "Pi (mcowger)";
@@ -280,6 +285,13 @@ async function handleSessionOpen(
       ? SessionManager.inMemory(config.cwd)
       : SessionManager.create(config.cwd);
 
+  const customTools = mcp?.tools ? [...mcp.tools] : [];
+  const hasExtensionTodoTool = hasPiTodoExtensionTool(loader.getExtensions());
+  const hasCustomTodoTool = customTools.some((tool) => tool.name === PI_TODO_TOOL_NAME);
+  if (!hasExtensionTodoTool && !hasCustomTodoTool) {
+    customTools.push(createPiTodoTool(sessionManager));
+  }
+
   let created;
   try {
     if (persistedLeafId !== undefined) {
@@ -296,7 +308,7 @@ async function handleSessionOpen(
       modelRuntime: runtime,
       sessionManager,
       resourceLoader: loader,
-      ...(mcp && mcp.tools.length > 0 ? { customTools: mcp.tools } : {}),
+      ...(customTools.length > 0 ? { customTools } : {}),
     });
   } catch (error) {
     await mcp?.close().catch(() => undefined);

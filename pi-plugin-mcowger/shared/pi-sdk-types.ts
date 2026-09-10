@@ -103,6 +103,9 @@ export interface PiPromptTemplateLike {
 /** Subset of pi's DefaultResourceLoader used by the provider. */
 export interface PiResourceLoaderLike {
   reload(): Promise<void>;
+  getExtensions(): {
+    extensions: ReadonlyArray<{ tools: ReadonlyMap<string, unknown> }>;
+  };
   getPrompts(): { prompts: PiPromptTemplateLike[] };
 }
 

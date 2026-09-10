@@ -20,7 +20,8 @@ The plugin targets Paseo `v0.8.0`. Paseo's provider API is stable for this relea
 - Stores Pi presets in Paseo host settings and exposes them as composer modes. Manage presets in
   Settings → Plugins → Pi Presets. Selecting one applies its model, thinking level, tool patterns,
   and appended system prompt.
-- Emits `@juicesharp/rpiv-todo` results as native Paseo todo items.
+- Provides a branch-aware `todo` tool when no loaded Pi extension already contributes one, and emits
+  its results (along with `@juicesharp/rpiv-todo` results) as native Paseo todo items.
 - Maps foreground pi subagent calls to native Paseo subagent tool rows.
 - Bridges pi extension dialogs to Paseo permission questions.
 - Bridges Paseo-provided MCP servers to pi custom tools in-process.
