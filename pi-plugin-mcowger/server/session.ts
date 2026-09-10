@@ -25,7 +25,11 @@ import {
   type PiUiDialogResponse,
 } from "./pi-ui-context.js";
 import { readActivePresetName, presetsToModes, type PiPresetsConfig } from "./presets.js";
-import { getUserMessageText, PiHistoryMapper } from "./history-mapper.js";
+import {
+  getUserMessageText,
+  PiHistoryMapper,
+  type PiCommandHistoryEntry,
+} from "./history-mapper.js";
 import {
   DEFAULT_PI_THINKING_LEVEL,
   clampThinkingLevel,
@@ -47,6 +51,8 @@ import { extractTodoSnapshot, PI_TODO_TIMELINE_ITEM_ID } from "./todo.js";
 
 const QUESTION_RESPONSE_HEADER = "Response";
 const PI_COMPACTION_ITEM_ID = "pi-compaction";
+const PI_COMMAND_ANCHOR_ENTRY_TYPE = "paseo-command-anchor";
+const PI_COMMAND_ENTRY_TYPE = "paseo-command";
 const TODO_TOOL_NAMES = new Set(["todo"]);
 
 export interface SdkSessionBundle {
@@ -233,7 +239,7 @@ export class PiProviderSession {
     this.emitEvent = options.emit;
     this.cleanup = options.cleanup;
 
-    this.currentMode = readActivePresetName(this.sessionManager.getEntries());
+    this.currentMode = readActivePresetName(this.sessionManager.getBranch());
 
     void this.sdk.bindExtensions({
       uiContext: createHeadlessUiContext({
@@ -250,9 +256,10 @@ export class PiProviderSession {
 
   get persistence(): ProviderPersistence {
     return {
-      version: 1,
+      version: 2,
       data: {
         sessionFile: this.sdk.sessionFile ?? null,
+        leafId: this.sessionManager.getLeafId(),
         cwd: this.config.cwd,
         ...(this.config.model ? { model: this.config.model } : {}),
         ...(this.config.thinkingOption ? { thinkingOption: this.config.thinkingOption } : {}),
@@ -305,15 +312,17 @@ export class PiProviderSession {
   }
 
   async replayHistory(): Promise<void> {
-    const userEntries = this.sessionManager
-      .getEntries()
-      .flatMap((entry): { id: string; text: string }[] => {
-        if (!isRecord(entry)) return [];
-        if (entry.type !== "message") return [];
+    const commandItemsByUserCount = new Map<number, PiCommandHistoryEntry[]>();
+    const userEntries: { id: string; text: string }[] = [];
+    let userCount = 0;
+
+    for (const entry of this.sessionManager.getBranch()) {
+      if (!isRecord(entry)) continue;
+      if (entry.type === "message") {
         const message = entry.message;
-        if (!isRecord(message) || message.role !== "user") return [];
+        if (!isRecord(message) || message.role !== "user") continue;
         const id = optionalString(entry.id);
-        if (!id) return [];
+        if (!id) continue;
         const content = message.content as
           | string
           | Array<{ type: string; text?: string }>
@@ -327,12 +336,46 @@ export class PiProviderSession {
                   .map((part) => part.text)
                   .join("\n\n")
               : "";
-        return text ? [{ id, text }] : [];
-      });
+        if (text) userEntries.push({ id, text });
+        userCount += 1;
+        continue;
+      }
+      if (entry.type !== "custom" || entry.customType !== PI_COMMAND_ENTRY_TYPE) continue;
+      const data = isRecord(entry.data) ? entry.data : null;
+      const id = optionalString(entry.id);
+      const text = optionalString(data?.text);
+      const anchorId = optionalString(data?.anchorId);
+      if (!id || !text || !anchorId) continue;
+      const commandEntry: PiCommandHistoryEntry = { id, text, anchorId, userCount };
+      const commands = commandItemsByUserCount.get(userCount) ?? [];
+      commands.push(commandEntry);
+      commandItemsByUserCount.set(userCount, commands);
+    }
+
     const mapper = new PiHistoryMapper(userEntries);
     const messages = this.sdk.messages as unknown as PiAgentMessage[];
-    for (const item of mapper.mapMessages(messages)) {
-      this.emit({ type: "timeline.item", sessionId: this.sessionId, item });
+    let mappedUserCount = 0;
+    for (const message of messages) {
+      if (message.role === "user") {
+        for (const command of commandItemsByUserCount.get(mappedUserCount) ?? []) {
+          this.emit({
+            type: "timeline.item",
+            sessionId: this.sessionId,
+            item: mapper.mapCommandEntry(command),
+          });
+        }
+        mappedUserCount += 1;
+      }
+      for (const item of mapper.mapMessage(message)) {
+        this.emit({ type: "timeline.item", sessionId: this.sessionId, item });
+      }
+    }
+    for (const command of commandItemsByUserCount.get(mappedUserCount) ?? []) {
+      this.emit({
+        type: "timeline.item",
+        sessionId: this.sessionId,
+        item: mapper.mapCommandEntry(command),
+      });
     }
   }
 
@@ -368,7 +411,8 @@ export class PiProviderSession {
     const commandText = `/${name}${args ? ` ${args}` : ""}`;
 
     if (name === "preset") {
-      await this.emitCommandUserMessage(prompt.clientMessageId, commandText);
+      const commandEntry = this.appendCommandEntry(commandText);
+      this.emitCommandUserMessage(prompt.clientMessageId, commandText, commandEntry);
       try {
         await this.applyPreset(args.trim());
         this.emitPromptResult(prompt.clientMessageId, { type: "completed" });
@@ -383,7 +427,8 @@ export class PiProviderSession {
     }
 
     if (name === "compact") {
-      await this.emitCommandUserMessage(prompt.clientMessageId, commandText);
+      const commandEntry = this.appendCommandEntry(commandText);
+      this.emitCommandUserMessage(prompt.clientMessageId, commandText, commandEntry);
       try {
         await this.sdk.compact(args.trim() || undefined);
         this.emitPromptResult(prompt.clientMessageId, { type: "completed" });
@@ -402,11 +447,31 @@ export class PiProviderSession {
     await this.startTurn(payload, prompt);
   }
 
-  private async emitCommandUserMessage(clientMessageId: string, text: string): Promise<void> {
+  private appendCommandEntry(text: string): { id: string; anchorId: string } {
+    const anchorId = this.sessionManager.appendCustomEntry(PI_COMMAND_ANCHOR_ENTRY_TYPE, { text });
+    const id = this.sessionManager.appendCustomEntry(PI_COMMAND_ENTRY_TYPE, {
+      text,
+      anchorId,
+    });
+    return { id, anchorId };
+  }
+
+  private emitCommandUserMessage(
+    clientMessageId: string,
+    text: string,
+    commandEntry: { id: string; anchorId: string },
+  ): void {
     this.emit({
       type: "timeline.item",
       sessionId: this.sessionId,
-      item: { type: "user_message", id: clientMessageId, text, clientMessageId },
+      item: {
+        type: "user_message",
+        id: commandEntry.id,
+        messageId: commandEntry.id,
+        revertToken: commandEntry.anchorId,
+        text,
+        clientMessageId,
+      },
     });
   }
 
@@ -637,11 +702,30 @@ export class PiProviderSession {
     if (!targetId) {
       throw new Error("Pi rewind requires a user message id revert token");
     }
-    if (!this.sessionManager.getEntry(targetId)) {
+    const target = this.sessionManager.getEntry(targetId);
+    if (!isRecord(target)) {
       throw new Error(`Pi rewind target ${targetId} was not found in the session tree`);
     }
-    await this.sdk.navigateTree(targetId, { summarize: false });
+    const isUserMessage =
+      target.type === "message" && isRecord(target.message) && target.message.role === "user";
+    const isCommandAnchor =
+      target.type === "custom" && target.customType === PI_COMMAND_ANCHOR_ENTRY_TYPE;
+    if (!isUserMessage && !isCommandAnchor) {
+      throw new Error(`Pi rewind target ${targetId} is not a user message or command anchor`);
+    }
+    const result = await this.sdk.navigateTree(targetId, { summarize: false });
+    if (isRecord(result) && result.cancelled === true) {
+      throw new Error(`Pi rewind target ${targetId} was not selected`);
+    }
     this.activeToolCalls.clear();
+    this.activeAssistantMessageId = null;
+    this.activeAssistantText = "";
+    this.activeReasoningId = null;
+    this.activeReasoningText = "";
+    this.pendingSettledMessages = null;
+    this.pendingSteerSubmissions.length = 0;
+    this.currentMode = readActivePresetName(this.sessionManager.getBranch());
+    this.cancelPendingDialogs("The Pi conversation was rewound.");
     this.refreshState();
   }
 
@@ -1163,8 +1247,7 @@ export class PiProviderSession {
     }
     this.emitUsage();
     try {
-      const entries = this.sessionManager.getEntries();
-      const active = readActivePresetName(entries);
+      const active = readActivePresetName(this.sessionManager.getBranch());
       if (active !== this.currentMode) {
         this.currentMode = active;
       }

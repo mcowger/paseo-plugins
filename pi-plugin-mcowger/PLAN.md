@@ -23,7 +23,7 @@ extension-warm model catalogs.
 | Todos | rpiv-todo `details.tasks` (+ pi-example `details.todos`) → native `type:"todo"` timeline items, live + replay |
 | Subagents | Foreground `task`/`subagent` calls → native `sub_agent` tool detail |
 | Permissions | Headless `ExtensionUIContext` (bound via `session.bindExtensions`, mode `"rpc"`): select/confirm/input/editor → Paseo permission questions; notify → notification items; `custom()` rejects (no TUI) |
-| Rewind | `session.revert.conversation` → `session.navigateTree(revertToken, { summarize: false })`; revert tokens = pi user-entry ids from `entry_appended` events |
+| Rewind | `session.revert.conversation` → `session.navigateTree(revertToken, { summarize: false })`; revert tokens = pi user-entry ids from `entry_appended` events; persistence records the active leaf and replay follows the active branch |
 | Persistence | `SessionManager.open(sessionFile)` resume; `history:"replay"` streams mapped message history before `session.ready` |
 | Catalog | `ModelRuntime.create()` (cached catalogs, no network by default) + extension warmup; per-model `thinkingOptions` from `reasoning` + `thinkingLevelMap` (PR #4413 semantics) |
 | Commands published | `compact`, `preset`, plus prompt templates discovered by the loader |
@@ -37,3 +37,5 @@ extension-warm model catalogs.
 - Foreground-only subagent rendering; detached pi-subagents background runs are out of scope.
 - Project-local extensions that register providers (rare) only appear after that cwd's
   session loads them.
+- Paseo owns fork context construction. The plugin forwards `chat_history` attachment text before
+  the new prompt and does not create a native pi fork.

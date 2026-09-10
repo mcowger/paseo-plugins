@@ -228,6 +228,14 @@ async function handleSessionOpen(
     typeof (persistenceData as Record<string, unknown>).sessionFile === "string"
       ? ((persistenceData as Record<string, unknown>).sessionFile as string)
       : null;
+  const persistedLeafId =
+    persistenceData &&
+    typeof persistenceData === "object" &&
+    !Array.isArray(persistenceData) &&
+    ((persistenceData as Record<string, unknown>).leafId === null ||
+      typeof (persistenceData as Record<string, unknown>).leafId === "string")
+      ? ((persistenceData as Record<string, unknown>).leafId as string | null)
+      : undefined;
 
   const runtime = await getModelRuntime();
 
@@ -259,6 +267,15 @@ async function handleSessionOpen(
 
   let created;
   try {
+    if (persistedLeafId !== undefined) {
+      if (persistedLeafId === null) {
+        sessionManager.resetLeaf();
+      } else if (!sessionManager.getEntry(persistedLeafId)) {
+        throw new Error(`Pi persisted leaf ${persistedLeafId} was not found in the session tree`);
+      } else {
+        sessionManager.branch(persistedLeafId);
+      }
+    }
     created = await createAgentSession({
       cwd: config.cwd,
       modelRuntime: runtime,

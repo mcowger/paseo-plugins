@@ -35,7 +35,11 @@ export interface PiModelRuntimeLike {
 /** Subset of pi's SessionManager used by the provider. */
 export interface PiSessionManagerLike {
   getEntries(): unknown[];
+  getBranch(fromId?: string): unknown[];
+  getLeafId(): string | null;
   getEntry(id: string): unknown;
+  branch(branchFromId: string): void;
+  resetLeaf(): void;
   appendCustomEntry(customType: string, data?: unknown): string;
 }
 

@@ -22,12 +22,15 @@ class FakeSdkSession {
   appendedEntries: Array<{ customType: string; data: unknown }> = [];
   compactCalls: Array<string | undefined> = [];
   navigations: string[] = [];
+  navigateResult: unknown = {};
+  leafId: string | null = null;
   aborts = 0;
   model: unknown = TEST_MODEL;
   thinkingLevel = "medium";
   sessionFile = "/tmp/session.jsonl";
   messages: unknown[] = [];
   entries: unknown[] = [];
+  branchEntries: unknown[] | null = null;
   modelRuntime = {
     getModel: (provider: string, id: string) => ({ provider, id, reasoning: true }),
   };
@@ -73,7 +76,8 @@ class FakeSdkSession {
   }
   async navigateTree(targetId: string): Promise<unknown> {
     this.navigations.push(targetId);
-    return {};
+    this.leafId = targetId;
+    return this.navigateResult;
   }
   getSessionStats() {
     return {
@@ -87,11 +91,19 @@ class FakeSdkSession {
 function makeSessionManager(fake: FakeSdkSession): SessionManager {
   return {
     getEntries: () => fake.entries,
+    getBranch: () => fake.branchEntries ?? fake.entries,
+    getLeafId: () => fake.leafId,
     getEntry: (id: string) =>
       fake.entries.find((entry) => (entry as { id?: string }).id === id) ?? null,
+    branch: (id: string) => {
+      fake.leafId = id;
+    },
+    resetLeaf: () => {
+      fake.leafId = null;
+    },
     appendCustomEntry: (customType: string, data?: unknown) => {
       fake.appendedEntries.push({ customType, data });
-      return "entry-id";
+      return `entry-${fake.appendedEntries.length}`;
     },
   } as unknown as SessionManager;
 }
@@ -227,7 +239,17 @@ describe("PiProviderSession commands", () => {
     });
     expect(fake.setModelCalls).toEqual(["plexus/gpt-5.6-sol"]);
     expect(fake.thinkingLevels).toContain("high");
-    expect(fake.appendedEntries).toEqual([{ customType: "preset-state", data: { name: "plan" } }]);
+    expect(fake.appendedEntries).toEqual([
+      {
+        customType: "paseo-command-anchor",
+        data: { text: "/preset plan" },
+      },
+      {
+        customType: "paseo-command",
+        data: { text: "/preset plan", anchorId: "entry-1" },
+      },
+      { customType: "preset-state", data: { name: "plan" } },
+    ]);
     expect(events.some((e) => e.type === "session.prompt_result")).toBe(true);
   });
 
@@ -391,10 +413,99 @@ describe("PiProviderSession steering", () => {
   });
 });
 
+describe("PiProviderSession replay", () => {
+  it("persists the active branch leaf for resume", () => {
+    const { fake, session } = createHarness();
+    fake.leafId = "entry-c";
+    expect(session.persistence).toEqual({
+      version: 2,
+      data: {
+        sessionFile: "/tmp/session.jsonl",
+        leafId: "entry-c",
+        cwd: "/tmp/work",
+      },
+    });
+  });
+
+  it("replays only the active Pi branch", async () => {
+    const { fake, session, events } = createHarness();
+    const first = { type: "message", id: "entry-a", message: { role: "user", content: "first" } };
+    const abandoned = {
+      type: "message",
+      id: "entry-b",
+      message: { role: "user", content: "abandoned" },
+    };
+    const replacement = {
+      type: "message",
+      id: "entry-c",
+      message: { role: "user", content: "replacement" },
+    };
+    fake.entries.push(first, abandoned, replacement);
+    fake.branchEntries = [first, replacement];
+    fake.messages = [
+      { role: "user", content: "first" },
+      { role: "assistant", responseId: "answer-a", content: [{ type: "text", text: "one" }] },
+      { role: "user", content: "replacement" },
+      { role: "assistant", responseId: "answer-c", content: [{ type: "text", text: "two" }] },
+    ];
+
+    await session.replayHistory();
+
+    const users = events
+      .filter(
+        (event): event is Extract<ProviderEvent, { type: "timeline.item" }> =>
+          event.type === "timeline.item" && event.item.type === "user_message",
+      )
+      .map((event) => event.item);
+    expect(users).toEqual([
+      { type: "user_message", id: "entry-a", text: "first", messageId: "entry-a", revertToken: "entry-a" },
+      {
+        type: "user_message",
+        id: "entry-c",
+        text: "replacement",
+        messageId: "entry-c",
+        revertToken: "entry-c",
+      },
+    ]);
+  });
+
+  it("replays command rows with their anchor token", async () => {
+    const { fake, session, events } = createHarness();
+    fake.branchEntries = [
+      { type: "message", id: "entry-a", message: { role: "user", content: "first" } },
+      {
+        type: "custom",
+        id: "command-1",
+        customType: "paseo-command",
+        data: { text: "/compact", anchorId: "anchor-1" },
+      },
+    ];
+    fake.messages = [{ role: "user", content: "first" }];
+
+    await session.replayHistory();
+
+    expect(events).toContainEqual({
+      type: "timeline.item",
+      sessionId: "s1",
+      item: {
+        type: "user_message",
+        id: "command-1",
+        messageId: "command-1",
+        revertToken: "anchor-1",
+        text: "/compact",
+      },
+    });
+  });
+});
+
 describe("PiProviderSession rewind", () => {
   it("rewinds via navigateTree for known entries", async () => {
     const { fake, session } = createHarness();
-    fake.entries.push({ type: "message", id: "entry-1" });
+    fake.entries.push({
+      type: "message",
+      id: "entry-1",
+      message: { role: "user", content: "first prompt" },
+    });
     await session.revertConversation("entry-1");
     expect(fake.navigations).toEqual(["entry-1"]);
   });
@@ -402,5 +513,46 @@ describe("PiProviderSession rewind", () => {
   it("rejects unknown rewind targets", async () => {
     const { session } = createHarness();
     await expect(session.revertConversation("missing")).rejects.toThrow(/not found/);
+  });
+
+  it("rejects non-user rewind targets", async () => {
+    const { fake, session } = createHarness();
+    fake.entries.push({ type: "message", id: "assistant-1", message: { role: "assistant" } });
+    await expect(session.revertConversation("assistant-1")).rejects.toThrow(/not a user message/);
+  });
+
+  it("does not commit a canceled tree navigation", async () => {
+    const { fake, session } = createHarness();
+    fake.entries.push({
+      type: "message",
+      id: "entry-1",
+      message: { role: "user", content: "first prompt" },
+    });
+    fake.navigateResult = { cancelled: true };
+    await expect(session.revertConversation("entry-1")).rejects.toThrow(/not selected/);
+  });
+
+  it("forwards fork chat history before the new prompt", async () => {
+    const { fake, session } = createHarness();
+    await session.handlePrompt({
+      clientMessageId: "fork-message",
+      delivery: "auto",
+      input: {
+        type: "message",
+        content: [
+          {
+            type: "text",
+            mimeType: "text/plain",
+            contextKind: "chat_history",
+            title: "Chat history",
+            text: "<chat-history-summary>\nPrevious work\n</chat-history-summary>",
+          },
+          { type: "text", text: "Continue from here" },
+        ],
+      },
+    });
+    expect(fake.prompts[0]?.text).toBe(
+      "<chat-history-summary>\nPrevious work\n</chat-history-summary>\n\nContinue from here",
+    );
   });
 });

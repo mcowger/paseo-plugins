@@ -17,6 +17,13 @@ export interface PiCapturedUserMessageEntry {
   text: string;
 }
 
+export interface PiCommandHistoryEntry {
+  id: string;
+  text: string;
+  anchorId: string;
+  userCount: number;
+}
+
 function isTextContentBlock(block: unknown): block is PiTextContent {
   return (
     typeof block === "object" &&
@@ -56,33 +63,24 @@ export class PiHistoryMapper {
   constructor(private readonly userEntries: readonly PiCapturedUserMessageEntry[] = []) {}
 
   mapMessages(messages: readonly PiAgentMessage[]): ProviderTimelineItem[] {
-    const items: ProviderTimelineItem[] = [];
+    return messages.flatMap((message) => this.mapMessage(message));
+  }
 
-    for (const message of messages) {
-      switch (message.role) {
-        case "user":
-          items.push(...this.mapUserMessage(message));
-          break;
-        case "custom":
-          items.push(...this.mapCustomMessage(message));
-          break;
-        case "assistant":
-          items.push(...this.mapAssistantMessage(message));
-          break;
-        case "toolResult": {
-          const mapped = this.mapToolResultMessage(message);
-          if (mapped) {
-            items.push(...mapped);
-          }
-          break;
-        }
-        case "bashExecution":
-          items.push(this.mapBashExecutionMessage(message));
-          break;
+  mapMessage(message: PiAgentMessage): ProviderTimelineItem[] {
+    switch (message.role) {
+      case "user":
+        return this.mapUserMessage(message);
+      case "custom":
+        return this.mapCustomMessage(message);
+      case "assistant":
+        return this.mapAssistantMessage(message);
+      case "toolResult": {
+        const mapped = this.mapToolResultMessage(message);
+        return mapped ?? [];
       }
+      case "bashExecution":
+        return [this.mapBashExecutionMessage(message)];
     }
-
-    return items;
   }
 
   private mapUserMessage(
@@ -198,6 +196,16 @@ export class PiHistoryMapper {
     }
 
     return items;
+  }
+
+  mapCommandEntry(entry: PiCommandHistoryEntry): ProviderTimelineItem {
+    return {
+      type: "user_message",
+      id: entry.id,
+      text: entry.text,
+      messageId: entry.id,
+      revertToken: entry.anchorId,
+    };
   }
 
   private mapBashExecutionMessage(
