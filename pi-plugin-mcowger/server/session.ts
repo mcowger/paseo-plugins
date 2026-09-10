@@ -302,22 +302,7 @@ export class PiProviderSession {
       ...(this.currentMode && this.presets[this.currentMode] ? { mode: this.currentMode } : {}),
       thinkingOption: normalizePiThinkingLevel(this.sdk.thinkingLevel) ?? undefined,
       thinkingOptions: currentModel ? (thinkingOptionsForModel(currentModel) ?? []) : [],
-      settings: [
-        {
-          type: "toggle",
-          id: AUTO_COMPACTION_SETTING,
-          label: "Auto-compaction",
-          description: "Compact long conversations automatically.",
-          value: this.sdk.autoCompactionEnabled,
-        },
-        {
-          type: "toggle",
-          id: AUTO_RETRY_SETTING,
-          label: "Auto-retry",
-          description: "Retry transient provider errors automatically.",
-          value: this.sdk.autoRetryEnabled,
-        },
-      ],
+      settings: [],
     };
   }
 

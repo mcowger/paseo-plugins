@@ -308,10 +308,7 @@ describe("PiProviderSession commands", () => {
     await session.configure({ settings: { autoCompaction: false, autoRetry: false } });
     expect(fake.autoCompactionEnabled).toBe(false);
     expect(fake.autoRetryEnabled).toBe(false);
-    expect(session.configState().settings).toEqual([
-      expect.objectContaining({ id: "autoCompaction", value: false }),
-      expect.objectContaining({ id: "autoRetry", value: false }),
-    ]);
+    expect(session.configState().settings).toEqual([]);
   });
 
   it("intercepts the compact command", async () => {
@@ -331,9 +328,7 @@ describe("PiProviderSession commands", () => {
     expect(fake.autoRetryEnabled).toBe(false);
     const configEvent = events.at(-1);
     expect(configEvent).toMatchObject({ type: "session.config" });
-    expect(
-      (configEvent as Extract<ProviderEvent, { type: "session.config" }>).config.settings,
-    ).toContainEqual(expect.objectContaining({ id: "autoRetry", value: false }));
+    expect((configEvent as Extract<ProviderEvent, { type: "session.config" }>).config.settings).toEqual([]);
   });
 
   it("normalizes the setting name in composer commands", async () => {

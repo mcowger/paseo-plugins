@@ -5,6 +5,11 @@ import { PI_PROVIDER_ID } from "../shared/preset-settings.js";
 const PAGE_SIZE = 200;
 const SUBSCRIPTION_ID = "pi-runtime-settings-agents";
 
+type RuntimeState = {
+  autoCompaction: boolean;
+  autoRetry: boolean;
+};
+
 function isPiAgent(agent: { provider?: string }): boolean {
   return agent.provider === PI_PROVIDER_ID;
 }
@@ -20,24 +25,48 @@ function settingValue(agent: { features?: unknown }, id: string): boolean | unde
   return typeof feature?.value === "boolean" ? feature.value : undefined;
 }
 
+function stateFromAgent(agent: { features?: unknown }, previous?: RuntimeState): RuntimeState {
+  return {
+    autoCompaction: settingValue(agent, "autoCompaction") ?? previous?.autoCompaction ?? true,
+    autoRetry: settingValue(agent, "autoRetry") ?? previous?.autoRetry ?? true,
+  };
+}
+
 function makeMenu(
-  agent: { features?: unknown },
-  send: (text: string) => Promise<void>,
+  state: RuntimeState,
+  send: (setting: keyof RuntimeState, value: boolean) => Promise<void>,
+  update: () => void,
 ) {
-  const toggle = (id: string, label: string, command: string, value: boolean | undefined) => ({
-    kind: "item" as const,
-    id: `${id}-${value === true ? "off" : "on"}`,
-    title: `${value === true ? "Disable" : "Enable"} ${label}`,
-    behavior: { kind: "action" as const, onPress: () => send(`/settings ${command} ${value === true ? "off" : "on"}`) },
-  });
+  const toggle = (
+    id: keyof RuntimeState,
+    label: string,
+    icon: string,
+  ) => {
+    const value = state[id];
+    return {
+      kind: "item" as const,
+      id: `${id}-${value ? "on" : "off"}`,
+      title: `${label}: ${value ? "On" : "Off"}`,
+      icon,
+      behavior: {
+        kind: "action" as const,
+        onPress: async () => {
+          await send(id, !value);
+          state[id] = !value;
+          update();
+        },
+      },
+    };
+  };
   return [
-    toggle("auto-compaction", "auto-compaction", "auto-compaction", settingValue(agent, "autoCompaction")),
-    toggle("auto-retry", "auto-retry", "auto-retry", settingValue(agent, "autoRetry")),
+    toggle("autoCompaction", "Auto-compaction", "Minimize2"),
+    toggle("autoRetry", "Auto-retry", "RotateCw"),
   ];
 }
 
 export function contributeRuntimeSettingsPills(client: PluginClientContext): () => void {
   const pills = new Map<string, PluginButtonRegistration>();
+  const states = new Map<string, RuntimeState>();
   const workspaceIds = new Map<string, string>();
   const agents = new Map<string, ReturnType<typeof client.paseo.agents.ref>>();
   let stopped = false;
@@ -45,8 +74,26 @@ export function contributeRuntimeSettingsPills(client: PluginClientContext): () 
   const remove = (agentId: string) => {
     pills.get(agentId)?.remove();
     pills.delete(agentId);
+    states.delete(agentId);
     agents.delete(agentId);
     workspaceIds.delete(agentId);
+  };
+
+  const update = (agentId: string) => {
+    const pill = pills.get(agentId);
+    const state = states.get(agentId);
+    const handle = agents.get(agentId);
+    if (!pill || !state || !handle) return;
+    pill.update({
+      behavior: {
+        kind: "menu",
+        items: makeMenu(
+          state,
+          (setting, value) => handle.send(`/settings ${setting === "autoCompaction" ? "auto-compaction" : "auto-retry"} ${value ? "on" : "off"}`),
+          () => update(agentId),
+        ),
+      },
+    });
   };
 
   const register = (agent: {
@@ -61,20 +108,15 @@ export function contributeRuntimeSettingsPills(client: PluginClientContext): () 
       return;
     }
     if (workspaceIds.get(agent.id) === agent.workspaceId) {
-      const handle = agents.get(agent.id);
-      if (!handle) {
-        remove(agent.id);
-      } else {
-        pills.get(agent.id)?.update({
-          behavior: { kind: "menu", items: makeMenu(agent, (text) => handle.send(text)) },
-        });
-      }
+      states.set(agent.id, stateFromAgent(agent, states.get(agent.id)));
+      update(agent.id);
       return;
     }
     remove(agent.id);
     const handle = client.paseo.agents.ref(agent.id);
     workspaceIds.set(agent.id, agent.workspaceId);
     agents.set(agent.id, handle);
+    states.set(agent.id, stateFromAgent(agent));
     pills.set(agent.id, client.addComposerPill({
       id: "pi-runtime-settings",
       workspaceId: agent.workspaceId,
@@ -83,9 +125,10 @@ export function contributeRuntimeSettingsPills(client: PluginClientContext): () 
         title: "Pi runtime settings",
         icon: "Settings2",
         label: "Pi settings",
-        behavior: { kind: "menu", items: makeMenu(agent, (text) => handle.send(text)) },
+        behavior: { kind: "menu", items: [] },
       },
     }));
+    update(agent.id);
   };
 
   const unsubscribeAgents = client.paseo.agents.subscribe((update) => {
@@ -116,6 +159,7 @@ export function contributeRuntimeSettingsPills(client: PluginClientContext): () 
     unsubscribeAgents();
     for (const pill of pills.values()) pill.remove();
     pills.clear();
+    states.clear();
     agents.clear();
     workspaceIds.clear();
   };
