@@ -24,6 +24,10 @@ Expanded file read with syntax-highlighted content:
 
 ![Expanded file read](./images/read-file-detail.png)
 
+Paseo tool calls use purpose-built cards with readable prompt, configuration, result, and status sections:
+
+![Paseo create-agent card](./images/paseo-create-agent.png)
+
 ## Features
 
 - Color-coded reasoning and tool-call cards with Lucide icons.
