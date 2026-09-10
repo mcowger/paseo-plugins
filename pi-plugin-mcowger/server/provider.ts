@@ -16,10 +16,9 @@ import {
   type ProviderRegistration,
 } from "@getpaseo/plugin/server/provider";
 
-import type { PiModel } from "../shared/rpc-types.js";
 import { createMcpBridge } from "./mcp-bridge.js";
 import type { PiModelRuntimeLike } from "../shared/pi-sdk-types.js";
-import { createModelRuntime, listCatalogModels } from "./pi-host.js";
+import { buildCatalog, createModelRuntime, listScopedModels } from "./pi-host.js";
 import { loadPiPresets, presetsToModes } from "./presets.js";
 import { PiProviderSession } from "./session.js";
 import { normalizePiThinkingLevel, parsePiModelReference } from "./thinking.js";
@@ -193,13 +192,13 @@ async function handleCatalog(
 ): Promise<void> {
   try {
     const runtime = await getModelRuntime();
-    const models = await listCatalogModels(runtime);
+    const baseCatalog = await buildCatalog(runtime, input.cwd ?? homedir());
     const presets = loadPiPresets(input.cwd ?? homedir());
     state.emit({
       type: "catalog",
       requestId: input.requestId,
       catalog: {
-        models,
+        ...baseCatalog,
         modes: presetsToModes(presets),
       },
     });
@@ -330,7 +329,7 @@ async function handleSessionOpen(
       promptCommands,
     },
     config,
-    models: (await runtime.getAvailable()).map((model: unknown) => model as PiModel),
+    models: await listScopedModels(runtime, config.cwd),
     emit: state.emit,
   });
   state.sessions.set(input.sessionId, providerSession);

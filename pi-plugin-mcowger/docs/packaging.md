@@ -145,6 +145,26 @@ The `hostStubFor` bit is whatever your bundle's top level touches; for this plug
 `@getpaseo/plugin/server/provider` needs real functions (import the built
 `@getpaseo/plugin` dist, it's right there in the paseo checkout).
 
+## Bonus chapter: jiti, user extensions, and the alias map
+
+pi loads user extensions (~/.pi/agent/extensions, plus npm packages from
+settings.json `packages`) through jiti. In built mode jiti gets its module
+resolution anchored at `import.meta.url` and an alias table from `getAliases()`
+(mapping `@earendil-works/pi-*`, typebox, etc. to pi's install). Neither survives
+vendoring: with the meta URL stripped, aliases resolve through nested-node_modules
+guessing and user extensions fail one after another with `Invalid URL`.
+
+`build-vendor.mjs` therefore also replaces `import.meta.resolve(` calls with a
+banner-injected resolver (`PI_VENDOR_META_RESOLVE`) that honors package `exports`
+(including wildcard subpaths like `./providers/*`) against the plugin's installed
+pi copy, and rewrites the loader's `{ alias: getAliases() }` call to a curated
+runtime map (`PI_VENDOR_ALIASES`) with the same entries pi uses, computed at
+bundle-evaluation time.
+
+Verify extension loading works before shipping with a one-liner against the
+vendored bundle: create a `DefaultResourceLoader`, `reload()`, and print
+`getExtensions().errors` — expect zero.
+
 ## Daemon-side notes worth fixing upstream eventually
 
 None of these block this plugin, but each cost an evening:

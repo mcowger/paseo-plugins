@@ -4,13 +4,8 @@ import type { ProviderCatalog, ProviderModel } from "@getpaseo/plugin/server/pro
 
 import type { PiModel } from "../shared/rpc-types.js";
 import type { PiModelRuntimeLike } from "../shared/pi-sdk-types.js";
-import {
-  createAgentSession,
-  DefaultResourceLoader,
-  getAgentDir,
-  ModelRuntime,
-  SessionManager,
-} from "./pi-sdk.js";
+import { modelMatchesPatterns, readPiUserSettings } from "./pi-settings.js";
+import { createAgentSession, DefaultResourceLoader, getAgentDir, ModelRuntime, SessionManager } from "./pi-sdk.js";
 import { mapPiModel } from "./thinking.js";
 
 /**
@@ -34,18 +29,66 @@ export async function createModelRuntime(): Promise<PiModelRuntimeLike> {
   return runtime;
 }
 
-export async function listCatalogModels(
+/**
+ * Authenticated models scoped by pi's settings (enabledProviders /
+ * enabledModels). Raw pi model shapes, thinkingLevelMap included.
+ */
+export async function listScopedModels(
   modelRuntime: PiModelRuntimeLike,
-): Promise<ProviderModel[]> {
-  const available = await modelRuntime.getAvailable();
-  return available.map((model: unknown) => mapPiModel(model as PiModel));
+  cwd?: string,
+): Promise<PiModel[]> {
+  const settings = readPiUserSettings(cwd ?? homedir());
+  const available = (await modelRuntime.getAvailable()) as unknown as PiModel[];
+  return available.filter((model) => {
+    const fullId = `${model.provider}/${model.id}`;
+    // enabledProviders deliberately not honored here: it is the
+    // pi-suppress-providers extension's convention, and that extension (now
+    // that extension loading works) applies it by suppressing auth env vars.
+    if (settings.enabledModels?.length && !modelMatchesPatterns(fullId, settings.enabledModels)) {
+      return false;
+    }
+    return true;
+  });
 }
 
+/**
+ * Catalog honoring pi's settings.json: enabledProviders and enabledModels
+ * scope the list; defaultProvider/defaultModel, defaultThinkingLevel, and
+ * modelThinkingLevels drive the reported defaults.
+ */
 export async function buildCatalog(
   modelRuntime: PiModelRuntimeLike,
+  cwd?: string,
 ): Promise<ProviderCatalog> {
+  const settings = readPiUserSettings(cwd ?? homedir());
+  const scoped = await listScopedModels(modelRuntime, cwd);
+
+  const defaultModelId =
+    settings.defaultProvider && settings.defaultModel
+      ? `${settings.defaultProvider}/${settings.defaultModel}`
+      : undefined;
+  const models = scoped.map((model): ProviderModel => {
+    const fullId = `${model.provider}/${model.id}`;
+    return {
+      ...mapPiModel(
+        model,
+        settings.modelThinkingLevels?.[fullId] ?? settings.defaultThinkingLevel,
+      ),
+      ...(defaultModelId && fullId === defaultModelId ? { isDefault: true } : {}),
+    };
+  });
+  const hasDefault = defaultModelId
+    ? scoped.some((model) => `${model.provider}/${model.id}` === defaultModelId)
+    : false;
+  const defaultEntry = hasDefault
+    ? models.find((model) => model.id === defaultModelId)
+    : undefined;
   return {
-    models: await listCatalogModels(modelRuntime),
+    models,
     modes: [],
+    ...(hasDefault && defaultModelId ? { defaultModel: defaultModelId } : {}),
+    ...(defaultEntry?.defaultThinkingOptionId
+      ? { defaultThinkingOption: defaultEntry.defaultThinkingOptionId }
+      : {}),
   };
 }

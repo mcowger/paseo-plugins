@@ -1,3 +1,82 @@
+import { createRequire as __piVendorCreateRequire } from "node:module";
+var require = __piVendorCreateRequire("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js");
+var PI_VENDOR_META_RESOLVE = (function (spec) {
+  var path = require("node:path");
+  var fs = require("node:fs");
+  var url = require("node:url");
+  var anchorDir = path.dirname(url.fileURLToPath("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js"));
+  var match = spec.match(/^(@[^/]+\/[^/]+)(\/.*)?$/) || spec.match(/^([^/]+)(\/.*)?$/);
+  if (!match) return spec;
+  var pkgName = match[1];
+  var subpath = match[2] || "";
+  var root = path.normalize(path.join(anchorDir, "..", "node_modules", pkgName));
+  try {
+    var pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    var key = subpath ? "." + subpath : ".";
+    var exp = pkg.exports && (pkg.exports[key] ?? (!subpath ? pkg.exports["."] : undefined));
+    var entry =
+      (exp && (typeof exp === "string" ? exp : exp.import ?? exp.default)) ??
+      (subpath ? null : (pkg.module ?? pkg.main ?? "index.js"));
+    if (!entry && subpath && pkg.exports) {
+      for (var pattern of Object.keys(pkg.exports)) {
+        if (pattern.indexOf("*") < 0) continue;
+        var keyRe = new RegExp("^" + pattern.replace(/[.+?^$\{\}()|[\]\\]/g, "\\$&").replace(/\*/g, "(.*)") + "$");
+        var keyMatch = keyRe.exec(key);
+        if (!keyMatch) continue;
+        var target = pkg.exports[pattern];
+        var targetExp = typeof target === "string" ? target : target && (target.import ?? target.default);
+        if (!targetExp) continue;
+        entry = targetExp.replace(/\*/g, keyMatch[1] ?? "");
+        break;
+      }
+    }
+    var file = entry ? path.join(root, entry) : path.join(root, subpath.replace(/^\//, ""));
+    if (fs.existsSync(file)) return url.pathToFileURL(file).href;
+  } catch {}
+  return spec;
+});
+var PI_VENDOR_ALIASES = (function () {
+  var url = require("node:url");
+  var anchorFile = url.fileURLToPath("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js");
+  var toPath = function (spec) {
+    try {
+      return url.fileURLToPath(PI_VENDOR_META_RESOLVE(spec));
+    } catch {
+      return undefined;
+    }
+  };
+  var agent = anchorFile;
+  var core = toPath("@earendil-works/pi-agent-core");
+  var tui = toPath("@earendil-works/pi-tui");
+  var compat = toPath("@earendil-works/pi-ai/compat");
+  var oauth = toPath("@earendil-works/pi-ai/oauth");
+  var providersAll = toPath("@earendil-works/pi-ai/providers/all");
+  var typebox = toPath("typebox");
+  var typeboxCompile = toPath("typebox/compile");
+  var typeboxValue = toPath("typebox/value");
+  return {
+    "@earendil-works/pi-coding-agent": agent,
+    "@earendil-works/pi-agent-core": core,
+    "@earendil-works/pi-tui": tui,
+    "@earendil-works/pi-ai": compat,
+    "@earendil-works/pi-ai/compat": compat,
+    "@earendil-works/pi-ai/oauth": oauth,
+    "@earendil-works/pi-ai/providers/all": providersAll,
+    "@mariozechner/pi-coding-agent": agent,
+    "@mariozechner/pi-agent-core": core,
+    "@mariozechner/pi-tui": tui,
+    "@mariozechner/pi-ai": compat,
+    "@mariozechner/pi-ai/compat": compat,
+    "@mariozechner/pi-ai/oauth": oauth,
+    "@mariozechner/pi-ai/providers/all": providersAll,
+    typebox: typebox,
+    "typebox/compile": typeboxCompile,
+    "typebox/value": typeboxValue,
+    "@sinclair/typebox": typebox,
+    "@sinclair/typebox/compile": typeboxCompile,
+    "@sinclair/typebox/value": typeboxValue,
+  };
+})();
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -192232,9 +192311,9 @@ function stripBom(content) {
 }
 
 // node_modules/@earendil-works/pi-coding-agent/dist/config.js
-var __filename2 = fileURLToPath2(typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown");
+var __filename2 = fileURLToPath2("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js");
 var __dirname = dirname(__filename2);
-var isBunBinary = (typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown").includes("$bunfs") || (typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown").includes("~BUN") || (typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown").includes("%7EBUN");
+var isBunBinary = "file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js".includes("$bunfs") || "file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js".includes("~BUN") || "file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js".includes("%7EBUN");
 var isBunRuntime = !!process.versions.bun;
 var isBundledNode = typeof PI_BUNDLED_NODE !== "undefined" && PI_BUNDLED_NODE;
 function normalizeSelfUpdatePackageTarget(target) {
@@ -204439,7 +204518,7 @@ var __rewriteRelativeImportExtension2 = function(path18, preserveJsx) {
   return path18;
 };
 var importNodeOnlyApi = (specifier) => {
-  const runtimeSpecifier = (typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown").endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier;
+  const runtimeSpecifier = "file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js".endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier;
   return import(__rewriteRelativeImportExtension2(runtimeSpecifier));
 };
 var bedrockModuleOverride;
@@ -205919,7 +205998,7 @@ var __rewriteRelativeImportExtension4 = function(path18, preserveJsx) {
   return path18;
 };
 var importOAuthModule = (specifier) => {
-  const runtimeSpecifier = (typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown").endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier;
+  const runtimeSpecifier = "file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js".endsWith(".js") ? specifier.replace(/\.ts$/, ".js") : specifier;
   return import(__rewriteRelativeImportExtension4(runtimeSpecifier));
 };
 var bundledLoaders;
@@ -218504,10 +218583,10 @@ import * as path6 from "node:path";
 import { createRequire } from "node:module";
 import { dirname as dirname4, join as join5 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
-var moduleRequire = createRequire(typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown");
+var moduleRequire = createRequire("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js");
 var TUI_PACKAGE_NAME = "@earendil-works/pi-tui";
 function getNativeModuleCandidates(nativePath, options = {}) {
-  const moduleDir = dirname4(fileURLToPath3(options.moduleUrl ?? (typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown")));
+  const moduleDir = dirname4(fileURLToPath3(options.moduleUrl ?? "file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js"));
   const candidates = [];
   try {
     const packageEntry = (options.resolvePackage ?? moduleRequire.resolve)(TUI_PACKAGE_NAME);
@@ -218519,7 +218598,7 @@ function getNativeModuleCandidates(nativePath, options = {}) {
 }
 
 // node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui/dist/native-modifiers.js
-var cjsRequire = createRequire2(typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown");
+var cjsRequire = createRequire2("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js");
 var nativeModifiersHelper;
 function isNativeModifiersHelper(value3) {
   if (typeof value3 !== "object" || value3 === null)
@@ -218566,7 +218645,7 @@ function isNativeModifierPressed(key) {
 }
 
 // node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui/dist/terminal.js
-var cjsRequire2 = createRequire3(typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown");
+var cjsRequire2 = createRequire3("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js");
 var TERMINAL_PROGRESS_KEEPALIVE_MS = 1e3;
 var TERMINAL_PROGRESS_ACTIVE_SEQUENCE = "\x1B]9;4;3\x07";
 var TERMINAL_PROGRESS_CLEAR_SEQUENCE = "\x1B]9;4;0\x07";
@@ -222803,7 +222882,7 @@ function applyExifOrientation(photon, image, originalBytes) {
 import { createRequire as createRequire4 } from "module";
 import * as path10 from "path";
 import { fileURLToPath as fileURLToPath4 } from "url";
-var require2 = createRequire4(typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown");
+var require2 = createRequire4("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js");
 var fs10 = require2("fs");
 var WASM_FILENAME = "photon_rs_bg.wasm";
 var photonModule = null;
@@ -223095,8 +223174,8 @@ async function resizeImageInWorker(workerSpecifier, inputBytes, mimeType, option
   }
 }
 async function resizeImage(inputBytes, mimeType, options) {
-  const isTypeScriptRuntime = (typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown").endsWith(".ts");
-  const workerUrl = new URL(isTypeScriptRuntime ? "./image-resize-worker.ts" : "./image-resize-worker.js", typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown");
+  const isTypeScriptRuntime = "file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js".endsWith(".ts");
+  const workerUrl = new URL(isTypeScriptRuntime ? "./image-resize-worker.ts" : "./image-resize-worker.js", "file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js");
   if (typeof process.versions.bun === "string") {
     try {
       return await resizeImageInWorker("./src/utils/image-resize-worker.ts", inputBytes, mimeType, options);
@@ -240412,56 +240491,9 @@ var VIRTUAL_MODULES = {
   "@mariozechner/pi-ai/providers/all": all_exports,
   "@mariozechner/pi-coding-agent": dist_exports3
 };
-var require3 = createRequire6(typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown");
+var require3 = createRequire6("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js");
 var isNodeSeaBinary = "sea" in process.features && process.features.sea === true || process.getBuiltinModule("node:sea")?.isSea() === true;
-var isTypeScriptSourceRuntime = !isBunBinary && path11.extname(fileURLToPath5(typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown")) === ".ts";
-var _aliases = null;
-function getAliases() {
-  if (_aliases)
-    return _aliases;
-  const __dirname2 = path11.dirname(fileURLToPath5(typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown"));
-  const packageIndex = path11.resolve(__dirname2, "../..", "index.js");
-  const typeboxEntry = require3.resolve("typebox");
-  const typeboxCompileEntry = require3.resolve("typebox/compile");
-  const typeboxValueEntry = require3.resolve("typebox/value");
-  const packagesRoot = path11.resolve(__dirname2, "../../../../");
-  const resolveWorkspaceOrImport = (workspaceRelativePath, specifier) => {
-    const workspacePath = path11.join(packagesRoot, workspaceRelativePath);
-    if (fs11.existsSync(workspacePath)) {
-      return workspacePath;
-    }
-    return fileURLToPath5(import.meta.resolve(specifier));
-  };
-  const piCodingAgentEntry = packageIndex;
-  const piAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/pi-agent-core");
-  const piTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@earendil-works/pi-tui");
-  const piAiCompatEntry = resolveWorkspaceOrImport("ai/dist/compat.js", "@earendil-works/pi-ai/compat");
-  const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/pi-ai/oauth");
-  const piAiProvidersEntry = resolveWorkspaceOrImport("ai/dist/providers/all.js", "@earendil-works/pi-ai/providers/all");
-  _aliases = {
-    "@earendil-works/pi-coding-agent": piCodingAgentEntry,
-    "@earendil-works/pi-agent-core": piAgentCoreEntry,
-    "@earendil-works/pi-tui": piTuiEntry,
-    "@earendil-works/pi-ai/providers/all": piAiProvidersEntry,
-    "@earendil-works/pi-ai/compat": piAiCompatEntry,
-    "@earendil-works/pi-ai/oauth": piAiOauthEntry,
-    "@earendil-works/pi-ai": piAiCompatEntry,
-    "@mariozechner/pi-coding-agent": piCodingAgentEntry,
-    "@mariozechner/pi-agent-core": piAgentCoreEntry,
-    "@mariozechner/pi-tui": piTuiEntry,
-    "@mariozechner/pi-ai/providers/all": piAiProvidersEntry,
-    "@mariozechner/pi-ai/compat": piAiCompatEntry,
-    "@mariozechner/pi-ai/oauth": piAiOauthEntry,
-    "@mariozechner/pi-ai": piAiCompatEntry,
-    typebox: typeboxEntry,
-    "typebox/compile": typeboxCompileEntry,
-    "typebox/value": typeboxValueEntry,
-    "@sinclair/typebox": typeboxEntry,
-    "@sinclair/typebox/compile": typeboxCompileEntry,
-    "@sinclair/typebox/value": typeboxValueEntry
-  };
-  return _aliases;
-}
+var isTypeScriptSourceRuntime = !isBunBinary && path11.extname(fileURLToPath5("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js")) === ".ts";
 var extensionCacheCwd;
 var extensionCacheGeneration = 0;
 var extensionCache = /* @__PURE__ */ new Map();
@@ -240750,12 +240782,12 @@ async function loadExtensionModule(extensionPath, cacheToken) {
       return cachedFactory;
     }
   }
-  const jiti = createJiti(typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown", {
+  const jiti = createJiti("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js", {
     moduleCache: false,
     // Compiled binaries and the bundled Node distribution use embedded modules.
     // Source TypeScript reuses host modules and root tsconfig paths. Unbundled
     // Node builds use dist aliases.
-    ...isBunBinary || isNodeSeaBinary || isBundledNode ? { virtualModules: VIRTUAL_MODULES, tryNative: false } : isTypeScriptSourceRuntime ? { virtualModules: VIRTUAL_MODULES, tsconfigPaths: true } : { alias: getAliases() }
+    ...isBunBinary || isNodeSeaBinary || isBundledNode ? { virtualModules: VIRTUAL_MODULES, tryNative: false } : isTypeScriptSourceRuntime ? { virtualModules: VIRTUAL_MODULES, tsconfigPaths: true } : { alias: PI_VENDOR_ALIASES }
   });
   const module = await jiti.import(extensionPath, { default: true });
   const factory = module;
@@ -262127,7 +262159,7 @@ import { join as join36 } from "path";
 import { createRequire as createRequire7 } from "module";
 import { dirname as dirname22, join as join35 } from "path";
 import { pathToFileURL as pathToFileURL3 } from "url";
-var moduleRequire2 = createRequire7(typeof process !== "undefined" && process.cwd ? "file://" + process.cwd() + "/pi-sdk-vendor.js" : "file:///unknown");
+var moduleRequire2 = createRequire7("file:///home/matt.cowger/workspace/paseo-plugins/pi-plugin-mcowger/node_modules/@earendil-works/pi-coding-agent/dist/index.js");
 var executableDirRequire = createRequire7(pathToFileURL3(join35(dirname22(process.execPath), "package.json")).href);
 var hasDisplay = process.platform !== "linux" || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
 function loadClipboardNative(requires = [moduleRequire2, executableDirRequire]) {

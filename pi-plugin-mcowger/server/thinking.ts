@@ -105,12 +105,18 @@ export function thinkingOptionsForModel(model: PiModel): ProviderThinkingOption[
   }));
 }
 
-export function defaultThinkingOptionForModel(model: PiModel): string | undefined {
+export function defaultThinkingOptionForModel(
+  model: PiModel,
+  preferredLevel?: string | null,
+): string | undefined {
   const supported = supportedThinkingLevels(model);
   if (supported.length === 0) {
     return undefined;
   }
-  return clampThinkingLevel(DEFAULT_PI_THINKING_LEVEL, supported) ?? undefined;
+  // pi's own resolution order: per-model override wins over the global default,
+  // both clamped to what the model actually supports.
+  const requested = normalizePiThinkingLevel(preferredLevel) ?? DEFAULT_PI_THINKING_LEVEL;
+  return clampThinkingLevel(requested, supported) ?? undefined;
 }
 
 export function normalizePiModelLabel(label: string): string {
@@ -148,7 +154,7 @@ export function parsePiModelReference(modelId: string | null): PiModelReference 
   return { id: modelId };
 }
 
-export function mapPiModel(model: PiModel): ProviderModel {
+export function mapPiModel(model: PiModel, thinkingPreference?: string | null): ProviderModel {
   const fullId = `${model.provider}/${model.id}`;
   const rawLabel = `${model.provider}/${model.name ?? model.id}`;
   const segments = rawLabel.split("/").filter((segment) => segment.length > 0);
@@ -166,6 +172,6 @@ export function mapPiModel(model: PiModel): ProviderModel {
       ? { contextWindowMaxTokens: model.contextWindow }
       : {}),
     ...(thinkingOptions ? { thinkingOptions } : {}),
-    ...(thinkingOptions ? { defaultThinkingOptionId: defaultThinkingOptionForModel(model) } : {}),
+    ...(thinkingOptions ? { defaultThinkingOptionId: defaultThinkingOptionForModel(model, thinkingPreference) } : {}),
   };
 }
