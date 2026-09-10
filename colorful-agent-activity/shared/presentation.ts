@@ -360,11 +360,9 @@ export function paseoToolLeafName(toolName: string): string | null {
     return namespacedLeafName;
   }
   const normalized = toolName.trim().toLowerCase();
-  if (normalized.startsWith("paseo_") && normalized.length > "paseo_".length) {
-    const directLeafName = normalized.slice("paseo_".length);
-    return PASEO_TOOL_LABELS[directLeafName] ? directLeafName : null;
-  }
-  return null;
+  const directMatch = normalized.match(/^(?:mcp_)?paseo_(.+)$/);
+  const directLeafName = directMatch?.[1];
+  return directLeafName && PASEO_TOOL_LABELS[directLeafName] ? directLeafName : null;
 }
 
 export function paseoToolLabel(toolName: string): string | null {

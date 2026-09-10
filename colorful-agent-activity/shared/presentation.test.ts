@@ -101,14 +101,27 @@ describe("colorful activity presentation", () => {
       provider: "pi/plexus/gpt-5.6-luna",
     };
     expect(paseoToolLabel("mcp__paseo__create_agent")).toBe("Create Agent");
+    expect(paseoToolLabel("mcp_paseo_create_agent")).toBe("Create Agent");
     expect(paseoToolIcon("paseo.create_agent")).toBe("Bot");
     expect(paseoToolLeafName("paseo_create_agent")).toBe("create_agent");
+    expect(paseoToolLeafName("mcp_paseo_create_agent")).toBe("create_agent");
     expect(paseoToolLeafName("mcp__paseo__future_tool")).toBeNull();
     expect(paseoToolCategory("paseo_remote.create_agent")).toBe("agent");
     expect(paseoToolSummary("mcp__paseo__create_agent", input)).toBe(
       "Random Number Agent 3 · pi/plexus/gpt-5.6-luna",
     );
     expect(paseoToolLabel("mcp__github__create_issue")).toBeNull();
+    expect(
+      resolveToolCallPresentation({
+        name: "mcp_paseo_create_agent",
+        detail: { type: "unknown", input, output: { agentId: "agt_123" } },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Bot",
+      label: "Paseo Create Agent",
+      summary: "Random Number Agent 3 · pi/plexus/gpt-5.6-luna",
+    });
     expect(
       resolveToolCallPresentation({
         name: "mcp__paseo__create_agent",
