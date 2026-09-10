@@ -24,7 +24,7 @@ The plugin targets Paseo `v0.8.0`. Paseo's provider API is stable for this relea
 - Bridges pi extension dialogs to Paseo permission questions.
 - Bridges Paseo-provided MCP servers to pi custom tools in-process.
 - Persists sessions with pi's `SessionManager` and supports replay from the active branch, steering,
-  interruption, compaction, usage reporting, conversation rewind, and Paseo chat-history forks.
+  interruption, compaction, and usage reporting.
 
 ## Installation
 
