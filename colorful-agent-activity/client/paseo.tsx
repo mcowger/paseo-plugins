@@ -2435,6 +2435,33 @@ function FallbackPaseo({
   );
 }
 
+function PaseoFailure({
+  result,
+  palette,
+  styles,
+}: {
+  result: unknown;
+  palette: ActivityPalette;
+  styles: ActivityStyles;
+}) {
+  const failure = asRecord(result);
+  const error = asRecord(failure?.error);
+  return (
+    <View style={styles.paseoStack}>
+      <StatusPill value="Failed" palette={palette} styles={styles} />
+      <PaseoFields
+        fields={[
+          ["Code", error?.code],
+          ["Error", error?.message ?? failure?.error],
+          ["Retryable", error?.retryable],
+        ]}
+        palette={palette}
+        styles={styles}
+      />
+    </View>
+  );
+}
+
 function humanizeKey(key: string): string {
   const words = key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -2456,6 +2483,9 @@ export function PaseoToolDetail({
   const leaf = paseoToolLeafName(toolName);
   if (!leaf) return null;
   const result = paseoToolResult(output);
+  if (asRecord(result)?.ok === false) {
+    return <PaseoFailure result={result} palette={palette} styles={styles} />;
+  }
   if (leaf.startsWith("browser_")) {
     return (
       <BrowserTool
@@ -2516,7 +2546,7 @@ export function PaseoToolDetail({
       />
     );
   }
-  if (leaf.includes("provider") || leaf.includes("profile")) {
+  if (leaf.includes("provider") || leaf.includes("profile") || leaf === "list_models") {
     return (
       <ProviderTool
         leaf={leaf}

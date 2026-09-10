@@ -27,6 +27,7 @@ import {
   diffLinesForDetail,
   fileIconForPath,
   formatUnknownValue,
+  paseoToolLeafName,
   resolveActivityPalette,
   type ActivityPalette,
   type ActivityThemeColors,
@@ -791,17 +792,18 @@ function DetailBody({
     case "plan":
       return <Text selectable style={styles.detailText}>{detail.text}</Text>;
     case "unknown": {
-      const paseoDetail = (
-        <PaseoToolDetail
-          toolName={data.name}
-          input={detail.input}
-          output={detail.output}
-          theme={theme}
-          palette={palette}
-          styles={styles}
-        />
-      );
-      if (paseoDetail) return paseoDetail;
+      if (paseoToolLeafName(data.name)) {
+        return (
+          <PaseoToolDetail
+            toolName={data.name}
+            input={detail.input}
+            output={detail.output}
+            theme={theme}
+            palette={palette}
+            styles={styles}
+          />
+        );
+      }
       return (
         <>
           <DetailLabel style={styles.detailLabel}>Input</DetailLabel>
