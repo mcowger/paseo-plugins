@@ -106,7 +106,11 @@ const AUTO_COMPACTION_SETTING = "autoCompaction";
 const AUTO_RETRY_SETTING = "autoRetry";
 
 function settingBoolean(settings: Readonly<Record<string, unknown>>, id: string): boolean | undefined {
-  return typeof settings[id] === "boolean" ? settings[id] : undefined;
+  const value = settings[id];
+  if (typeof value === "boolean") return value;
+  if (value === "on") return true;
+  if (value === "off") return false;
+  return undefined;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -302,7 +306,30 @@ export class PiProviderSession {
       ...(this.currentMode && this.presets[this.currentMode] ? { mode: this.currentMode } : {}),
       thinkingOption: normalizePiThinkingLevel(this.sdk.thinkingLevel) ?? undefined,
       thinkingOptions: currentModel ? (thinkingOptionsForModel(currentModel) ?? []) : [],
-      settings: [],
+      settings: [
+        {
+          type: "select",
+          id: AUTO_COMPACTION_SETTING,
+          label: "Compact",
+          description: "Compact long conversations automatically.",
+          value: this.sdk.autoCompactionEnabled ? "on" : "off",
+          options: [
+            { label: "Compact ✓", value: "on" },
+            { label: "Compact ×", value: "off" },
+          ],
+        },
+        {
+          type: "select",
+          id: AUTO_RETRY_SETTING,
+          label: "Retry",
+          description: "Retry transient provider errors automatically.",
+          value: this.sdk.autoRetryEnabled ? "on" : "off",
+          options: [
+            { label: "Retry ✓", value: "on" },
+            { label: "Retry ×", value: "off" },
+          ],
+        },
+      ],
     };
   }
 

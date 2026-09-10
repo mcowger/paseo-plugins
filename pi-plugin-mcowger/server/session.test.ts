@@ -305,10 +305,29 @@ describe("PiProviderSession commands", () => {
 
   it("applies runtime settings from configure", async () => {
     const { fake, session } = createHarness();
-    await session.configure({ settings: { autoCompaction: false, autoRetry: false } });
+    await session.configure({ settings: { autoCompaction: "off", autoRetry: "off" } });
     expect(fake.autoCompactionEnabled).toBe(false);
     expect(fake.autoRetryEnabled).toBe(false);
-    expect(session.configState().settings).toEqual([]);
+    expect(session.configState().settings).toEqual([
+      expect.objectContaining({
+        id: "autoCompaction",
+        label: "Compact",
+        value: "off",
+        options: [
+          { label: "Compact ✓", value: "on" },
+          { label: "Compact ×", value: "off" },
+        ],
+      }),
+      expect.objectContaining({
+        id: "autoRetry",
+        label: "Retry",
+        value: "off",
+        options: [
+          { label: "Retry ✓", value: "on" },
+          { label: "Retry ×", value: "off" },
+        ],
+      }),
+    ]);
   });
 
   it("intercepts the compact command", async () => {
@@ -328,7 +347,9 @@ describe("PiProviderSession commands", () => {
     expect(fake.autoRetryEnabled).toBe(false);
     const configEvent = events.at(-1);
     expect(configEvent).toMatchObject({ type: "session.config" });
-    expect((configEvent as Extract<ProviderEvent, { type: "session.config" }>).config.settings).toEqual([]);
+    expect(
+      (configEvent as Extract<ProviderEvent, { type: "session.config" }>).config.settings,
+    ).toContainEqual(expect.objectContaining({ id: "autoRetry", value: "off" }));
   });
 
   it("normalizes the setting name in composer commands", async () => {
