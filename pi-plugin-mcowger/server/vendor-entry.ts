@@ -6,6 +6,7 @@ export {
   getAgentDir,
   ModelRuntime,
   SessionManager,
+  SettingsManager,
   defineTool,
 } from "@earendil-works/pi-coding-agent";
 export { Client } from "@modelcontextprotocol/sdk/client/index.js";
