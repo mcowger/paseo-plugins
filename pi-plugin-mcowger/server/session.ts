@@ -223,6 +223,7 @@ export class PiProviderSession {
   private activeTurnStarted = false;
   private pendingSettledMessages: PiAgentMessage[] | null = null;
   private readonly pendingSteerSubmissions: PiPendingSteerSubmission[] = [];
+  private readonly emittedUserEntryIds = new Set<string>();
   private interruptingTurn: { turnId: string | undefined } | null = null;
   private closed = false;
   private readonly unsubscribe: () => void;
@@ -1068,8 +1069,12 @@ export class PiProviderSession {
     if (!isRecord(message) || message.role !== "user") {
       return;
     }
+    this.emitPersistedUserMessage(entry, message);
+  }
+
+  private emitPersistedUserMessage(entry: Record<string, unknown>, message: Record<string, unknown>): void {
     const entryId = optionalString(entry.id);
-    if (!entryId) {
+    if (!entryId || this.emittedUserEntryIds.has(entryId)) {
       return;
     }
     const text = getUserMessageText(
@@ -1078,6 +1083,7 @@ export class PiProviderSession {
     if (!text) {
       return;
     }
+    this.emittedUserEntryIds.add(entryId);
     const pendingSteer = this.takePendingSteerSubmission(text);
     const clientMessageId = pendingSteer
       ? pendingSteer.clientMessageId
@@ -1096,7 +1102,25 @@ export class PiProviderSession {
     });
   }
 
+  private emitUserMessageAfterPersistence(
+    message: Extract<PiAgentMessage, { role: "user" }>,
+  ): void {
+    queueMicrotask(() => {
+      const entry = this.sessionManager.getEntries().find((candidate) => {
+        if (!isRecord(candidate) || candidate.type !== "message") return false;
+        return candidate.message === message;
+      });
+      if (isRecord(entry)) {
+        this.emitPersistedUserMessage(entry, message as unknown as Record<string, unknown>);
+      }
+    });
+  }
+
   private handleMessageEnd(event: { message: PiAgentMessage }): void {
+    if (event.message.role === "user") {
+      this.emitUserMessageAfterPersistence(event.message);
+      return;
+    }
     if (event.message.role === "assistant") {
       this.activeAssistantMessageId = null;
       this.activeReasoningId = null;

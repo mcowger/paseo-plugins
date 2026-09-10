@@ -227,6 +227,35 @@ describe("PiProviderSession turn flow", () => {
   });
 });
 
+describe("PiProviderSession user identity", () => {
+  it("emits the persisted Pi entry id for a submitted user message", async () => {
+    const { fake, session, events } = createHarness();
+    const userMessage = { role: "user", content: "hello" } as const;
+    fake.onPrompt = () => {
+      fake.emitEvent({ type: "turn_start" } as AgentSessionEvent);
+      fake.entries.push({ type: "message", id: "entry-1", message: userMessage });
+      fake.emitEvent({ type: "message_end", message: userMessage } as AgentSessionEvent);
+      fake.onPrompt = null;
+    };
+
+    await session.handlePrompt(messagePrompt("hello"));
+    await flush();
+
+    expect(events).toContainEqual({
+      type: "timeline.item",
+      sessionId: "s1",
+      item: {
+        type: "user_message",
+        id: "entry-1",
+        messageId: "entry-1",
+        revertToken: "entry-1",
+        text: "hello",
+        clientMessageId: "cm-1",
+      },
+    });
+  });
+});
+
 describe("PiProviderSession commands", () => {
   it("applies presets natively for the preset command", async () => {
     const { fake, session, events } = createHarness({
