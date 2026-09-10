@@ -7,7 +7,7 @@ running the `pi` CLI in RPC mode.
 
 ## Status
 
-The plugin targets Paseo `v0.8.0`. Paseo's provider API is stable for this release.
+The plugin is ready for use with Paseo `v0.8.0`. Paseo's provider API is stable for this release.
 
 ## Preview
 
@@ -26,8 +26,24 @@ The plugin targets Paseo `v0.8.0`. Paseo's provider API is stable for this relea
 - Bridges pi extension dialogs to Paseo permission questions.
 - Bridges Paseo-provided MCP servers to pi custom tools in-process.
 - Publishes Pi extension slash commands alongside built-in commands and prompt templates.
+- Exposes native composer selectors for compact and retry.
+- Emits startup diagnostics for failed resources, MCP connections, model fallbacks, and unsupported
+  session configuration instead of hiding those problems in daemon logs.
 - Persists sessions with pi's `SessionManager` and supports replay from the active branch, steering,
   interruption, compaction, and usage reporting.
+
+## Runtime settings and diagnostics
+
+Active Pi agents expose native composer selectors for `Compact` and `Retry`. Each selector shows
+its current state and opens a small popup with explicit on/off choices.
+
+The embedded SDK cannot safely apply per-session environment overrides or provider-native options
+without mutating shared process state. It also does not expose MCP approval enforcement. The plugin
+leaves those values unchanged and emits a visible startup diagnostic when `env`, `providerOptions`,
+or `toolPolicy` is supplied.
+
+Startup diagnostics also cover failed Pi extensions, skills, prompts, themes, MCP tool discovery,
+unavailable requested models, and model fallbacks.
 
 ## Preset behavior
 
