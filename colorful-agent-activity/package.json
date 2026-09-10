@@ -1,0 +1,32 @@
+{
+  "name": "colorful-agent-activity",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@getpaseo/client": "0.8.0",
+    "@getpaseo/plugin": "0.8.0",
+    "@getpaseo/protocol": "0.8.0",
+    "@shikijs/core": "4.4.3",
+    "@shikijs/engine-javascript": "4.4.3",
+    "@shikijs/langs": "4.4.3",
+    "@shikijs/themes": "4.4.3",
+    "@tanstack/react-query": "^5.90.11",
+    "@types/diff": "^5.2.2",
+    "@types/node": "^20.9.0",
+    "@types/react": "~19.2.0",
+    "diff": "7.0.0",
+    "oxlint": "1.61.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6",
+    "zod": "^4.4.3"
+  }
+}

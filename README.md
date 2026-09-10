@@ -13,3 +13,4 @@ when contributing changes.
 - [Subagent activity](./subagent-activity/README.md)
 - [Session summary](./session-summary/README.md)
 - [Reasoning display](./reasoning-display/README.md)
+- [Colorful agent activity](./colorful-agent-activity/README.md)
