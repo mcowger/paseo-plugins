@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420" role="img" aria-labelledby="title desc">
+  <title id="title">Session summary preview</title>
+  <desc id="desc">A dark Paseo session summary with prompt, token, task, and tool cards.</desc>
+  <rect width="640" height="420" rx="14" fill="#0d1117"/>
+  <rect x="18" y="18" width="604" height="384" rx="10" fill="#161b22" stroke="#30363d"/>
+  <text x="42" y="62" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="24" font-weight="700">Session summary</text>
+  <text x="42" y="88" fill="#8b949e" font-family="system-ui, sans-serif" font-size="13">Live view of the current coding session</text>
+  <rect x="42" y="112" width="556" height="64" rx="8" fill="#21262d" stroke="#3d444d"/>
+  <text x="62" y="138" fill="#8b949e" font-family="system-ui, sans-serif" font-size="12">Prompt</text>
+  <text x="62" y="159" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="14">Review the plugin migration and update the docs</text>
+  <rect x="42" y="194" width="270" height="150" rx="8" fill="#21262d" stroke="#3d444d"/>
+  <text x="62" y="224" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="16" font-weight="700">Tokens</text>
+  <text x="62" y="254" fill="#8b949e" font-family="system-ui, sans-serif" font-size="12">Context</text><text x="250" y="254" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="13">28.2k / 128k</text>
+  <text x="62" y="282" fill="#8b949e" font-family="system-ui, sans-serif" font-size="12">Last turn</text><text x="225" y="282" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="13">↑1.1k ↓3.4k</text>
+  <text x="62" y="310" fill="#8b949e" font-family="system-ui, sans-serif" font-size="12">Cached</text><text x="250" y="310" fill="#56d364" font-family="system-ui, sans-serif" font-size="13">18.7k</text>
+  <rect x="328" y="194" width="270" height="150" rx="8" fill="#21262d" stroke="#3d444d"/>
+  <text x="348" y="224" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="16" font-weight="700">Tasks &amp; tools</text>
+  <text x="348" y="258" fill="#56d364" font-family="system-ui, sans-serif" font-size="13">✓ 3/4 tasks complete</text>
+  <text x="348" y="286" fill="#8b949e" font-family="system-ui, sans-serif" font-size="13">read 12x</text>
+  <text x="348" y="312" fill="#8b949e" font-family="system-ui, sans-serif" font-size="13">edit 6x</text>
+</svg>

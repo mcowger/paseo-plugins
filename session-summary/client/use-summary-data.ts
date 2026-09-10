@@ -265,6 +265,11 @@ export function useSummaryData(agentId: string): SummaryDataState {
     };
     const unsubscribeAgent = agentHandle.subscribe(updateAgentStats);
     const unsubscribe = agentTimeline.subscribe((stream) => {
+      if (!("timestamp" in stream)) {
+        timelineEntries = [];
+        scheduleRefresh();
+        return;
+      }
       if (stream.event.type === "timeline") {
         timelineEntries = [
           ...timelineEntries,

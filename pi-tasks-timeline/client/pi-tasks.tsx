@@ -1,13 +1,11 @@
 import type {
   PluginAgentPanelProps,
-  PluginComposerPillProps,
+  PluginButtonContentProps,
   PluginTimelineItemProps,
 } from "@getpaseo/plugin/client";
-import { Icon, Modal } from "@getpaseo/plugin/client/react-native";
 import { useMemo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import type { z } from "zod";
-import { closePiTasksPopup, usePiTasksPopup } from "./pi-tasks-popup";
 import { activeTasks, usePiTaskSnapshot } from "./pi-tasks-state";
 import { piTaskListSchema } from "../shared/pi-tasks";
 
@@ -141,74 +139,31 @@ export function PiTasksPanel({ theme, layout, agentId }: PluginAgentPanelProps) 
   );
 }
 
-export function PiTasksPill({ theme, layout, agentId }: PluginComposerPillProps) {
+export function PiTasksPopover(props: PluginButtonContentProps) {
+  const { theme, layout } = props;
+  const agentId = "agentId" in props ? props.agentId : "";
   const snapshot = usePiTaskSnapshot(agentId);
   const tasks = activeTasks(snapshot.tasks);
-  const current = tasks.find((task) => task.status === "in_progress") ?? tasks[0];
-  const popup = usePiTasksPopup();
-  const textStyle = useMemo(() => ({ color: theme.colors.foregroundMuted, flexShrink: 1 }), [theme]);
-  const popupStyles = useMemo(
+  const styles = useMemo(
     () => ({
-      content: { gap: 12, padding: layout.compact ? 16 : 20 },
+      content: { gap: 12 },
       detail: { color: theme.colors.foregroundMuted },
       error: { color: theme.colors.statusDanger },
-      button: { padding: 10, borderRadius: 8, backgroundColor: theme.colors.accent },
-      buttonText: { color: theme.colors.accentForeground, textAlign: "center" as const },
     }),
-    [layout.compact, theme],
+    [theme],
   );
-  const label = current ? `${tasks.length} active · ${current.text}` : "Pi tasks";
-  const popupOpen = popup?.agentId === agentId;
-  const openPanel = popup?.openPanel;
   return (
-    <>
-      <Icon name="ListChecks" size={14} color={theme.colors.foregroundMuted} />
-      <Text numberOfLines={1} style={textStyle}>
-        {label}
-      </Text>
-      <Modal
-        title="Active Pi tasks"
-        icon={<Icon name="ListChecks" size={18} color={theme.colors.foregroundMuted} />}
-        open={popupOpen}
-        onOpenChange={(open) => {
-          if (!open) closePiTasksPopup();
-        }}
-      >
-        <Modal.Content>
-          <View style={popupStyles.content}>
-            {snapshot.loading && snapshot.tasks === null ? (
-              <Text style={popupStyles.detail}>Loading tasks…</Text>
-            ) : null}
-            {snapshot.error ? (
-              <Text style={popupStyles.error}>Unable to load tasks: {snapshot.error}</Text>
-            ) : null}
-            {!snapshot.loading && !snapshot.error && tasks.length === 0 ? (
-              <Text style={popupStyles.detail}>No active tasks.</Text>
-            ) : null}
-            {tasks.length > 0 ? (
-              <TaskRows
-                tasks={tasks}
-                theme={theme}
-                compact={layout.compact}
-                progressLabel={`${tasks.length} active`}
-              />
-            ) : null}
-            {openPanel ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Open full Pi tasks panel"
-                onPress={() => {
-                  closePiTasksPopup();
-                  openPanel();
-                }}
-                style={popupStyles.button}
-              >
-                <Text style={popupStyles.buttonText}>Open full panel</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </Modal.Content>
-      </Modal>
-    </>
+    <View style={styles.content}>
+      {snapshot.loading && snapshot.tasks === null ? (
+        <Text style={styles.detail}>Loading tasks…</Text>
+      ) : null}
+      {snapshot.error ? <Text style={styles.error}>Unable to load tasks: {snapshot.error}</Text> : null}
+      {!snapshot.loading && !snapshot.error && tasks.length === 0 ? (
+        <Text style={styles.detail}>No active tasks.</Text>
+      ) : null}
+      {tasks.length > 0 ? (
+        <TaskRows tasks={tasks} theme={theme} compact={layout.compact} progressLabel={`${tasks.length} active`} />
+      ) : null}
+    </View>
   );
 }

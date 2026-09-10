@@ -1,10 +1,10 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { ReasoningDisplaySettings, ReasoningTimelineItem } from "./client/reasoning";
+import { transformReasoning } from "./client/transform-reasoning";
 import {
   REASONING_RENDERER_KIND,
   REASONING_RENDERER_VERSION,
   reasoningItemDataSchema,
-  transformReasoning,
 } from "./shared/reasoning";
 
 export default function contribute(client: PluginClientContext) {

@@ -1,4 +1,3 @@
-import type { PluginTimelineTransformerContribution } from "@getpaseo/plugin/client";
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 
@@ -61,16 +60,3 @@ export function formatThinkingText(text: string): string {
     })
     .join("");
 }
-
-type ReasoningTransformer = PluginTimelineTransformerContribution<"reasoning">["transform"];
-
-export const transformReasoning: ReasoningTransformer = ({ item, phase }) => ({
-  items: [
-    {
-      type: "plugin",
-      kind: REASONING_RENDERER_KIND,
-      version: REASONING_RENDERER_VERSION,
-      data: { text: formatThinkingText(item.text), phase },
-    },
-  ],
-});

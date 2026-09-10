@@ -14,6 +14,15 @@ processes or expose provider credentials.
 - **Mobile overview**: Keeps the prompt, statistics, tasks, latest thought, and recent tools visible on compact layouts.
 - **Access points**: Available from the **Summary** workspace/explorer panel, the `/summary` slash command, and the **Summary** composer pill.
 
+## Preview
+
+![Session summary preview](./images/session-summary.svg)
+
+## Limitations
+
+The summary uses the timeline and usage data exposed by Paseo. Provider-specific fields are only
+shown when the provider reports them, and older history is capped to keep the panel responsive.
+
 ## Install
 
 The plugin targets Paseo `v0.8.0-beta.1`.

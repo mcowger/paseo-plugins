@@ -1,7 +1,4 @@
-import type { PluginClientContext, PluginComposerPillProps } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
-import { useMemo } from "react";
-import { Text } from "react-native";
+import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { SessionSummaryPanel } from "./client/session-summary-panel";
 
 const PANEL_ID = "session-summary";
@@ -13,19 +10,6 @@ type ComposerAgent = {
   readonly workspaceId?: string | null;
   readonly archivedAt?: string | null;
 };
-
-export function SessionSummaryPill({ theme }: PluginComposerPillProps) {
-  const textStyle = useMemo(
-    () => ({ color: theme.colors.foregroundMuted, fontSize: 12 }),
-    [theme],
-  );
-  return (
-    <>
-      <Icon name="LayoutDashboard" size={14} color={theme.colors.foregroundMuted} />
-      <Text style={textStyle}>Summary</Text>
-    </>
-  );
-}
 
 async function listAgents(client: PluginClientContext): Promise<ComposerAgent[]> {
   const agents: ComposerAgent[] = [];
@@ -43,13 +27,13 @@ async function listAgents(client: PluginClientContext): Promise<ComposerAgent[]>
 }
 
 export default function contribute(client: PluginClientContext) {
-  const pillRemovers = new Map<string, () => void>();
+  const pills = new Map<string, PluginButtonRegistration>();
   const workspaceIds = new Map<string, string>();
   let stopped = false;
 
   const removePill = (agentId: string) => {
-    pillRemovers.get(agentId)?.();
-    pillRemovers.delete(agentId);
+    pills.get(agentId)?.remove();
+    pills.delete(agentId);
     workspaceIds.delete(agentId);
   };
   const registerPill = (agent: ComposerAgent) => {
@@ -62,16 +46,22 @@ export default function contribute(client: PluginClientContext) {
     removePill(agent.id);
     const workspaceId = agent.workspaceId;
     workspaceIds.set(agent.id, workspaceId);
-    pillRemovers.set(
+    pills.set(
       agent.id,
       client.addComposerPill({
         id: PANEL_ID,
-        title: "Open session summary",
         workspaceId,
         agentId: agent.id,
-        Component: SessionSummaryPill,
-        onPress() {
-          client.openPanel(PANEL_ID, { workspaceId, agentId: agent.id });
+        button: {
+          title: "Open session summary",
+          icon: "LayoutDashboard",
+          label: "Summary",
+          behavior: {
+            kind: "action",
+            onPress() {
+              client.openPanel(PANEL_ID, { workspaceId, agentId: agent.id });
+            },
+          },
         },
       }),
     );
@@ -110,8 +100,8 @@ export default function contribute(client: PluginClientContext) {
     unsubscribeAgents();
     removeSlashCommand();
     removePanel();
-    for (const remove of pillRemovers.values()) remove();
-    pillRemovers.clear();
+    for (const pill of pills.values()) pill.remove();
+    pills.clear();
     workspaceIds.clear();
   };
 }

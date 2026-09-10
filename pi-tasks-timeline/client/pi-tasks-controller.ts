@@ -1,6 +1,5 @@
-import type { PluginClientContext } from "@getpaseo/plugin/client";
-import { PiTasksPill } from "./pi-tasks";
-import { openPiTasksPopup } from "./pi-tasks-popup";
+import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
+import { PiTasksPopover } from "./pi-tasks";
 import {
   getPiTaskSnapshot,
   hasActiveSnapshot,
@@ -19,15 +18,39 @@ type AgentRegistration = {
   status?: "initializing" | "idle" | "running" | "error" | "closed";
 };
 
+function taskPillLabel(agentId: string): string {
+  const tasks = getPiTaskSnapshot(agentId).tasks?.filter((task) => task.status !== "completed");
+  const current = tasks?.find((task) => task.status === "in_progress") ?? tasks?.[0];
+  return current ? `${tasks?.length ?? 0} active · ${current.text}` : "Pi tasks";
+}
+
+function addTaskPill(
+  client: PluginClientContext,
+  workspaceId: string,
+  agentId: string,
+): PluginButtonRegistration {
+  return client.addComposerPill({
+    id: "pi-tasks",
+    workspaceId,
+    agentId,
+    button: {
+      title: "Open active Pi tasks",
+      icon: "ListChecks",
+      label: taskPillLabel(agentId),
+      behavior: { kind: "popover", Content: PiTasksPopover },
+    },
+  });
+}
+
 export function contributeClient(client: PluginClientContext) {
-  const pillRemovers = new Map<string, () => void>();
+  const pills = new Map<string, PluginButtonRegistration>();
   const trackerCleanups = new Map<string, () => void>();
   const workspaceIds = new Map<string, string>();
   let stopped = false;
 
   const remove = (agentId: string) => {
-    pillRemovers.get(agentId)?.();
-    pillRemovers.delete(agentId);
+    pills.get(agentId)?.remove();
+    pills.delete(agentId);
     trackerCleanups.get(agentId)?.();
     trackerCleanups.delete(agentId);
     workspaceIds.delete(agentId);
@@ -48,47 +71,25 @@ export function contributeClient(client: PluginClientContext) {
 
     const stopWatching = watchPiTasks(client.paseo, agent.id, agent.status ?? "idle");
     const unsubscribe = subscribePiTaskSnapshot(agent.id, () => {
-      if (stopped || !hasActiveSnapshot(getPiTaskSnapshot(agent.id))) {
-        pillRemovers.get(agent.id)?.();
-        pillRemovers.delete(agent.id);
+      const snapshot = getPiTaskSnapshot(agent.id);
+      if (stopped || !hasActiveSnapshot(snapshot)) {
+        pills.get(agent.id)?.remove();
+        pills.delete(agent.id);
         return;
       }
-      if (pillRemovers.has(agent.id)) return;
-      const removePill = client.addComposerPill({
-        id: "pi-tasks",
-        title: "Open active Pi tasks",
-        workspaceId,
-        agentId: agent.id,
-        Component: PiTasksPill,
-        onPress() {
-          openPiTasksPopup({
-            agentId: agent.id,
-            openPanel: () => client.openPanel("pi-tasks", { workspaceId, agentId: agent.id }),
-          });
-        },
-      });
-      pillRemovers.set(agent.id, removePill);
+      const existing = pills.get(agent.id);
+      if (existing) {
+        existing.update({ label: taskPillLabel(agent.id) });
+        return;
+      }
+      pills.set(agent.id, addTaskPill(client, workspaceId, agent.id));
     });
     trackerCleanups.set(agent.id, () => {
       unsubscribe();
       stopWatching();
     });
     if (hasActiveSnapshot(getPiTaskSnapshot(agent.id))) {
-      unsubscribe();
-      const removePill = client.addComposerPill({
-        id: "pi-tasks",
-        title: "Open active Pi tasks",
-        workspaceId,
-        agentId: agent.id,
-        Component: PiTasksPill,
-        onPress() {
-          openPiTasksPopup({
-            agentId: agent.id,
-            openPanel: () => client.openPanel("pi-tasks", { workspaceId, agentId: agent.id }),
-          });
-        },
-      });
-      pillRemovers.set(agent.id, removePill);
+      pills.set(agent.id, addTaskPill(client, workspaceId, agent.id));
     }
   };
 
@@ -107,7 +108,7 @@ export function contributeClient(client: PluginClientContext) {
   return () => {
     stopped = true;
     unsubscribeAgents();
-    for (const agentId of new Set([...pillRemovers.keys(), ...trackerCleanups.keys()])) {
+    for (const agentId of new Set([...pills.keys(), ...trackerCleanups.keys()])) {
       remove(agentId);
     }
   };

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420" role="img" aria-labelledby="title desc">
+  <title id="title">Pi provider preview</title>
+  <desc id="desc">A dark Paseo provider preview showing Pi model, preset, and thinking settings.</desc>
+  <rect width="640" height="420" rx="14" fill="#0d1117"/>
+  <rect x="18" y="18" width="604" height="384" rx="10" fill="#161b22" stroke="#30363d"/>
+  <text x="42" y="62" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="24" font-weight="700">Pi provider</text>
+  <text x="42" y="90" fill="#8b949e" font-family="system-ui, sans-serif" font-size="14">Embedded pi coding agent session</text>
+  <g font-family="system-ui, sans-serif">
+    <text x="42" y="138" fill="#8b949e" font-size="13">Model</text>
+    <rect x="42" y="150" width="556" height="44" rx="7" fill="#21262d" stroke="#3d444d"/>
+    <text x="58" y="178" fill="#e6edf3" font-size="15">plexus/gemini-3.5-flash-lite</text>
+    <text x="42" y="226" fill="#8b949e" font-size="13">Preset</text>
+    <rect x="42" y="238" width="270" height="44" rx="7" fill="#21262d" stroke="#3d444d"/>
+    <text x="58" y="266" fill="#e6edf3" font-size="15">default</text>
+    <text x="328" y="226" fill="#8b949e" font-size="13">Thinking</text>
+    <rect x="328" y="238" width="270" height="44" rx="7" fill="#21262d" stroke="#3d444d"/>
+    <text x="344" y="266" fill="#e6edf3" font-size="15">high</text>
+    <rect x="42" y="324" width="556" height="42" rx="7" fill="#238636"/>
+    <text x="278" y="351" fill="#ffffff" font-size="15" text-anchor="middle">Start Pi session</text>
+  </g>
+</svg>

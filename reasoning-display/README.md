@@ -38,6 +38,11 @@ paseo plugin reload reasoning-display
    - **Always expand**
 3. Optionally toggle **Debug logging** under **Diagnostics** to enable verbose console logging.
 
+## Limitations
+
+The plugin replaces Paseo's reasoning rows only while its timeline transformer is loaded. It does
+not recover reasoning text that the provider never sends.
+
 ## Development
 
 ```bash

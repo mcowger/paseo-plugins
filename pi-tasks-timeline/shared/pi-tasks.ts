@@ -1,4 +1,4 @@
-import type { PluginTimelineTransformerContribution } from "@getpaseo/plugin/client";
+import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { z } from "zod";
 
 const taskStatusSchema = z.enum(["pending", "in_progress", "completed"]);
@@ -40,22 +40,7 @@ export const piTaskListSchema = z.object({
 });
 
 export type PiTask = z.output<typeof piTaskListSchema>["tasks"][number];
-type ToolCallTransformer = PluginTimelineTransformerContribution<"tool_call">["transform"];
-type ToolCallItem = Parameters<ToolCallTransformer>[0]["item"];
-
-function replacement(tasks: PiTask[]) {
-  if (tasks.length === 0) return;
-  return {
-    items: [
-      {
-        type: "plugin" as const,
-        kind: "pi-task-list",
-        version: 1,
-        data: { tasks },
-      },
-    ],
-  };
-}
+type ToolCallItem = Extract<AgentTimelineItem, { type: "tool_call" }>;
 
 export function hasActivePiTasks(tasks: readonly PiTask[]): boolean {
   return tasks.some((task) => task.status !== "completed");
@@ -94,8 +79,3 @@ export function parsePiTodoToolCall(item: ToolCallItem): PiTask[] | undefined {
     }));
   }
 }
-
-export const transformPiTodoToolCall: ToolCallTransformer = ({ item }) => {
-  const tasks = parsePiTodoToolCall(item);
-  return tasks === undefined ? undefined : replacement(tasks);
-};

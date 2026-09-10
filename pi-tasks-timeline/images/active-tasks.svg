@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420" role="img" aria-labelledby="title desc">
+  <title id="title">Active Pi tasks preview</title>
+  <desc id="desc">A dark Paseo panel showing an active Pi task list and composer pill.</desc>
+  <rect width="640" height="420" rx="14" fill="#0d1117"/>
+  <rect x="18" y="18" width="604" height="384" rx="10" fill="#161b22" stroke="#30363d"/>
+  <rect x="42" y="42" width="556" height="44" rx="8" fill="#21262d" stroke="#3d444d"/>
+  <text x="62" y="70" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="15">Active Pi tasks</text>
+  <rect x="420" y="51" width="158" height="26" rx="13" fill="#30363d"/>
+  <text x="499" y="69" fill="#8b949e" font-family="system-ui, sans-serif" font-size="12" text-anchor="middle">2 active · Build UI</text>
+  <rect x="42" y="106" width="556" height="238" rx="8" fill="#21262d" stroke="#3d444d"/>
+  <text x="66" y="140" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="18" font-weight="700">Pi tasks</text>
+  <text x="544" y="140" fill="#8b949e" font-family="system-ui, sans-serif" font-size="14">2 active</text>
+  <text x="70" y="188" fill="#58a6ff" font-family="system-ui, sans-serif" font-size="20">◐</text>
+  <text x="104" y="188" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="15">Build the timeline card</text>
+  <text x="104" y="211" fill="#8b949e" font-family="system-ui, sans-serif" font-size="13">Implement renderer and styles</text>
+  <text x="70" y="258" fill="#8b949e" font-family="system-ui, sans-serif" font-size="20">○</text>
+  <text x="104" y="258" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="15">Run the plugin checks</text>
+  <text x="104" y="281" fill="#8b949e" font-family="system-ui, sans-serif" font-size="13">Lint, typecheck, and test</text>
+</svg>

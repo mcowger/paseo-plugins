@@ -1,7 +1,8 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { PiTaskList, PiTasksPanel } from "./client/pi-tasks";
 import { contributeClient } from "./client/pi-tasks-controller";
-import { piTaskListSchema, transformPiTodoToolCall } from "./shared/pi-tasks";
+import { transformPiTodoToolCall } from "./client/transform-pi-tasks";
+import { piTaskListSchema } from "./shared/pi-tasks";
 
 export default function contribute(client: PluginClientContext) {
   client.addTimelineTransformer({

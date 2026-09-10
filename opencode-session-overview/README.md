@@ -42,6 +42,11 @@ After updating the plugin, run `paseo plugin reload opencode-session-overview` t
 Usage and context costs are based on the latest usage snapshot provided by Paseo. They are not
 presented as lifetime billing totals when the provider has not supplied those values.
 
+## Limitations
+
+The pane only applies to OpenCode agents. Usage, session, task, and subagent details depend on the
+latest data reported by Paseo and the OpenCode provider.
+
 ## Development
 
 ```bash

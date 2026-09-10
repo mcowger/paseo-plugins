@@ -5,7 +5,7 @@
 `v0.8.0-beta.1` and embeds pi through `@earendil-works/pi-coding-agent` instead of
 running the `pi` CLI in RPC mode.
 
-## Status
+## Limitations
 
 This plugin is not ready for regular use until
 [getpaseo/paseo#4626](https://github.com/getpaseo/paseo/issues/4626) is fixed and closed.
@@ -13,6 +13,10 @@ That bug leaves agents attached to a closed provider runtime after a plugin relo
 be refreshed without restarting the daemon.
 
 Expect breaking changes while Paseo's v0.8 provider API is unreleased.
+
+## Preview
+
+![Pi provider preview](./images/pi-provider.svg)
 
 ## What it does
 

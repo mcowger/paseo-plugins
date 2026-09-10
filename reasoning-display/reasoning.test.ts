@@ -4,8 +4,8 @@ import {
   getLatestReasoningQueryKey,
   getReasoningExpansionState,
   reasoningSettingsSchema,
-  transformReasoning,
 } from "./shared/reasoning";
+import { transformReasoning } from "./client/transform-reasoning";
 
 function reasoning(text: string) {
   return { type: "reasoning" as const, text };

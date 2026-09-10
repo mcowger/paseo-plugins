@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { hasActivePiTasks, transformPiTodoToolCall } from "./shared/pi-tasks";
+import { transformPiTodoToolCall } from "./client/transform-pi-tasks";
+import { hasActivePiTasks } from "./shared/pi-tasks";
 
 function completedTodo(output: unknown) {
   return {

@@ -9,13 +9,22 @@ timeline history.
 - Replaces supported Pi `todo` tool-call rows with a readable task list in the timeline.
 - Preserves pending, in-progress, and completed tasks. Deleted task tombstones are omitted.
 - Adds an **Active Pi tasks** panel to the workspace and explorer agent surfaces.
-- Shows a composer pill while active tasks exist, including the active-task count and current task.
-- Opens a modal from the pill with the active tasks and an **Open full panel** button.
+- Shows a Paseo 0.8 composer pill while active tasks exist, including the active-task count and current task.
+- Opens the active tasks in a host-rendered popover from the pill.
 - Refreshes from projected timeline history when task updates arrive and while the agent is running
   or has active tasks.
 
 If a tool call is unrelated, malformed, empty, or uses an unsupported task shape, Paseo's original
 timeline entry is left unchanged.
+
+## Preview
+
+![Active Pi tasks preview](./images/active-tasks.svg)
+
+## Limitations
+
+The plugin only recognizes completed `todo` tool-call results in the supported `details.tasks` or
+`details.todos` shapes. Other task producers leave the original timeline entry unchanged.
 
 ## Installation
 

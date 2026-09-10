@@ -39,6 +39,11 @@ paseo plugin reload subagent-activity
 The pane is also available as **Subagent activity** in the workspace and explorer panel locations.
 After updating the plugin, run `paseo plugin reload subagent-activity` to load the changes.
 
+## Limitations
+
+Managed descendants use Paseo's agent registry. Provider-native activity is best effort and may not
+include model, token, or independent lifecycle data.
+
 ## Development
 
 ```bash
