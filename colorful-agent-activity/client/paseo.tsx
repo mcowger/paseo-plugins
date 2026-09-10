@@ -117,7 +117,7 @@ function statusColor(
   }
 }
 
-function Section({
+export function Section({
   title,
   children,
   styles,
@@ -134,7 +134,7 @@ function Section({
   );
 }
 
-function StatusPill({
+export function StatusPill({
   value,
   palette,
   styles,
@@ -240,7 +240,7 @@ function PaseoField({
   );
 }
 
-function PaseoFields({
+export function PaseoFields({
   fields,
   palette,
   styles,
@@ -267,7 +267,7 @@ function PaseoFields({
   );
 }
 
-function PaseoHero({
+export function PaseoHero({
   icon,
   title,
   subtitle,
@@ -356,7 +356,7 @@ function TokenizedLines({
   );
 }
 
-function PaseoCodeBlock({
+export function PaseoCodeBlock({
   code,
   language,
   label,

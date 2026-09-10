@@ -124,6 +124,17 @@ describe("colorful activity presentation", () => {
     });
     expect(
       resolveToolCallPresentation({
+        name: "mcp__github__search_repositories",
+        detail: { type: "unknown", input: { query: "paseo" }, output: {} },
+      }),
+    ).toMatchObject({
+      category: "search",
+      icon: "BookMarked",
+      label: "GitHub Repository Search",
+      summary: "paseo",
+    });
+    expect(
+      resolveToolCallPresentation({
         name: "mcp__paseo__create_agent",
         detail: { type: "unknown", input, output: { agentId: "agt_123" } },
       }),

@@ -3,6 +3,12 @@ import type { JsonValue, ToolCallDetail, ToolCallTimelineItem } from "@getpaseo/
 import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization";
 import type { PaletteMode } from "./settings";
 import { exaToolIcon, exaToolKind, exaToolLabel, exaToolSummary } from "./exa";
+import {
+  githubToolIcon,
+  githubToolKind,
+  githubToolLabel,
+  githubToolSummary,
+} from "./github";
 
 export const TOOL_CATEGORIES = [
   "shell",
@@ -625,6 +631,15 @@ export function resolveToolCallPresentation(
       }
       if (name === "speak") {
         return { category: "communication", icon: "MicVocal", label: "Speak" };
+      }
+      const githubKind = githubToolKind(item.name);
+      if (githubKind) {
+        return {
+          category: githubKind === "pull-request" || githubKind === "actions-run" ? "agent" : "search",
+          icon: githubToolIcon(githubKind),
+          label: githubToolLabel(githubKind),
+          summary: githubToolSummary(githubKind, detail.input),
+        };
       }
       const exaKind = exaToolKind(item.name);
       if (exaKind) {

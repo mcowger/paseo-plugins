@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import type { z } from "zod";
 import { useShikiTokens, isDarkSurface, type ShikiToken } from "./highlight";
+import { GithubToolDetail } from "./github";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
 import {
   diffLinesForDetail,
@@ -35,6 +36,7 @@ import {
 } from "../shared/presentation";
 import { parseInlineMarkdown, parseReasoningMarkdown } from "../shared/markdown";
 import { exaToolKind } from "../shared/exa";
+import { githubToolKind } from "../shared/github";
 import { activitySettings, DEFAULT_PALETTE_MODE } from "../shared/settings";
 import {
   getActivityExpansionState,
@@ -793,6 +795,18 @@ function DetailBody({
     case "plan":
       return <Text selectable style={styles.detailText}>{detail.text}</Text>;
     case "unknown": {
+      if (githubToolKind(data.name)) {
+        return (
+          <GithubToolDetail
+            toolName={data.name}
+            input={detail.input}
+            output={detail.output}
+            theme={theme}
+            palette={palette}
+            styles={styles}
+          />
+        );
+      }
       if (exaToolKind(data.name)) {
         return (
           <ExaToolDetail
