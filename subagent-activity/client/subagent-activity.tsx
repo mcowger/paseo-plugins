@@ -175,7 +175,7 @@ function ManagedAgentRow({
     <View style={styles.agentCard}>
       <View style={styles.agentHeader}>
         <View style={styles.agentTitleRow}>
-          <Text style={[styles.status, { color: statusColor(theme, status) }]}>{STATUS_SYMBOLS[status]}</Text>
+          <Text style={[styles.status, statusStyle(styles, status)]}>{STATUS_SYMBOLS[status]}</Text>
           <Text numberOfLines={1} style={styles.agentTitle}>
             {getAgentDisplayName(agent)}
           </Text>
@@ -216,7 +216,7 @@ function ToolCallRow({
   const styles = usePanelStyles(theme, compact);
   return (
     <View style={styles.toolRow}>
-      <Text style={[styles.toolStatus, { color: toolStatusColor(theme, activity.status) }]}>
+      <Text style={[styles.toolStatus, toolStatusStyle(styles, activity.status)]}>
         {toolStatusSymbol(activity.status)}
       </Text>
       <View style={styles.toolText}>
@@ -250,7 +250,7 @@ function ProviderActivityRow({
     <View style={styles.providerCard}>
       <View style={styles.agentHeader}>
         <View style={styles.agentTitleRow}>
-          <Text style={[styles.status, { color: toolStatusColor(theme, activity.status) }]}>
+          <Text style={[styles.status, toolStatusStyle(styles, activity.status)]}>
             {toolStatusSymbol(activity.status)}
           </Text>
           <Text numberOfLines={2} style={styles.agentTitle}>
@@ -333,6 +333,11 @@ function usePanelStyles(theme: PluginTheme, compact: boolean, depth = 0) {
       agentHeader: { flexDirection: "row" as const, justifyContent: "space-between" as const, gap: 8 },
       agentTitleRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 7, flex: 1, minWidth: 0 },
       status: { fontSize: 15, fontWeight: "700" as const },
+      statusRunning: { color: theme.colors.accent },
+      statusError: { color: theme.colors.statusDanger },
+      statusClosed: { color: theme.colors.foregroundMuted },
+      statusAttention: { color: theme.colors.statusWarning },
+      statusSuccess: { color: theme.colors.statusSuccess },
       agentTitle: { color: theme.colors.foreground, fontWeight: "600" as const, flex: 1 },
       statusLabel: { color: theme.colors.foregroundMuted, fontSize: 12 },
       metadataRow: { flexDirection: "row" as const, justifyContent: "space-between" as const, gap: 8 },
@@ -377,11 +382,11 @@ function asStatus(status: string): Status {
   return Object.prototype.hasOwnProperty.call(STATUS_SYMBOLS, status) ? (status as Status) : "idle";
 }
 
-function statusColor(theme: PluginTheme, status: Status): string {
-  if (status === "running") return theme.colors.accent;
-  if (status === "error") return theme.colors.statusDanger;
-  if (status === "closed") return theme.colors.foregroundMuted;
-  return theme.colors.statusWarning;
+function statusStyle(styles: ReturnType<typeof usePanelStyles>, status: Status) {
+  if (status === "running") return styles.statusRunning;
+  if (status === "error") return styles.statusError;
+  if (status === "closed") return styles.statusClosed;
+  return styles.statusAttention;
 }
 
 function toolStatusSymbol(status: ToolCallActivity["status"]): string {
@@ -391,9 +396,12 @@ function toolStatusSymbol(status: ToolCallActivity["status"]): string {
   return "◐";
 }
 
-function toolStatusColor(theme: PluginTheme, status: ToolCallActivity["status"]): string {
-  if (status === "completed") return theme.colors.statusSuccess;
-  if (status === "failed") return theme.colors.statusDanger;
-  if (status === "running") return theme.colors.accent;
-  return theme.colors.statusWarning;
+function toolStatusStyle(
+  styles: ReturnType<typeof usePanelStyles>,
+  status: ToolCallActivity["status"],
+) {
+  if (status === "completed") return styles.statusSuccess;
+  if (status === "failed") return styles.statusError;
+  if (status === "running") return styles.statusRunning;
+  return styles.statusAttention;
 }
