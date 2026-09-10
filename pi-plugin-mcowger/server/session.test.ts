@@ -342,6 +342,22 @@ describe("PiProviderSession commands", () => {
     expect(fake.autoCompactionEnabled).toBe(false);
     expect(fake.autoRetryEnabled).toBe(true);
   });
+
+  it("does not intercept settings commands in multimodal prompts", async () => {
+    const { fake, session } = createHarness();
+    await session.handlePrompt({
+      ...messagePrompt("/settings auto-retry off"),
+      input: {
+        type: "message",
+        content: [
+          { type: "text", text: "/settings auto-retry off" },
+          { type: "image", data: "ZmFrZQ==", mimeType: "image/png" },
+        ],
+      },
+    } as never);
+    expect(fake.autoRetryEnabled).toBe(true);
+    expect(fake.prompts[0]?.text).toContain("/settings auto-retry off");
+  });
 });
 
 describe("PiProviderSession presets as modes", () => {

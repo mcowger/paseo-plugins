@@ -464,10 +464,13 @@ export class PiProviderSession {
       return;
     }
 
-    const text = prompt.input.content
-      .filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text")
-      .map((part) => part.text)
-      .join("\n");
+    const textParts = prompt.input.content.filter(
+      (part): part is Extract<typeof part, { type: "text" }> => part.type === "text",
+    );
+    const text =
+      textParts.length === prompt.input.content.length
+        ? textParts.map((part) => part.text).join("\n")
+        : "";
     const runtimeSetting = this.parseRuntimeSettingCommand(text);
     if (runtimeSetting) {
       await this.applyRuntimeSetting(runtimeSetting.id, runtimeSetting.value, prompt.clientMessageId);
