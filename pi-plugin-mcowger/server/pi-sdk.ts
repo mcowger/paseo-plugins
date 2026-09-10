@@ -5,6 +5,7 @@ export {
   Client,
   DefaultResourceLoader,
   ModelRuntime,
+  SettingsManager,
   SSEClientTransport,
   SessionManager,
   StdioClientTransport,

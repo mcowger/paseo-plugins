@@ -27,6 +27,8 @@ class FakeSdkSession {
   aborts = 0;
   model: unknown = TEST_MODEL;
   thinkingLevel = "medium";
+  autoCompactionEnabled = true;
+  autoRetryEnabled = true;
   sessionFile = "/tmp/session.jsonl";
   messages: unknown[] = [];
   entries: unknown[] = [];
@@ -70,6 +72,12 @@ class FakeSdkSession {
   setThinkingLevel(level: string): void {
     this.thinkingLevels.push(level);
     this.thinkingLevel = level;
+  }
+  setAutoCompactionEnabled(enabled: boolean): void {
+    this.autoCompactionEnabled = enabled;
+  }
+  setAutoRetryEnabled(enabled: boolean): void {
+    this.autoRetryEnabled = enabled;
   }
   setActiveToolsByName(tools: string[]): void {
     this.activeTools.push(tools);
@@ -295,6 +303,17 @@ describe("PiProviderSession commands", () => {
     expect(events.some((e) => e.type === "session.prompt_result")).toBe(true);
   });
 
+  it("applies runtime settings from configure", async () => {
+    const { fake, session } = createHarness();
+    await session.configure({ settings: { autoCompaction: false, autoRetry: false } });
+    expect(fake.autoCompactionEnabled).toBe(false);
+    expect(fake.autoRetryEnabled).toBe(false);
+    expect(session.configState().settings).toEqual([
+      expect.objectContaining({ id: "autoCompaction", value: false }),
+      expect.objectContaining({ id: "autoRetry", value: false }),
+    ]);
+  });
+
   it("intercepts the compact command", async () => {
     const { fake, session } = createHarness();
     await session.handlePrompt({
@@ -304,6 +323,24 @@ describe("PiProviderSession commands", () => {
     });
     expect(fake.compactCalls).toEqual(["keep it short"]);
     expect(fake.prompts).toHaveLength(0);
+  });
+
+  it("applies runtime settings from the composer command path", async () => {
+    const { fake, session, events } = createHarness();
+    await session.handlePrompt(messagePrompt("/settings auto-retry off"));
+    expect(fake.autoRetryEnabled).toBe(false);
+    const configEvent = events.at(-1);
+    expect(configEvent).toMatchObject({ type: "session.config" });
+    expect(
+      (configEvent as Extract<ProviderEvent, { type: "session.config" }>).config.settings,
+    ).toContainEqual(expect.objectContaining({ id: "autoRetry", value: false }));
+  });
+
+  it("normalizes the setting name in composer commands", async () => {
+    const { fake, session } = createHarness();
+    await session.handlePrompt(messagePrompt("/settings AUTO-COMPACTION off"));
+    expect(fake.autoCompactionEnabled).toBe(false);
+    expect(fake.autoRetryEnabled).toBe(true);
   });
 });
 

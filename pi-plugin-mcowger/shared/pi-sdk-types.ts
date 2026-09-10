@@ -63,6 +63,10 @@ export interface PiAgentSessionLike {
   compact(customInstructions?: string): Promise<unknown>;
   setModel(model: unknown, options?: Record<string, unknown>): Promise<void>;
   setThinkingLevel(level: string, options?: Record<string, unknown>): void;
+  setAutoCompactionEnabled(enabled: boolean): void;
+  readonly autoCompactionEnabled: boolean;
+  setAutoRetryEnabled(enabled: boolean): void;
+  readonly autoRetryEnabled: boolean;
   setActiveToolsByName(toolNames: string[]): void;
   getAllTools?(): ReadonlyArray<{ name: string }>;
   getActiveToolNames?(): string[];
@@ -104,12 +108,21 @@ export interface PiPromptTemplateLike {
 export interface PiResourceLoaderLike {
   reload(): Promise<void>;
   getExtensions(): {
+    errors: ReadonlyArray<{ path?: string; error: unknown }>;
     extensions: ReadonlyArray<{
       tools: ReadonlyMap<string, unknown>;
       commands: ReadonlyMap<string, { name: string; description?: string }>;
     }>;
   };
-  getPrompts(): { prompts: PiPromptTemplateLike[] };
+  getPrompts(): { prompts: PiPromptTemplateLike[]; diagnostics: ReadonlyArray<PiResourceDiagnostic> };
+  getSkills(): { diagnostics: ReadonlyArray<PiResourceDiagnostic> };
+  getThemes(): { diagnostics: ReadonlyArray<PiResourceDiagnostic> };
+}
+
+export interface PiResourceDiagnostic {
+  type?: string;
+  message: string;
+  path?: string;
 }
 
 /** Result of createAgentSession for our purposes. */

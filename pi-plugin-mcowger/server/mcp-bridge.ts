@@ -70,7 +70,16 @@ export async function createMcpBridge(
         return;
       }
       clients.push(client);
-      const listed = await client.listTools();
+      let listed;
+      try {
+        listed = await client.listTools();
+      } catch (error) {
+        log(
+          `mcp: failed to list tools from ${serverName}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        await client.close().catch(() => undefined);
+        return;
+      }
       for (const mcpTool of listed.tools) {
         const toolName = `mcp_${sanitizeNamePart(serverName)}_${sanitizeNamePart(mcpTool.name)}`;
         tools.push(

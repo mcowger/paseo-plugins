@@ -102,6 +102,13 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+const AUTO_COMPACTION_SETTING = "autoCompaction";
+const AUTO_RETRY_SETTING = "autoRetry";
+
+function settingBoolean(settings: Readonly<Record<string, unknown>>, id: string): boolean | undefined {
+  return typeof settings[id] === "boolean" ? settings[id] : undefined;
+}
+
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -295,7 +302,22 @@ export class PiProviderSession {
       ...(this.currentMode && this.presets[this.currentMode] ? { mode: this.currentMode } : {}),
       thinkingOption: normalizePiThinkingLevel(this.sdk.thinkingLevel) ?? undefined,
       thinkingOptions: currentModel ? (thinkingOptionsForModel(currentModel) ?? []) : [],
-      settings: [],
+      settings: [
+        {
+          type: "toggle",
+          id: AUTO_COMPACTION_SETTING,
+          label: "Auto-compaction",
+          description: "Compact long conversations automatically.",
+          value: this.sdk.autoCompactionEnabled,
+        },
+        {
+          type: "toggle",
+          id: AUTO_RETRY_SETTING,
+          label: "Auto-retry",
+          description: "Retry transient provider errors automatically.",
+          value: this.sdk.autoRetryEnabled,
+        },
+      ],
     };
   }
 
@@ -439,6 +461,16 @@ export class PiProviderSession {
 
     if (prompt.input.type === "command") {
       await this.handleCommand(prompt);
+      return;
+    }
+
+    const text = prompt.input.content
+      .filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+    const runtimeSetting = this.parseRuntimeSettingCommand(text);
+    if (runtimeSetting) {
+      await this.applyRuntimeSetting(runtimeSetting.id, runtimeSetting.value, prompt.clientMessageId);
       return;
     }
 
@@ -695,6 +727,12 @@ export class PiProviderSession {
     if (changes.thinkingOption !== undefined) {
       const level = normalizePiThinkingLevel(changes.thinkingOption) ?? DEFAULT_PI_THINKING_LEVEL;
       this.syncThinkingToCurrentModel(level);
+    }
+    if (changes.settings) {
+      const autoCompaction = settingBoolean(changes.settings, AUTO_COMPACTION_SETTING);
+      const autoRetry = settingBoolean(changes.settings, AUTO_RETRY_SETTING);
+      if (autoCompaction !== undefined) this.sdk.setAutoCompactionEnabled(autoCompaction);
+      if (autoRetry !== undefined) this.sdk.setAutoRetryEnabled(autoRetry);
     }
     const currentPreset = this.currentMode ? this.presets[this.currentMode] : undefined;
     if (currentPreset) {
@@ -960,6 +998,26 @@ export class PiProviderSession {
     this.activeTurnStarted = false;
     this.pendingSettledMessages = null;
     this.pendingSteerSubmissions.length = 0;
+  }
+
+  private parseRuntimeSettingCommand(text: string): { id: string; value: boolean } | null {
+    const match = /^\/settings\s+(auto-compaction|auto-retry)\s+(on|off)$/i.exec(text.trim());
+    if (!match) return null;
+    return {
+      id:
+        match[1].toLowerCase() === "auto-compaction"
+          ? AUTO_COMPACTION_SETTING
+          : AUTO_RETRY_SETTING,
+      value: match[2].toLowerCase() === "on",
+    };
+  }
+
+  private async applyRuntimeSetting(id: string, value: boolean, clientMessageId: string): Promise<void> {
+    if (id === AUTO_COMPACTION_SETTING) this.sdk.setAutoCompactionEnabled(value);
+    else if (id === AUTO_RETRY_SETTING) this.sdk.setAutoRetryEnabled(value);
+    else throw new Error(`Unsupported Pi runtime setting: ${id}`);
+    this.emitPromptResult(clientMessageId, { type: "completed" });
+    this.emitConfigState();
   }
 
   private parseSlashCommandInput(text: string): { commandName: string; args?: string } | null {

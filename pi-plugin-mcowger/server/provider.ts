@@ -5,6 +5,7 @@ import {
   DefaultResourceLoader,
   getAgentDir,
   SessionManager,
+  SettingsManager,
 } from "./pi-sdk.js";
 import {
   negotiateProviderCapabilities,
@@ -258,15 +259,46 @@ async function handleSessionOpen(
       : undefined;
 
   const runtime = await getModelRuntime();
+  const startupDiagnostics: string[] = [];
+  if (Object.keys(config.env).length > 0) {
+    startupDiagnostics.push(
+      "Pi ignored session env overrides: the embedded SDK has no safe per-session environment injection.",
+    );
+  }
+  if (Object.keys(config.providerOptions ?? {}).length > 0) {
+    startupDiagnostics.push(
+      "Pi ignored providerOptions: the embedded SDK does not expose a per-session provider-options API.",
+    );
+  }
+  if (config.toolPolicy) {
+    throw new Error(
+      "Pi cannot open a session with toolPolicy because the embedded SDK does not enforce MCP approvals.",
+    );
+  }
+  const sessionSettings = config.settings;
+  const settingsManager = SettingsManager.inMemory({
+    ...(typeof sessionSettings.autoCompaction === "boolean"
+      ? { compaction: { enabled: sessionSettings.autoCompaction } }
+      : {}),
+    ...(typeof sessionSettings.autoRetry === "boolean"
+      ? { retry: { enabled: sessionSettings.autoRetry } }
+      : {}),
+  });
+  const unsupportedSettings = Object.keys(sessionSettings).filter(
+    (id) => id !== "autoCompaction" && id !== "autoRetry",
+  );
+  if (unsupportedSettings.length > 0) {
+    startupDiagnostics.push(
+      `Pi ignored unsupported settings: ${unsupportedSettings.join(", ")}.`,
+    );
+  }
 
   // Bridge Paseo-injected MCP servers to pi custom tools; failures degrade
   // per-server and never block the session.
   let mcp = null;
   const mcpServers = config.mcpServers ?? {};
   if (Object.keys(mcpServers).length > 0) {
-    mcp = await createMcpBridge(mcpServers, (message) =>
-      console.log(`[pi-plugin-mcowger] ${message}`),
-    );
+    mcp = await createMcpBridge(mcpServers, (message) => startupDiagnostics.push(message));
   }
 
   const systemPrompt = config.systemPrompt;
@@ -278,6 +310,22 @@ async function handleSessionOpen(
       : undefined,
   });
   await loader.reload();
+  for (const diagnostic of loader.getExtensions().errors) {
+    startupDiagnostics.push(
+      `Pi extension failed to load${diagnostic.path ? ` (${diagnostic.path})` : ""}: ${String(diagnostic.error)}`,
+    );
+  }
+  for (const [kind, result] of [
+    ["skill", loader.getSkills()],
+    ["prompt", loader.getPrompts()],
+    ["theme", loader.getThemes()],
+  ] as const) {
+    for (const diagnostic of result.diagnostics) {
+      startupDiagnostics.push(
+        `Pi ${kind} resource failed to load${diagnostic.path ? ` (${diagnostic.path})` : ""}: ${diagnostic.message}`,
+      );
+    }
+  }
 
   const sessionManager = persistedSessionFile
     ? SessionManager.open(persistedSessionFile)
@@ -309,6 +357,7 @@ async function handleSessionOpen(
       modelRuntime: runtime,
       sessionManager,
       resourceLoader: loader,
+      settingsManager,
       ...(customTools.length > 0 ? { customTools } : {}),
     });
   } catch (error) {
@@ -320,10 +369,14 @@ async function handleSessionOpen(
   // Apply the requested model/thinking after creation (fast, direct).
   if (config.model) {
     const reference = parsePiModelReference(config.model);
-    if (reference?.provider) {
+    if (!reference?.provider) {
+      startupDiagnostics.push(`Pi requested model is invalid or unavailable: ${config.model}`);
+    } else {
       const model = runtime.getModel(reference.provider, reference.id);
       if (model) {
         await session.setModel(model);
+      } else {
+        startupDiagnostics.push(`Pi requested model is unavailable: ${config.model}`);
       }
     }
   }
@@ -332,18 +385,11 @@ async function handleSessionOpen(
     session.setThinkingLevel(thinkingLevel);
   }
   if (modelFallbackMessage) {
-    state.emit({
-      type: "timeline.item",
-      sessionId: input.sessionId,
-      item: {
-        type: "notification",
-        id: `fallback:${input.sessionId}`,
-        level: "warning",
-        message: modelFallbackMessage,
-      },
-    });
+    startupDiagnostics.push(`Pi model fallback: ${modelFallbackMessage}`);
   }
-
+  if (!session.model) {
+    startupDiagnostics.push("Pi has no available model. Select an available model before prompting.");
+  }
   const presets = state.presetStore.snapshot().presets;
   const promptCommands = buildPiPromptCommands(
     extensions.extensions,
@@ -376,6 +422,18 @@ async function handleSessionOpen(
     ...(config.title ? { title: config.title } : {}),
     cwd: config.cwd,
   });
+  for (const [index, message] of startupDiagnostics.entries()) {
+    state.emit({
+      type: "timeline.item",
+      sessionId: input.sessionId,
+      item: {
+        type: "notification",
+        id: `startup-diagnostic:${input.sessionId}:${index}`,
+        level: message.includes("failed") || message.includes("no available") ? "error" : "warning",
+        message,
+      },
+    });
+  }
   providerSession.emitConfigState();
 
   const commands = providerSession.listCommands();

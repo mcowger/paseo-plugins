@@ -11,6 +11,10 @@ export declare const ModelRuntime: {
   create(options?: Record<string, unknown>): Promise<PiModelRuntimeLike>;
 };
 
+export declare const SettingsManager: {
+  inMemory(settings?: Record<string, unknown>): unknown;
+};
+
 export declare const SessionManager: PiSessionManagerStatics;
 
 export declare const DefaultResourceLoader: {
@@ -31,6 +35,7 @@ export declare function createAgentSession(options?: {
   customTools?: PiToolDefinition[];
   resourceLoader?: PiResourceLoaderLike;
   sessionManager?: unknown;
+  settingsManager?: unknown;
 }): Promise<PiCreateAgentSessionResultLike>;
 
 export declare function getAgentDir(): string;
