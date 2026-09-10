@@ -11,5 +11,11 @@
     "sdk:install:tarballs": "node scripts/install-paseo-sdk.mjs --source tarball",
     "sdk:snapshot": "node scripts/paseo-sdk-snapshot.mjs --update",
     "sdk:snapshot:check": "node scripts/paseo-sdk-snapshot.mjs --check"
+  },
+  "dependencies": {
+    "@shikijs/core": "^4.4.3",
+    "@shikijs/engine-javascript": "^4.4.3",
+    "@shikijs/langs": "^4.4.3",
+    "@shikijs/themes": "^4.4.3"
   }
 }
