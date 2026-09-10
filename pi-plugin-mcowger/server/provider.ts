@@ -8,7 +8,6 @@ import {
 } from "./pi-sdk.js";
 import {
   negotiateProviderCapabilities,
-  type ProviderCommand,
   type ProviderConnection,
   type ProviderError,
   type ProviderEvent,
@@ -17,6 +16,7 @@ import {
 } from "@getpaseo/plugin/server/provider";
 
 import { createMcpBridge } from "./mcp-bridge.js";
+import { buildPiPromptCommands } from "./commands.js";
 import type { PiModelRuntimeLike } from "../shared/pi-sdk-types.js";
 import { buildCatalog, createModelRuntime, listScopedModels } from "./pi-host.js";
 import { PI_PROVIDER_ID as SHARED_PI_PROVIDER_ID } from "../shared/preset-settings.js";
@@ -284,9 +284,10 @@ async function handleSessionOpen(
     : config.persist === false
       ? SessionManager.inMemory(config.cwd)
       : SessionManager.create(config.cwd);
+  const extensions = loader.getExtensions();
 
   const customTools = mcp?.tools ? [...mcp.tools] : [];
-  const hasExtensionTodoTool = hasPiTodoExtensionTool(loader.getExtensions());
+  const hasExtensionTodoTool = hasPiTodoExtensionTool(extensions);
   const hasCustomTodoTool = customTools.some((tool) => tool.name === PI_TODO_TOOL_NAME);
   if (!hasExtensionTodoTool && !hasCustomTodoTool) {
     customTools.push(createPiTodoTool(sessionManager));
@@ -344,24 +345,10 @@ async function handleSessionOpen(
   }
 
   const presets = state.presetStore.snapshot().presets;
-  const promptCommands: ProviderCommand[] = [
-    {
-      name: "compact",
-      description: "Manually compact the session context",
-      argumentHint: "[instructions]",
-    },
-    {
-      name: "preset",
-      description: "Activate a pi preset",
-      argumentHint: "<name>",
-    },
-    ...loader
-      .getPrompts()
-      .prompts.map((template) => ({
-        name: template.name,
-        description: template.description ?? "Prompt template",
-      })),
-  ];
+  const promptCommands = buildPiPromptCommands(
+    extensions.extensions,
+    loader.getPrompts().prompts,
+  );
 
   const providerSession = new PiProviderSession({
     sessionId: input.sessionId,

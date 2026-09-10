@@ -1368,7 +1368,7 @@ export class PiProviderSession {
 
     if (TODO_TOOL_NAMES.has(event.toolName)) {
       const todos = extractTodoSnapshot(toolCall, result);
-      if (todos && todos.length > 0) {
+      if (todos) {
         this.emit({
           type: "timeline.item",
           sessionId: this.sessionId,

@@ -104,7 +104,10 @@ export interface PiPromptTemplateLike {
 export interface PiResourceLoaderLike {
   reload(): Promise<void>;
   getExtensions(): {
-    extensions: ReadonlyArray<{ tools: ReadonlyMap<string, unknown> }>;
+    extensions: ReadonlyArray<{
+      tools: ReadonlyMap<string, unknown>;
+      commands: ReadonlyMap<string, { name: string; description?: string }>;
+    }>;
   };
   getPrompts(): { prompts: PiPromptTemplateLike[] };
 }

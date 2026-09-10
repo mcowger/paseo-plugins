@@ -181,7 +181,7 @@ export class PiHistoryMapper {
     ];
 
     const todos = extractTodoSnapshot(tracked, result);
-    if (todos && todos.length > 0) {
+    if (todos) {
       items.push({
         type: "todo",
         id: PI_TODO_TIMELINE_ITEM_ID,

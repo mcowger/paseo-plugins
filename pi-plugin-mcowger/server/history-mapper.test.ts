@@ -87,6 +87,29 @@ describe("PiHistoryMapper", () => {
     });
   });
 
+  it("emits an empty native todo item when all tasks are cleared", () => {
+    const mapper = new PiHistoryMapper();
+    const items = mapper.mapMessages([
+      {
+        role: "assistant",
+        content: [{ type: "toolCall", id: "call-clear", name: "todo", arguments: { action: "clear" } }],
+      },
+      {
+        role: "toolResult",
+        toolCallId: "call-clear",
+        toolName: "todo",
+        content: [{ type: "text", text: "Cleared 2 todos" }],
+        details: { todos: [] },
+      },
+    ]);
+
+    expect(items.find((item) => item.type === "todo")).toEqual({
+      type: "todo",
+      id: "pi-todos",
+      items: [],
+    });
+  });
+
   it("maps bash executions", () => {
     const mapper = new PiHistoryMapper();
     const items = mapper.mapMessages([

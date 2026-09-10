@@ -26,13 +26,11 @@ extension-warm model catalogs.
 | Rewind | Not advertised. Pi tree navigation and active-leaf persistence remain implemented, but Paseo's plugin adapter cannot replace its session-local history after rewind. |
 | Persistence | `SessionManager.open(sessionFile)` resume; `history:"replay"` streams mapped message history before `session.ready` |
 | Catalog | `ModelRuntime.create()` (cached catalogs, no network by default) + extension warmup; per-model `thinkingOptions` from `reasoning` + `thinkingLevelMap` (PR #4413 semantics) |
-| Commands published | `compact`, `preset`, plus prompt templates discovered by the loader |
+| Commands published | `compact`, `preset`, Pi extension commands, plus prompt templates discovered by the loader |
 | Testing | 53 unit tests (fake SDK session) + in-process smoke suite (catalog, live prompt with streaming, persistence/resume) |
 
 ## Known limitations
 
-- Extension-registered custom slash commands are not published to the composer (the
-  runner's command list isn't reachable from `createAgentSession`'s result in v1).
 - `ask_user`'s combined select+comment flow is simplified to sequential dialogs.
 - Foreground-only subagent rendering; detached pi-subagents background runs are out of scope.
 - Project-local extensions that register providers (rare) only appear after that cwd's

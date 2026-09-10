@@ -490,6 +490,30 @@ describe("PiProviderSession todos", () => {
       },
     });
   });
+
+  it("emits an empty native todo item when all tasks are cleared", async () => {
+    const { fake, session, events } = createHarness();
+    await session.handlePrompt(messagePrompt("clear tasks"));
+    fake.emitEvent({
+      type: "tool_execution_end",
+      toolCallId: "tc-clear",
+      toolName: "todo",
+      result: {
+        content: [{ type: "text", text: "Cleared all todos" }],
+        details: { todos: [] },
+      },
+    } as unknown as AgentSessionEvent);
+
+    const todo = events.findLast(
+      (event): event is Extract<ProviderEvent, { type: "timeline.item" }> =>
+        event.type === "timeline.item" && event.item.type === "todo",
+    );
+    expect(todo).toEqual({
+      type: "timeline.item",
+      sessionId: "s1",
+      item: { type: "todo", id: "pi-todos", items: [] },
+    });
+  });
 });
 
 describe("PiProviderSession permissions", () => {
