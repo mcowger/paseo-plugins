@@ -10,6 +10,10 @@ const PLAN_PRESET = {
 };
 
 describe("presetsToModes", () => {
+  it("does not expose a mode when no presets are configured", () => {
+    expect(presetsToModes({})).toEqual([]);
+  });
+
   it("maps presets to provider modes", () => {
     const modes = presetsToModes({
       plan: PLAN_PRESET,

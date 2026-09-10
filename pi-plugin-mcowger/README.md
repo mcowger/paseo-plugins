@@ -27,6 +27,15 @@ The plugin targets Paseo `v0.8.0`. Paseo's provider API is stable for this relea
 - Persists sessions with pi's `SessionManager` and supports replay from the active branch, steering,
   interruption, compaction, and usage reporting.
 
+## Preset behavior
+
+Preset modes apply their model and thinking level when selected on an existing live session. In a
+new-agent draft composer, Paseo `v0.8.0` provider modes cannot declare model or thinking defaults,
+so selecting a preset updates the mode pill but leaves the draft's model and thinking pills unchanged.
+The preset is still applied when the session is created. Updating the draft pills immediately will
+require a future Paseo host/API change. When no presets are configured, the provider publishes no
+modes and Paseo hides the mode pill.
+
 ## Installation
 
 Install from a checkout of this repository:
