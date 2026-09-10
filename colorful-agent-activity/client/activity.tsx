@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import type { z } from "zod";
 import { useShikiTokens, isDarkSurface, type ShikiToken } from "./highlight";
+import { PaseoToolDetail } from "./paseo";
 import {
   diffLinesForDetail,
   fileIconForPath,
@@ -347,10 +348,145 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         fontSize: 12,
         lineHeight: 18,
       } satisfies TextStyle,
+      paseoStack: {
+        gap: 10,
+      } satisfies ViewStyle,
+      paseoHero: {
+        borderRadius: 8,
+        gap: 7,
+        padding: 10,
+      } satisfies ViewStyle,
+      paseoHeroRow: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 8,
+      } satisfies ViewStyle,
+      paseoHeroIcon: {
+        alignItems: "center",
+        borderRadius: 8,
+        height: 28,
+        justifyContent: "center",
+        width: 28,
+      } satisfies ViewStyle,
+      paseoHeroTitle: {
+        color: theme.colors.foreground,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 13,
+        fontWeight: "700",
+        lineHeight: 19,
+      } satisfies TextStyle,
+      paseoHeroSubtitle: {
+        color: theme.colors.foregroundMuted,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 16,
+      } satisfies TextStyle,
+      paseoRows: {
+        gap: 5,
+      } satisfies ViewStyle,
+      paseoRow: {
+        alignItems: "flex-start",
+        flexDirection: "row",
+        gap: 10,
+        minWidth: 0,
+      } satisfies ViewStyle,
+      paseoKey: {
+        color: theme.colors.foregroundMuted,
+        flexShrink: 0,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 18,
+        minWidth: 105,
+      } satisfies TextStyle,
+      paseoValue: {
+        color: theme.colors.foreground,
+        flex: 1,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 12,
+        lineHeight: 18,
+        minWidth: 0,
+      } satisfies TextStyle,
+      paseoPrompt: {
+        backgroundColor: theme.colors.surface2,
+        borderRadius: 6,
+        color: theme.colors.foreground,
+        fontFamily: "monospace",
+        fontSize: 12,
+        lineHeight: 18,
+        paddingHorizontal: 9,
+        paddingVertical: 8,
+      } satisfies TextStyle,
+      paseoList: {
+        gap: 6,
+      } satisfies ViewStyle,
+      paseoListItem: {
+        backgroundColor: theme.colors.surface2,
+        borderRadius: 6,
+        gap: 3,
+        paddingHorizontal: 9,
+        paddingVertical: 7,
+      } satisfies ViewStyle,
+      paseoListItemHeader: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 7,
+        minWidth: 0,
+      } satisfies ViewStyle,
+      paseoListItemTitle: {
+        color: theme.colors.foreground,
+        flex: 1,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 12,
+        fontWeight: "600",
+        lineHeight: 18,
+        minWidth: 0,
+      } satisfies TextStyle,
+      paseoListItemMeta: {
+        color: theme.colors.foregroundMuted,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 16,
+      } satisfies TextStyle,
+      paseoChips: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 5,
+      } satisfies ViewStyle,
+      paseoChip: {
+        borderRadius: 5,
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+      } satisfies ViewStyle,
+      paseoChipText: {
+        color: theme.colors.foreground,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 15,
+      } satisfies TextStyle,
+      paseoStatus: {
+        alignSelf: "flex-start",
+        borderRadius: 5,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+      } satisfies ViewStyle,
+      paseoStatusText: {
+        color: theme.colors.foreground,
+        fontFamily: "monospace",
+        fontSize: 10,
+        fontWeight: "700",
+        lineHeight: 15,
+        textTransform: "uppercase",
+      } satisfies TextStyle,
     }),
     [palette, theme],
   );
 }
+
+export type ActivityStyles = ReturnType<typeof useActivityStyles>;
 
 function statusIcon(status: ToolCallData["status"]): string {
   switch (status) {
@@ -654,7 +790,18 @@ function DetailBody({
       return <Text selectable style={styles.detailText}>{detail.text ?? ""}</Text>;
     case "plan":
       return <Text selectable style={styles.detailText}>{detail.text}</Text>;
-    case "unknown":
+    case "unknown": {
+      const paseoDetail = (
+        <PaseoToolDetail
+          toolName={data.name}
+          input={detail.input}
+          output={detail.output}
+          theme={theme}
+          palette={palette}
+          styles={styles}
+        />
+      );
+      if (paseoDetail) return paseoDetail;
       return (
         <>
           <DetailLabel style={styles.detailLabel}>Input</DetailLabel>
@@ -663,6 +810,7 @@ function DetailBody({
           <Text selectable style={styles.detailText}>{formatUnknownValue(detail.output)}</Text>
         </>
       );
+    }
   }
 }
 

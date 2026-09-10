@@ -6,6 +6,13 @@ import {
   fileIconForPath,
   formatReasoningText,
   languageForFilePath,
+  paseoToolCategory,
+  paseoToolIcon,
+  paseoToolLabel,
+  paseoToolLeafName,
+  paseoToolSummary,
+  paseoToolResult,
+  unwrapPaseoToolOutput,
   resolveActivityPalette,
   resolveToolCallPresentation,
 } from "./presentation";
@@ -85,6 +92,60 @@ describe("colorful activity presentation", () => {
       icon: "SquareTerminal",
       label: "Shell Command",
       summary: "bun run typecheck && bun test",
+    });
+  });
+
+  it("gives namespaced Paseo tools a specialized title, icon, and summary", () => {
+    const input = {
+      title: "Random Number Agent 3",
+      provider: "pi/plexus/gpt-5.6-luna",
+    };
+    expect(paseoToolLabel("mcp__paseo__create_agent")).toBe("Create Agent");
+    expect(paseoToolIcon("paseo.create_agent")).toBe("Bot");
+    expect(paseoToolLeafName("paseo_create_agent")).toBe("create_agent");
+    expect(paseoToolLeafName("mcp__paseo__future_tool")).toBeNull();
+    expect(paseoToolCategory("paseo_remote.create_agent")).toBe("agent");
+    expect(paseoToolSummary("mcp__paseo__create_agent", input)).toBe(
+      "Random Number Agent 3 · pi/plexus/gpt-5.6-luna",
+    );
+    expect(paseoToolLabel("mcp__github__create_issue")).toBeNull();
+    expect(
+      resolveToolCallPresentation({
+        name: "mcp__paseo__create_agent",
+        detail: { type: "unknown", input, output: { agentId: "agt_123" } },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Bot",
+      label: "Paseo Create Agent",
+      summary: "Random Number Agent 3 · pi/plexus/gpt-5.6-luna",
+    });
+  });
+
+  it("unwraps MCP text envelopes with diagnostic prefixes", () => {
+    const output = {
+      content: [
+        {
+          type: "text",
+          text: 'availableModes_count=0\\n\\n{"agentId":"agt_123","status":"running"}',
+        },
+      ],
+    };
+    expect(unwrapPaseoToolOutput(output)).toEqual({
+      agentId: "agt_123",
+      status: "running",
+    });
+    expect(paseoToolResult({ ok: true, result: { browserId: "tab-1" } })).toEqual({
+      browserId: "tab-1",
+    });
+    expect(
+      paseoToolResult({
+        ok: false,
+        error: { code: "browser_timeout", message: "Timed out" },
+      }),
+    ).toEqual({
+      ok: false,
+      error: { code: "browser_timeout", message: "Timed out" },
     });
   });
 

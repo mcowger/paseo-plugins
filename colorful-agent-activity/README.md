@@ -38,6 +38,7 @@ Expanded file read with syntax-highlighted content:
   and unknown tool payloads.
 - Vivid, soft, and high-contrast palette modes using the active Paseo theme.
 - Status indicators for running, completed, failed, and canceled calls.
+- Specialized Paseo cards for agents, workspaces, terminals, schedules, providers, permissions, and browser automation instead of raw JSON.
 
 ## Install
 

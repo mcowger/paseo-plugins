@@ -1,5 +1,6 @@
 import { diffLines } from "diff";
 import type { JsonValue, ToolCallDetail, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
+import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization";
 import type { PaletteMode } from "./settings";
 
 export const TOOL_CATEGORIES = [
@@ -212,6 +213,246 @@ function prettyToolName(name: string): string {
     .join(" ");
 }
 
+const PASEO_TOOL_LABELS: Readonly<Record<string, string>> = {
+  speak: "Speak",
+  create_workspace: "Create Workspace",
+  list_workspaces: "List Workspaces",
+  archive_workspace: "Archive Workspace",
+  create_agent: "Create Agent",
+  send_agent_prompt: "Send Agent Prompt",
+  get_agent_status: "Get Agent Status",
+  list_agents: "List Agents",
+  cancel_agent: "Cancel Agent Run",
+  archive_agent: "Archive Agent",
+  kill_agent: "Kill Agent",
+  update_agent: "Update Agent",
+  rename_workspace: "Rename Workspace",
+  list_workspace_scripts: "List Workspace Scripts",
+  start_workspace_script: "Start Workspace Script",
+  stop_workspace_script: "Stop Workspace Script",
+  list_terminals: "List Terminals",
+  create_terminal: "Create Terminal",
+  kill_terminal: "Kill Terminal",
+  capture_terminal: "Capture Terminal",
+  send_terminal_keys: "Send Terminal Keys",
+  create_schedule: "Create Schedule",
+  create_heartbeat: "Create Heartbeat",
+  delete_heartbeat: "Delete Heartbeat",
+  list_schedules: "List Schedules",
+  inspect_schedule: "Inspect Schedule",
+  pause_schedule: "Pause Schedule",
+  resume_schedule: "Resume Schedule",
+  delete_schedule: "Delete Schedule",
+  update_schedule: "Update Schedule",
+  schedule_logs: "Schedule Logs",
+  run_schedule_once: "Run Schedule Once",
+  list_providers: "List Providers",
+  list_models: "List Models",
+  list_profiles: "List Agent Profiles",
+  inspect_provider: "Inspect Provider",
+  get_agent_activity: "Get Agent Activity",
+  set_agent_mode: "Set Agent Session Mode",
+  list_pending_permissions: "List Pending Permissions",
+  respond_to_permission: "Respond to Permission",
+  browser_list_tabs: "List Browser Tabs",
+  browser_new_tab: "Create Browser Tab",
+  browser_snapshot: "Snapshot Browser Page",
+  browser_click: "Click Browser Element",
+  browser_fill: "Fill Browser Element",
+  browser_wait: "Wait for Browser Condition",
+  browser_type: "Type into Browser",
+  browser_keypress: "Press Browser Key",
+  browser_navigate: "Navigate Browser",
+  browser_back: "Browser Back",
+  browser_forward: "Browser Forward",
+  browser_reload: "Browser Reload",
+  browser_screenshot: "Capture Browser Screenshot",
+  browser_upload: "Upload Files in Browser",
+  browser_hover: "Hover Browser Element",
+  browser_select: "Select Browser Option",
+  browser_drag: "Drag Browser Element",
+  browser_logs: "Read Browser Logs",
+  browser_evaluate: "Evaluate Browser JavaScript",
+  browser_scroll: "Scroll Browser",
+  browser_resize: "Resize Browser Viewport",
+  browser_close_tab: "Close Browser Tab",
+};
+
+const PASEO_TOOL_ICONS: Readonly<Record<string, string>> = {
+  speak: "MicVocal",
+  create_workspace: "FolderPlus",
+  list_workspaces: "Folders",
+  archive_workspace: "Archive",
+  create_agent: "Bot",
+  send_agent_prompt: "Send",
+  get_agent_status: "Activity",
+  list_agents: "Users",
+  cancel_agent: "CircleStop",
+  archive_agent: "Archive",
+  kill_agent: "CircleX",
+  update_agent: "Settings2",
+  rename_workspace: "Pencil",
+  list_workspace_scripts: "ListTree",
+  start_workspace_script: "Play",
+  stop_workspace_script: "Square",
+  list_terminals: "SquareTerminal",
+  create_terminal: "SquareTerminal",
+  kill_terminal: "CircleX",
+  capture_terminal: "ScrollText",
+  send_terminal_keys: "Keyboard",
+  create_schedule: "CalendarClock",
+  create_heartbeat: "HeartPulse",
+  delete_heartbeat: "Trash2",
+  list_schedules: "CalendarDays",
+  inspect_schedule: "CalendarSearch",
+  pause_schedule: "Pause",
+  resume_schedule: "Play",
+  delete_schedule: "Trash2",
+  update_schedule: "CalendarCog",
+  schedule_logs: "ScrollText",
+  run_schedule_once: "CalendarCheck",
+  list_providers: "Network",
+  list_models: "Cpu",
+  list_profiles: "ContactRound",
+  inspect_provider: "ScanSearch",
+  get_agent_activity: "ListActivity",
+  set_agent_mode: "SlidersHorizontal",
+  list_pending_permissions: "ShieldAlert",
+  respond_to_permission: "ShieldCheck",
+  browser_list_tabs: "PanelsTopLeft",
+  browser_new_tab: "Globe2",
+  browser_snapshot: "Scan",
+  browser_click: "MousePointer2",
+  browser_fill: "TextCursorInput",
+  browser_wait: "Timer",
+  browser_type: "Keyboard",
+  browser_keypress: "KeyRound",
+  browser_navigate: "Navigation",
+  browser_back: "ArrowLeft",
+  browser_forward: "ArrowRight",
+  browser_reload: "RefreshCw",
+  browser_screenshot: "Camera",
+  browser_upload: "Upload",
+  browser_hover: "Hand",
+  browser_select: "ListFilter",
+  browser_drag: "Move",
+  browser_logs: "ScrollText",
+  browser_evaluate: "Braces",
+  browser_scroll: "Scroll",
+  browser_resize: "Maximize2",
+  browser_close_tab: "X",
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(value: unknown, key: string): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const field = value[key];
+  return typeof field === "string" && field.trim() ? field : undefined;
+}
+
+export function paseoToolLeafName(toolName: string): string | null {
+  const namespacedLeafName = getPaseoToolLeafName(toolName);
+  if (namespacedLeafName && PASEO_TOOL_LABELS[namespacedLeafName]) {
+    return namespacedLeafName;
+  }
+  const normalized = toolName.trim().toLowerCase();
+  if (normalized.startsWith("paseo_") && normalized.length > "paseo_".length) {
+    const directLeafName = normalized.slice("paseo_".length);
+    return PASEO_TOOL_LABELS[directLeafName] ? directLeafName : null;
+  }
+  return null;
+}
+
+export function paseoToolLabel(toolName: string): string | null {
+  const leafName = paseoToolLeafName(toolName);
+  if (!leafName) return null;
+  return PASEO_TOOL_LABELS[leafName] ?? prettyToolName(leafName);
+}
+
+export function paseoToolIcon(toolName: string): string | null {
+  const leafName = paseoToolLeafName(toolName);
+  if (!leafName) return null;
+  return PASEO_TOOL_ICONS[leafName] ?? "Sparkles";
+}
+
+export function paseoToolCategory(toolName: string): ToolCategory | null {
+  const leafName = paseoToolLeafName(toolName);
+  if (!leafName) return null;
+  if (leafName.startsWith("browser_")) return "search";
+  if (leafName.includes("terminal") || leafName.includes("workspace_script")) return "shell";
+  if (leafName.includes("schedule") || leafName.includes("heartbeat")) return "plan";
+  if (leafName.includes("provider") || leafName.includes("profile")) return "agent";
+  if (leafName.includes("agent") || leafName.includes("permission")) return "agent";
+  if (leafName === "speak") return "communication";
+  if (leafName.includes("workspace")) return "file";
+  return "unknown";
+}
+
+export function paseoToolSummary(toolName: string, input: unknown): string | undefined {
+  const leafName = paseoToolLeafName(toolName);
+  if (!leafName) return undefined;
+  const title = stringField(input, "title");
+  const provider = stringField(input, "provider");
+  const agentId = stringField(input, "agentId");
+  const workspaceId = stringField(input, "workspaceId");
+  const browserId = stringField(input, "browserId");
+  const url = stringField(input, "url");
+  const prompt = stringField(input, "prompt") ?? stringField(input, "initialPrompt");
+  if (leafName === "create_agent" && title && provider) return `${title} · ${provider}`;
+  if (leafName === "create_agent" && title) return title;
+  if (leafName === "send_agent_prompt" && agentId) return agentId;
+  if (leafName.endsWith("_agent") && agentId) return agentId;
+  if (leafName.includes("workspace") && workspaceId) return workspaceId;
+  if (leafName.startsWith("browser_") && url) return url;
+  if (leafName.startsWith("browser_") && browserId) return browserId;
+  if ((leafName === "create_schedule" || leafName === "create_heartbeat") && prompt) {
+    return compactText(prompt);
+  }
+  if (leafName === "list_models" && provider) return provider;
+  if (leafName === "speak" && stringField(input, "text")) return compactText(stringField(input, "text")!);
+  return undefined;
+}
+
+function parseEmbeddedJson(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    for (const match of value.matchAll(/\{|\[/g)) {
+      const offset = match.index;
+      if (offset === undefined) continue;
+      try {
+        return JSON.parse(value.slice(offset)) as unknown;
+      } catch {
+        continue;
+      }
+    }
+    return undefined;
+  }
+}
+
+export function unwrapPaseoToolOutput(value: unknown): unknown {
+  const record = isRecord(value) ? value : null;
+  if (!record) return value;
+  if (record.structuredContent !== undefined) return unwrapPaseoToolOutput(record.structuredContent);
+  if (Array.isArray(record.content)) {
+    const content = record.content.find((item) => isRecord(item) && item.type === "text");
+    if (isRecord(content)) {
+      const parsed = typeof content.text === "string" ? parseEmbeddedJson(content.text) : undefined;
+      return parsed === undefined ? content.text : unwrapPaseoToolOutput(parsed);
+    }
+  }
+  return value;
+}
+
+export function paseoToolResult(value: unknown): unknown {
+  const unwrapped = unwrapPaseoToolOutput(value);
+  const record = isRecord(unwrapped) ? unwrapped : null;
+  return record?.ok === true && record.result !== undefined ? record.result : unwrapped;
+}
+
 function countLines(value: string): number {
   if (!value) return 0;
   const lines = value.replace(/\r/g, "").split("\n");
@@ -376,7 +617,7 @@ export function resolveToolCallPresentation(
         icon: "ListChecks",
         label: "Plan",
       };
-    case "unknown":
+    case "unknown": {
       if (name === "thinking") {
         return { category: "plan", icon: "Brain", label: "Thinking" };
       }
@@ -386,11 +627,21 @@ export function resolveToolCallPresentation(
       if (name === "speak") {
         return { category: "communication", icon: "MicVocal", label: "Speak" };
       }
+      const paseoLabel = paseoToolLabel(item.name);
+      if (paseoLabel) {
+        return {
+          category: paseoToolCategory(item.name) ?? "unknown",
+          icon: paseoToolIcon(item.name) ?? "Sparkles",
+          label: `Paseo ${paseoLabel}`,
+          summary: paseoToolSummary(item.name, detail.input),
+        };
+      }
       return {
         category: "unknown",
         icon: "Wrench",
         label: prettyToolName(item.name),
       };
+    }
   }
 }
 
