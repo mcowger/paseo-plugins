@@ -49,6 +49,12 @@ export interface SubAgentActionPresentation {
   summaryIcon?: string;
 }
 
+export interface SubAgentAction {
+  index: number;
+  toolName: string;
+  summary?: string;
+}
+
 export interface ActivityThemeColors {
   surface0: string;
   surface1: string;
@@ -712,6 +718,23 @@ export function resolveSubAgentActionPresentation(
     return { icon: "Bot", label: "Agent Task" };
   }
   return { icon: "Wrench", label: toolName.trim() || "Tool" };
+}
+
+export function parseSubAgentActionLog(log: string): readonly SubAgentAction[] {
+  const actions: SubAgentAction[] = [];
+  for (const line of log.split(/\r?\n/)) {
+    const match = line.trim().match(/^\[([^\]]+)\]\s*(.*)$/);
+    if (!match?.[1]) continue;
+    const toolName = match[1].trim();
+    if (!toolName) continue;
+    const summary = match[2]?.trim();
+    actions.push({
+      index: actions.length,
+      toolName,
+      ...(summary ? { summary } : {}),
+    });
+  }
+  return actions;
 }
 
 function parseHexColor(value: string): [number, number, number] | null {

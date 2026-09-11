@@ -6,6 +6,7 @@ import {
   fileIconForPath,
   formatReasoningText,
   languageForFilePath,
+  parseSubAgentActionLog,
   paseoToolCategory,
   paseoToolIcon,
   paseoToolLabel,
@@ -110,6 +111,13 @@ describe("colorful activity presentation", () => {
       icon: "SquareTerminal",
       label: "Shell Command",
     });
+  });
+
+  it("recovers Claude-style sub-agent actions from the provider log", () => {
+    expect(parseSubAgentActionLog("[Read] README.md\n[Shell] git status\nnot an action")).toEqual([
+      { index: 0, toolName: "Read", summary: "README.md" },
+      { index: 1, toolName: "Shell", summary: "git status" },
+    ]);
   });
 
   it("gives namespaced Paseo tools a specialized title, icon, and summary", () => {

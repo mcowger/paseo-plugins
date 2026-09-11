@@ -29,6 +29,7 @@ import {
   fileIconForPath,
   formatUnknownValue,
   paseoToolLeafName,
+  parseSubAgentActionLog,
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
   type ActivityPalette,
@@ -928,13 +929,13 @@ function SubAgentProgress({
   detail: Extract<ToolCallDetail, { type: "sub_agent" }>;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const actions = useMemo(
-    () => [...(detail.actions ?? [])].sort((left, right) => left.index - right.index),
-    [detail.actions],
-  );
+  const actions = useMemo(() => {
+    const explicitActions = [...(detail.actions ?? [])].sort((left, right) => left.index - right.index);
+    return explicitActions.length > 0 ? explicitActions : parseSubAgentActionLog(detail.log);
+  }, [detail.actions, detail.log]);
   const hiddenActionCount = Math.max(0, actions.length - MAX_VISIBLE_SUBAGENT_ACTIONS);
   const visibleActions = actions.slice(hiddenActionCount);
-  const thinking = detail.log?.replace(/\s+/g, " ").trim();
+  const thinking = actions.length > 0 && !(detail.actions?.length ?? 0) ? null : detail.log?.replace(/\s+/g, " ").trim();
 
   return (
     <View style={styles.subAgentProgress}>
