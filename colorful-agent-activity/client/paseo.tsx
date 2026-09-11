@@ -2,8 +2,10 @@ import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import React, { type ReactNode } from "react";
 import { Text, View, type TextStyle } from "react-native";
+import { ChildAgentTimeline } from "./child-agent";
 import { isDarkSurface, useShikiTokens, type ShikiToken } from "./highlight";
 import type { ActivityStyles } from "./activity";
+import { extractPaseoChildAgentId } from "../shared/child-agent";
 import {
   exaOutputText,
   exaToolKind,
@@ -683,6 +685,13 @@ function AgentTool({
             palette={palette}
             styles={styles}
           />
+          {extractPaseoChildAgentId(outputRecord) ? (
+            <ChildAgentTimeline
+              agentId={extractPaseoChildAgentId(outputRecord)!}
+              palette={palette}
+              styles={styles}
+            />
+          ) : null}
           <ModeList
             modes={fieldArray(outputRecord, "availableModes")}
             palette={palette}
