@@ -273,12 +273,16 @@ export function PaseoHero({
   icon,
   title,
   subtitle,
+  status,
+  palette,
   color,
   styles,
 }: {
   icon: string;
   title: string;
   subtitle?: string;
+  status?: string;
+  palette?: ActivityPalette;
   color: string;
   styles: ActivityStyles;
 }) {
@@ -290,10 +294,22 @@ export function PaseoHero({
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.paseoHeroTitle}>{title}</Text>
-          {subtitle ? (
-            <Text numberOfLines={2} style={styles.paseoHeroSubtitle}>
-              {subtitle}
-            </Text>
+          {subtitle || status ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {subtitle ? (
+                <Text numberOfLines={1} style={styles.paseoHeroSubtitle}>
+                  {subtitle}
+                </Text>
+              ) : null}
+              {status && palette ? (
+                <Text
+                  numberOfLines={1}
+                  style={[styles.paseoHeroSubtitle, { color: statusColor(status, palette) }]}
+                >
+                  {status}
+                </Text>
+              ) : null}
+            </View>
           ) : null}
         </View>
       </View>
@@ -305,19 +321,20 @@ function PromptBlock({
   text,
   label = "Prompt",
   styles,
+  compact = false,
 }: {
   text: string | undefined;
   label?: string;
   styles: ActivityStyles;
+  compact?: boolean;
 }) {
   if (!text) return null;
-  return (
-    <Section title={label} styles={styles}>
-      <Text selectable style={styles.paseoPrompt}>
-        {text}
-      </Text>
-    </Section>
+  const prompt = (
+    <Text numberOfLines={compact ? 2 : undefined} selectable style={styles.paseoPrompt}>
+      {text}
+    </Text>
   );
+  return label ? <Section title={label} styles={styles}>{prompt}</Section> : prompt;
 }
 
 function TokenizedLines({
@@ -643,92 +660,47 @@ function AgentTool({
   const inputRecord = asRecord(input);
   const outputRecord = asRecord(result);
   switch (leaf) {
-    case "create_agent":
+    case "create_agent": {
+      const childAgentId = extractPaseoChildAgentId(outputRecord);
+      const provider = fieldString(inputRecord, "provider");
+      const settings = asRecord(inputRecord?.settings);
+      const thinkingOptionId = fieldString(settings, "thinkingOptionId");
+      const subtitle = [
+        provider,
+        thinkingOptionId ? `Thinking option ${thinkingOptionId}` : undefined,
+        inputRecord?.background === true ? "Background" : undefined,
+        inputRecord?.notifyOnFinish === true ? "Notify on finish" : undefined,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const status = fieldString(outputRecord, "status");
       return (
         <View style={styles.paseoStack}>
           <PaseoHero
             icon="Bot"
             title={fieldString(inputRecord, "title") ?? "New agent"}
-            subtitle={fieldString(inputRecord, "provider")}
+            subtitle={subtitle}
+            status={status}
+            palette={palette}
             color={palette.categoryColors.agent}
             styles={styles}
           />
           <PromptBlock
             text={fieldString(inputRecord, "initialPrompt")}
+            label=""
+            compact
             styles={styles}
           />
-          <Section title="Configuration" styles={styles}>
-            <PaseoFields
-              fields={[
-                ["Provider", inputRecord?.provider],
-                ["Workspace", inputRecord?.workspaceId],
-                ["Working directory", inputRecord?.cwd],
-                ["Background", inputRecord?.background],
-                ["Notify on finish", inputRecord?.notifyOnFinish],
-                ["Settings", inputRecord?.settings],
-                ["Labels", inputRecord?.labels],
-              ]}
-              palette={palette}
-              styles={styles}
-            />
-          </Section>
-          <OutputFields
-            result={outputRecord}
-            fields={[
-              ["agentId", "Agent"],
-              ["type", "Provider"],
-              ["status", "Status"],
-              ["cwd", "Working directory"],
-              ["workspaceId", "Workspace"],
-              ["currentModeId", "Mode"],
-            ]}
-            palette={palette}
-            styles={styles}
-          />
-          {extractPaseoChildAgentId(outputRecord) ? (
+          {childAgentId ? (
             <ChildAgentTimeline
-              agentId={extractPaseoChildAgentId(outputRecord)!}
+              agentId={childAgentId}
               palette={palette}
               styles={styles}
             />
-          ) : null}
-          <ModeList
-            modes={fieldArray(outputRecord, "availableModes")}
-            palette={palette}
-            styles={styles}
-          />
-          {fieldString(outputRecord, "status") ? (
-            <StatusPill
-              value={fieldString(outputRecord, "status")!}
-              palette={palette}
-              styles={styles}
-            />
-          ) : null}
-          {fieldString(outputRecord, "lastMessage") ? (
-            <PromptBlock
-              text={fieldString(outputRecord, "lastMessage")}
-              label="Last message"
-              styles={styles}
-            />
-          ) : null}
-          {fieldString(outputRecord, "guidance") ? (
-            <PromptBlock
-              text={fieldString(outputRecord, "guidance")}
-              label="Guidance"
-              styles={styles}
-            />
-          ) : null}
-          {outputRecord?.permission ? (
-            <Section title="Permission" styles={styles}>
-              <PermissionList
-                permissions={[outputRecord.permission]}
-                palette={palette}
-                styles={styles}
-              />
-            </Section>
           ) : null}
         </View>
       );
+    }
     case "send_agent_prompt":
       return (
         <View style={styles.paseoStack}>

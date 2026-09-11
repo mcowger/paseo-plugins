@@ -50,7 +50,7 @@ import {
 } from "../shared/timeline";
 
 const MAX_DETAIL_HEIGHT = 420;
-const MAX_VISIBLE_SUBAGENT_ACTIONS = 6;
+const MAX_VISIBLE_SUBAGENT_ACTIONS = 2;
 
 type Theme = PluginTimelineItemProps["theme"];
 type ReasoningData = z.output<typeof reasoningItemDataSchema>;
@@ -352,74 +352,119 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       subAgentProgress: {
         borderLeftColor: theme.colors.border,
         borderLeftWidth: 1,
-        gap: 5,
+        gap: 2,
         marginLeft: 20,
-        paddingBottom: 8,
-        paddingLeft: 14,
-        paddingTop: 4,
+        paddingBottom: 4,
+        paddingLeft: 8,
+        paddingTop: 2,
       } satisfies ViewStyle,
       subAgentLine: {
         alignItems: "center",
         flexDirection: "row",
-        gap: 8,
+        gap: 5,
         minWidth: 0,
       } satisfies ViewStyle,
       subAgentLineIcon: {
         alignItems: "center",
         justifyContent: "center",
-        width: 16,
+        width: 14,
       } satisfies ViewStyle,
       subAgentLineLabel: {
         color: theme.colors.foreground,
         flexShrink: 0,
         fontFamily: "monospace",
-        fontSize: 13,
+        fontSize: 11,
         fontWeight: "600",
-        lineHeight: 20,
+        lineHeight: 16,
       } satisfies TextStyle,
       subAgentLineSummary: {
         color: theme.colors.foregroundMuted,
         flex: 1,
         flexShrink: 1,
         fontFamily: "monospace",
-        fontSize: 13,
-        lineHeight: 20,
+        fontSize: 11,
+        lineHeight: 16,
         minWidth: 0,
       } satisfies TextStyle,
       subAgentMore: {
         color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
-        fontSize: 13,
-        lineHeight: 20,
-        paddingLeft: 24,
+        fontSize: 11,
+        lineHeight: 16,
+        paddingLeft: 19,
       } satisfies TextStyle,
       subAgentAction: {
         alignItems: "center",
         flexDirection: "row",
-        gap: 8,
+        gap: 5,
         minWidth: 0,
-        paddingLeft: 24,
+        paddingLeft: 19,
       } satisfies ViewStyle,
       subAgentActionIcon: {
         alignItems: "center",
         justifyContent: "center",
-        width: 16,
+        width: 14,
       } satisfies ViewStyle,
       subAgentActionLabel: {
         color: theme.colors.foreground,
         flexShrink: 0,
         fontFamily: "monospace",
-        fontSize: 13,
-        lineHeight: 20,
+        fontSize: 11,
+        lineHeight: 16,
       } satisfies TextStyle,
       subAgentActionSummary: {
         color: theme.colors.foregroundMuted,
         flex: 1,
         flexShrink: 1,
         fontFamily: "monospace",
-        fontSize: 13,
-        lineHeight: 20,
+        fontSize: 11,
+        lineHeight: 16,
         minWidth: 0,
+      } satisfies TextStyle,
+      childTimelineSection: {
+        gap: 3,
+      } satisfies ViewStyle,
+      childTimelineHeader: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 5,
+      } satisfies ViewStyle,
+      childTimelineList: {
+        gap: 2,
+      } satisfies ViewStyle,
+      childTimelineItem: {
+        alignItems: "center",
+        backgroundColor: theme.colors.surface2,
+        borderRadius: 4,
+        flexDirection: "row",
+        gap: 5,
+        minWidth: 0,
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+      } satisfies ViewStyle,
+      childTimelineItemTitle: {
+        color: theme.colors.foreground,
+        flexShrink: 0,
+        fontFamily: "monospace",
+        fontSize: 11,
+        fontWeight: "600",
+        lineHeight: 15,
+      } satisfies TextStyle,
+      childTimelineItemSummary: {
+        color: theme.colors.foregroundMuted,
+        flex: 1,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 10,
+        lineHeight: 14,
+        minWidth: 0,
+      } satisfies TextStyle,
+      childTimelineItemMeta: {
+        color: theme.colors.foregroundMuted,
+        flexShrink: 0,
+        fontFamily: "monospace",
+        fontSize: 10,
+        lineHeight: 14,
       } satisfies TextStyle,
       empty: {
         color: theme.colors.foregroundMuted,
@@ -942,12 +987,12 @@ function SubAgentProgress({
       {thinking ? (
         <View style={styles.subAgentLine}>
           <View style={styles.subAgentLineIcon}>
-            <Icon name="Brain" color={styles.subAgentLineSummary.color} size={15} />
+            <Icon name="Brain" color={styles.subAgentLineSummary.color} size={14} />
           </View>
-          <Text numberOfLines={2} style={styles.subAgentLineLabel}>
+          <Text numberOfLines={1} style={styles.subAgentLineLabel}>
             Thinking
           </Text>
-          <Text numberOfLines={2} style={styles.subAgentLineSummary}>
+          <Text numberOfLines={1} style={styles.subAgentLineSummary}>
             {thinking}
           </Text>
         </View>
@@ -958,13 +1003,13 @@ function SubAgentProgress({
         return (
           <View key={`${action.index}-${action.toolName}`} style={styles.subAgentAction}>
             <View style={styles.subAgentActionIcon}>
-              <Icon name={presentation.icon} color={styles.subAgentActionSummary.color} size={15} />
+              <Icon name={presentation.icon} color={styles.subAgentActionSummary.color} size={14} />
             </View>
             <Text numberOfLines={1} style={styles.subAgentActionLabel}>
               {presentation.label}
             </Text>
             {presentation.summaryIcon && action.summary ? (
-              <Icon name={presentation.summaryIcon} color={styles.subAgentActionSummary.color} size={15} />
+              <Icon name={presentation.summaryIcon} color={styles.subAgentActionSummary.color} size={14} />
             ) : null}
             {action.summary ? (
               <Text numberOfLines={1} style={styles.subAgentActionSummary}>
@@ -1201,15 +1246,15 @@ export function ColorfulToolCall({
   const styles = useActivityStyles(theme, palette);
   const isRunning = item.data.status === "running";
   const isLatest = useIsLatestToolCall(agentId, timestamp, isRunning);
+  const detail = asToolCallDetail(item.data.detail);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+  const categoryColor = palette.categoryColors[item.data.presentation.category];
+  const categoryBackground = palette.categoryBackgrounds[item.data.presentation.category];
+  const statusColor = palette.statusColors[item.data.status];
   const expanded = getActivityExpansionState(isRunning, isLatest, userExpanded);
   const toggle = useCallback(() => {
     if (!isRunning) setUserExpanded(!expanded);
   }, [expanded, isRunning]);
-  const categoryColor = palette.categoryColors[item.data.presentation.category];
-  const categoryBackground = palette.categoryBackgrounds[item.data.presentation.category];
-  const statusColor = palette.statusColors[item.data.status];
-  const detail = asToolCallDetail(item.data.detail);
   const subAgentDetail = detail?.type === "sub_agent" ? detail : null;
   return (
     <View style={styles.card}>

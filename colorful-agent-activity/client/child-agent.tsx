@@ -16,6 +16,7 @@ import {
 } from "../shared/presentation";
 
 const CHILD_TIMELINE_PAGE_SIZE = 100;
+const MAX_VISIBLE_CHILD_ACTIVITY_ENTRIES = 3;
 
 type TimelineEntry = Awaited<
   ReturnType<PaseoAgentHandle["timeline"]["refetch"]>
@@ -46,7 +47,7 @@ export function ChildAgentTimeline({
 }) {
   const state = useChildTimeline(agentId);
   const entries = useMemo(
-    () => recentChildTimelineEntries(state.entries),
+    () => recentChildTimelineEntries(state.entries).slice(-MAX_VISIBLE_CHILD_ACTIVITY_ENTRIES),
     [state.entries],
   );
   const statusColor = state.agent
@@ -54,8 +55,8 @@ export function ChildAgentTimeline({
     : palette.categoryColors.agent;
 
   return (
-    <View style={styles.section}>
-      <View style={styles.paseoListItemHeader}>
+    <View style={styles.childTimelineSection}>
+      <View style={styles.childTimelineHeader}>
         <Text style={styles.detailLabel}>Live child activity</Text>
         {state.agent?.status ? (
           <Text style={[styles.paseoListItemMeta, { color: statusColor }]}>
@@ -70,7 +71,7 @@ export function ChildAgentTimeline({
       ) : entries.length === 0 ? (
         <Text style={styles.empty}>No child activity yet.</Text>
       ) : (
-        <View style={styles.paseoList}>
+        <View style={styles.childTimelineList}>
           {entries.map((entry) => (
             <ChildTimelineRow
               key={childTimelineEntryKey(entry)}
@@ -169,21 +170,19 @@ function ChildTimelineRow({
 }) {
   const row = childTimelineRow(item, palette);
   return (
-    <View style={styles.paseoListItem}>
-      <View style={styles.paseoListItemHeader}>
-        <Icon name={row.icon} color={row.color} size={14} />
-        <Text numberOfLines={1} style={styles.paseoListItemTitle}>
-          {row.title}
-        </Text>
-        {row.status ? (
-          <Text style={[styles.paseoListItemMeta, { color: row.statusColor }]}>
-            {row.status}
-          </Text>
-        ) : null}
-      </View>
+    <View style={styles.childTimelineItem}>
+      <Icon name={row.icon} color={row.color} size={13} />
+      <Text numberOfLines={1} style={styles.childTimelineItemTitle}>
+        {row.title}
+      </Text>
       {row.summary ? (
-        <Text numberOfLines={2} style={styles.paseoListItemMeta}>
+        <Text numberOfLines={1} style={styles.childTimelineItemSummary}>
           {row.summary}
+        </Text>
+      ) : null}
+      {row.status ? (
+        <Text style={[styles.childTimelineItemMeta, { color: row.statusColor }]}>
+          {row.status}
         </Text>
       ) : null}
     </View>
