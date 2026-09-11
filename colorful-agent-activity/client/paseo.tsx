@@ -1,7 +1,7 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
-import React, { type ReactNode } from "react";
-import { Text, View, type TextStyle } from "react-native";
+import React, { useState, type ReactNode } from "react";
+import { Pressable, Text, View, type TextStyle } from "react-native";
 import { ChildAgentTimeline } from "./child-agent";
 import { isDarkSurface, useShikiTokens, type ShikiToken } from "./highlight";
 import type { ActivityStyles } from "./activity";
@@ -328,9 +328,21 @@ function PromptBlock({
   styles: ActivityStyles;
   compact?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   if (!text) return null;
-  const prompt = (
-    <Text numberOfLines={compact ? 2 : undefined} selectable style={styles.paseoPrompt}>
+  const prompt = compact ? (
+    <Pressable
+      accessibilityLabel={`${expanded ? "Collapse" : "Expand"} prompt: ${text}`}
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      onPress={() => setExpanded((current) => !current)}
+    >
+      <Text numberOfLines={expanded ? undefined : 2} selectable style={styles.paseoPrompt}>
+        {text}
+      </Text>
+    </Pressable>
+  ) : (
+    <Text selectable style={styles.paseoPrompt}>
       {text}
     </Text>
   );
