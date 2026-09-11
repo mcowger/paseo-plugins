@@ -43,6 +43,12 @@ export interface ToolCallPresentation {
   diffStats?: DiffStats;
 }
 
+export interface SubAgentActionPresentation {
+  icon: string;
+  label: string;
+  summaryIcon?: string;
+}
+
 export interface ActivityThemeColors {
   surface0: string;
   surface1: string;
@@ -604,7 +610,7 @@ export function resolveToolCallPresentation(
       return {
         category: "agent",
         icon: "Bot",
-        label: "Sub-agent",
+        label: "Agent Task",
         summary: detail.description
           ? compactText(detail.description)
           : compactText(detail.subAgentType ?? ""),
@@ -666,6 +672,46 @@ export function resolveToolCallPresentation(
       };
     }
   }
+}
+
+export function resolveSubAgentActionPresentation(
+  toolName: string,
+  summary?: string,
+): SubAgentActionPresentation {
+  const normalized = toolName.trim().toLowerCase().replace(/[\s.-]+/g, "_");
+  if (normalized === "read" || normalized.includes("read_file") || normalized.includes("readfile")) {
+    return { icon: "FileText", label: "Read File", summaryIcon: fileIconForPath(summary) };
+  }
+  if (
+    normalized === "glob" ||
+    normalized === "find" ||
+    normalized.includes("find_file") ||
+    normalized.includes("list_file")
+  ) {
+    return { icon: "Search", label: "Find Files" };
+  }
+  if (normalized === "grep" || normalized === "search" || normalized.includes("search")) {
+    return { icon: "Search", label: "Search" };
+  }
+  if (
+    normalized === "bash" ||
+    normalized === "sh" ||
+    normalized === "run" ||
+    normalized.includes("shell") ||
+    normalized.includes("command")
+  ) {
+    return { icon: "SquareTerminal", label: "Shell Command" };
+  }
+  if (normalized === "edit" || normalized.includes("edit_file") || normalized.includes("patch")) {
+    return { icon: "Pencil", label: "Edit File", summaryIcon: fileIconForPath(summary) };
+  }
+  if (normalized === "write" || normalized.includes("write_file") || normalized.includes("writefile")) {
+    return { icon: "Pencil", label: "Write File", summaryIcon: fileIconForPath(summary) };
+  }
+  if (normalized === "task" || normalized.includes("sub_agent") || normalized.includes("subagent")) {
+    return { icon: "Bot", label: "Agent Task" };
+  }
+  return { icon: "Wrench", label: toolName.trim() || "Tool" };
 }
 
 function parseHexColor(value: string): [number, number, number] | null {

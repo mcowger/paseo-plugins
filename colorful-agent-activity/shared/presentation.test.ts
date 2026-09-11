@@ -14,6 +14,7 @@ import {
   paseoToolResult,
   unwrapPaseoToolOutput,
   resolveActivityPalette,
+  resolveSubAgentActionPresentation,
   resolveToolCallPresentation,
 } from "./presentation";
 
@@ -92,6 +93,22 @@ describe("colorful activity presentation", () => {
       icon: "SquareTerminal",
       label: "Shell Command",
       summary: "bun run typecheck && bun test",
+    });
+  });
+
+  it("maps sub-agent actions to readable inline progress rows", () => {
+    expect(resolveSubAgentActionPresentation("read", "README.md")).toEqual({
+      icon: "FileText",
+      label: "Read File",
+      summaryIcon: "FileText",
+    });
+    expect(resolveSubAgentActionPresentation("find_files")).toEqual({
+      icon: "Search",
+      label: "Find Files",
+    });
+    expect(resolveSubAgentActionPresentation("shell", "git status")).toEqual({
+      icon: "SquareTerminal",
+      label: "Shell Command",
     });
   });
 

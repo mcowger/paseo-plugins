@@ -30,6 +30,7 @@ import {
   formatUnknownValue,
   paseoToolLeafName,
   resolveActivityPalette,
+  resolveSubAgentActionPresentation,
   type ActivityPalette,
   type ActivityThemeColors,
   type DiffLine,
@@ -48,6 +49,7 @@ import {
 } from "../shared/timeline";
 
 const MAX_DETAIL_HEIGHT = 420;
+const MAX_VISIBLE_SUBAGENT_ACTIONS = 6;
 
 type Theme = PluginTimelineItemProps["theme"];
 type ReasoningData = z.output<typeof reasoningItemDataSchema>;
@@ -346,6 +348,78 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       reasoningSpacer: {
         height: 4,
       } satisfies ViewStyle,
+      subAgentProgress: {
+        borderLeftColor: theme.colors.border,
+        borderLeftWidth: 1,
+        gap: 5,
+        marginLeft: 20,
+        paddingBottom: 8,
+        paddingLeft: 14,
+        paddingTop: 4,
+      } satisfies ViewStyle,
+      subAgentLine: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 8,
+        minWidth: 0,
+      } satisfies ViewStyle,
+      subAgentLineIcon: {
+        alignItems: "center",
+        justifyContent: "center",
+        width: 16,
+      } satisfies ViewStyle,
+      subAgentLineLabel: {
+        color: theme.colors.foreground,
+        flexShrink: 0,
+        fontFamily: "monospace",
+        fontSize: 13,
+        fontWeight: "600",
+        lineHeight: 20,
+      } satisfies TextStyle,
+      subAgentLineSummary: {
+        color: theme.colors.foregroundMuted,
+        flex: 1,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 13,
+        lineHeight: 20,
+        minWidth: 0,
+      } satisfies TextStyle,
+      subAgentMore: {
+        color: theme.colors.foregroundMuted,
+        fontFamily: "monospace",
+        fontSize: 13,
+        lineHeight: 20,
+        paddingLeft: 24,
+      } satisfies TextStyle,
+      subAgentAction: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 8,
+        minWidth: 0,
+        paddingLeft: 24,
+      } satisfies ViewStyle,
+      subAgentActionIcon: {
+        alignItems: "center",
+        justifyContent: "center",
+        width: 16,
+      } satisfies ViewStyle,
+      subAgentActionLabel: {
+        color: theme.colors.foreground,
+        flexShrink: 0,
+        fontFamily: "monospace",
+        fontSize: 13,
+        lineHeight: 20,
+      } satisfies TextStyle,
+      subAgentActionSummary: {
+        color: theme.colors.foregroundMuted,
+        flex: 1,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 13,
+        lineHeight: 20,
+        minWidth: 0,
+      } satisfies TextStyle,
       empty: {
         color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
@@ -782,11 +856,6 @@ function DetailBody({
           {detail.subAgentType ? <Text style={styles.detailText}>{detail.subAgentType}</Text> : null}
           {detail.description ? <Text style={styles.mutedText}>{detail.description}</Text> : null}
           {detail.childSessionId ? <Text style={styles.mutedText}>Session {detail.childSessionId}</Text> : null}
-          {detail.actions?.map((action) => (
-            <Text key={`${action.index}-${action.toolName}`} style={styles.detailText}>
-              [{action.toolName}] {action.summary ?? ""}
-            </Text>
-          ))}
           {detail.log ? <ShikiCodeBlock code={detail.log} language="ansi" label="Activity log" styles={styles} theme={theme} /> : null}
         </>
       );
@@ -850,6 +919,62 @@ function DetailBody({
       );
     }
   }
+}
+
+function SubAgentProgress({
+  detail,
+  styles,
+}: {
+  detail: Extract<ToolCallDetail, { type: "sub_agent" }>;
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  const actions = useMemo(
+    () => [...(detail.actions ?? [])].sort((left, right) => left.index - right.index),
+    [detail.actions],
+  );
+  const hiddenActionCount = Math.max(0, actions.length - MAX_VISIBLE_SUBAGENT_ACTIONS);
+  const visibleActions = actions.slice(hiddenActionCount);
+  const thinking = detail.log?.replace(/\s+/g, " ").trim();
+
+  return (
+    <View style={styles.subAgentProgress}>
+      {thinking ? (
+        <View style={styles.subAgentLine}>
+          <View style={styles.subAgentLineIcon}>
+            <Icon name="Brain" color={styles.subAgentLineSummary.color} size={15} />
+          </View>
+          <Text numberOfLines={2} style={styles.subAgentLineLabel}>
+            Thinking
+          </Text>
+          <Text numberOfLines={2} style={styles.subAgentLineSummary}>
+            {thinking}
+          </Text>
+        </View>
+      ) : null}
+      {hiddenActionCount > 0 ? <Text style={styles.subAgentMore}>+{hiddenActionCount} more…</Text> : null}
+      {visibleActions.map((action) => {
+        const presentation = resolveSubAgentActionPresentation(action.toolName, action.summary);
+        return (
+          <View key={`${action.index}-${action.toolName}`} style={styles.subAgentAction}>
+            <View style={styles.subAgentActionIcon}>
+              <Icon name={presentation.icon} color={styles.subAgentActionSummary.color} size={15} />
+            </View>
+            <Text numberOfLines={1} style={styles.subAgentActionLabel}>
+              {presentation.label}
+            </Text>
+            {presentation.summaryIcon && action.summary ? (
+              <Icon name={presentation.summaryIcon} color={styles.subAgentActionSummary.color} size={15} />
+            ) : null}
+            {action.summary ? (
+              <Text numberOfLines={1} style={styles.subAgentActionSummary}>
+                {action.summary}
+              </Text>
+            ) : null}
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 function renderInlineReasoning(text: string, styles: ReturnType<typeof useActivityStyles>): ReactNode[] {
@@ -1083,6 +1208,8 @@ export function ColorfulToolCall({
   const categoryColor = palette.categoryColors[item.data.presentation.category];
   const categoryBackground = palette.categoryBackgrounds[item.data.presentation.category];
   const statusColor = palette.statusColors[item.data.status];
+  const detail = asToolCallDetail(item.data.detail);
+  const subAgentDetail = detail?.type === "sub_agent" ? detail : null;
   return (
     <View style={styles.card}>
       <ActivityHeader
@@ -1098,6 +1225,7 @@ export function ColorfulToolCall({
         onPress={toggle}
         styles={styles}
       />
+      {subAgentDetail ? <SubAgentProgress detail={subAgentDetail} styles={styles} /> : null}
       {expanded ? (
         <View style={styles.details}>
           <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} nestedScrollEnabled showsVerticalScrollIndicator>
