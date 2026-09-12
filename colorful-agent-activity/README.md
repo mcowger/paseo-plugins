@@ -29,6 +29,20 @@ Paseo tool calls use purpose-built detail views for prompts, configuration, resu
 
 ![Paseo create-agent card](./images/paseo-create-agent.png)
 
+### Native mobile (iOS)
+
+Timeline with active thinking and tool activity:
+
+![Mobile activity timeline](./images/mobile-activity-timeline.png)
+
+Expanded shell command with formatted output:
+
+![Mobile shell command output](./images/mobile-shell-output.png)
+
+File edit with colored line diff:
+
+![Mobile file diff](./images/mobile-diff-view.png)
+
 ## Features
 
 - Works on desktop, web, and native mobile (iOS and Android Hermes runtime).
