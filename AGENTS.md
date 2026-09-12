@@ -53,6 +53,8 @@ The current target host and SDK baseline is **Paseo v0.8.0**. Pin `@getpaseo/cli
     (`window`, `document`, `localStorage`) are type errors by default.
   - Sanctioned web-only APIs belong exclusively in `client/web.ts`, declaring only used globals, gated by
     `Platform.OS === "web"`, and providing a native fallback or no-op.
+  - Client bundles run on Hermes in native iOS/Android. Avoid ES6 classes, browser DOM utilities, and
+    heavy AST libraries in client modules; see [Mobile and Hermes runtime compatibility](#mobile-and-hermes-runtime-compatibility).
 - Validate RPC inputs and outputs with Zod, keep secrets server-side, and never log credentials.
 - Use lowercase IDs containing only letters, numbers, and hyphens (starting with a lowercase letter).
 
@@ -148,6 +150,46 @@ Patterns observed across Paseo plugins:
     (payload capped at 64 KiB; advertised via `server_info.features.pluginTimelineItems`).
 - Theme plugins: use static `client.addTheme` registrations in `index.client.tsx` with hex color palettes.
   Paseo expands palettes through semantic builders covering surfaces, status, diffs, syntax, and terminals.
+
+## Mobile and Hermes runtime compatibility
+
+Paseo runs on desktop/web (V8/Chromium) and native mobile (iOS and Android via Hermes in React Native). Plugin client bundles must execute in both runtimes.
+
+### Evaluation model on mobile
+
+- App code is bundled ahead of time with Metro and Babel, lowering modern syntax to ES5.
+- Plugin client bundles bypass Metro. The Paseo daemon compiles `index.client.tsx` on the fly with `esbuild` (`es2020` target, no Babel lowering pass) and sends the bundle string over the WebSocket to the app.
+- The mobile app runs the bundle directly via `globalThis.eval(bundle)`.
+- If evaluation throws, `PluginRegistry.installCatalog` catches the exception and drops the plugin for that session. The plugin shows as Failed under **Settings → Plugins** with the evaluation error message.
+
+### Hermes restrictions and client dependencies
+
+- **Dynamic `eval()` and class syntax in Hermes:** Paseo mobile runs Hermes as configured by React Native. Unlike the main app bundle (which Babel transpiles ahead of time), plugin client bundles are evaluated dynamically via `eval()`. Under this evaluation mode, certain ES6 class patterns have known runtime failures:
+  - Anonymous class expressions assigned to variables (`var Schema = class {}; Schema.prototype.prop = ...`) can evaluate the variable as `undefined` before prototype assignment, throwing:
+    ```text
+    TypeError: Cannot read property 'prototype' of undefined
+    ```
+  - Certain class declarations and inheritance patterns can also trigger `SyntaxError: invalid statement encountered` depending on the Hermes runtime flags configured by the host build.
+  - Writing client plugin code with plain functions, closures, and object literals avoids these runtime evaluation pitfalls. Prefer functions and plain objects in client modules.
+- **Audit client dependencies:** Any npm package bundled into `client/` or `shared/` runs through `eval()` on Hermes. Packages that pass in Node or browser tests can crash Hermes immediately during evaluation.
+  - Packages with known mobile eval failures:
+    - `@shikijs/*`: pulls in `property-information`, Unified/HAST AST utilities, and class expressions that trigger the prototype TypeError.
+    - `highlight.js` (v11+): uses class declarations (`class MultiRegex`, `class TokenTree`) that can fail parsing on Hermes.
+    - `diff`: pulls in unnecessary class/prototype chains and adds bundle bloat.
+  - Safe alternatives:
+    - `prismjs`: modular imports (`prismjs/components/prism-core` plus specific language grammars like `prismjs/components/prism-typescript`) use pure ES5 functions and prototype objects without classes.
+    - Native protocol diffs: use Paseo's `ToolCallDetail.unifiedDiff` directly instead of running a diff engine in the client. If fallback diffing is needed when `unifiedDiff` is absent, use a compact functional line diff.
+- **Keep client bundles small:** Aim for under 300 KB. Mobile devices must download, parse, and evaluate the full bundle string over WebSocket. Large bundles hurt startup time and can cause `esbuild` to rename loop variables (e.g. `key` to `key2`), breaking the daemon compiler's `makeHermesInteropEager` export fix.
+
+### Verifying mobile compatibility
+
+`npm test`, `npm run lint`, and `npm run typecheck` run on Node (V8) and do not verify Hermes behavior.
+- Check the compiled client bundle for `class ` or `.prototype` assignments to class variables before release.
+- If React Native's Hermes compiler (`hermesc`) is available locally, verify bytecode compilation:
+  ```bash
+  hermesc -emit-binary -out /dev/null <bundle.js>
+  ```
+- Verify the plugin loads on a connected mobile app under **Settings → Plugins** with no evaluation error.
 
 ## Security, portability, and verification
 
