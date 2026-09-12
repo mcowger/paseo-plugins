@@ -23,9 +23,9 @@ const paletteOptions = [
 ];
 
 const paletteDescriptions = {
-  vivid: "Strong category colors and tinted card backgrounds.",
-  soft: "Muted accents with quieter card backgrounds.",
-  high_contrast: "Stronger borders and status colors for easier scanning.",
+  vivid: "Restrained category accents with neutral activity rows.",
+  soft: "Mostly neutral icons with color reserved for status.",
+  high_contrast: "Stronger dividers and status colors for easier scanning.",
 } as const;
 
 function ReadyControls({ settings, theme }: { settings: ReadySettings; theme: PluginSurfaceProps["theme"] }) {

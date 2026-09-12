@@ -207,7 +207,7 @@ describe("colorful activity presentation", () => {
   it("derives palette colors from Paseo theme tokens", () => {
     const palette = resolveActivityPalette("high_contrast", colors);
     expect(palette.categoryColors.shell).toBe(colors.statusWarning);
-    expect(palette.categoryColors.reasoning).toBe(colors.accent);
+    expect(palette.categoryColors.reasoning).toBe(colors.foregroundMuted);
     expect(palette.statusColors.failed).toBe(colors.statusDanger);
     expect(palette.borderWidth).toBe(2);
   });

@@ -171,7 +171,7 @@ function ChildTimelineRow({
   const row = childTimelineRow(item, palette);
   return (
     <View style={styles.childTimelineItem}>
-      <Icon name={row.icon} color={row.color} size={13} />
+      <Icon name={row.icon} color={row.color} size={11} />
       <Text numberOfLines={1} style={styles.childTimelineItemTitle}>
         {row.title}
       </Text>

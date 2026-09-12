@@ -183,7 +183,7 @@ function CodeResultList({ items, styles }: { items: unknown[]; styles: ActivityS
               <Text selectable numberOfLines={1} style={styles.paseoListItemTitle}>
                 {fieldString(result, "path", "name") ?? "Code result"}
               </Text>
-              <Icon name="Code2" color={styles.paseoListItemTitle.color} size={14} />
+              <Icon name="Code2" color={styles.paseoListItemTitle.color} size={12} />
             </View>
             <Text style={styles.paseoListItemMeta}>
               {fieldString(repository, "full_name", "fullName", "name") ??

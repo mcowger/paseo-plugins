@@ -147,7 +147,7 @@ export function StatusPill({
 }) {
   const color = statusColor(value, palette);
   return (
-    <View style={[styles.paseoStatus, { backgroundColor: `${color}2e` }]}>
+    <View style={styles.paseoStatus}>
       <Text style={[styles.paseoStatusText, { color }]}>{value}</Text>
     </View>
   );
@@ -287,10 +287,10 @@ export function PaseoHero({
   styles: ActivityStyles;
 }) {
   return (
-    <View style={[styles.paseoHero, { backgroundColor: `${color}24` }]}>
+    <View style={[styles.paseoHero, { borderLeftColor: color }]}>
       <View style={styles.paseoHeroRow}>
-        <View style={[styles.paseoHeroIcon, { backgroundColor: `${color}38` }]}>
-          <Icon name={icon} color={color} size={16} />
+        <View style={styles.paseoHeroIcon}>
+          <Icon name={icon} color={color} size={12} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.paseoHeroTitle}>{title}</Text>
@@ -519,13 +519,7 @@ function AgentSnapshot({
             {Object.entries(capabilities)
               .filter(([, value]) => value === true)
               .map(([key]) => (
-                <View
-                  key={key}
-                  style={[
-                    styles.paseoChip,
-                    { backgroundColor: palette.categoryBackgrounds.agent },
-                  ]}
-                >
+                <View key={key} style={styles.paseoChip}>
                   <Text style={styles.paseoChipText}>{humanizeKey(key)}</Text>
                 </View>
               ))}
@@ -1258,7 +1252,7 @@ function TerminalList({
                 <Icon
                   name="SquareTerminal"
                   color={palette.categoryColors.shell}
-                  size={14}
+                  size={12}
                 />
               </View>
               <Text numberOfLines={2} style={styles.paseoListItemMeta}>

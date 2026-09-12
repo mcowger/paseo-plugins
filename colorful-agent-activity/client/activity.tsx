@@ -50,7 +50,7 @@ import {
 } from "../shared/timeline";
 
 const MAX_DETAIL_HEIGHT = 420;
-const MAX_VISIBLE_SUBAGENT_ACTIONS = 2;
+const MAX_VISIBLE_SUBAGENT_ACTIONS = 5;
 
 type Theme = PluginTimelineItemProps["theme"];
 type ReasoningData = z.output<typeof reasoningItemDataSchema>;
@@ -126,79 +126,73 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
   return useMemo(
     () => ({
       card: {
-        marginHorizontal: -13,
-        marginVertical: 2,
+        marginHorizontal: 0,
+        marginVertical: -3,
       } satisfies ViewStyle,
       headerButton: {
         alignItems: "center",
-        borderRadius: 8,
+        borderRadius: 2,
         flexDirection: "row",
-        gap: 7,
+        gap: 5,
         minWidth: 0,
         outlineColor: "transparent",
         outlineStyle: "none" as unknown as ViewStyle["outlineStyle"],
         outlineWidth: 0,
         overflow: "hidden",
-        paddingHorizontal: 9,
-        paddingVertical: 5,
-      } satisfies ViewStyle,
-      headerButtonActive: {
-        borderBottomLeftRadius: 0,
-        borderBottomRightRadius: 0,
+        paddingHorizontal: 5,
+        paddingVertical: 2,
       } satisfies ViewStyle,
       iconBadge: {
         alignItems: "center",
-        borderRadius: 10,
-        height: 20,
+        height: 16,
         justifyContent: "center",
-        width: 20,
+        width: 16,
       } satisfies ViewStyle,
       title: {
         color: theme.colors.foreground,
         flexShrink: 0,
         fontFamily: "monospace",
-        fontSize: 13,
+        fontSize: 12,
         fontWeight: "600",
-        lineHeight: 20,
+        lineHeight: 17,
       } satisfies TextStyle,
       summary: {
         color: theme.colors.foregroundMuted,
         flex: 1,
         flexShrink: 1,
         fontFamily: "monospace",
-        fontSize: 13,
-        lineHeight: 20,
+        fontSize: 12,
+        lineHeight: 17,
         minWidth: 0,
       } satisfies TextStyle,
       status: {
         alignItems: "center",
         flexDirection: "row",
-        gap: 5,
-        marginLeft: 3,
+        marginLeft: 2,
       } satisfies ViewStyle,
       stats: {
         alignItems: "center",
         flexDirection: "row",
         gap: 3,
-        marginLeft: 3,
+        marginLeft: 2,
       } satisfies ViewStyle,
       additions: {
         color: theme.colors.statusSuccess,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: 10,
+        lineHeight: 15,
       } satisfies TextStyle,
       deletions: {
         color: theme.colors.statusDanger,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: 10,
+        lineHeight: 15,
       } satisfies TextStyle,
       details: {
-        backgroundColor: theme.colors.surface1,
-        borderBottomLeftRadius: 8,
-        borderBottomRightRadius: 8,
+        borderLeftColor: theme.colors.border,
+        borderLeftWidth: 1,
         flexShrink: 1,
+        marginLeft: 12,
         minWidth: 0,
         overflow: "hidden",
       } satisfies ViewStyle,
@@ -206,54 +200,55 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         maxHeight: MAX_DETAIL_HEIGHT,
       } satisfies ViewStyle,
       detailsContent: {
-        gap: 10,
-        padding: 10,
+        gap: 6,
+        paddingHorizontal: 7,
+        paddingVertical: 5,
       } satisfies ViewStyle,
       detailLabel: {
         color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
-        fontSize: 11,
-        fontWeight: "600",
-        letterSpacing: 0.5,
-        lineHeight: 16,
+        fontSize: 10,
+        fontWeight: "500",
+        letterSpacing: 0.35,
+        lineHeight: 14,
         textTransform: "uppercase",
       } satisfies TextStyle,
       detailText: {
         color: theme.colors.foreground,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: 11,
+        lineHeight: 16,
       } satisfies TextStyle,
       mutedText: {
         color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: 11,
+        lineHeight: 16,
       } satisfies TextStyle,
       pathRow: {
         alignItems: "center",
         flexDirection: "row",
-        gap: 7,
+        gap: 5,
         minWidth: 0,
       } satisfies ViewStyle,
       pathText: {
         color: theme.colors.foreground,
         flex: 1,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: 11,
+        lineHeight: 16,
       } satisfies TextStyle,
       section: {
-        gap: 5,
+        gap: 3,
       } satisfies ViewStyle,
       codeSurface: {
-        backgroundColor: theme.colors.surface2,
+        backgroundColor: theme.colors.surface0,
         borderColor: theme.colors.border,
-        borderRadius: 6,
+        borderRadius: 2,
         borderWidth: 1,
         minWidth: "100%",
-        paddingHorizontal: 9,
-        paddingVertical: 8,
+        paddingHorizontal: 6,
+        paddingVertical: 4,
       } satisfies ViewStyle,
       codeScroll: {
         maxWidth: "100%",
@@ -261,35 +256,35 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       codeLine: {
         color: theme.colors.foreground,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
-        minHeight: 18,
+        fontSize: 11,
+        lineHeight: 16,
+        minHeight: 16,
       } satisfies TextStyle,
       diffSurface: {
-        backgroundColor: theme.colors.surface2,
+        backgroundColor: theme.colors.surface0,
         borderColor: theme.colors.border,
-        borderRadius: 6,
+        borderRadius: 2,
         borderWidth: 1,
         minWidth: "100%",
         overflow: "hidden",
-        paddingVertical: 4,
+        paddingVertical: 2,
       } satisfies ViewStyle,
       diffLine: {
         flexDirection: "row",
-        minHeight: 18,
-        paddingHorizontal: 8,
+        minHeight: 16,
+        paddingHorizontal: 5,
       } satisfies ViewStyle,
       diffMarker: {
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
-        width: 14,
+        fontSize: 11,
+        lineHeight: 16,
+        width: 12,
       } satisfies TextStyle,
       diffText: {
         flexShrink: 0,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: 11,
+        lineHeight: 16,
       } satisfies TextStyle,
       diffAdded: {
         backgroundColor: palette.categoryBackgrounds.agent,
@@ -301,29 +296,29 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         backgroundColor: palette.categoryBackgrounds.search,
       } satisfies ViewStyle,
       reasoningBody: {
-        gap: 6,
-        paddingHorizontal: 11,
-        paddingVertical: 10,
+        gap: 3,
+        paddingHorizontal: 7,
+        paddingVertical: 5,
       } satisfies ViewStyle,
       reasoningLine: {
         color: theme.colors.foreground,
         fontFamily: "monospace",
-        fontSize: 13,
-        lineHeight: 20,
+        fontSize: 12,
+        lineHeight: 17,
       } satisfies TextStyle,
       reasoningHeading: {
         color: theme.colors.foreground,
         fontFamily: "monospace",
-        fontSize: 14,
-        fontWeight: "700",
-        lineHeight: 21,
+        fontSize: 12,
+        fontWeight: "600",
+        lineHeight: 17,
       } satisfies TextStyle,
       reasoningBullet: {
-        color: theme.colors.accent,
+        color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
-        fontSize: 13,
-        lineHeight: 20,
-        width: 20,
+        fontSize: 12,
+        lineHeight: 17,
+        width: 14,
       } satisfies TextStyle,
       reasoningBulletRow: {
         alignItems: "flex-start",
@@ -331,32 +326,32 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         gap: 4,
       } satisfies ViewStyle,
       reasoningQuote: {
-        borderLeftColor: theme.colors.accent,
-        borderLeftWidth: 2,
+        borderLeftColor: theme.colors.border,
+        borderLeftWidth: 1,
         color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
-        fontSize: 13,
-        lineHeight: 20,
-        paddingLeft: 8,
+        fontSize: 12,
+        lineHeight: 17,
+        paddingLeft: 6,
       } satisfies TextStyle,
       reasoningInlineCode: {
         backgroundColor: theme.colors.surface2,
         color: theme.colors.foreground,
         fontFamily: "monospace",
-        fontSize: 12,
-        paddingHorizontal: 3,
+        fontSize: 11,
+        paddingHorizontal: 2,
       } satisfies TextStyle,
       reasoningSpacer: {
-        height: 4,
+        height: 2,
       } satisfies ViewStyle,
       subAgentProgress: {
         borderLeftColor: theme.colors.border,
         borderLeftWidth: 1,
-        gap: 2,
-        marginLeft: 20,
-        paddingBottom: 4,
-        paddingLeft: 8,
-        paddingTop: 2,
+        gap: 1,
+        marginLeft: 12,
+        paddingBottom: 2,
+        paddingLeft: 7,
+        paddingTop: 1,
       } satisfies ViewStyle,
       subAgentLine: {
         alignItems: "center",
@@ -422,7 +417,7 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         minWidth: 0,
       } satisfies TextStyle,
       childTimelineSection: {
-        gap: 3,
+        gap: 2,
       } satisfies ViewStyle,
       childTimelineHeader: {
         alignItems: "center",
@@ -430,24 +425,25 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         gap: 5,
       } satisfies ViewStyle,
       childTimelineList: {
-        gap: 2,
+        borderLeftColor: theme.colors.border,
+        borderLeftWidth: 1,
+        gap: 1,
+        marginLeft: 7,
+        paddingLeft: 7,
       } satisfies ViewStyle,
       childTimelineItem: {
         alignItems: "center",
-        backgroundColor: theme.colors.surface2,
-        borderRadius: 4,
         flexDirection: "row",
         gap: 5,
         minWidth: 0,
-        paddingHorizontal: 6,
-        paddingVertical: 3,
+        paddingVertical: 1,
       } satisfies ViewStyle,
       childTimelineItemTitle: {
         color: theme.colors.foreground,
         flexShrink: 0,
         fontFamily: "monospace",
         fontSize: 11,
-        fontWeight: "600",
+        fontWeight: "500",
         lineHeight: 15,
       } satisfies TextStyle,
       childTimelineItemSummary: {
@@ -469,89 +465,90 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       empty: {
         color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: 11,
+        lineHeight: 16,
       } satisfies TextStyle,
       paseoStack: {
-        gap: 10,
+        gap: 6,
       } satisfies ViewStyle,
       paseoHero: {
-        borderRadius: 8,
-        gap: 7,
-        padding: 10,
+        borderLeftColor: theme.colors.border,
+        borderLeftWidth: 2,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
       } satisfies ViewStyle,
       paseoHeroRow: {
         alignItems: "center",
         flexDirection: "row",
-        gap: 8,
+        gap: 6,
       } satisfies ViewStyle,
       paseoHeroIcon: {
         alignItems: "center",
-        borderRadius: 8,
-        height: 28,
+        height: 16,
         justifyContent: "center",
-        width: 28,
+        width: 16,
       } satisfies ViewStyle,
       paseoHeroTitle: {
         color: theme.colors.foreground,
         flexShrink: 1,
         fontFamily: "monospace",
-        fontSize: 13,
-        fontWeight: "700",
-        lineHeight: 19,
+        fontSize: 11,
+        fontWeight: "600",
+        lineHeight: 16,
       } satisfies TextStyle,
       paseoHeroSubtitle: {
         color: theme.colors.foregroundMuted,
         flexShrink: 1,
         fontFamily: "monospace",
-        fontSize: 11,
-        lineHeight: 16,
+        fontSize: 10,
+        lineHeight: 14,
       } satisfies TextStyle,
       paseoRows: {
-        gap: 5,
+        gap: 2,
       } satisfies ViewStyle,
       paseoRow: {
         alignItems: "flex-start",
         flexDirection: "row",
-        gap: 10,
+        gap: 8,
         minWidth: 0,
       } satisfies ViewStyle,
       paseoKey: {
         color: theme.colors.foregroundMuted,
         flexShrink: 0,
         fontFamily: "monospace",
-        fontSize: 11,
-        lineHeight: 18,
-        minWidth: 105,
+        fontSize: 10,
+        lineHeight: 15,
+        minWidth: 90,
       } satisfies TextStyle,
       paseoValue: {
         color: theme.colors.foreground,
         flex: 1,
         flexShrink: 1,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: 11,
+        lineHeight: 15,
         minWidth: 0,
       } satisfies TextStyle,
       paseoPrompt: {
-        backgroundColor: theme.colors.surface2,
-        borderRadius: 6,
+        backgroundColor: theme.colors.surface0,
+        borderLeftColor: theme.colors.border,
+        borderLeftWidth: 1,
         color: theme.colors.foreground,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
-        paddingHorizontal: 9,
-        paddingVertical: 8,
+        fontSize: 11,
+        lineHeight: 16,
+        paddingHorizontal: 6,
+        paddingVertical: 4,
       } satisfies TextStyle,
       paseoList: {
-        gap: 6,
+        gap: 0,
       } satisfies ViewStyle,
       paseoListItem: {
-        backgroundColor: theme.colors.surface2,
-        borderRadius: 6,
-        gap: 3,
-        paddingHorizontal: 9,
-        paddingVertical: 7,
+        borderTopColor: theme.colors.border,
+        borderTopWidth: 1,
+        gap: 1,
+        paddingHorizontal: 5,
+        paddingVertical: 3,
       } satisfies ViewStyle,
       paseoListItemHeader: {
         alignItems: "center",
@@ -564,16 +561,16 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         flex: 1,
         flexShrink: 1,
         fontFamily: "monospace",
-        fontSize: 12,
-        fontWeight: "600",
-        lineHeight: 18,
+        fontSize: 11,
+        fontWeight: "500",
+        lineHeight: 15,
         minWidth: 0,
       } satisfies TextStyle,
       paseoListItemMeta: {
         color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
-        fontSize: 11,
-        lineHeight: 16,
+        fontSize: 10,
+        lineHeight: 14,
       } satisfies TextStyle,
       paseoChips: {
         flexDirection: "row",
@@ -581,29 +578,27 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         gap: 5,
       } satisfies ViewStyle,
       paseoChip: {
-        borderRadius: 5,
-        paddingHorizontal: 6,
-        paddingVertical: 3,
+        borderColor: theme.colors.border,
+        borderRadius: 2,
+        borderWidth: 1,
+        paddingHorizontal: 4,
+        paddingVertical: 1,
       } satisfies ViewStyle,
       paseoChipText: {
-        color: theme.colors.foreground,
+        color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
-        fontSize: 11,
-        lineHeight: 15,
+        fontSize: 10,
+        lineHeight: 14,
       } satisfies TextStyle,
       paseoStatus: {
         alignSelf: "flex-start",
-        borderRadius: 5,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
       } satisfies ViewStyle,
       paseoStatusText: {
         color: theme.colors.foreground,
         fontFamily: "monospace",
         fontSize: 10,
-        fontWeight: "700",
-        lineHeight: 15,
-        textTransform: "uppercase",
+        fontWeight: "500",
+        lineHeight: 14,
       } satisfies TextStyle,
     }),
     [palette, theme],
@@ -647,7 +642,7 @@ function PathRow({
 }) {
   return (
     <View style={styles.pathRow}>
-      <Icon name={icon} color={styles.pathText.color} size={15} />
+      <Icon name={icon} color={styles.pathText.color} size={12} />
       <Text selectable style={styles.pathText}>
         {path}
       </Text>
@@ -987,7 +982,7 @@ function SubAgentProgress({
       {thinking ? (
         <View style={styles.subAgentLine}>
           <View style={styles.subAgentLineIcon}>
-            <Icon name="Brain" color={styles.subAgentLineSummary.color} size={14} />
+            <Icon name="Brain" color={styles.subAgentLineSummary.color} size={11} />
           </View>
           <Text numberOfLines={1} style={styles.subAgentLineLabel}>
             Thinking
@@ -1003,13 +998,13 @@ function SubAgentProgress({
         return (
           <View key={`${action.index}-${action.toolName}`} style={styles.subAgentAction}>
             <View style={styles.subAgentActionIcon}>
-              <Icon name={presentation.icon} color={styles.subAgentActionSummary.color} size={14} />
+              <Icon name={presentation.icon} color={styles.subAgentActionSummary.color} size={11} />
             </View>
             <Text numberOfLines={1} style={styles.subAgentActionLabel}>
               {presentation.label}
             </Text>
             {presentation.summaryIcon && action.summary ? (
-              <Icon name={presentation.summaryIcon} color={styles.subAgentActionSummary.color} size={14} />
+              <Icon name={presentation.summaryIcon} color={styles.subAgentActionSummary.color} size={11} />
             ) : null}
             {action.summary ? (
               <Text numberOfLines={1} style={styles.subAgentActionSummary}>
@@ -1151,7 +1146,6 @@ function ReasoningText({
 function ActivityHeader({
   icon,
   iconColor,
-  iconBackground,
   title,
   summary,
   status,
@@ -1163,7 +1157,6 @@ function ActivityHeader({
 }: {
   icon: string;
   iconColor: string;
-  iconBackground: string;
   title: string;
   summary?: string;
   status?: ToolCallData["status"];
@@ -1178,10 +1171,10 @@ function ActivityHeader({
       accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${title}`}
       accessibilityRole="button"
       onPress={onPress}
-      style={[styles.headerButton, { backgroundColor: iconBackground }, expanded && styles.headerButtonActive]}
+      style={styles.headerButton}
     >
-      <View style={[styles.iconBadge, { backgroundColor: iconBackground }]}>
-        <Icon name={icon} color={iconColor} size={14} />
+      <View style={styles.iconBadge}>
+        <Icon name={icon} color={iconColor} size={12} />
       </View>
       <Text numberOfLines={1} style={styles.title}>{title}</Text>
       {summary ? <Text numberOfLines={1} style={styles.summary}>{summary}</Text> : null}
@@ -1193,10 +1186,10 @@ function ActivityHeader({
       ) : null}
       {status ? (
         <View style={styles.status}>
-          <Icon name={statusIcon(status)} color={statusColor ?? styles.title.color} size={14} />
+          <Icon name={statusIcon(status)} color={statusColor ?? styles.title.color} size={12} />
         </View>
       ) : null}
-      <Icon name={expanded ? "ChevronDown" : "ChevronRight"} color={styles.summary.color} size={15} />
+      <Icon name={expanded ? "ChevronDown" : "ChevronRight"} color={styles.summary.color} size={12} />
     </Pressable>
   );
 }
@@ -1221,8 +1214,7 @@ export function ColorfulReasoning({
       <ActivityHeader
         icon="Sparkles"
         iconColor={palette.categoryColors.reasoning}
-        iconBackground={palette.categoryBackgrounds.reasoning}
-        title="Thought Process"
+        title="Thinking"
         expanded={expanded}
         onPress={toggle}
         styles={styles}
@@ -1249,7 +1241,6 @@ export function ColorfulToolCall({
   const detail = asToolCallDetail(item.data.detail);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const categoryColor = palette.categoryColors[item.data.presentation.category];
-  const categoryBackground = palette.categoryBackgrounds[item.data.presentation.category];
   const statusColor = palette.statusColors[item.data.status];
   const expanded = getActivityExpansionState(isRunning, isLatest, userExpanded);
   const toggle = useCallback(() => {
@@ -1261,7 +1252,6 @@ export function ColorfulToolCall({
       <ActivityHeader
         icon={item.data.presentation.icon}
         iconColor={categoryColor}
-        iconBackground={categoryBackground}
         title={item.data.presentation.label}
         summary={item.data.presentation.summary}
         status={item.data.status}

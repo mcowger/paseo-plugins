@@ -1,8 +1,8 @@
 # Colorful agent activity
 
-Colorful agent activity replaces Paseo's public reasoning and agent tool-call rows with compact,
-icon-led cards. It keeps the latest thinking block and latest tool call open, shows useful details on
-demand, and uses Shiki for shell and code output.
+Colorful agent activity replaces Paseo's public reasoning and agent tool-call rows with dense,
+IDE-style activity rows. It keeps the latest thinking block and latest tool call open, shows useful
+details on demand, and uses Shiki for shell and code output.
 
 Requires Paseo `>=0.8.0`.
 
@@ -24,13 +24,13 @@ Expanded file read with syntax-highlighted content:
 
 ![Expanded file read](./images/read-file-detail.png)
 
-Paseo tool calls use purpose-built cards with readable prompt, configuration, result, and status sections:
+Paseo tool calls use purpose-built detail views for prompts, configuration, results, and status:
 
 ![Paseo create-agent card](./images/paseo-create-agent.png)
 
 ## Features
 
-- Color-coded reasoning and tool-call cards with Lucide icons.
+- Compact reasoning and tool-call rows with small Lucide icons and restrained accents.
 - Markdown reasoning support for headings, inline bold/italic/code, ordered and unordered lists,
   blockquotes, blank-line spacing, and fenced code blocks.
 - The newest thinking block stays open until a newer thinking block starts, including while tools run.
@@ -42,9 +42,9 @@ Paseo tool calls use purpose-built cards with readable prompt, configuration, re
   and unknown tool payloads.
 - Vivid, soft, and high-contrast palette modes using the active Paseo theme.
 - Status indicators for running, completed, failed, and canceled calls.
-- Specialized Paseo cards for agents, workspaces, terminals, schedules, providers, permissions, and browser automation instead of raw JSON.
-- Dedicated Exa cards show search queries, result metadata, URLs, and highlights instead of the raw MCP envelope.
-- Dedicated GitHub cards show repository and code search results, files, pull requests, Actions runs, and job logs instead of raw MCP payloads.
+- Specialized Paseo views for agents, workspaces, terminals, schedules, providers, permissions, and browser automation instead of raw JSON.
+- Dedicated Exa views show search queries, result metadata, URLs, and highlights instead of the raw MCP envelope.
+- Dedicated GitHub views show repository and code search results, files, pull requests, Actions runs, and job logs instead of raw MCP payloads.
 
 ## Install
 
@@ -74,9 +74,9 @@ tool calls before plugin transforms run, so the plugin cannot recover each indiv
 
 Choose a palette under the plugin's **Colorful activity** settings screen:
 
-- **Vivid** — stronger category colors and tinted surfaces.
-- **Soft** — quieter accents and backgrounds.
-- **High contrast** — stronger borders and status colors.
+- **Vivid** - restrained category accents on neutral rows.
+- **Soft** - mostly neutral icons with color reserved for status.
+- **High contrast** - stronger dividers and status colors.
 
 Reload after installation or source changes:
 

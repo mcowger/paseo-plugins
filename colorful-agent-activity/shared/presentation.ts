@@ -765,15 +765,15 @@ export function resolveActivityPalette(
   mode: PaletteMode,
   colors: ActivityThemeColors,
 ): ActivityPalette {
-  const alpha = mode === "vivid" ? 0.18 : mode === "high_contrast" ? 0.28 : 0.1;
+  const alpha = mode === "vivid" ? 0.1 : mode === "high_contrast" ? 0.16 : 0.06;
   const categoryColors: Record<ActivityCategory, string> = {
-    reasoning: colors.accent,
+    reasoning: mode === "vivid" ? colors.accent : colors.foregroundMuted,
     shell: colors.statusWarning,
-    file: colors.accent,
-    search: colors.accent,
-    agent: colors.statusSuccess,
-    plan: colors.accent,
-    communication: colors.accent,
+    file: mode === "vivid" ? colors.accent : colors.foregroundMuted,
+    search: mode === "vivid" ? colors.accent : colors.foregroundMuted,
+    agent: mode === "vivid" ? colors.statusSuccess : colors.foregroundMuted,
+    plan: colors.foregroundMuted,
+    communication: mode === "vivid" ? colors.accent : colors.foregroundMuted,
     unknown: colors.foregroundMuted,
   };
   const statusColors = {
