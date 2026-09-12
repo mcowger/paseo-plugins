@@ -309,12 +309,14 @@ function truncate(value: string, limit: number): string {
   return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
 }
 
-function coalesceReasoningItems(items: readonly AgentTimelineItem[]): AgentTimelineItem[] {
+function coalesceStreamingTextItems(items: readonly AgentTimelineItem[]): AgentTimelineItem[] {
   const result: AgentTimelineItem[] = [];
   for (const item of items) {
     const previous = result.at(-1);
     if (previous?.type === "reasoning" && item.type === "reasoning") {
       result[result.length - 1] = { type: "reasoning", text: `${previous.text}${item.text}` };
+    } else if (previous?.type === "assistant_message" && item.type === "assistant_message") {
+      result[result.length - 1] = { type: "assistant_message", text: `${previous.text}${item.text}` };
     } else {
       result.push(item);
     }
@@ -328,7 +330,7 @@ export function reduceTimeline(items: readonly AgentTimelineItem[]): SessionSumm
   let outcome: string | null = null;
   const thoughts: SummaryThought[] = [];
 
-  for (const item of coalesceReasoningItems(items)) {
+  for (const item of coalesceStreamingTextItems(items)) {
     if (item.type === "user_message" && initialPrompt === null) initialPrompt = textValue(item.text);
     if (item.type === "assistant_message") outcome = textValue(item.text) ?? outcome;
     if (item.type === "reasoning") {

@@ -62,6 +62,16 @@ describe("session summary timeline reduction", () => {
     expect(summary.outcome).toBe("I added the dashboard and tests.");
   });
 
+  it("coalesces streamed assistant output into the complete outcome", () => {
+    const summary = reduceTimeline([
+      { type: "assistant_message", text: "Cora found no issues; " },
+      { type: "assistant_message", text: "working tree is " },
+      { type: "assistant_message", text: "clean." },
+    ] satisfies AgentTimelineItem[]);
+
+    expect(summary.outcome).toBe("Cora found no issues; working tree is clean.");
+  });
+
   it("uses the latest native Todo snapshot for task status", () => {
     const summary = reduceTimeline([
       {
