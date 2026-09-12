@@ -827,6 +827,9 @@ export class PiProviderSession {
     if (!isRecord(target)) {
       throw new Error(`Pi rewind target ${targetId} was not found in the session tree`);
     }
+    if (!this.sessionManager.getBranch().some((entry) => isRecord(entry) && entry.id === targetId)) {
+      throw new Error(`Pi rewind target ${targetId} is not on the active branch`);
+    }
     const isUserMessage =
       target.type === "message" && isRecord(target.message) && target.message.role === "user";
     const isCommandAnchor =

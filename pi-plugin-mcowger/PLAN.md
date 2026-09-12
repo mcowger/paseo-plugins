@@ -23,7 +23,7 @@ extension-warm model catalogs.
 | Todos | rpiv-todo `details.tasks` (+ pi-example `details.todos`) → native `type:"todo"` timeline items, live + replay |
 | Subagents | Foreground `task`/`subagent` calls → native `sub_agent` tool detail |
 | Permissions | Headless `ExtensionUIContext` (bound via `session.bindExtensions`, mode `"rpc"`): select/confirm/input/editor → Paseo permission questions; notify → notification items; `custom()` rejects (no TUI) |
-| Rewind | Not advertised. Pi tree navigation and active-leaf persistence remain implemented, but Paseo's plugin adapter cannot replace its session-local history after rewind. |
+| Rewind | Conversation rewind is advertised through Paseo's provider capability and uses Pi tree navigation with active-branch replay and persistence refresh. File and combined rewind remain unsupported. |
 | Persistence | `SessionManager.open(sessionFile)` resume; `history:"replay"` streams mapped message history before `session.ready` |
 | Catalog | `ModelRuntime.create()` (cached catalogs, no network by default) + extension warmup; per-model `thinkingOptions` from `reasoning` + `thinkingLevelMap` (PR #4413 semantics) |
 | Commands published | `compact`, `preset`, Pi extension commands, plus prompt templates discovered by the loader |
@@ -37,7 +37,7 @@ extension-warm model catalogs.
   session loads them.
 - Preset settings synchronize to the provider when the Pi Presets settings screen saves or reloads
   the document.
-- Conversation rewind is disabled until Paseo exposes a way for plugin providers to replace
-  adapter history after a rewind.
+- File and combined rewind are unsupported because Pi tree navigation only changes conversation
+  history and does not provide an atomic workspace-file rewind contract.
 - Fork visibility is host-gated by Paseo's global `agentForkContext` feature; the provider plugin
   has no provider-level fork capability to advertise or withdraw.

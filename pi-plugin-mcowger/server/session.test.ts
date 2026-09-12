@@ -727,7 +727,7 @@ describe("PiProviderSession replay", () => {
 
 describe("PiProviderSession rewind", () => {
   it("rewinds via navigateTree for known entries", async () => {
-    const { fake, session } = createHarness();
+    const { fake, session, events } = createHarness();
     fake.entries.push({
       type: "message",
       id: "entry-1",
@@ -735,6 +735,29 @@ describe("PiProviderSession rewind", () => {
     });
     await session.revertConversation("entry-1");
     expect(fake.navigations).toEqual(["entry-1"]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "session.persistence",
+        persistence: expect.objectContaining({
+          data: expect.objectContaining({ leafId: "entry-1" }),
+        }),
+      }),
+    );
+  });
+
+  it("rejects rewind targets from an abandoned branch", async () => {
+    const { fake, session } = createHarness();
+    const abandoned = {
+      type: "message",
+      id: "abandoned-entry",
+      message: { role: "user", content: "abandoned" },
+    };
+    fake.entries.push(abandoned);
+    fake.branchEntries = [];
+
+    await expect(session.revertConversation("abandoned-entry")).rejects.toThrow(
+      /not on the active branch/,
+    );
   });
 
   it("rejects unknown rewind targets", async () => {

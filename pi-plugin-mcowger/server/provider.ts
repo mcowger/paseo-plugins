@@ -41,6 +41,7 @@ const SUPPORTED_CAPABILITIES = [
   "prompt.steer",
   "session.persistence",
   "session.configure",
+  "session.revert.conversation",
   "permission",
 ] as const;
 

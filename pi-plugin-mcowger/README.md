@@ -33,8 +33,17 @@ The plugin is ready for use with Paseo `v0.8.0`. Paseo's provider API is stable 
 - Exposes native composer selectors for compact and retry.
 - Emits startup diagnostics for failed resources, MCP connections, model fallbacks, and unsupported
   session configuration instead of hiding those problems in daemon logs.
-- Persists sessions with pi's `SessionManager` and supports replay from the active branch, steering,
-  interruption, compaction, and usage reporting.
+- Persists sessions with pi's `SessionManager` and supports replay from the active branch, conversation
+  rewind, steering, interruption, compaction, and usage reporting.
+
+## Conversation rewind
+
+Conversation rewind is supported through Paseo's standard provider rewind API. Pi rewinds to the
+selected user message with `SessionManager` tree navigation, then persists the new active leaf and
+replays the active branch on resume.
+
+This only rewinds conversation history. File-only and combined conversation/file rewind are not
+advertised because Pi does not provide an atomic workspace-file rewind operation.
 
 ## Runtime settings and diagnostics
 
