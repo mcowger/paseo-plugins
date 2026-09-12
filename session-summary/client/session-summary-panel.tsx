@@ -66,7 +66,6 @@ function useStyles(theme: PluginTheme, compact: boolean) {
         paddingVertical: 3,
       },
       grid: {
-        flex: compact ? undefined : 1,
         flexDirection: compact ? "column" as const : "row" as const,
         gap: compact ? 7 : 10,
         minHeight: compact ? undefined : 0,
