@@ -20,7 +20,8 @@ import {
 import { MarkdownContent, MarkdownPreview, useMarkdownStyles } from "./markdown";
 import { useSummaryData } from "./use-summary-data";
 
-const THOUGHT_BLOCK_MAX_HEIGHT = 320;
+const ACTIVITY_SECTION_MAX_HEIGHT = 320;
+const ACTIVITY_LIST_MAX_HEIGHT = 280;
 const PROMPT_PREVIEW_LINES = 2;
 
 type ToolAppearance = {
@@ -66,6 +67,7 @@ function useStyles(theme: PluginTheme, compact: boolean) {
         paddingVertical: 3,
       },
       grid: {
+        alignItems: compact ? "stretch" as const : "flex-start" as const,
         flexDirection: compact ? "column" as const : "row" as const,
         gap: compact ? 7 : 10,
         minHeight: compact ? undefined : 0,
@@ -74,8 +76,9 @@ function useStyles(theme: PluginTheme, compact: boolean) {
       toolsColumn: { flex: compact ? undefined : 1, gap: compact ? 7 : 10, minHeight: compact ? undefined : 0 },
       card: { gap: compact ? 4 : 6 },
 
-      toolsCard: { flex: compact ? undefined : 1 },
-      thoughtCard: { flex: compact ? undefined : 2, minHeight: compact ? undefined : 0 },
+      toolsCard: { maxHeight: ACTIVITY_SECTION_MAX_HEIGHT },
+      toolsList: { maxHeight: ACTIVITY_LIST_MAX_HEIGHT },
+      thoughtCard: { flex: compact ? undefined : 2, maxHeight: ACTIVITY_SECTION_MAX_HEIGHT, minHeight: compact ? undefined : 0 },
       headingRow: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, gap: 5 },
       headingStart: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5, flexShrink: 1 },
       title: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 12, fontWeight: "600" as const, lineHeight: 17 },
@@ -102,7 +105,7 @@ function useStyles(theme: PluginTheme, compact: boolean) {
       compactToolSummary: { color: theme.colors.foregroundMuted, flex: 1, fontFamily: "monospace", fontSize: 12, lineHeight: 17 },
       thoughtLog: {
         flex: compact ? undefined : 1,
-        maxHeight: compact ? THOUGHT_BLOCK_MAX_HEIGHT : undefined,
+        maxHeight: ACTIVITY_LIST_MAX_HEIGHT,
         minHeight: 0,
       },
       thoughtBlock: { marginVertical: 1 },
@@ -118,7 +121,7 @@ function useStyles(theme: PluginTheme, compact: boolean) {
         borderLeftColor: theme.colors.border,
         borderLeftWidth: 1,
         marginLeft: 5,
-        maxHeight: THOUGHT_BLOCK_MAX_HEIGHT,
+        maxHeight: ACTIVITY_SECTION_MAX_HEIGHT,
         paddingLeft: 11,
         paddingVertical: 3,
       },
@@ -304,18 +307,22 @@ function ToolsCard({ summary, styles }: { summary: SessionSummary; styles: Retur
         <Text style={styles.pill}>{summary.totalToolCalls} {summary.totalToolCalls === 1 ? "call" : "calls"}</Text>
       </View>
       <View style={styles.divider} />
-      {summary.tools.length > 0 ? summary.tools.map((tool) => {
-        const appearance = toolAppearance(tool);
-        return (
-          <View key={tool.name} style={styles.row}>
-            <View style={styles.toolRow}>
-              <Icon name={appearance.icon} size={12} color={toolColor(appearance, styles)} />
-              <Text style={styles.toolName}>{tool.name}:</Text>
-            </View>
-            <Text style={styles.toolCount}>{tool.count}x</Text>
-          </View>
-        );
-      }) : <Text style={styles.muted}>No tool calls yet.</Text>}
+      {summary.tools.length > 0 ? (
+        <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={styles.toolsList}>
+          {summary.tools.map((tool) => {
+            const appearance = toolAppearance(tool);
+            return (
+              <View key={tool.name} style={styles.row}>
+                <View style={styles.toolRow}>
+                  <Icon name={appearance.icon} size={12} color={toolColor(appearance, styles)} />
+                  <Text style={styles.toolName}>{tool.name}:</Text>
+                </View>
+                <Text style={styles.toolCount}>{tool.count}x</Text>
+              </View>
+            );
+          })}
+        </ScrollView>
+      ) : <Text style={styles.muted}>No tool calls yet.</Text>}
     </View>
   );
 }
