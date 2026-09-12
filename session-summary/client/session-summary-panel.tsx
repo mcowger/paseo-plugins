@@ -44,125 +44,113 @@ function useStyles(theme: PluginTheme, compact: boolean) {
       screen: {
         flex: 1,
         flexGrow: 1,
-        gap: compact ? 10 : 14,
-        padding: compact ? 12 : 20,
+        gap: compact ? 7 : 10,
+        padding: compact ? 8 : 12,
         backgroundColor: theme.colors.surface0,
       },
-      promptCard: {
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: 10,
-        overflow: "hidden" as const,
-        backgroundColor: theme.colors.surface1,
-      },
+      promptCard: { gap: 3 },
       promptHeader: {
         flexDirection: "row" as const,
         alignItems: "center" as const,
         justifyContent: "space-between" as const,
-        gap: 8,
-        paddingHorizontal: compact ? 10 : 14,
-        paddingTop: compact ? 10 : 14,
+        gap: 5,
+        paddingVertical: 2,
       },
-      promptHeading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
-      promptPreview: { paddingHorizontal: compact ? 10 : 14, paddingBottom: compact ? 10 : 14, paddingTop: 8 },
-      promptBody: { borderTopWidth: 1, borderTopColor: theme.colors.border, padding: compact ? 10 : 14 },
+      promptHeading: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5 },
+      promptPreview: { paddingLeft: 17, paddingTop: 1 },
+      promptBody: {
+        borderLeftColor: theme.colors.border,
+        borderLeftWidth: 1,
+        marginLeft: 5,
+        paddingLeft: 11,
+        paddingVertical: 3,
+      },
       grid: {
         flex: compact ? undefined : 1,
         flexDirection: compact ? "column" as const : "row" as const,
-        gap: compact ? 10 : 14,
+        gap: compact ? 7 : 10,
         minHeight: compact ? undefined : 0,
       },
-      compactOverview: { flex: 1, gap: 10, minHeight: 0 },
-      toolsColumn: { flex: compact ? undefined : 1, gap: compact ? 10 : 14, minHeight: compact ? undefined : 0 },
-      card: {
-        gap: compact ? 8 : 10,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: 10,
-        padding: compact ? 10 : 14,
-        backgroundColor: theme.colors.surface1,
-      },
+      compactOverview: { flex: 1, gap: 7, minHeight: 0 },
+      toolsColumn: { flex: compact ? undefined : 1, gap: compact ? 7 : 10, minHeight: compact ? undefined : 0 },
+      card: { gap: compact ? 4 : 6 },
+
       toolsCard: { flex: compact ? undefined : 1 },
       thoughtCard: { flex: compact ? undefined : 2, minHeight: compact ? undefined : 0 },
-      headingRow: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, gap: 8 },
-      headingStart: { flexDirection: "row" as const, alignItems: "center" as const, gap: 7, flexShrink: 1 },
-      title: { color: theme.colors.foreground, fontSize: compact ? 18 : 21, fontWeight: "600" as const },
-      heading: { color: theme.colors.foreground, fontSize: compact ? 14 : 15, fontWeight: "600" as const },
-      muted: { color: theme.colors.foregroundMuted, lineHeight: 19 },
-      pill: { color: theme.colors.foregroundMuted, backgroundColor: theme.colors.surface2, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
-      divider: { height: 1, backgroundColor: theme.colors.border },
-      row: { flexDirection: "row" as const, justifyContent: "space-between" as const, alignItems: "center" as const, gap: 8 },
-      toolRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
-      taskToggle: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6 },
-      task: { flexDirection: "row" as const, alignItems: "flex-start" as const, gap: 8 },
-      taskText: { color: theme.colors.foreground, flex: 1, lineHeight: 19 },
-      completedTaskText: { color: theme.colors.foregroundMuted, flex: 1, lineHeight: 19 },
-      toolName: { color: theme.colors.foreground, fontFamily: "monospace", flex: 1 },
-      toolCount: { color: theme.colors.foreground, fontFamily: "monospace", fontWeight: "600" as const },
-      statsCard: { paddingVertical: compact ? 8 : 10 },
-      statsValue: { color: theme.colors.foregroundMuted, flexShrink: 1, fontFamily: "monospace", fontSize: compact ? 11 : 12 },
-      compactThought: { gap: 5 },
-      compactThoughtCard: { flex: 1, minHeight: 110 },
-      compactThoughtText: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: compact ? 12 : 13, lineHeight: compact ? 17 : 19 },
-      compactToolList: { gap: 5 },
-      compactToolRow: { alignItems: "center" as const, flexDirection: "row" as const, gap: 7 },
-      compactToolName: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 12, width: 58 },
-      compactToolSummary: { color: theme.colors.foregroundMuted, flex: 1, fontFamily: "monospace", fontSize: 12 },
+      headingRow: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, gap: 5 },
+      headingStart: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5, flexShrink: 1 },
+      title: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 12, fontWeight: "600" as const, lineHeight: 17 },
+      heading: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 12, fontWeight: "600" as const, lineHeight: 17 },
+      muted: { color: theme.colors.foregroundMuted, fontFamily: "monospace", fontSize: 12, lineHeight: 17 },
+      pill: { color: theme.colors.foregroundMuted, fontFamily: "monospace", fontSize: 10, lineHeight: 14 },
+      divider: { height: 1, backgroundColor: theme.colors.border, marginVertical: 1 },
+      row: { flexDirection: "row" as const, justifyContent: "space-between" as const, alignItems: "center" as const, gap: 5, minHeight: 17 },
+      toolRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5 },
+      taskToggle: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5, minHeight: 17 },
+      task: { flexDirection: "row" as const, alignItems: "flex-start" as const, gap: 5, paddingLeft: 5 },
+      taskText: { color: theme.colors.foreground, flex: 1, fontFamily: "monospace", fontSize: 12, lineHeight: 17 },
+      completedTaskText: { color: theme.colors.foregroundMuted, flex: 1, fontFamily: "monospace", fontSize: 12, lineHeight: 17 },
+      toolName: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 12, lineHeight: 17, flex: 1 },
+      toolCount: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 11, fontWeight: "600" as const, lineHeight: 16 },
+      statsCard: { gap: 3 },
+      statsValue: { color: theme.colors.foreground, flexShrink: 1, fontFamily: "monospace", fontSize: 11, lineHeight: 15 },
+      compactThought: { gap: 3, paddingLeft: 17 },
+      compactThoughtCard: { flex: 1, minHeight: 0 },
+      compactThoughtText: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 12, lineHeight: 17 },
+      compactToolList: { gap: 2, paddingLeft: 17 },
+      compactToolRow: { alignItems: "center" as const, flexDirection: "row" as const, gap: 5, minHeight: 17 },
+      compactToolName: { color: theme.colors.foreground, fontFamily: "monospace", fontSize: 12, lineHeight: 17, width: 58 },
+      compactToolSummary: { color: theme.colors.foregroundMuted, flex: 1, fontFamily: "monospace", fontSize: 12, lineHeight: 17 },
       thoughtLog: {
         flex: compact ? undefined : 1,
         maxHeight: compact ? THOUGHT_BLOCK_MAX_HEIGHT : undefined,
         minHeight: 0,
       },
-      thoughtBlock: { marginVertical: 2 },
+      thoughtBlock: { marginVertical: 1 },
       thoughtHeader: {
         alignItems: "center" as const,
-        borderColor: theme.colors.border,
-        borderRadius: 8,
-        borderWidth: 1,
         flexDirection: "row" as const,
-        gap: 7,
-        paddingHorizontal: 8,
-        paddingVertical: 6,
+        gap: 5,
+        minHeight: 21,
+        paddingVertical: 2,
       },
-      thoughtHeaderExpanded: {
-        backgroundColor: theme.colors.surface2,
-        borderBottomLeftRadius: 0,
-        borderBottomRightRadius: 0,
-      },
+      thoughtHeaderExpanded: {},
       thoughtBody: {
-        backgroundColor: theme.colors.surface0,
-        borderBottomLeftRadius: 8,
-        borderBottomRightRadius: 8,
-        borderColor: theme.colors.border,
-        borderTopWidth: 0,
-        borderWidth: 1,
+        borderLeftColor: theme.colors.border,
+        borderLeftWidth: 1,
+        marginLeft: 5,
         maxHeight: THOUGHT_BLOCK_MAX_HEIGHT,
-        padding: 10,
+        paddingLeft: 11,
+        paddingVertical: 3,
       },
-      thoughtLabel: { color: theme.colors.foregroundMuted, fontFamily: "monospace", fontSize: 13, flex: 1 },
+      thoughtLabel: { color: theme.colors.foregroundMuted, fontFamily: "monospace", fontSize: 12, lineHeight: 17, flex: 1 },
       thoughtLabelExpanded: { color: theme.colors.foreground },
       outcome: {
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderRadius: 10,
-        padding: compact ? 10 : 14,
-        gap: 8,
-        backgroundColor: theme.colors.surface1,
+        borderLeftColor: theme.colors.border,
+        borderLeftWidth: 1,
+        gap: 3,
+        marginLeft: 5,
+        paddingLeft: 11,
+        paddingVertical: 2,
       },
-      detailsSection: { gap: compact ? 10 : 14 },
+      detailsSection: { gap: 3 },
       detailsToggle: {
         alignItems: "center" as const,
-        backgroundColor: theme.colors.surface1,
-        borderColor: theme.colors.border,
-        borderRadius: 10,
-        borderWidth: 1,
         flexDirection: "row" as const,
-        gap: 8,
+        gap: 5,
         justifyContent: "space-between" as const,
-        padding: compact ? 10 : 14,
+        minHeight: 21,
+        paddingVertical: 2,
       },
-      detailsToggleStart: { alignItems: "center" as const, flexDirection: "row" as const, gap: 7 },
-      detailsContent: { gap: compact ? 10 : 14 },
+      detailsToggleStart: { alignItems: "center" as const, flexDirection: "row" as const, gap: 5 },
+      detailsContent: {
+        borderLeftColor: theme.colors.border,
+        borderLeftWidth: 1,
+        gap: compact ? 7 : 10,
+        marginLeft: 5,
+        paddingLeft: 11,
+        paddingVertical: 3,
+      },
       success: { color: theme.colors.statusSuccess },
       active: { color: theme.colors.accent },
       warning: { color: theme.colors.statusWarning },
@@ -207,7 +195,7 @@ function SessionStatsCard({ stats, styles }: { stats: SessionStats; styles: Retu
     <View style={[styles.card, styles.statsCard]}>
       <View style={styles.headingRow}>
         <View style={styles.headingStart}>
-          <Icon name="Activity" size={16} color={styles.active.color} />
+          <Icon name="Activity" size={12} color={styles.active.color} />
           <Text style={styles.heading}>Tokens</Text>
         </View>
       </View>
@@ -237,7 +225,7 @@ function PromptCard({ prompt, styles, markdownStyles }: {
       <View style={styles.promptCard}>
         <View style={styles.promptHeader}>
           <View style={styles.promptHeading}>
-            <Icon name="UserRound" size={16} color={styles.muted.color} />
+            <Icon name="UserRound" size={12} color={styles.muted.color} />
             <Text style={styles.heading}>You</Text>
           </View>
         </View>
@@ -255,10 +243,10 @@ function PromptCard({ prompt, styles, markdownStyles }: {
       >
         <View style={styles.promptHeader}>
           <View style={styles.promptHeading}>
-            <Icon name="UserRound" size={16} color={styles.active.color} />
+            <Icon name="UserRound" size={12} color={styles.active.color} />
             <Text style={styles.heading}>You</Text>
           </View>
-          <Icon name={expanded ? "ChevronUp" : "ChevronDown"} size={16} color={styles.muted.color} />
+          <Icon name={expanded ? "ChevronUp" : "ChevronDown"} size={12} color={styles.muted.color} />
         </View>
         {!expanded ? <View style={styles.promptPreview}><MarkdownPreview text={prompt} styles={markdownStyles} numberOfLines={PROMPT_PREVIEW_LINES} /></View> : null}
       </Pressable>
@@ -273,7 +261,7 @@ function TasksCard({ summary, styles }: { summary: SessionSummary; styles: Retur
     <View style={styles.card}>
       <View style={styles.headingRow}>
         <View style={styles.headingStart}>
-          <Icon name="ListTodo" size={16} color={styles.active.color} />
+          <Icon name="ListTodo" size={12} color={styles.active.color} />
           <Text style={styles.heading}>Tasks &amp; Plan</Text>
         </View>
         <Text style={summary.completedTaskCount === summary.tasks.length && summary.tasks.length > 0 ? styles.success : styles.muted}>
@@ -290,13 +278,13 @@ function TasksCard({ summary, styles }: { summary: SessionSummary; styles: Retur
             onPress={() => setTasksExpanded((expanded) => !expanded)}
             style={styles.taskToggle}
           >
-            <Icon name="ClipboardList" size={15} color={styles.active.color} />
+            <Icon name="ClipboardList" size={12} color={styles.active.color} />
             <Text style={styles.muted}>{summary.completedTaskCount === summary.tasks.length ? "All tasks complete" : "Show task details"}</Text>
-            <Icon name={tasksExpanded ? "ChevronDown" : "ChevronRight"} size={15} color={styles.muted.color} />
+            <Icon name={tasksExpanded ? "ChevronDown" : "ChevronRight"} size={12} color={styles.muted.color} />
           </Pressable>
           {tasksExpanded ? summary.tasks.map((task) => (
             <View key={task.id} style={styles.task}>
-              <Icon name={taskStatusIcon(task.status)} size={15} color={taskStatusColor(task.status, styles)} />
+              <Icon name={taskStatusIcon(task.status)} size={12} color={taskStatusColor(task.status, styles)} />
               <Text numberOfLines={2} style={task.status === "completed" ? styles.completedTaskText : styles.taskText}>{task.text}</Text>
             </View>
           )) : null}
@@ -311,7 +299,7 @@ function ToolsCard({ summary, styles }: { summary: SessionSummary; styles: Retur
     <View style={[styles.card, styles.toolsCard]}>
       <View style={styles.headingRow}>
         <View style={styles.headingStart}>
-          <Icon name="Wrench" size={16} color={styles.warning.color} />
+          <Icon name="Wrench" size={12} color={styles.warning.color} />
           <Text style={styles.heading}>Tools</Text>
         </View>
         <Text style={styles.pill}>{summary.totalToolCalls} {summary.totalToolCalls === 1 ? "call" : "calls"}</Text>
@@ -322,7 +310,7 @@ function ToolsCard({ summary, styles }: { summary: SessionSummary; styles: Retur
         return (
           <View key={tool.name} style={styles.row}>
             <View style={styles.toolRow}>
-              <Icon name={appearance.icon} size={15} color={toolColor(appearance, styles)} />
+              <Icon name={appearance.icon} size={12} color={toolColor(appearance, styles)} />
               <Text style={styles.toolName}>{tool.name}:</Text>
             </View>
             <Text style={styles.toolCount}>{tool.count}x</Text>
@@ -338,7 +326,7 @@ function ToolsSummaryCard({ summary, styles }: { summary: SessionSummary; styles
     <View style={styles.card}>
       <View style={styles.headingRow}>
         <View style={styles.headingStart}>
-          <Icon name="Wrench" size={16} color={styles.warning.color} />
+          <Icon name="Wrench" size={12} color={styles.warning.color} />
           <Text style={styles.heading}>Tools</Text>
         </View>
         <Text style={styles.pill}>{summary.totalToolCalls} {summary.totalToolCalls === 1 ? "call" : "calls"}</Text>
@@ -349,7 +337,7 @@ function ToolsSummaryCard({ summary, styles }: { summary: SessionSummary; styles
             const appearance = toolAppearance({ name: call.name, count: 1 });
             return (
               <View key={call.id} style={styles.compactToolRow}>
-                <Icon name={appearance.icon} size={13} color={toolColor(appearance, styles)} />
+                <Icon name={appearance.icon} size={11} color={toolColor(appearance, styles)} />
                 <Text numberOfLines={1} style={styles.compactToolName}>{call.name}</Text>
                 <Text numberOfLines={1} style={styles.compactToolSummary}>{call.summary}</Text>
               </View>
@@ -400,7 +388,7 @@ function ThinkingBlock({ label, text, expanded, onToggle, styles, markdownStyles
         onPress={onToggle}
         style={[styles.thoughtHeader, expanded && styles.thoughtHeaderExpanded]}
       >
-        <Icon name={expanded ? "ChevronDown" : "Brain"} size={15} color={expanded ? styles.active.color : styles.muted.color} />
+        <Icon name={expanded ? "ChevronDown" : "Brain"} size={12} color={expanded ? styles.active.color : styles.muted.color} />
         <Text numberOfLines={1} style={[styles.thoughtLabel, expanded && styles.thoughtLabelExpanded]}>{label}</Text>
       </Pressable>
       {expanded ? (
@@ -442,7 +430,7 @@ function ThoughtLogCard({ summary, styles, markdownStyles }: {
   return (
     <View style={[styles.card, styles.thoughtCard]}>
       <View style={styles.headingStart}>
-        <Icon name="Brain" size={16} color={styles.active.color} />
+        <Icon name="Brain" size={12} color={styles.active.color} />
         <Text style={styles.heading}>Thought Log</Text>
       </View>
       <View style={styles.divider} />
@@ -481,7 +469,7 @@ function OutcomeCard({ summary, styles, markdownStyles }: {
   return (
     <View style={styles.outcome}>
       <View style={styles.headingStart}>
-        <Icon name="Sparkles" size={16} color={styles.success.color} />
+        <Icon name="Sparkles" size={12} color={styles.success.color} />
         <Text style={styles.heading}>Outcome / Summary of Changes</Text>
       </View>
       {summary.outcome ? <MarkdownContent text={summary.outcome} styles={markdownStyles} /> : <Text style={styles.muted}>The agent has not produced a final response yet.</Text>}
@@ -505,10 +493,10 @@ function DetailsSection({ summary, styles, markdownStyles }: {
         style={styles.detailsToggle}
       >
         <View style={styles.detailsToggleStart}>
-          <Icon name="List" size={16} color={styles.active.color} />
+          <Icon name="List" size={12} color={styles.active.color} />
           <Text style={styles.heading}>Details</Text>
         </View>
-        <Icon name={expanded ? "ChevronUp" : "ChevronDown"} size={16} color={styles.muted.color} />
+        <Icon name={expanded ? "ChevronUp" : "ChevronDown"} size={12} color={styles.muted.color} />
       </Pressable>
       {expanded ? (
         <View style={styles.detailsContent}>

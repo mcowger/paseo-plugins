@@ -124,7 +124,7 @@ export function MarkdownPreview({ text, styles, numberOfLines }: {
   numberOfLines: number;
 }) {
   const containerStyle = useMemo(
-    () => ({ maxHeight: numberOfLines * 21, overflow: "hidden" as const }),
+    () => ({ maxHeight: numberOfLines * 17, overflow: "hidden" as const }),
     [numberOfLines],
   );
   return <View style={containerStyle}><MarkdownContent text={text} styles={styles} /></View>;
@@ -132,58 +132,59 @@ export function MarkdownPreview({ text, styles, numberOfLines }: {
 
 export function useMarkdownStyles(theme: PluginTheme, variant: MarkdownVariant): MarkdownStyles {
   return useMemo(() => {
-    const monospace = variant === "thought" ? { fontFamily: "monospace" } : {};
+    const monospace = { fontFamily: "monospace" };
     return {
-      container: { gap: 6 },
+      container: { gap: 3 },
       paragraph: {
         color: theme.colors.foreground,
-        fontSize: 14,
-        lineHeight: 21,
+        fontSize: 12,
+        lineHeight: 17,
         ...monospace,
       },
       heading: {
         color: theme.colors.foreground,
-        fontSize: 15,
-        fontWeight: "700" as const,
-        lineHeight: 21,
+        fontSize: 12,
+        fontWeight: "600" as const,
+        lineHeight: 17,
         ...monospace,
       },
       bullet: {
-        color: theme.colors.accent,
-        minWidth: 20,
-        fontSize: 14,
-        lineHeight: 21,
+        color: theme.colors.foregroundMuted,
+        minWidth: 14,
+        fontSize: 12,
+        lineHeight: 17,
         ...monospace,
       },
-      bulletRow: { flexDirection: "row" as const, gap: 4, alignItems: "flex-start" as const },
+      bulletRow: { flexDirection: "row" as const, gap: 3, alignItems: "flex-start" as const },
       quote: {
-        borderLeftWidth: 2,
-        borderLeftColor: theme.colors.accent,
+        borderLeftWidth: 1,
+        borderLeftColor: theme.colors.border,
         color: theme.colors.foregroundMuted,
-        paddingLeft: 8,
-        fontSize: 14,
-        lineHeight: 21,
+        paddingLeft: 6,
+        fontSize: 12,
+        lineHeight: 17,
         ...monospace,
       },
       code: {
         backgroundColor: theme.colors.surface2,
         color: theme.colors.foreground,
         fontFamily: "monospace",
-        fontSize: 12,
+        fontSize: 11,
         paddingHorizontal: 3,
       },
       codeBlock: {
         backgroundColor: theme.colors.surface0,
         borderColor: theme.colors.border,
-        borderRadius: 6,
+        borderRadius: 2,
         borderWidth: 1,
         color: theme.colors.foreground,
         fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 18,
-        padding: 10,
+        fontSize: 11,
+        lineHeight: 16,
+        paddingHorizontal: 6,
+        paddingVertical: 4,
       },
-      spacer: { height: 4 },
+      spacer: { height: 3 }
     };
   }, [theme, variant]);
 }
