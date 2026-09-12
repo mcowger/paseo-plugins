@@ -9,21 +9,19 @@ Requires Paseo `>=0.8.0`.
 
 ## Screenshots
 
-Thought process and shell activity:
+### Desktop & Web
 
-![Thought process and shell activity](./images/thought-process.png)
+Thought process with file read and inline diff:
 
-Expanded shell command with command/output sections:
+![Desktop thought and diff](./images/desktop-thought-and-diff.png)
 
-![Expanded shell command](./images/shell-command-detail.png)
+Expanded shell command with formatted output:
+
+![Desktop shell command](./images/desktop-shell-command.png)
 
 Interactive agent question row:
 
 ![Ask user question](./images/ask-user-question.png)
-
-Expanded file read with syntax-highlighted content:
-
-![Expanded file read](./images/read-file-detail.png)
 
 Paseo tool calls use purpose-built detail views for prompts, configuration, results, and status:
 
