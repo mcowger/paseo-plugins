@@ -21,7 +21,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import type { z } from "zod";
-import { useShikiTokens, isDarkSurface, type ShikiToken } from "./highlight";
+import { useHighlightTokens, isDarkSurface, type HighlightToken } from "./highlight";
 import { GithubToolDetail } from "./github";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
 import {
@@ -654,7 +654,7 @@ function TokenizedLines({
   lines,
   styles,
 }: {
-  lines: ShikiToken[][];
+  lines: HighlightToken[][];
   styles: ReturnType<typeof useActivityStyles>;
 }) {
   return (
@@ -684,7 +684,7 @@ function TokenizedLines({
   );
 }
 
-function ShikiCodeBlock({
+function HighlightedCodeBlock({
   code,
   language,
   theme,
@@ -697,7 +697,7 @@ function ShikiCodeBlock({
   label?: string;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const tokens = useShikiTokens(code, language, isDarkSurface(theme.colors.surface0));
+  const tokens = useHighlightTokens(code, language, isDarkSurface(theme.colors.surface0));
   return (
     <View style={styles.section}>
       {label ? <DetailLabel style={styles.detailLabel}>{label}</DetailLabel> : null}
@@ -796,7 +796,7 @@ function DetailBody({
     case "shell":
       return (
         <>
-          <ShikiCodeBlock
+          <HighlightedCodeBlock
             code={`$ ${detail.command}`}
             language="bash"
             label="Command"
@@ -804,7 +804,7 @@ function DetailBody({
             theme={theme}
           />
           {detail.output ? (
-            <ShikiCodeBlock
+            <HighlightedCodeBlock
               code={detail.output}
               language="ansi"
               label="Output"
@@ -822,7 +822,7 @@ function DetailBody({
         <>
           <PathRow icon={data.presentation.fileIcon ?? "Eye"} path={detail.filePath} styles={styles} />
           {detail.content ? (
-            <ShikiCodeBlock
+            <HighlightedCodeBlock
               code={detail.content}
               language={data.presentation.language ?? "text"}
               label="Contents"
@@ -839,7 +839,7 @@ function DetailBody({
         <>
           <PathRow icon={data.presentation.fileIcon ?? "Pencil"} path={detail.filePath} styles={styles} />
           {detail.content ? (
-            <ShikiCodeBlock
+            <HighlightedCodeBlock
               code={detail.content}
               language={data.presentation.language ?? "text"}
               label="Written contents"
@@ -863,7 +863,7 @@ function DetailBody({
           {detail.filePaths?.map((filePath) => (
             <PathRow key={filePath} icon={fileIconForPath(filePath)} path={filePath} styles={styles} />
           ))}
-          {detail.content ? <ShikiCodeBlock code={detail.content} language="text" styles={styles} theme={theme} /> : null}
+          {detail.content ? <HighlightedCodeBlock code={detail.content} language="text" styles={styles} theme={theme} /> : null}
           {detail.webResults?.map((result) => (
             <View key={result.url} style={styles.section}>
               <Text selectable style={styles.detailText}>{result.title}</Text>
@@ -879,7 +879,7 @@ function DetailBody({
       return (
         <>
           <Text selectable style={styles.detailText}>{detail.url}</Text>
-          {detail.result ? <ShikiCodeBlock code={detail.result} language="text" label="Result" styles={styles} theme={theme} /> : null}
+          {detail.result ? <HighlightedCodeBlock code={detail.result} language="text" label="Result" styles={styles} theme={theme} /> : null}
           {detail.code !== undefined ? <Text style={styles.mutedText}>HTTP {detail.code} {detail.codeText ?? ""}</Text> : null}
         </>
       );
@@ -888,7 +888,7 @@ function DetailBody({
         <>
           <Text style={styles.detailText}>Branch: {detail.branchName}</Text>
           <Text style={styles.mutedText}>Path: {detail.worktreePath}</Text>
-          {detail.log ? <ShikiCodeBlock code={detail.log} language="ansi" label="Setup log" styles={styles} theme={theme} /> : null}
+          {detail.log ? <HighlightedCodeBlock code={detail.log} language="ansi" label="Setup log" styles={styles} theme={theme} /> : null}
         </>
       );
     case "sub_agent":
@@ -897,7 +897,7 @@ function DetailBody({
           {detail.subAgentType ? <Text style={styles.detailText}>{detail.subAgentType}</Text> : null}
           {detail.description ? <Text style={styles.mutedText}>{detail.description}</Text> : null}
           {detail.childSessionId ? <Text style={styles.mutedText}>Session {detail.childSessionId}</Text> : null}
-          {detail.log ? <ShikiCodeBlock code={detail.log} language="ansi" label="Activity log" styles={styles} theme={theme} /> : null}
+          {detail.log ? <HighlightedCodeBlock code={detail.log} language="ansi" label="Activity log" styles={styles} theme={theme} /> : null}
         </>
       );
     case "plain_text":
@@ -942,14 +942,14 @@ function DetailBody({
       }
       return (
         <>
-          <ShikiCodeBlock
+          <HighlightedCodeBlock
             code={formatUnknownValue(detail.input)}
             language="json"
             label="Input"
             styles={styles}
             theme={theme}
           />
-          <ShikiCodeBlock
+          <HighlightedCodeBlock
             code={formatUnknownValue(detail.output)}
             language="json"
             label="Output"
@@ -1062,7 +1062,7 @@ function ReasoningMarkdown({
         switch (block.type) {
           case "code":
             return (
-              <ShikiCodeBlock
+              <HighlightedCodeBlock
                 key={key}
                 code={block.text}
                 language={block.language ?? "text"}

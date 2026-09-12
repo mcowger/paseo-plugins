@@ -3,7 +3,7 @@ import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
 import React, { useState, type ReactNode } from "react";
 import { Pressable, Text, View, type TextStyle } from "react-native";
 import { ChildAgentTimeline } from "./child-agent";
-import { isDarkSurface, useShikiTokens, type ShikiToken } from "./highlight";
+import { isDarkSurface, useHighlightTokens, type HighlightToken } from "./highlight";
 import type { ActivityStyles } from "./activity";
 import { extractPaseoChildAgentId } from "../shared/child-agent";
 import {
@@ -353,7 +353,7 @@ function TokenizedLines({
   lines,
   styles,
 }: {
-  lines: ShikiToken[][];
+  lines: HighlightToken[][];
   styles: ActivityStyles;
 }) {
   return (
@@ -400,7 +400,7 @@ export function PaseoCodeBlock({
   theme: Theme;
   styles: ActivityStyles;
 }) {
-  const tokens = useShikiTokens(
+  const tokens = useHighlightTokens(
     code,
     language,
     isDarkSurface(theme.colors.surface0)

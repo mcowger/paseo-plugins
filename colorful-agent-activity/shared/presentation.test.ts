@@ -34,7 +34,7 @@ const colors = {
 };
 
 describe("colorful activity presentation", () => {
-  it("maps file extensions to icons and Shiki languages", () => {
+  it("maps file extensions to icons and highlight languages", () => {
     expect(fileIconForPath("src/web/main.tsx")).toBe("FileCode2");
     expect(fileIconForPath("package.json")).toBe("FileJson");
     expect(fileIconForPath("README.md")).toBe("FileText");
@@ -51,6 +51,10 @@ describe("colorful activity presentation", () => {
 
   it("counts changes when an edit only has old and new strings", () => {
     expect(diffStatsFromStrings("one\ntwo\n", "one\nthree\n")).toEqual({
+      additions: 1,
+      deletions: 1,
+    });
+    expect(diffStatsFromStrings("one\ntwo", "one\ntwo\n")).toEqual({
       additions: 1,
       deletions: 1,
     });

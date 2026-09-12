@@ -1,8 +1,9 @@
 # Colorful agent activity
 
 Colorful agent activity replaces Paseo's public reasoning and agent tool-call rows with dense,
-IDE-style activity rows. It keeps the latest thinking block and latest tool call open, shows useful
-details on demand, and uses Shiki for shell and code output.
+IDE-style activity rows across desktop, web, and native mobile (iOS and Android). It keeps the latest
+thinking block and latest tool call open, shows useful details on demand, and uses Prism for shell and
+code output.
 
 Requires Paseo `>=0.8.0`.
 
@@ -30,12 +31,13 @@ Paseo tool calls use purpose-built detail views for prompts, configuration, resu
 
 ## Features
 
+- Works on desktop, web, and native mobile (iOS and Android Hermes runtime).
 - Compact reasoning and tool-call rows with small Lucide icons and restrained accents.
 - Markdown reasoning support for headings, inline bold/italic/code, ordered and unordered lists,
   blockquotes, blank-line spacing, and fenced code blocks.
 - The newest thinking block stays open until a newer thinking block starts, including while tools run.
 - The newest tool call stays open until a newer tool call appears.
-- Shell commands and terminal output highlighted with Shiki.
+- Shell commands and terminal output highlighted with Prism.
 - Extension-aware file icons for reads, writes, edits, and search results.
 - Edit statistics such as `+8 / -0` with colored diff rows.
 - Detail views for shell, read, write, edit, search, fetch, worktree, sub-agent, plan, plain-text,
@@ -89,7 +91,7 @@ paseo plugin reload colorful-agent-activity
 - The plugin sees public agent tool calls, not internal orchestrator calls.
 - Detailed tool-call mode is required for one card per tool call.
 - Paseo's native detail and syntax components are private, so this plugin renders its own details.
-- Shiki uses its JavaScript regex engine in the plugin bundle. It is not a terminal emulator.
+- Syntax highlighting uses Prism in the plugin bundle. It is not a terminal emulator.
 - Unsupported or oversized output falls back to plain monospace text.
 - Unknown tool payloads render as syntax-highlighted JSON, with a plain-text fallback for oversized or unsupported output.
 - A transformer that claims the same source row in another plugin can win before this plugin runs.
