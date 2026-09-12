@@ -183,13 +183,24 @@ Paseo runs on desktop/web (V8/Chromium) and native mobile (iOS and Android via H
 
 ### Verifying mobile compatibility
 
-`npm test`, `npm run lint`, and `npm run typecheck` run on Node (V8) and do not verify Hermes behavior.
-- Check the compiled client bundle for `class ` or `.prototype` assignments to class variables before release.
-- If React Native's Hermes compiler (`hermesc`) is available locally, verify bytecode compilation:
-  ```bash
-  hermesc -emit-binary -out /dev/null <bundle.js>
-  ```
-- Verify the plugin loads on a connected mobile app under **Settings → Plugins** with no evaluation error.
+Do not rely on standard unit tests alone; they run in Node (V8) against raw source files and will not catch bundle-level Hermes bugs.
+
+#### Automated bundle checks in `npm test`
+
+Add an automated client bundle test (e.g. `client/bundle.test.ts`) that runs with Vitest to catch syntax, class, and size regressions in CI:
+
+1. **Bundle with `esbuild`:** Use `esbuild` in tests to build the client entrypoint using the same config Paseo daemon uses (target `es2020`, platform `neutral`, format `cjs`, externalizing `@getpaseo/*`, `react`, `react-native`, `@tanstack/react-query`, and `zod`).
+2. **Assert no unlowered ES6 classes:** Strip comments and verify no `class ` declarations or expressions (`/\bclass\s+[A-Za-z0-9_$]+|\bclass\s*\{|=\s*class\b/`) exist in the output bundle.
+3. **Assert bundle size budget:** Keep client bundle under ~300 KB to guard against accidental heavy imports.
+4. **Bytecode compilation via `hermesc`:** Resolve React Native's bundled Hermes compiler (`node_modules/react-native/sdks/hermesc/<platform>-bin/hermesc`) and run `-emit-binary` to guarantee Hermes bytecode parser acceptance.
+
+See `colorful-agent-activity/client/bundle.test.ts` for the reference test implementation.
+
+#### Runtime verification on device
+
+`hermesc` verifies syntax and bytecode generation, but cannot catch runtime evaluation, missing globals, or native UI interop failures. Always smoke test changes on a connected mobile device or emulator:
+- Reload the plugin on your host (`paseo plugin reload <plugin-id>`).
+- Open the Paseo app on iOS or Android and check **Settings → Plugins** (or **Settings → Hosts → [Host] → Plugins**) to confirm the plugin is active and shows no evaluation error.
 
 ## Security, portability, and verification
 
