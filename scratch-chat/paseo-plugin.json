@@ -1,0 +1,4 @@
+{
+  "id": "scratch-chat",
+  "requirements": { "paseo": ">=0.8.0" }
+}
