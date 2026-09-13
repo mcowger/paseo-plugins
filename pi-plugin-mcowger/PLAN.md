@@ -17,7 +17,6 @@ extension-warm model catalogs.
 |---|---|
 | pi source | **Bundle `@earendil-works/pi-coding-agent` 0.85.1** as a plugin dependency; global pi binary, `PI_COMMAND`, and version probe deleted |
 | Host target | Paseo **≥ 0.8.0** (manifest requirement; repo SDK pins at 0.8.0) |
-| Presets | **Paseo-owned**: host-scoped settings edited in a plugin Settings screen, synchronized to the provider through a revisioned RPC, and exposed as Paseo modes; apply via `setModel`/`setThinkingLevel`/tool glob resolution + appended system prompt; state via `appendCustomEntry("preset-state")`. Manual model/thinking changes keep the mode selected but mark it modified. `/preset` command is also supported natively |
 | User extensions | Load normally via `DefaultResourceLoader` (plexus provider, rpiv-todo, pi-subagents, etc.) — verified they register into the shared ModelRuntime after a one-time warmup session |
 | MCP | Paseo-injected MCP servers are connected **in-process** via `@modelcontextprotocol/sdk` and exposed as pi custom tools `mcp_<server>_<tool>`; no mcp.json temp files, no pi-mcp-adapter dependency |
 | Todos | rpiv-todo `details.tasks` (+ pi-example `details.todos`) → native `type:"todo"` timeline items, live + replay |
@@ -26,7 +25,7 @@ extension-warm model catalogs.
 | Rewind | Conversation rewind is advertised through Paseo's provider capability and uses Pi tree navigation with active-branch replay and persistence refresh. File and combined rewind remain unsupported. |
 | Persistence | `SessionManager.open(sessionFile)` resume; `history:"replay"` streams mapped message history before `session.ready` |
 | Catalog | `ModelRuntime.create()` (cached catalogs, no network by default) + extension warmup; per-model `thinkingOptions` from `reasoning` + `thinkingLevelMap` (PR #4413 semantics) |
-| Commands published | `compact`, `preset`, Pi extension commands, plus prompt templates discovered by the loader |
+| Commands published | `compact`, Pi extension commands, plus prompt templates discovered by the loader |
 | Testing | 53 unit tests (fake SDK session) + in-process smoke suite (catalog, live prompt with streaming, persistence/resume) |
 
 ## Known limitations
@@ -35,8 +34,6 @@ extension-warm model catalogs.
 - Foreground-only subagent rendering; detached pi-subagents background runs are out of scope.
 - Project-local extensions that register providers (rare) only appear after that cwd's
   session loads them.
-- Preset settings synchronize to the provider when the Pi Presets settings screen saves or reloads
-  the document.
 - File and combined rewind are unsupported because Pi tree navigation only changes conversation
   history and does not provide an atomic workspace-file rewind contract.
 - Fork visibility is host-gated by Paseo's global `agentForkContext` feature; the provider plugin

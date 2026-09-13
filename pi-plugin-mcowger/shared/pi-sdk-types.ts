@@ -45,7 +45,6 @@ export interface PiSessionManagerLike {
 
 /** Subset of pi's AgentSession used by the session adapter. */
 export interface PiAgentSessionLike {
-  readonly agent: { state: { systemPrompt: string } };
   readonly sessionManager: {
     appendSessionInfo?: (name: string) => string;
     getSessionName?: () => string | undefined;
@@ -72,9 +71,6 @@ export interface PiAgentSessionLike {
   readonly autoCompactionEnabled: boolean;
   setAutoRetryEnabled(enabled: boolean): void;
   readonly autoRetryEnabled: boolean;
-  setActiveToolsByName(toolNames: string[]): void;
-  getAllTools?(): ReadonlyArray<{ name: string }>;
-  getActiveToolNames?(): string[];
   navigateTree(targetId: string, options?: { summarize?: boolean }): Promise<unknown>;
   getSessionStats(): {
     sessionId: string;

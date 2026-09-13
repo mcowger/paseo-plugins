@@ -13,17 +13,10 @@ The plugin is ready for use with Paseo `v0.8.0`. Paseo's provider API is stable 
 
 ![Pi provider preview](./images/pi-provider.svg)
 
-## Screenshot
-
-![Pi provider in Paseo](./images/pi-provider.png)
-
 ## What it does
 
 - Loads pi models, auth, settings, extensions, skills, and prompt templates from `~/.pi/agent`.
 - Exposes pi models with per-model thinking levels in Paseo's composer.
-- Stores Pi presets in Paseo host settings and exposes them as composer modes. Manage presets in
-  Settings → Plugins → Pi Presets. Selecting one applies its model, thinking level, tool patterns,
-  and appended system prompt.
 - Provides a branch-aware `todo` tool when no loaded Pi extension already contributes one, and emits
   its results (along with `@juicesharp/rpiv-todo` results) as native Paseo todo items.
 - Maps foreground pi subagent calls to native Paseo subagent tool rows.
@@ -58,15 +51,6 @@ or `toolPolicy` is supplied.
 Startup diagnostics also cover failed Pi extensions, skills, prompts, themes, MCP tool discovery,
 unavailable requested models, and model fallbacks.
 
-## Preset behavior
-
-Preset modes apply their model and thinking level when selected on an existing live session. In a
-new-agent draft composer, Paseo `v0.8.0` provider modes cannot declare model or thinking defaults,
-so selecting a preset updates the mode pill but leaves the draft's model and thinking pills unchanged.
-The preset is still applied when the session is created. Updating the draft pills immediately will
-require a future Paseo host/API change. When no presets are configured, the provider publishes no
-modes and Paseo hides the mode pill.
-
 ## Installation
 
 Install from a checkout of this repository:
@@ -92,9 +76,7 @@ The plugin uses pi's normal configuration directory, including:
 - `~/.pi/agent/extensions/`
 - `~/.pi/agent/packages`
 
-Presets are managed by Paseo in the plugin's host-scoped settings document. The plugin no longer
-reads pi `presets.json` files. Project-local `.pi` settings and resources are loaded for the active
-workspace.
+Project-local `.pi` settings and resources are loaded for the active workspace.
 
 ## Development
 

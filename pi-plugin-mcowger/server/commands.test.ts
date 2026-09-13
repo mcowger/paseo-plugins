@@ -46,11 +46,6 @@ describe("buildPiPromptCommands", () => {
         argumentHint: "[instructions]",
       },
       {
-        name: "preset",
-        description: "Activate a pi preset",
-        argumentHint: "<name>",
-      },
-      {
         name: "settings",
         description: "Change Pi runtime settings",
         argumentHint: "<auto-compaction|auto-retry> <on|off>",
@@ -80,7 +75,7 @@ describe("buildPiPromptCommands", () => {
       [{ name: "deploy" }],
     );
 
-    expect(commands).toHaveLength(8);
+    expect(commands).toHaveLength(7);
     expect(commands.at(-2)).toEqual({
       name: "status",
       description: "Pi extension command",

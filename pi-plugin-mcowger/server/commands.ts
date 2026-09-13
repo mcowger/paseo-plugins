@@ -31,11 +31,6 @@ const BUILTIN_COMMANDS: readonly ProviderCommand[] = [
     argumentHint: "[instructions]",
   },
   {
-    name: "preset",
-    description: "Activate a pi preset",
-    argumentHint: "<name>",
-  },
-  {
     name: "settings",
     description: "Change Pi runtime settings",
     argumentHint: "<auto-compaction|auto-retry> <on|off>",
