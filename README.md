@@ -17,6 +17,7 @@ when contributing changes.
 - [Session summary](./session-summary/README.md)
 - [Reasoning display](./reasoning-display/README.md)
 - [Colorful agent activity](./colorful-agent-activity/README.md)
+- [Theme Studio](./theme-studio/README.md)
 
 ## Reference index and community registry
 
