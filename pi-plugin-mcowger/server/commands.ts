@@ -1,6 +1,6 @@
 import type { ProviderCommand } from "@getpaseo/plugin/server/provider";
 
-import type { PiPromptTemplateLike } from "../shared/pi-sdk-types.js";
+import type { PiPromptTemplateLike, PiSkillLike } from "../shared/pi-sdk-types.js";
 
 export interface PiExtensionCommandLike {
   name: string;
@@ -9,6 +9,19 @@ export interface PiExtensionCommandLike {
 
 export interface PiExtensionCommandsLike {
   commands: ReadonlyMap<string, PiExtensionCommandLike>;
+}
+
+export interface PiSlashCommand {
+  name: string;
+  arguments: string;
+}
+
+export function parsePiSlashCommand(text: string): PiSlashCommand | null {
+  const trimmed = text.trim();
+  if (/[\r\n]/.test(trimmed)) return null;
+  const match = /^\/([^\s/]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
+  if (!match) return null;
+  return { name: match[1], arguments: match[2]?.trim() ?? "" };
 }
 
 const BUILTIN_COMMANDS: readonly ProviderCommand[] = [
@@ -20,6 +33,24 @@ const BUILTIN_COMMANDS: readonly ProviderCommand[] = [
   {
     name: "preset",
     description: "Activate a pi preset",
+    argumentHint: "<name>",
+  },
+  {
+    name: "settings",
+    description: "Change Pi runtime settings",
+    argumentHint: "<auto-compaction|auto-retry> <on|off>",
+  },
+  {
+    name: "reload",
+    description: "Reload Pi extensions, skills, prompts, themes, and context files",
+  },
+  {
+    name: "session",
+    description: "Show Pi session info and stats",
+  },
+  {
+    name: "name",
+    description: "Set the Pi session display name",
     argumentHint: "<name>",
   },
 ];
@@ -38,6 +69,7 @@ function addCommand(
 export function buildPiPromptCommands(
   extensions: readonly PiExtensionCommandsLike[],
   prompts: readonly PiPromptTemplateLike[],
+  skills: readonly PiSkillLike[] = [],
 ): ProviderCommand[] {
   const commands: ProviderCommand[] = [];
   const names = new Set<string>();
@@ -60,6 +92,15 @@ export function buildPiPromptCommands(
     addCommand(commands, names, {
       name: prompt.name,
       description: prompt.description?.trim() || "Prompt template",
+    });
+  }
+
+  for (const skill of skills) {
+    const name = skill.name.trim();
+    if (!name) continue;
+    addCommand(commands, names, {
+      name: `skill:${name}`,
+      description: skill.description?.trim() || "Pi skill",
     });
   }
 

@@ -395,6 +395,7 @@ async function handleSessionOpen(
   const promptCommands = buildPiPromptCommands(
     extensions.extensions,
     loader.getPrompts().prompts,
+    loader.getSkills().skills,
   );
 
   const providerSession = new PiProviderSession({
@@ -409,6 +410,12 @@ async function handleSessionOpen(
     config,
     models: await listScopedModels(runtime, config.cwd),
     loadPresets: () => state.presetStore.snapshot().presets,
+    reloadCommands: () =>
+      buildPiPromptCommands(
+        loader.getExtensions().extensions,
+        loader.getPrompts().prompts,
+        loader.getSkills().skills,
+      ),
     emit: state.emit,
   });
   state.sessions.set(input.sessionId, providerSession);

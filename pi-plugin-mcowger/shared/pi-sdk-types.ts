@@ -46,7 +46,10 @@ export interface PiSessionManagerLike {
 /** Subset of pi's AgentSession used by the session adapter. */
 export interface PiAgentSessionLike {
   readonly agent: { state: { systemPrompt: string } };
-  readonly sessionManager: unknown;
+  readonly sessionManager: {
+    appendSessionInfo?: (name: string) => string;
+    getSessionName?: () => string | undefined;
+  };
   readonly modelRuntime: {
     getModel(provider: string, id: string): unknown;
     getAvailable(): Promise<readonly unknown[]>;
@@ -55,12 +58,14 @@ export interface PiAgentSessionLike {
   readonly model: { provider: string; id: string } | undefined;
   readonly thinkingLevel: string;
   readonly messages: readonly unknown[];
+  readonly sessionName?: string;
   subscribe(listener: (event: unknown) => void): () => void;
   bindExtensions(bindings: { uiContext?: unknown; mode?: string }): Promise<void>;
   prompt(text: string, options?: Record<string, unknown>): Promise<void>;
   steer(text: string, images?: unknown[]): Promise<void>;
   abort(): Promise<void>;
   compact(customInstructions?: string): Promise<unknown>;
+  reload(options?: { beforeSessionStart?: () => Promise<void> }): Promise<void>;
   setModel(model: unknown, options?: Record<string, unknown>): Promise<void>;
   setThinkingLevel(level: string, options?: Record<string, unknown>): void;
   setAutoCompactionEnabled(enabled: boolean): void;
@@ -72,7 +77,19 @@ export interface PiAgentSessionLike {
   getActiveToolNames?(): string[];
   navigateTree(targetId: string, options?: { summarize?: boolean }): Promise<unknown>;
   getSessionStats(): {
-    tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
+    sessionId: string;
+    userMessages: number;
+    assistantMessages: number;
+    toolCalls: number;
+    toolResults: number;
+    totalMessages: number;
+    tokens: {
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheWrite: number;
+      total: number;
+    };
     cost: number;
     contextUsage?: { tokens: number | null; contextWindow: number };
   };
@@ -98,8 +115,13 @@ export interface PiToolDefinition {
  */
 export type PiHeadlessUiContext = Record<string, unknown>;
 
-/** Minimal prompt template shape from the resource loader. */
+/** Minimal prompt and skill shapes from the resource loader. */
 export interface PiPromptTemplateLike {
+  name: string;
+  description?: string;
+}
+
+export interface PiSkillLike {
   name: string;
   description?: string;
 }
@@ -115,7 +137,7 @@ export interface PiResourceLoaderLike {
     }>;
   };
   getPrompts(): { prompts: PiPromptTemplateLike[]; diagnostics: ReadonlyArray<PiResourceDiagnostic> };
-  getSkills(): { diagnostics: ReadonlyArray<PiResourceDiagnostic> };
+  getSkills(): { skills: PiSkillLike[]; diagnostics: ReadonlyArray<PiResourceDiagnostic> };
   getThemes(): { diagnostics: ReadonlyArray<PiResourceDiagnostic> };
 }
 

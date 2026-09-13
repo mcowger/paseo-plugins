@@ -19,6 +19,7 @@ import type {
 
 import type { PiAgentMessage, PiImageContent, PiModel, PiThinkingLevel } from "../shared/rpc-types.js";
 import type { McpBridgeHandle } from "./mcp-bridge.js";
+import { parsePiSlashCommand } from "./commands.js";
 import {
   createHeadlessUiContext,
   type PiUiDialogRequest,
@@ -76,6 +77,7 @@ export interface PiProviderSessionOptions {
   models: PiModel[];
   loadPresets?: () => PiPresetsConfig;
   emit(event: ProviderEvent): void;
+  reloadCommands?: () => ProviderCommand[];
   cleanup?: () => void;
 }
 
@@ -224,6 +226,7 @@ export class PiProviderSession {
   private readonly promptCommands: ProviderCommand[];
   private readonly mcp: McpBridgeHandle | null;
   private readonly loadPresets?: () => PiPresetsConfig;
+  private readonly reloadCommands?: () => ProviderCommand[];
 
   private models: PiModel[];
   private currentMode: string | null = null;
@@ -260,6 +263,7 @@ export class PiProviderSession {
     this.config = options.config;
     this.models = options.models;
     this.loadPresets = options.loadPresets;
+    this.reloadCommands = options.reloadCommands;
     this.emitEvent = options.emit;
     this.cleanup = options.cleanup;
 
@@ -476,21 +480,20 @@ export class PiProviderSession {
       return;
     }
 
-    const textParts = prompt.input.content.filter(
-      (part): part is Extract<typeof part, { type: "text" }> => part.type === "text",
-    );
-    const text =
-      textParts.length === prompt.input.content.length
-        ? textParts.map((part) => part.text).join("\n")
-        : "";
-    const runtimeSetting = this.parseRuntimeSettingCommand(text);
-    if (runtimeSetting) {
-      await this.applyRuntimeSetting(runtimeSetting.id, runtimeSetting.value, prompt.clientMessageId);
+    let payload = convertPromptInput(prompt.input, { model: this.currentModel() });
+    const slashInvocation =
+      prompt.input.content.every((part) => part.type === "text")
+        ? parsePiSlashCommand(payload.text)
+        : null;
+    if (slashInvocation && this.isNativeSlashCommand(slashInvocation.name)) {
+      if (this.activeTurnId) await this.interrupt();
+      await this.handleCommand({
+        ...prompt,
+        input: { type: "command", name: slashInvocation.name, arguments: slashInvocation.arguments },
+      });
       return;
     }
 
-    let payload = convertPromptInput(prompt.input, { model: this.currentModel() });
-    const slashInvocation = this.parseSlashCommandInput(payload.text);
     if (!slashInvocation) {
       payload = { ...payload, text: this.consumePresetNotice(payload.text) };
     }
@@ -505,9 +508,46 @@ export class PiProviderSession {
     await this.startTurn(payload, prompt);
   }
 
+  private isNativeSlashCommand(name: string): boolean {
+    return ["compact", "preset", "settings", "reload", "session", "name"].includes(name);
+  }
+
   private async handleCommand(prompt: ProviderPrompt): Promise<void> {
     const { name, arguments: args } = prompt.input as { name: string; arguments: string };
     const commandText = `/${name}${args ? ` ${args}` : ""}`;
+
+    if (name === "reload") {
+      this.emitCommandUserMessage(prompt.clientMessageId, commandText, this.appendCommandEntry(commandText));
+      await this.handleReload(prompt.clientMessageId);
+      return;
+    }
+
+    if (name === "session") {
+      this.emitCommandUserMessage(prompt.clientMessageId, commandText, this.appendCommandEntry(commandText));
+      await this.handleSessionInfo(prompt.clientMessageId);
+      return;
+    }
+
+    if (name === "name") {
+      this.emitCommandUserMessage(prompt.clientMessageId, commandText, this.appendCommandEntry(commandText));
+      await this.handleSessionName(args, prompt.clientMessageId);
+      return;
+    }
+
+    if (name === "settings") {
+      const runtimeSetting = this.parseRuntimeSettingCommand(commandText);
+      if (!runtimeSetting) {
+        this.emitPromptResult(prompt.clientMessageId, {
+          type: "failed",
+          error: { message: "Usage: /settings <auto-compaction|auto-retry> <on|off>" },
+        });
+        return;
+      }
+      const commandEntry = this.appendCommandEntry(commandText);
+      this.emitCommandUserMessage(prompt.clientMessageId, commandText, commandEntry);
+      await this.applyRuntimeSetting(runtimeSetting.id, runtimeSetting.value, prompt.clientMessageId);
+      return;
+    }
 
     if (name === "preset") {
       const commandEntry = this.appendCommandEntry(commandText);
@@ -544,6 +584,78 @@ export class PiProviderSession {
     // prompt pipeline, which expands templates / dispatches extension commands.
     const payload: PiPromptPayload = { text: commandText };
     await this.startTurn(payload, prompt);
+  }
+
+  private async handleReload(clientMessageId: string): Promise<void> {
+    try {
+      await this.sdk.reload();
+      const commands = this.reloadCommands?.();
+      if (commands) {
+        this.emit({ type: "session.commands", sessionId: this.sessionId, commands });
+      }
+      this.emitPromptResult(clientMessageId, { type: "completed" });
+      this.emitNotification("Pi resources reloaded.", "info");
+    } catch (error) {
+      this.emitPromptResult(clientMessageId, {
+        type: "failed",
+        error: { message: toErrorMessage(error) },
+      });
+    }
+  }
+
+  private async handleSessionInfo(clientMessageId: string): Promise<void> {
+    try {
+      const stats = this.sdk.getSessionStats();
+      const name = this.sdk.sessionName?.trim();
+      const lines = [
+        name ? `Name: ${name}` : "Name: (unnamed)",
+        `Session: ${stats.sessionId}`,
+        `Messages: ${stats.totalMessages} (${stats.userMessages} user, ${stats.assistantMessages} assistant)`,
+        `Tools: ${stats.toolCalls} calls, ${stats.toolResults} results`,
+        `Tokens: ${stats.tokens.total}`,
+        `Cost: $${stats.cost.toFixed(4)}`,
+      ];
+      this.emit({
+        type: "timeline.item",
+        sessionId: this.sessionId,
+        item: { type: "assistant_message", id: `session-info:${randomUUID()}`, text: lines.join("\n") },
+      });
+      this.emitPromptResult(clientMessageId, { type: "completed" });
+    } catch (error) {
+      this.emitPromptResult(clientMessageId, {
+        type: "failed",
+        error: { message: toErrorMessage(error) },
+      });
+    }
+  }
+
+  private async handleSessionName(rawName: string, clientMessageId: string): Promise<void> {
+    const name = rawName.trim();
+    if (!name) {
+      this.emitPromptResult(clientMessageId, {
+        type: "failed",
+        error: { message: "Usage: /name <name>" },
+      });
+      return;
+    }
+    try {
+      if (!this.sdk.sessionManager.appendSessionInfo) {
+        throw new Error("Pi session naming is unavailable");
+      }
+      this.sdk.sessionManager.appendSessionInfo(name);
+      this.emit({
+        type: "timeline.item",
+        sessionId: this.sessionId,
+        item: { type: "notification", id: `session-name:${randomUUID()}`, level: "info", message: `Session renamed to ${name}.` },
+      });
+      this.emitPersistence();
+      this.emitPromptResult(clientMessageId, { type: "completed" });
+    } catch (error) {
+      this.emitPromptResult(clientMessageId, {
+        type: "failed",
+        error: { message: toErrorMessage(error) },
+      });
+    }
   }
 
   private appendCommandEntry(text: string): { id: string; anchorId: string } {
@@ -1036,23 +1148,6 @@ export class PiProviderSession {
     else throw new Error(`Unsupported Pi runtime setting: ${id}`);
     this.emitPromptResult(clientMessageId, { type: "completed" });
     this.emitConfigState();
-  }
-
-  private parseSlashCommandInput(text: string): { commandName: string; args?: string } | null {
-    const trimmed = text.trim();
-    if (!trimmed.startsWith("/") || trimmed.length <= 1) {
-      return null;
-    }
-    const withoutPrefix = trimmed.slice(1);
-    const firstWhitespaceIdx = withoutPrefix.search(/\s/);
-    const commandName =
-      firstWhitespaceIdx === -1 ? withoutPrefix : withoutPrefix.slice(0, firstWhitespaceIdx);
-    if (!commandName || commandName.includes("/")) {
-      return null;
-    }
-    const rawArgs =
-      firstWhitespaceIdx === -1 ? "" : withoutPrefix.slice(firstWhitespaceIdx + 1).trim();
-    return rawArgs.length > 0 ? { commandName, args: rawArgs } : { commandName };
   }
 
   private takePendingSteerSubmission(text: string): PiPendingSteerSubmission | undefined {
