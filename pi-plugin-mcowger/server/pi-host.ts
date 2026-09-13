@@ -16,9 +16,9 @@ import { mapPiModel } from "./thinking.js";
  * Registrations persist after the warmup session is disposed.
  */
 export async function createModelRuntime(): Promise<PiModelRuntimeLike> {
-  const runtime = await ModelRuntime.create();
   const loader = new DefaultResourceLoader({ cwd: homedir(), agentDir: getAgentDir() });
   await loader.reload();
+  const runtime = await ModelRuntime.create();
   const { session } = await createAgentSession({
     cwd: homedir(),
     modelRuntime: runtime,
