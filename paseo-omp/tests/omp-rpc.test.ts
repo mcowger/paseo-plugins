@@ -1889,6 +1889,7 @@ describe("OMP RPC transport", () => {
         HOME: "/home/runner",
         HTTPS_PROXY: proxy,
         OPENAI_API_KEY: "daemon-secret",
+        PLEXUS_API_KEY: "plexus-secret",
         UNRELATED_DAEMON_VALUE: "must-not-pass",
         NODE_OPTIONS: "--require attacker.js",
         RANDOM_TOKEN: "must-not-pass-either",
@@ -1905,6 +1906,7 @@ describe("OMP RPC transport", () => {
       HOME: "/home/runner",
       HTTPS_PROXY: proxy,
       OPENAI_API_KEY: "daemon-secret",
+      PLEXUS_API_KEY: "plexus-secret",
       TEST_ENV: "explicit",
       CUSTOMER_API_KEY: "session-secret",
     });
