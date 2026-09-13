@@ -18,7 +18,8 @@
     "subagent-activity",
     "reasoning-display",
     "opencode-session-overview",
-    "pi-plugin-mcowger"
+    "pi-plugin-mcowger",
+    "theme-studio"
   ],
   "snapshot": "sdk/paseo-sdk-api.json"
 }

@@ -22,13 +22,24 @@ export const transformReasoning: ReasoningTransformer = ({ item, phase }) => ({
   ],
 });
 
-export const transformToolCall: ToolCallTransformer = ({ item }) => ({
-  items: [
-    {
-      type: "plugin",
-      kind: TOOL_CALL_RENDERER_KIND,
-      version: TOOL_CALL_RENDERER_VERSION,
-      data: createToolCallData(item),
-    },
-  ],
-});
+export const transformToolCall: ToolCallTransformer = ({ item }) => {
+  // Paseo renders this exact shape as a SpeakMessage, not an ordinary tool card.
+  if (
+    item.name === "speak" &&
+    item.detail?.type === "unknown" &&
+    typeof item.detail.input === "string" &&
+    item.detail.input.trim()
+  ) {
+    return undefined;
+  }
+  return {
+    items: [
+      {
+        type: "plugin",
+        kind: TOOL_CALL_RENDERER_KIND,
+        version: TOOL_CALL_RENDERER_VERSION,
+        data: createToolCallData(item),
+      },
+    ],
+  };
+};

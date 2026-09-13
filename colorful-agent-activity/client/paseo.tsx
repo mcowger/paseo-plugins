@@ -1,9 +1,9 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
-import React, { useState, type ReactNode } from "react";
+import React, { useMemo, useState, type ReactNode } from "react";
 import { Pressable, Text, View, type TextStyle } from "react-native";
 import { ChildAgentTimeline } from "./child-agent";
-import { isDarkSurface, useHighlightTokens, type HighlightToken } from "./highlight";
+import { useHighlightTokens, type HighlightToken } from "./highlight";
 import type { ActivityStyles } from "./activity";
 import { extractPaseoChildAgentId } from "../shared/child-agent";
 import {
@@ -16,6 +16,7 @@ import {
   formatUnknownValue,
   paseoToolLeafName,
   paseoToolResult,
+  previewText,
   type ActivityPalette,
 } from "../shared/presentation";
 
@@ -400,10 +401,13 @@ export function PaseoCodeBlock({
   theme: Theme;
   styles: ActivityStyles;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const preview = useMemo(() => previewText(code), [code]);
+  const displayCode = showAll ? code : preview.text;
   const tokens = useHighlightTokens(
-    code,
+    displayCode,
     language,
-    isDarkSurface(theme.colors.surface0)
+    theme.colors,
   );
   return (
     <Section title={label ?? "Output"} styles={styles}>
@@ -413,11 +417,24 @@ export function PaseoCodeBlock({
             <TokenizedLines lines={tokens} styles={styles} />
           ) : (
             <Text selectable style={styles.codeLine}>
-              {code || " "}
+              {displayCode || " "}
             </Text>
           )}
         </View>
       </ScrollView>
+      {preview.truncated ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setShowAll(!showAll)}
+          style={styles.showMoreButton}
+        >
+          <Text style={styles.showMoreText}>
+            {showAll
+              ? "Show less"
+              : `Show all (${preview.totalLines} lines, ${preview.totalChars.toLocaleString()} chars)`}
+          </Text>
+        </Pressable>
+      ) : null}
     </Section>
   );
 }

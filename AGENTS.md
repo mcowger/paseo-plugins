@@ -19,8 +19,17 @@ The current target host and SDK baseline is **Paseo v0.8.0**. Pin `@getpaseo/cli
   working examples for panels and commands (`local-plugin`), RPC, attachment sources (`linear`),
   themes (`catppuccin`), timeline items (`timeline-items`, `inline-thinking`), direct providers
   (`provider-direct`), and ACP adapter providers (`provider-acp-transformer`).
-- [Community reference index](examples/README.md): reviewed public plugins grouped by the techniques
-  they demonstrate and their known API caveats.
+- [Community plugin registry (paseo.cafe)](https://paseo.cafe/): community-run directory indexing
+  Paseo plugins from GitHub. Machine-readable endpoints:
+  - Catalog JSON: [`https://paseo.cafe/api/plugins`](https://paseo.cafe/api/plugins)
+  - LLM compact index: [`https://paseo.cafe/llms.txt`](https://paseo.cafe/llms.txt)
+  - LLM expanded facts: [`https://paseo.cafe/llms-full.txt`](https://paseo.cafe/llms-full.txt)
+  - OpenAPI spec: [`https://paseo.cafe/openapi.json`](https://paseo.cafe/openapi.json)
+  - GitHub registry source: [`https://github.com/paseo-cafe/paseo-cafe/tree/main/registry`](https://github.com/paseo-cafe/paseo-cafe/tree/main/registry)
+  - Per-plugin markdown: `https://paseo.cafe/plugins/<id>.md`
+- [Community reference index](examples/README.md): reviewed public plugins from the paseo.cafe registry
+  grouped by the techniques they demonstrate (surfaces, panels, timeline transformers, pills, providers,
+  ACP adapters, lifecycle hooks, telemetry) with direct GitHub and paseo.cafe links.
 
 ## Development reminders
 
