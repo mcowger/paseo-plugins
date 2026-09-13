@@ -214,6 +214,7 @@ export class PiProviderSession {
   private readonly emitEvent: (event: ProviderEvent) => void;
   private readonly cleanup?: () => void;
   private readonly promptCommands: ProviderCommand[];
+  private readonly reloadCommands?: () => ProviderCommand[];
   private readonly mcp: McpBridgeHandle | null;
 
   private models: PiModel[];
@@ -242,6 +243,7 @@ export class PiProviderSession {
     this.sdk = options.bundle.session;
     this.sessionManager = options.bundle.sessionManager;
     this.promptCommands = options.bundle.promptCommands;
+    this.reloadCommands = options.reloadCommands;
     this.mcp = options.bundle.mcp;
     this.config = options.config;
     this.models = options.models;
@@ -422,8 +424,35 @@ export class PiProviderSession {
       return;
     }
 
-    let payload = convertPromptInput(prompt.input, { model: this.currentModel() });
-    const slashInvocation = this.parseSlashCommandInput(payload.text);
+    const textParts = prompt.input.content.filter(
+      (part): part is Extract<typeof prompt.input.content[number], { type: "text" }> =>
+        part.type === "text",
+    );
+    const text =
+      textParts.length === prompt.input.content.length
+        ? textParts.map((part) => part.text).join("\n")
+        : "";
+    const runtimeSetting = this.parseRuntimeSettingCommand(text);
+    if (runtimeSetting) {
+      await this.applyRuntimeSetting(runtimeSetting.id, runtimeSetting.value, prompt.clientMessageId);
+      return;
+    }
+
+    const payload = convertPromptInput(prompt.input, { model: this.currentModel() });
+    const slashInvocation =
+      textParts.length === prompt.input.content.length ? parsePiSlashCommand(payload.text) : null;
+    if (slashInvocation && this.isNativeSlashCommand(slashInvocation.name)) {
+      if (this.activeTurnId) await this.interrupt();
+      await this.handleCommand({
+        ...prompt,
+        input: {
+          type: "command",
+          name: slashInvocation.name,
+          arguments: slashInvocation.arguments,
+        },
+      });
+      return;
+    }
 
     if (prompt.delivery === "steer" && this.activeTurnId && !slashInvocation) {
       await this.steerActiveTurn(payload, prompt);
@@ -442,6 +471,55 @@ export class PiProviderSession {
   private async handleCommand(prompt: ProviderPrompt): Promise<void> {
     const { name, arguments: args } = prompt.input as { name: string; arguments: string };
     const commandText = `/${name}${args ? ` ${args}` : ""}`;
+
+    if (name === "reload") {
+      this.emitCommandUserMessage(
+        prompt.clientMessageId,
+        commandText,
+        this.appendCommandEntry(commandText),
+      );
+      await this.handleReload(prompt.clientMessageId);
+      return;
+    }
+
+    if (name === "session") {
+      this.emitCommandUserMessage(
+        prompt.clientMessageId,
+        commandText,
+        this.appendCommandEntry(commandText),
+      );
+      await this.handleSessionInfo(prompt.clientMessageId);
+      return;
+    }
+
+    if (name === "name") {
+      this.emitCommandUserMessage(
+        prompt.clientMessageId,
+        commandText,
+        this.appendCommandEntry(commandText),
+      );
+      await this.handleSessionName(args, prompt.clientMessageId);
+      return;
+    }
+
+    if (name === "settings") {
+      const runtimeSetting = this.parseRuntimeSettingCommand(commandText);
+      if (!runtimeSetting) {
+        this.emitPromptResult(prompt.clientMessageId, {
+          type: "failed",
+          error: { message: "Usage: /settings <auto-compaction|auto-retry> <on|off>" },
+        });
+        return;
+      }
+      const commandEntry = this.appendCommandEntry(commandText);
+      this.emitCommandUserMessage(prompt.clientMessageId, commandText, commandEntry);
+      await this.applyRuntimeSetting(
+        runtimeSetting.id,
+        runtimeSetting.value,
+        prompt.clientMessageId,
+      );
+      return;
+    }
 
     if (name === "compact") {
       const commandEntry = this.appendCommandEntry(commandText);

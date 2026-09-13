@@ -68,8 +68,8 @@ describe("buildPiPromptCommands", () => {
       [{ name: "deploy" }],
     );
 
-    expect(commands).toHaveLength(2);
-    expect(commands.at(-1)).toEqual({
+    expect(commands).toHaveLength(3);
+    expect(commands.at(-2)).toEqual({
       name: "status",
       description: "Pi extension command",
     });

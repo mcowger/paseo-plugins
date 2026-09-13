@@ -71,6 +71,9 @@ export interface PiAgentSessionLike {
   readonly autoCompactionEnabled: boolean;
   setAutoRetryEnabled(enabled: boolean): void;
   readonly autoRetryEnabled: boolean;
+  getActiveToolNames(): string[];
+  getAllTools(): Array<{ name: string }>;
+  setActiveToolsByName(toolNames: string[]): void;
   navigateTree(targetId: string, options?: { summarize?: boolean }): Promise<unknown>;
   getSessionStats(): {
     sessionId: string;

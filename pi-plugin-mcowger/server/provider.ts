@@ -26,7 +26,6 @@ import {
 } from "./tool-policy.js";
 import type { PiModelRuntimeLike } from "../shared/pi-sdk-types.js";
 import { buildCatalog, createModelRuntime, listScopedModels } from "./pi-host.js";
-import { PI_PROVIDER_ID as SHARED_PI_PROVIDER_ID } from "../shared/tool-policy.js";
 import { createPiToolPolicyStore, type PiToolPolicyStore } from "./tool-policy.js";
 import { PiProviderSession } from "./session.js";
 import { normalizePiThinkingLevel, parsePiModelReference } from "./thinking.js";
@@ -444,6 +443,12 @@ async function handleSessionOpen(
     },
     config,
     models: await listScopedModels(runtime, config.cwd),
+    reloadCommands: () =>
+      buildPiPromptCommands(
+        loader.getExtensions().extensions,
+        loader.getPrompts().prompts,
+        loader.getSkills().skills,
+      ),
     emit: state.emit,
   });
   state.sessions.set(input.sessionId, providerSession);

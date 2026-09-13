@@ -7,7 +7,7 @@ running the `pi` CLI in RPC mode.
 
 ## Status
 
-The plugin is ready for use with Paseo `v0.8.0`. Paseo's provider API is stable for this release.
+Version `0.1.0` is ready for use with Paseo `v0.8.0`. Paseo's provider API is stable for this release.
 
 ## Preview
 
