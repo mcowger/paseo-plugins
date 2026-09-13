@@ -17,11 +17,6 @@ const BUILTIN_COMMANDS: readonly ProviderCommand[] = [
     description: "Manually compact the session context",
     argumentHint: "[instructions]",
   },
-  {
-    name: "preset",
-    description: "Activate a pi preset",
-    argumentHint: "<name>",
-  },
 ];
 
 function addCommand(

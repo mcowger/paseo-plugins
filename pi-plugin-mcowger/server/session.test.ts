@@ -122,7 +122,7 @@ function makeSessionManager(fake: FakeSdkSession): SessionManager {
   } as unknown as SessionManager;
 }
 
-function createHarness(options: { presets?: Record<string, never> | Record<string, object> } = {}) {
+function createHarness() {
   const fake = new FakeSdkSession();
   const events: ProviderEvent[] = [];
   const config: ProviderSessionConfig = {
@@ -136,10 +136,8 @@ function createHarness(options: { presets?: Record<string, never> | Record<strin
     session: fake as unknown as AgentSession,
     sessionManager: makeSessionManager(fake),
     mcp: null,
-    presets: (options.presets ?? {}) as SdkSessionBundle["presets"],
     promptCommands: [
       { name: "compact", description: "Compact" },
-      { name: "preset", description: "Preset" },
     ],
   };
   const session = new PiProviderSession({
@@ -271,38 +269,6 @@ describe("PiProviderSession user identity", () => {
 });
 
 describe("PiProviderSession commands", () => {
-  it("applies presets natively for the preset command", async () => {
-    const { fake, session, events } = createHarness({
-      presets: {
-        plan: {
-          id: "plan",
-          name: "Plan",
-          model: "plexus/gpt-5.6-sol",
-          thinkingLevel: "high",
-        },
-      },
-    });
-    await session.handlePrompt({
-      clientMessageId: "cm-p",
-      delivery: "auto",
-      input: { type: "command", name: "preset", arguments: "plan" },
-    });
-    expect(fake.setModelCalls).toEqual(["plexus/gpt-5.6-sol"]);
-    expect(fake.thinkingLevels).toContain("high");
-    expect(fake.appendedEntries).toEqual([
-      {
-        customType: "paseo-command-anchor",
-        data: { text: "/preset plan" },
-      },
-      {
-        customType: "paseo-command",
-        data: { text: "/preset plan", anchorId: "entry-1" },
-      },
-      { customType: "preset-state", data: { name: "plan" } },
-    ]);
-    expect(events.some((e) => e.type === "session.prompt_result")).toBe(true);
-  });
-
   it("applies runtime settings from configure", async () => {
     const { fake, session } = createHarness();
     await session.configure({ settings: { autoCompaction: "off", autoRetry: "off" } });
@@ -373,158 +339,6 @@ describe("PiProviderSession commands", () => {
     } as never);
     expect(fake.autoRetryEnabled).toBe(true);
     expect(fake.prompts[0]?.text).toContain("/settings auto-retry off");
-  });
-});
-
-describe("PiProviderSession presets as modes", () => {
-  it("exposes presets as modes with the active mode in config state", () => {
-    const { session } = createHarness({
-      presets: {
-        plan: {
-          id: "plan",
-          name: "Plan",
-          model: "openai/gpt-5.2",
-          thinkingLevel: "high",
-        },
-      },
-    });
-    const config = session.configState();
-    expect(config.modes).toEqual([
-      { id: "plan", label: "Plan", icon: "Bot", description: "openai/gpt-5.2 · thinking: high" },
-    ]);
-  });
-
-  it("applies a preset on configure(mode): model, thinking, tools, instructions", async () => {
-    const { fake, session, events } = createHarness({
-      presets: {
-        plan: {
-          id: "plan",
-          name: "Plan",
-          model: "plexus/gpt-5.6-sol",
-          thinkingLevel: "high",
-          tools: ["read", "mcp_*"],
-          appendSystemPrompt: "Plan first.",
-        },
-      },
-    });
-    await session.configure({ mode: "plan" });
-    expect(fake.setModelCalls).toEqual(["plexus/gpt-5.6-sol"]);
-    expect(fake.thinkingLevels).toContain("high");
-    expect(fake.activeTools).toEqual([["read", "mcp_linear_search"]]);
-    expect(fake.agent.state.systemPrompt).toBe("base system prompt\n\nPlan first.");
-
-    const configEvent = events.findLast((event) => event.type === "session.config");
-    expect(configEvent).toMatchObject({
-      config: { model: "plexus/gpt-5.6-sol", mode: "plan", thinkingOption: "high" },
-    });
-  });
-
-  it("announces a live preset change and marks manual overrides as modified", async () => {
-    const { fake, session } = createHarness({
-      presets: {
-        plan: {
-          id: "plan",
-          name: "Plan",
-          model: "anthropic/claude",
-          thinkingLevel: "high",
-          appendSystemPrompt: "Follow the plan.",
-        },
-      },
-    });
-
-    await session.configure({ mode: "plan" });
-    await session.configure({ thinkingOption: "low" });
-    expect(session.configState().modes[0]?.label).toBe("Plan (modified)");
-
-    await session.handlePrompt(messagePrompt("continue"));
-    expect(fake.prompts[0]?.text).toBe(
-      "NOTE: YOUR PRESET MODE HAS CHANGED TO Plan. FOLLOW ITS INSTRUCTIONS:\nFollow the plan.\n\ncontinue",
-    );
-  });
-
-  it("clamps thinking when the composer changes to a narrower model", async () => {
-    const { fake, session } = createHarness();
-    fake.modelRuntime.getModel = (provider, id) => ({
-      provider,
-      id,
-      reasoning: true,
-      thinkingLevelMap: { medium: null, high: null },
-    });
-    fake.thinkingLevel = "medium";
-
-    await session.configure({ model: "anthropic/narrow" });
-
-    expect(fake.thinkingLevels.at(-1)).toBe("low");
-    expect(session.configState().thinkingOption).toBe("low");
-  });
-
-  it("marks an edited active preset and reports when it is deleted", async () => {
-    const { session, events } = createHarness({
-      presets: {
-        plan: {
-          id: "plan",
-          name: "Plan",
-          model: "anthropic/claude",
-          thinkingLevel: "medium",
-          appendSystemPrompt: "Plan first.",
-        },
-      },
-    });
-    await session.configure({ mode: "plan" });
-    session.updatePresets({
-      plan: {
-        id: "plan",
-        name: "Plan",
-        model: "anthropic/claude",
-        thinkingLevel: "medium",
-        appendSystemPrompt: "Plan differently.",
-      },
-    });
-    await flush();
-    expect(session.configState().modes[0]?.label).toBe("Plan (modified)");
-
-    session.updatePresets({});
-    await flush();
-    expect(session.configState().mode).toBeUndefined();
-    expect(
-      events.some(
-        (event) =>
-          event.type === "timeline.item" &&
-          event.item.type === "notification" &&
-          event.item.level === "warning",
-      ),
-    ).toBe(true);
-  });
-
-  it("rejects unknown presets", async () => {
-    const { session } = createHarness();
-    await expect(session.configure({ mode: "nope" })).rejects.toThrow(/Unknown pi preset/);
-  });
-
-  it("restores the active preset from preset-state entries on construction", () => {
-    const fake = new FakeSdkSession();
-    fake.entries.push({ type: "custom", customType: "preset-state", data: { name: "plan" } });
-    const restored = new PiProviderSession({
-      sessionId: "s2",
-      bundle: {
-        session: fake as unknown as AgentSession,
-        sessionManager: makeSessionManager(fake),
-        mcp: null,
-        presets: {
-          plan: {
-            id: "plan",
-            name: "Plan",
-            model: "anthropic/m",
-            thinkingLevel: "medium",
-          },
-        },
-        promptCommands: [],
-      },
-      config: { cwd: "/tmp/work", env: {}, mcpServers: {}, settings: {}, persist: true },
-      models: [TEST_MODEL],
-      emit: () => {},
-    });
-    expect(restored.configState().mode).toBe("plan");
   });
 });
 
@@ -627,17 +441,6 @@ describe("PiProviderSession steering", () => {
     });
   });
 
-  it("interrupts and restarts when steering a slash command", async () => {
-    const { fake, session } = createHarness();
-    fake.onPrompt = () => {
-      fake.emitEvent({ type: "turn_start" } as AgentSessionEvent);
-      fake.onPrompt = null;
-    };
-    await session.handlePrompt(messagePrompt("start"));
-    await session.handlePrompt(messagePrompt("/preset plan", "cm-3", "steer"));
-    expect(fake.aborts).toBe(1);
-    expect(fake.prompts.at(-1)?.text).toBe("/preset plan");
-  });
 });
 
 describe("PiProviderSession replay", () => {

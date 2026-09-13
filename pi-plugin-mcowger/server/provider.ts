@@ -18,11 +18,16 @@ import {
 
 import { createMcpBridge } from "./mcp-bridge.js";
 import { buildPiPromptCommands } from "./commands.js";
+import {
+  formatPiToolPolicyDiagnostic,
+  piToolPolicyRequiresKnownBaseline,
+  policyChanged,
+  resolvePiToolPolicy,
+} from "./tool-policy.js";
 import type { PiModelRuntimeLike } from "../shared/pi-sdk-types.js";
 import { buildCatalog, createModelRuntime, listScopedModels } from "./pi-host.js";
-import { PI_PROVIDER_ID as SHARED_PI_PROVIDER_ID } from "../shared/preset-settings.js";
-import { createPiPresetStore, type PiPresetStore } from "./preset-store.js";
-import { presetsToModes } from "./presets.js";
+import { PI_PROVIDER_ID as SHARED_PI_PROVIDER_ID } from "../shared/tool-policy.js";
+import { createPiToolPolicyStore, type PiToolPolicyStore } from "./tool-policy.js";
 import { PiProviderSession } from "./session.js";
 import { normalizePiThinkingLevel, parsePiModelReference } from "./thinking.js";
 import {
@@ -47,29 +52,26 @@ const SUPPORTED_CAPABILITIES = [
 
 interface ProviderState {
   sessions: Map<string, PiProviderSession>;
-  presetStore: PiPresetStore;
+  toolPolicyStore: PiToolPolicyStore;
   emit(event: ProviderEvent): void;
   capabilities: readonly string[];
   modelRuntimePromise: Promise<PiModelRuntimeLike> | null;
 }
 
-export function createPiProvider(presetStore = createPiPresetStore()): ProviderRegistration {
+export function createPiProvider(toolPolicyStore = createPiToolPolicyStore()): ProviderRegistration {
   return {
     id: PI_PROVIDER_ID,
     label: PI_PROVIDER_LABEL,
     description:
-      "Pi coding agent via its in-process SDK, with per-model thinking levels, presets, native todos, and subagent rendering",
+      "Pi coding agent via its in-process SDK, with per-model thinking levels, host tool policy, native todos, and subagent rendering",
     icon: "icon.svg",
-    async getCatalogCacheKey() {
-      return presetStore.snapshot().revision;
-    },
     async connect(request) {
       if (!request.versions.includes(1)) {
         throw new Error("Provider protocol version 1 is required");
       }
       return createConnection(
         negotiateProviderCapabilities(request.capabilities, SUPPORTED_CAPABILITIES),
-        presetStore,
+        toolPolicyStore,
       );
     },
   };
@@ -77,12 +79,12 @@ export function createPiProvider(presetStore = createPiPresetStore()): ProviderR
 
 function createConnection(
   capabilities: readonly string[],
-  presetStore: PiPresetStore,
+  toolPolicyStore: PiToolPolicyStore,
 ): ProviderConnection {
   const listeners = new Set<(event: ProviderEvent) => void>();
   const state: ProviderState = {
     sessions: new Map(),
-    presetStore,
+    toolPolicyStore,
     capabilities,
     modelRuntimePromise: null,
     emit(event) {
@@ -91,11 +93,6 @@ function createConnection(
     },
   };
   let closed = false;
-  const unsubscribePresetStore = presetStore.subscribe(({ presets }) => {
-    if (closed) return;
-    for (const session of state.sessions.values()) session.updatePresets(presets);
-  });
-
   const modelRuntime = () => {
     state.modelRuntimePromise ??= createModelRuntime();
     return state.modelRuntimePromise;
@@ -136,7 +133,6 @@ function createConnection(
       const sessions = [...state.sessions.values()];
       state.sessions.clear();
       await Promise.all(sessions.map((session) => session.close().catch(() => undefined)));
-      unsubscribePresetStore();
       listeners.clear();
     },
   };
@@ -215,13 +211,12 @@ async function handleCatalog(
   try {
     const runtime = await getModelRuntime();
     const baseCatalog = await buildCatalog(runtime, input.cwd ?? homedir());
-    const presets = state.presetStore.snapshot().presets;
     state.emit({
       type: "catalog",
       requestId: input.requestId,
       catalog: {
         ...baseCatalog,
-        modes: presetsToModes(presets),
+        modes: [],
       },
     });
   } catch (error) {
@@ -298,8 +293,13 @@ async function handleSessionOpen(
   // per-server and never block the session.
   let mcp = null;
   const mcpServers = config.mcpServers ?? {};
+  const policy = state.toolPolicyStore.snapshot().settings;
   if (Object.keys(mcpServers).length > 0) {
-    mcp = await createMcpBridge(mcpServers, (message) => startupDiagnostics.push(message));
+    mcp = await createMcpBridge(
+      mcpServers,
+      policy.paseoTools,
+      (message: string) => startupDiagnostics.push(message),
+    );
   }
 
   const systemPrompt = config.systemPrompt;
@@ -366,6 +366,43 @@ async function handleSessionOpen(
     throw error;
   }
   const { session, modelFallbackMessage } = created;
+  const baselineToolNames = session.getActiveToolNames?.();
+  const knownToolNames = session.getAllTools?.().map((tool) => tool.name);
+  const finalToolNames = resolvePiToolPolicy(baselineToolNames, knownToolNames, policy.piTools);
+  const paseoToolCount = mcp?.paseoToolCount ?? 0;
+  const visiblePaseoToolCount = mcp?.visiblePaseoToolCount ?? 0;
+  if (baselineToolNames === undefined || finalToolNames === undefined) {
+    if (piToolPolicyRequiresKnownBaseline(policy.piTools)) {
+      session.setActiveToolsByName([]);
+      startupDiagnostics.push(
+        "Pi tool policy: Pi did not expose its active tool list; disabled tool calls because a restrictive policy could not be resolved safely.",
+      );
+    } else {
+      startupDiagnostics.push(
+        "Pi tool policy: Pi did not expose its active tool list; preserved the SDK's current tool selection.",
+      );
+    }
+  } else {
+    session.setActiveToolsByName(finalToolNames);
+    if (
+      policyChanged(
+        baselineToolNames,
+        finalToolNames,
+        paseoToolCount,
+        visiblePaseoToolCount,
+        policy.paseoTools.enabled,
+      )
+    ) {
+      startupDiagnostics.push(
+        formatPiToolPolicyDiagnostic(
+          baselineToolNames,
+          finalToolNames,
+          mcp?.paseoToolNames ?? [],
+          mcp?.visiblePaseoToolNames ?? [],
+        ),
+      );
+    }
+  }
 
   // Apply the requested model/thinking after creation (fast, direct).
   if (config.model) {
@@ -391,7 +428,6 @@ async function handleSessionOpen(
   if (!session.model) {
     startupDiagnostics.push("Pi has no available model. Select an available model before prompting.");
   }
-  const presets = state.presetStore.snapshot().presets;
   const promptCommands = buildPiPromptCommands(
     extensions.extensions,
     loader.getPrompts().prompts,
@@ -403,12 +439,10 @@ async function handleSessionOpen(
       session,
       sessionManager,
       mcp,
-      presets,
       promptCommands,
     },
     config,
     models: await listScopedModels(runtime, config.cwd),
-    loadPresets: () => state.presetStore.snapshot().presets,
     emit: state.emit,
   });
   state.sessions.set(input.sessionId, providerSession);
@@ -448,16 +482,4 @@ async function handleSessionOpen(
 
   state.emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
 
-  // Apply a requested preset on fresh sessions. On resume the saved mode is
-  // read back from preset-state entries by the session constructor.
-  if (!persistedSessionFile && config.mode && presets[config.mode]) {
-    try {
-      await providerSession.applyPreset(config.mode, { announce: false });
-      providerSession.emitConfigState();
-    } catch (error) {
-      console.warn(
-        `[pi-plugin-mcowger] Failed to apply preset "${config.mode}": ${toProviderError(error).message}`,
-      );
-    }
-  }
 }

@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import { buildPiPromptCommands } from "./commands.js";
 
 describe("buildPiPromptCommands", () => {
+  it("does not publish the removed preset command", () => {
+    expect(buildPiPromptCommands([], []).map((command) => command.name)).toEqual(["compact"]);
+  });
+
   it("publishes extension commands with built-ins and prompt templates", () => {
     const commands = buildPiPromptCommands(
       [
@@ -26,11 +30,6 @@ describe("buildPiPromptCommands", () => {
         description: "Manually compact the session context",
         argumentHint: "[instructions]",
       },
-      {
-        name: "preset",
-        description: "Activate a pi preset",
-        argumentHint: "<name>",
-      },
       { name: "review", description: "Review the current changes" },
       { name: "blank", description: "Uses the registered name" },
       { name: "explain", description: "Prompt template" },
@@ -48,7 +47,7 @@ describe("buildPiPromptCommands", () => {
       [{ name: "  ", description: "Empty" }],
     );
 
-    expect(commands).toHaveLength(3);
+    expect(commands).toHaveLength(2);
     expect(commands.at(-1)).toEqual({
       name: "status",
       description: "Pi extension command",

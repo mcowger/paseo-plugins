@@ -1,6 +1,6 @@
 /**
  * Real-pi smoke test: exercises the SDK path in-process — session creation,
- * model catalog, a live prompt with streaming, presets, and resume.
+ * model catalog, a live prompt with streaming, tool policy, and resume.
  * Run with: npx vitest run --config vitest.smoke.config.ts
  * Uses ~/.pi/agent auth; no pi binary spawning.
  */
