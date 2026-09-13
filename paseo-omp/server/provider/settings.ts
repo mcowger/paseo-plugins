@@ -60,6 +60,10 @@ export const OmpProviderOptionsSchema = z
       .describe("Profile environment applied before session launch environment")
       .optional(),
     params: OmpProviderParamsSchema.optional(),
+    redactUnsafeToolOutput: z
+      .boolean()
+      .describe("Replace incomplete credential-like tool results instead of publishing them")
+      .optional(),
   })
   .strict();
 

@@ -70,6 +70,14 @@ describe("OMP provider option normalization", () => {
     expect(normalized.readyTimeoutMs).toBe(12_345);
     expect(normalized.requestTimeoutMs).toBe(12_345);
   });
+  test("accepts the unsafe tool output redaction policy option", () => {
+    expect(parseOmpProviderOptions({ redactUnsafeToolOutput: false })).toEqual({
+      redactUnsafeToolOutput: false,
+    });
+    expect(() => parseOmpProviderOptions({ redactUnsafeToolOutput: "no" })).toThrow(
+      "providerOptions.redactUnsafeToolOutput",
+    );
+  });
 
   test("maps every interactive launch mode after permission bridging", () => {
     for (const [mode, approvalMode] of [

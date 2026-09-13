@@ -13,7 +13,7 @@ paseo plugin add omercnet/paseo-plugins:paseo-omp --ref paseo-omp-v<version>
 paseo plugin ls paseo-omp
 ```
 
-Open the **OMP** sidebar to verify the binary, RPC compatibility, storage, process health, registered providers, and effective native configuration. Then create an agent and select **OMP Plugin**. Normal use requires no plugin-specific settings.
+Open the **OMP** sidebar to verify the binary, RPC compatibility, storage, process health, registered providers, and effective native configuration. Then create an agent and select **OMP Plugin**. Normal use requires no plugin-specific settings; advanced profile options, including the output-redaction policy, are documented in [configuration](docs/configuration.md).
 
 - [Install, update, rollback, and local development](docs/installation.md)
 - [Configuration and every provider option](docs/configuration.md)
@@ -62,7 +62,7 @@ Provider functionality outside the capability flags is tracked separately:
 | Provider SDK surface | Completeness | Implementation |
 | --- | ---: | --- |
 | Registration metadata and sanitized SVG icon | **100%** | Stable `omp-plugin` identity, label, description, and bundled icon. |
-| Strict `providerOptionsSchema` | **100%** | Command, environment, session directory, RPC timeout, and role-model options are validated and normalized. |
+| Strict `providerOptionsSchema` | **100%** | Command, environment, session directory, RPC timeout, role-model, and output-redaction policy options are validated and normalized. |
 | Availability diagnostics | **100%** | Bounded checks distinguish missing, unrunnable, incompatible, and available OMP runtimes. |
 | Catalog cache identity | **100%** | Hash includes effective options, settings, scope, cwd, and default command. |
 | Models, modes, and thinking catalog | **100%** | Native catalog is mapped to opaque public model IDs with committed defaults and permission-gated modes. |

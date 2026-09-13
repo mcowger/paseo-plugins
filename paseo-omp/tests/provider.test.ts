@@ -8,6 +8,7 @@ import type {
   ProviderEvent,
   ProviderInput,
   ProviderRegistration,
+  ProviderSessionConfig,
   ProviderTimelineItem,
 } from "@getpaseo/plugin/server/provider";
 import { AgentPermissionRequestPayloadSchema } from "@getpaseo/protocol/messages";
@@ -981,6 +982,7 @@ async function openSession(
   model = MODEL_PUBLIC_ID,
   thinkingOption: string | null = "medium",
   persist = true,
+  providerOptions?: ProviderSessionConfig["providerOptions"],
 ) {
   await connection.send({
     type: "session.open",
@@ -996,6 +998,7 @@ async function openSession(
       mode: "full",
       ...(thinkingOption ? { thinkingOption } : {}),
       settings: {},
+      ...(providerOptions ? { providerOptions } : {}),
     },
     history: "skip",
   });
@@ -11110,12 +11113,164 @@ describe("OMP direct provider", () => {
 
     for (const [value, expected] of cases) {
       for (const split of [1, 2, 3]) {
-        expect(filter.streamText(value.slice(0, split))).toEqual({ text: "", pending: true });
+        const partial = filter.streamText(value.slice(0, split));
+        expect(partial).toEqual(
+          split === 1
+            ? { text: value.slice(0, split), pending: false }
+            : { text: "", pending: true },
+        );
         expect(filter.streamText(value).text).toBe(expected);
       }
     }
     expect(filter.streamText("normal output").text).toBe("normal output");
+    for (const value of ["tests", "status", "files", "agent", "output"]) {
+      expect(filter.streamText(value)).toEqual({ text: value, pending: false });
+      expect(filter.hasUnsafeStreamSuffix({ content: value })).toBe(false);
+    }
+    expect(filter.streamText("s")).toEqual({ text: "s", pending: false });
     expect(filter.streamText("Aut", true)).toEqual({ text: "Aut", pending: false });
+  });
+  test("keeps ordinary streamed tool results ending in marker prefixes", () => {
+    for (const content of ["tests", "status", "files"]) {
+      const events: ProviderEvent[] = [];
+      const projector = new OmpTimelineProjector(content, (event) => events.push(event));
+      projector.project(
+        { type: "tool_execution_start", toolCallId: content, toolName: "read", args: {} },
+        "turn-1",
+      );
+      projector.project(
+        {
+          type: "tool_execution_update",
+          toolCallId: content,
+          toolName: "read",
+          partialResult: { content },
+        },
+        "turn-1",
+      );
+      projector.project(
+        {
+          type: "tool_execution_end",
+          toolCallId: content,
+          toolName: "read",
+          result: { content },
+        },
+        "turn-1",
+      );
+      const completed = events.findLast(
+        (event) =>
+          event.type === "timeline.item" &&
+          event.item.type === "tool_call" &&
+          event.item.status === "completed",
+      );
+      expect(completed?.type === "timeline.item" && completed.item.type === "tool_call").toBe(true);
+      if (completed?.type === "timeline.item" && completed.item.type === "tool_call") {
+        expect(
+          completed.item.detail.type === "unknown" ? completed.item.detail.output : undefined,
+        ).toEqual({ content });
+      }
+    }
+  });
+  test("can disable incomplete tool-result redaction per provider profile", () => {
+    const events: ProviderEvent[] = [];
+    const projector = new OmpTimelineProjector(
+      "unsafe-output-opt-out",
+      (event) => events.push(event),
+      new ManualScheduler(),
+      [],
+      false,
+      new Map(),
+      false,
+    );
+    projector.project(
+      {
+        type: "tool_execution_start",
+        toolCallId: "ordinary-suffix",
+        toolName: "read",
+        args: {},
+      },
+      "turn-1",
+    );
+    projector.project(
+      {
+        type: "tool_execution_update",
+        toolCallId: "ordinary-suffix",
+        toolName: "read",
+        partialResult: { content: "secret" },
+      },
+      "turn-1",
+    );
+    projector.project(
+      {
+        type: "tool_execution_end",
+        toolCallId: "ordinary-suffix",
+        toolName: "read",
+        result: { content: "secret" },
+      },
+      "turn-1",
+    );
+    const completed = events.findLast(
+      (event) =>
+        event.type === "timeline.item" &&
+        event.item.type === "tool_call" &&
+        event.item.status === "completed",
+    );
+    expect(completed?.type === "timeline.item" && completed.item.type === "tool_call").toBe(true);
+    if (completed?.type === "timeline.item" && completed.item.type === "tool_call") {
+      expect(
+        completed.item.detail.type === "unknown" ? completed.item.detail.output : undefined,
+      ).toEqual({ content: "secret" });
+    }
+  });
+  test("applies the provider profile output-redaction opt-out", async () => {
+    const { connection, events, runtime } = await createHarness();
+    await openSession(
+      connection,
+      events,
+      "output-policy-open",
+      "session-1",
+      { TEST_ENV: "test-value" },
+      MODEL_PUBLIC_ID,
+      "medium",
+      true,
+      { redactUnsafeToolOutput: false },
+    );
+    const turnId = turnIdFrom(
+      await startPrompt(connection, events, "output-policy-prompt", "work"),
+    );
+    const session = sessionAt(runtime);
+    session.emit({
+      type: "tool_execution_start",
+      toolCallId: "output-policy-tool",
+      toolName: "read",
+      args: {},
+    });
+    session.emit({
+      type: "tool_execution_update",
+      toolCallId: "output-policy-tool",
+      toolName: "read",
+      partialResult: { content: "secret" },
+    });
+    session.emit({
+      type: "tool_execution_end",
+      toolCallId: "output-policy-tool",
+      toolName: "read",
+      result: { content: "secret" },
+    });
+    const completed = events.findLast(
+      (event) =>
+        event.type === "timeline.item" &&
+        event.item.type === "tool_call" &&
+        event.item.name === "read" &&
+        event.item.status === "completed",
+    );
+    expect(completed?.type === "timeline.item" && completed.item.type === "tool_call").toBe(true);
+    if (completed?.type === "timeline.item" && completed.item.type === "tool_call") {
+      expect(
+        completed.item.detail.type === "unknown" ? completed.item.detail.output : undefined,
+      ).toEqual({ content: "secret" });
+    }
+    await finishTurn(events, session, turnId);
+    await connection.close();
   });
 
   test("redacts POSIX paths after common delimiters", () => {
@@ -11227,9 +11382,9 @@ describe("OMP direct provider", () => {
     expect(JSON.stringify(events)).not.toContain("credential-value-");
     session.emit({ type: "command_output", text: "1234" });
     session.emit({ type: "command_output", text: " g" });
-    expect(
-      JSON.stringify(events.findLast((event) => event.type === "timeline.item")),
-    ).not.toContain(" g");
+    expect(JSON.stringify(events.findLast((event) => event.type === "timeline.item"))).toContain(
+      " g",
+    );
     session.emit({ type: "command_output", text: "hp_abcdefgh" });
     for (const [type, contentIndex, first, second] of [
       ["text_delta", 1, "Bearer alpha", "beta"],
@@ -11255,7 +11410,8 @@ describe("OMP direct provider", () => {
         message: { role: "assistant", responseId: "split-stream", content: [] },
       });
       await scheduler.flush();
-      expect(JSON.stringify(events.slice(splitBaseline))).not.toContain(first);
+      if (first.length === 1) expect(JSON.stringify(events.slice(splitBaseline))).toContain(first);
+      else expect(JSON.stringify(events.slice(splitBaseline))).not.toContain(first);
       session.emit({
         type: "message_update",
         assistantMessageEvent: { type, contentIndex, delta: second },

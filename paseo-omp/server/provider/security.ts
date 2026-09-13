@@ -299,7 +299,7 @@ export class OmpPublicDataFilter {
     const lowerInput = input.toLowerCase();
     for (const marker of STREAM_CREDENTIAL_MARKERS) {
       const maxLength = Math.min(lowerInput.length, marker.length);
-      for (let length = maxLength; length >= 1 && length > holdback; length -= 1) {
+      for (let length = maxLength; length >= 2 && length > holdback; length -= 1) {
         if (lowerInput.endsWith(marker.slice(0, length))) {
           holdback = length;
           break;

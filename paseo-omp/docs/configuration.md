@@ -19,7 +19,8 @@ Advanced launch overrides belong in an `omp-plugin` provider profile. The provid
       "smolModel": "openai/gpt-5-mini",
       "slowModel": "anthropic/claude-opus-5",
       "planModel": "openai/gpt-5.4"
-    }
+    },
+    "redactUnsafeToolOutput": true
   }
 }
 ```
@@ -32,6 +33,7 @@ Advanced launch overrides belong in an `omp-plugin` provider profile. The provid
 | `params.rpcTimeoutMs` | Startup, request, catalog, and availability timeout, from 1 ms through 10 minutes. |
 | `params.smolModel` | Native selector supplied through `--smol`. |
 | `params.slowModel` | Native selector supplied through `--slow`. |
+| `redactUnsafeToolOutput` | Defaults to `true`; when `false`, incomplete credential-like suffixes do not replace completed tool results. Direct credential, sensitive-value, and path sanitization remains active. |
 | `params.planModel` | Native selector supplied through `--plan`. |
 
 Paseo's generic provider profile fields remain available:

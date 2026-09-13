@@ -970,6 +970,8 @@ export interface OmpStartOptions {
   sessionDir?: string;
   readyTimeoutMs?: number;
   requestTimeoutMs?: number;
+  /** Replace incomplete credential-like tool results instead of publishing them. */
+  redactUnsafeToolOutput?: boolean;
   /** Resume this exact native OMP session; never use this to start a new conversation. */
   resumeSessionId?: string;
   noSession?: boolean;

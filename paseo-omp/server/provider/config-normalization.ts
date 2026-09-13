@@ -75,6 +75,9 @@ export function normalizeOmpCatalogOptions(
     ...(params.rpcTimeoutMs
       ? { readyTimeoutMs: params.rpcTimeoutMs, requestTimeoutMs: params.rpcTimeoutMs }
       : {}),
+    ...(providerOptions.redactUnsafeToolOutput !== undefined
+      ? { redactUnsafeToolOutput: providerOptions.redactUnsafeToolOutput }
+      : {}),
     ...((params.smolModel || params.slowModel || params.planModel) && {
       roleModels: {
         ...(params.smolModel ? { smol: params.smolModel } : {}),
@@ -131,6 +134,9 @@ export function normalizeOmpSessionConfig(
     ...(params.sessionDir ? { sessionDir: params.sessionDir } : {}),
     ...(params.rpcTimeoutMs
       ? { readyTimeoutMs: params.rpcTimeoutMs, requestTimeoutMs: params.rpcTimeoutMs }
+      : {}),
+    ...(options.redactUnsafeToolOutput !== undefined
+      ? { redactUnsafeToolOutput: options.redactUnsafeToolOutput }
       : {}),
     ...((params.smolModel || params.slowModel || params.planModel) && {
       roleModels: {

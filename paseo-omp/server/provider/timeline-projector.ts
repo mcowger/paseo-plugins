@@ -376,6 +376,7 @@ export class OmpTimelineProjector {
     sensitiveValues: Iterable<string> = [],
     private readonly conversationRevertEnabled = false,
     private readonly hostToolLabels: ReadonlyMap<string, string> = new Map(),
+    private readonly redactUnsafeToolOutput = true,
   ) {
     this.dataFilter = new OmpPublicDataFilter(sensitiveValues);
   }
@@ -489,8 +490,9 @@ export class OmpTimelineProjector {
         if (!previous) return;
         if (previous.turnId !== turnId || previous.generation !== this.runtimeGeneration) return;
         if (
-          previous.unsafePartialOutput ||
-          this.dataFilter.hasUnsafeStreamSuffix(event.partialResult)
+          this.redactUnsafeToolOutput &&
+          (previous.unsafePartialOutput ||
+            this.dataFilter.hasUnsafeStreamSuffix(event.partialResult))
         ) {
           this.tools.set(event.toolCallId, { ...previous, unsafePartialOutput: true });
           return;

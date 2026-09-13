@@ -303,6 +303,7 @@ export class OmpSubsessionProjector {
     private readonly scheduler: OmpTimelineScheduler,
     sensitiveValues: Iterable<string>,
     private readonly onActivityChange: () => void,
+    private readonly redactUnsafeToolOutput = true,
   ) {
     for (const value of sensitiveValues) this.sensitiveValues.add(value);
     this.dataFilter = new OmpPublicDataFilter(this.sensitiveValues);
@@ -553,6 +554,9 @@ export class OmpSubsessionProjector {
         this.emit,
         this.scheduler,
         this.sensitiveValues,
+        false,
+        new Map(),
+        this.redactUnsafeToolOutput,
       ),
     };
     this.children.set(sessionId, child);

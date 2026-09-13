@@ -709,6 +709,7 @@ export class OmpProviderSession {
       sensitiveValues,
       capabilities.includes("session.revert.conversation"),
       hostTools.labels,
+      recoveryOptions.redactUnsafeToolOutput ?? true,
     );
     this.subsessions = capabilities.includes("session.subsession")
       ? new OmpSubsessionProjector(
@@ -720,6 +721,7 @@ export class OmpProviderSession {
           scheduler,
           sensitiveValues,
           () => this.resumeDeferredAgentEnd(),
+          recoveryOptions.redactUnsafeToolOutput ?? true,
         )
       : null;
     this.bindRuntime(runtime);
