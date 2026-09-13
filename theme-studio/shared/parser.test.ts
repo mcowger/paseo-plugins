@@ -11,7 +11,7 @@ import {
   CSS_PROMPT_EXAMPLE,
   TAILWIND_PROMPT_EXAMPLE,
 } from "./presets.js";
-import { themeTokensSchema } from "./settings.js";
+import { themeStudioSettings, themeTokensSchema } from "./settings.js";
 
 describe("Theme Studio Color Parser", () => {
   it("normalizes hex colors correctly", () => {
@@ -121,5 +121,13 @@ describe("Theme Studio Color Parser", () => {
       const parsed = themeTokensSchema.safeParse(preset.tokens);
       expect(parsed.success).toBe(true);
     }
+  });
+
+  it("persists the selected preset identity in settings", () => {
+    const parsed = themeStudioSettings.schema.parse({
+      activePresetId: "tokyo-cyber",
+    });
+
+    expect(parsed.activePresetId).toBe("tokyo-cyber");
   });
 });

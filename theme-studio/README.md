@@ -6,6 +6,32 @@ Enter Tailwind color objects, CSS custom variables, or raw hex palettes, map col
 
 Requires Paseo `>=0.8.0`.
 
+## Screenshots
+
+Theme Studio live preview with passing test results:
+
+![Theme Studio live preview](./images/theme-studio-preview.png)
+
+Theme Studio's export screen with preset saving and plugin-code copying:
+
+![Theme Studio export screen](./images/theme-studio-export.jpg)
+
+Dark-mode theme token editor:
+
+![Theme Studio dark editor](./images/theme-studio-dark-editor.jpg)
+
+Live preview with contrast tests and token results:
+
+![Theme Studio contrast tests](./images/theme-studio-tests.jpg)
+
+Deep Navy & Gold theme editor:
+
+![Theme Studio live editor](./images/theme-studio-live-editor.jpg)
+
+Tailwind and CSS palette editing:
+
+![Theme Studio palette editor](./images/theme-studio-palette-editor.jpg)
+
 ## Features
 
 - **Multi-Format Palette Parser**:

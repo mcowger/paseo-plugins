@@ -19,10 +19,8 @@ import {
   generatePluginCode,
   normalizeHex,
 } from "../shared/parser.js";
-import {
-  themeStudioSettings,
-  type ThemeStudioSettings as ThemeStudioSettingsValue,
-} from "../shared/settings.js";
+import { liveTheme } from "./live-theme.js";
+import { themeStudioSettings, type ThemeStudioSettings as ThemeStudioSettingsValue } from "../shared/settings.js";
 import type { ThemeAppearance, ThemeStudioPreset, ThemeStudioTokens } from "../shared/theme-types.js";
 
 type ReadySettings = Extract<SettingsState<typeof themeStudioSettings.schema>, { status: "ready" }>;
@@ -193,8 +191,17 @@ function ThemeStudioControls({ settings, theme }: { settings: ReadySettings; the
   );
 
   const updateSettings = async (patch: Partial<ThemeStudioSettingsValue>) => {
-    const saved = await settings.save({ ...settings.values, ...patch }, settings.revision);
-    if (saved) toast.show("Theme Studio settings saved", { variant: "success" });
+    const nextValues = { ...settings.values, ...patch };
+    const saved = await settings.save(nextValues, settings.revision);
+    if (saved) {
+      liveTheme.update({
+        id: "theme-studio-live",
+        name: "Theme Studio (Live)",
+        appearance: nextValues.appearance,
+        colors: nextValues.tokens,
+      });
+      toast.show("Theme Studio settings saved", { variant: "success" });
+    }
   };
 
   const mapPalette = () => {
@@ -205,7 +212,7 @@ function ThemeStudioControls({ settings, theme }: { settings: ReadySettings; the
   };
 
   const saveTheme = () => {
-    void updateSettings({ rawInput, appearance, tokens });
+    void updateSettings({ rawInput, appearance, tokens, activePresetId: "custom" });
   };
 
   const savePreset = async () => {
@@ -220,6 +227,7 @@ function ThemeStudioControls({ settings, theme }: { settings: ReadySettings; the
       rawInput,
       appearance,
       tokens,
+      activePresetId: preset.id,
       savedPresets: [...settings.values.savedPresets, preset],
     });
   };
@@ -307,6 +315,12 @@ function ThemeStudioControls({ settings, theme }: { settings: ReadySettings; the
                 setAppearance(preset.appearance);
                 setTokens(preset.tokens);
                 if (preset.rawInput !== undefined) setRawInput(preset.rawInput);
+                void updateSettings({
+                  rawInput: preset.rawInput ?? settings.values.rawInput,
+                  appearance: preset.appearance,
+                  tokens: preset.tokens,
+                  activePresetId: preset.id,
+                });
               }}
             />
           ))}

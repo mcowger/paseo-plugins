@@ -32,6 +32,7 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
   const settingsState = useSettings(themeStudioSettings);
   const initialValues = settingsState.status === "ready" ? settingsState.values : undefined;
   const initialDraft = useRef(getStudioDraft());
+  const [settingsInitialized, setSettingsInitialized] = useState(Boolean(initialDraft.current));
 
   const [rawInput, setRawInput] = useState<string>(
     initialDraft.current?.rawInput ?? initialValues?.rawInput ?? BUILTIN_PRESETS[0].rawInput ?? "",
@@ -43,7 +44,7 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
     initialDraft.current?.tokens ?? initialValues?.tokens ?? BUILTIN_PRESETS[0].tokens,
   );
   const [activePresetId, setActivePresetId] = useState<string>(
-    initialDraft.current?.activePresetId ?? BUILTIN_PRESETS[0].id,
+    initialDraft.current?.activePresetId ?? initialValues?.activePresetId ?? BUILTIN_PRESETS[0].id,
   );
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [presetName, setPresetName] = useState("My Custom Theme");
@@ -57,12 +58,14 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
     setRawInput(settingsState.values.rawInput);
     setAppearance(settingsState.values.appearance);
     setTokens(settingsState.values.tokens);
+    setActivePresetId(settingsState.values.activePresetId);
     setStudioDraft({
       rawInput: settingsState.values.rawInput,
       appearance: settingsState.values.appearance,
       tokens: settingsState.values.tokens,
-      activePresetId: BUILTIN_PRESETS[0].id,
+      activePresetId: settingsState.values.activePresetId,
     });
+    setSettingsInitialized(true);
   }, [settingsState.status, settingsState.status === "ready" ? settingsState.revision : null]);
 
   // Update live theme registration
@@ -77,14 +80,13 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
     },
     [],
   );
-
-  // Sync on initial mount & updates
   useEffect(() => {
+    if (!settingsInitialized) return;
     syncLiveTheme(tokens, appearance);
-  }, [tokens, appearance, syncLiveTheme]);
+  }, [settingsInitialized, tokens, appearance, syncLiveTheme]);
 
   const savedPresets = settingsState.status === "ready" ? settingsState.values.savedPresets : [];
-  const handleSelectPreset = (presetId: string) => {
+  const handleSelectPreset = async (presetId: string) => {
     const preset = [...BUILTIN_PRESETS, ...savedPresets].find((candidate) => candidate.id === presetId);
     if (!preset) return;
     const nextRawInput = preset.rawInput ?? rawInput;
@@ -98,6 +100,19 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
     setAppearance(preset.appearance);
     setTokens(preset.tokens);
     if (preset.rawInput) setRawInput(preset.rawInput);
+    if (settingsState.status === "ready") {
+      const saved = await settingsState.save(
+        {
+          ...settingsState.values,
+          rawInput: nextRawInput,
+          appearance: preset.appearance,
+          tokens: preset.tokens,
+          activePresetId: preset.id,
+        },
+        settingsState.revision,
+      );
+      if (!saved) toast.error("Could not persist the selected preset");
+    }
   };
 
   const handleRawInputChange = (text: string) => {
@@ -136,7 +151,7 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
   const handleSave = async () => {
     if (settingsState.status !== "ready") return;
     const saved = await settingsState.save(
-      { ...settingsState.values, rawInput, appearance, tokens },
+      { ...settingsState.values, rawInput, appearance, tokens, activePresetId },
       settingsState.revision,
     );
     if (saved) toast.show("Theme saved", { variant: "success" });
@@ -156,6 +171,7 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
         rawInput,
         appearance,
         tokens,
+        activePresetId: id,
         savedPresets: [
           ...settingsState.values.savedPresets,
           { id, name, appearance, tokens, ...(rawInput.trim() ? { rawInput } : {}) },
@@ -222,7 +238,7 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
             return (
               <Pressable
                 key={preset.id}
-                onPress={() => handleSelectPreset(preset.id)}
+                onPress={() => void handleSelectPreset(preset.id)}
                 style={[
                   styles.presetPill,
                   { backgroundColor: theme.colors.surface1, borderColor: theme.colors.border },
