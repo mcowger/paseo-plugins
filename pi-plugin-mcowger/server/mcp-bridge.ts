@@ -4,6 +4,10 @@ import { defineTool } from "./pi-sdk.js";
 import type { PiToolDefinition } from "../shared/pi-sdk-types.js";
 import type { ProviderMcpServerConfig } from "@getpaseo/plugin/server/provider";
 
+import { isPaseoToolAllowed, readPiPaseoToolPolicy } from "./paseo-tool-policy.js";
+
+const PASEO_MCP_PATHNAME = "/mcp/agents";
+
 export interface McpBridgeHandle {
   tools: PiToolDefinition[];
   close(): Promise<void>;
@@ -45,6 +49,15 @@ function normalizeInputSchema(schema: unknown): Record<string, unknown> {
   return rest;
 }
 
+function isPaseoMcpServer(config: ProviderMcpServerConfig): boolean {
+  if (config.type !== "http" && config.type !== "sse") return false;
+  try {
+    return new URL(config.url).pathname === PASEO_MCP_PATHNAME;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Connect Paseo-injected MCP servers directly and expose their tools as pi
  * custom tools named `mcp_<server>_<tool>`. Each session gets its own clients,
@@ -56,10 +69,16 @@ export async function createMcpBridge(
 ): Promise<McpBridgeHandle> {
   const clients: Client[] = [];
   const tools: PiToolDefinition[] = [];
+  const paseoToolPolicy = readPiPaseoToolPolicy(log);
 
   const entries = Object.entries(servers);
   await Promise.all(
     entries.map(async ([serverName, config]) => {
+      const isPaseoServer = isPaseoMcpServer(config);
+      if (isPaseoServer && !paseoToolPolicy.enabled) {
+        log(`mcp: ${serverName} disabled by the pi Paseo-tool policy`);
+        return;
+      }
       const client = new Client({ name: "pi-plugin-mcowger", version: "0.0.0" });
       try {
         await client.connect(toTransport(config));
@@ -80,7 +99,10 @@ export async function createMcpBridge(
         await client.close().catch(() => undefined);
         return;
       }
-      for (const mcpTool of listed.tools) {
+      const visibleTools = isPaseoServer
+        ? listed.tools.filter((tool) => isPaseoToolAllowed(paseoToolPolicy, tool.name))
+        : listed.tools;
+      for (const mcpTool of visibleTools) {
         const toolName = `mcp_${sanitizeNamePart(serverName)}_${sanitizeNamePart(mcpTool.name)}`;
         tools.push(
           defineTool({
@@ -111,7 +133,11 @@ export async function createMcpBridge(
           }) as unknown as PiToolDefinition,
         );
       }
-      log(`mcp: ${serverName} connected (${listed.tools.length} tools)`);
+      log(
+        isPaseoServer
+          ? `mcp: ${serverName} connected (${visibleTools.length}/${listed.tools.length} tools after pi policy)`
+          : `mcp: ${serverName} connected (${visibleTools.length} tools)`,
+      );
     }),
   );
 
