@@ -1,4 +1,4 @@
-import { type FC, useCallback, useEffect, useMemo, useState } from "react";
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -24,23 +24,27 @@ import type {
   ThemeTokenKey,
 } from "../shared/theme-types.js";
 import { liveTheme } from "./live-theme.js";
+import { getStudioDraft, setStudioDraft } from "./studio-draft.js";
 import { MiniPreview } from "./mini-preview.js";
 import { TokenMapper } from "./token-mapper.js";
 
 export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
   const settingsState = useSettings(themeStudioSettings);
   const initialValues = settingsState.status === "ready" ? settingsState.values : undefined;
+  const initialDraft = useRef(getStudioDraft());
 
   const [rawInput, setRawInput] = useState<string>(
-    initialValues?.rawInput ?? BUILTIN_PRESETS[0].rawInput ?? "",
+    initialDraft.current?.rawInput ?? initialValues?.rawInput ?? BUILTIN_PRESETS[0].rawInput ?? "",
   );
   const [appearance, setAppearance] = useState<ThemeAppearance>(
-    initialValues?.appearance ?? BUILTIN_PRESETS[0].appearance,
+    initialDraft.current?.appearance ?? initialValues?.appearance ?? BUILTIN_PRESETS[0].appearance,
   );
   const [tokens, setTokens] = useState<ThemeStudioTokens>(
-    initialValues?.tokens ?? BUILTIN_PRESETS[0].tokens,
+    initialDraft.current?.tokens ?? initialValues?.tokens ?? BUILTIN_PRESETS[0].tokens,
   );
-  const [activePresetId, setActivePresetId] = useState<string>(BUILTIN_PRESETS[0].id);
+  const [activePresetId, setActivePresetId] = useState<string>(
+    initialDraft.current?.activePresetId ?? BUILTIN_PRESETS[0].id,
+  );
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [presetName, setPresetName] = useState("My Custom Theme");
   const toast = useToast();
@@ -49,10 +53,16 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
   const palette = useMemo(() => extractPalette(rawInput), [rawInput]);
 
   useEffect(() => {
-    if (settingsState.status !== "ready") return;
+    if (settingsState.status !== "ready" || initialDraft.current) return;
     setRawInput(settingsState.values.rawInput);
     setAppearance(settingsState.values.appearance);
     setTokens(settingsState.values.tokens);
+    setStudioDraft({
+      rawInput: settingsState.values.rawInput,
+      appearance: settingsState.values.appearance,
+      tokens: settingsState.values.tokens,
+      activePresetId: BUILTIN_PRESETS[0].id,
+    });
   }, [settingsState.status, settingsState.status === "ready" ? settingsState.revision : null]);
 
   // Update live theme registration
@@ -77,6 +87,13 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
   const handleSelectPreset = (presetId: string) => {
     const preset = [...BUILTIN_PRESETS, ...savedPresets].find((candidate) => candidate.id === presetId);
     if (!preset) return;
+    const nextRawInput = preset.rawInput ?? rawInput;
+    setStudioDraft({
+      rawInput: nextRawInput,
+      appearance: preset.appearance,
+      tokens: preset.tokens,
+      activePresetId: preset.id,
+    });
     setActivePresetId(preset.id);
     setAppearance(preset.appearance);
     setTokens(preset.tokens);
@@ -84,31 +101,34 @@ export const StudioSurface: FC<PluginSurfaceProps> = ({ theme, layout }) => {
   };
 
   const handleRawInputChange = (text: string) => {
-    setRawInput(text);
-    setActivePresetId("custom");
     const extracted = extractPalette(text);
     const autoApply = settingsState.status !== "ready" || settingsState.values.autoApply;
-    if (autoApply && extracted.colors.length > 0) {
-      setTokens(autoMapTokens(extracted.colors, appearance));
-    }
+    const nextTokens = autoApply && extracted.colors.length > 0 ? autoMapTokens(extracted.colors, appearance) : tokens;
+    setStudioDraft({ rawInput: text, appearance, tokens: nextTokens, activePresetId: "custom" });
+    setRawInput(text);
+    setActivePresetId("custom");
+    if (autoApply && extracted.colors.length > 0) setTokens(nextTokens);
   };
 
   const handleChangeToken = (key: ThemeTokenKey, hex: string) => {
+    const nextTokens = { ...tokens, [key]: hex };
+    setStudioDraft({ rawInput, appearance, tokens: nextTokens, activePresetId: "custom" });
     setActivePresetId("custom");
-    setTokens((prev) => ({ ...prev, [key]: hex }));
+    setTokens(nextTokens);
   };
 
   const handleToggleAppearance = (newAppearance: ThemeAppearance) => {
-    setAppearance(newAppearance);
     const autoApply = settingsState.status !== "ready" || settingsState.values.autoApply;
-    if (autoApply && palette.colors.length > 0) {
-      setTokens(autoMapTokens(palette.colors, newAppearance));
-    }
+    const nextTokens = autoApply && palette.colors.length > 0 ? autoMapTokens(palette.colors, newAppearance) : tokens;
+    setStudioDraft({ rawInput, appearance: newAppearance, tokens: nextTokens, activePresetId });
+    setAppearance(newAppearance);
+    if (autoApply && palette.colors.length > 0) setTokens(nextTokens);
   };
 
   const handleAutoMap = () => {
     if (palette.colors.length > 0) {
       const mapped = autoMapTokens(palette.colors, appearance);
+      setStudioDraft({ rawInput, appearance, tokens: mapped, activePresetId });
       setTokens(mapped);
     }
   };

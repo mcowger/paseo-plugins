@@ -1,5 +1,7 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 
+import { clearStudioDraft } from "./client/studio-draft.js";
+
 import { StudioSurface } from "./client/studio-surface.js";
 import { liveTheme } from "./client/live-theme.js";
 import { BUILTIN_PRESETS } from "./shared/presets.js";
@@ -49,6 +51,7 @@ export default function contribute(client: PluginClientContext) {
     removeSurface();
     removeSettings();
     for (const removeTheme of removeThemes) removeTheme();
+    clearStudioDraft();
     detachLiveTheme();
   };
 }
