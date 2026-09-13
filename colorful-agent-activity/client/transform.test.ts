@@ -95,4 +95,19 @@ describe("colorful activity timeline transforms", () => {
       },
     });
   });
+
+  it("preserves native speak tool calls with text input", () => {
+    const result = transformToolCall({
+      phase: "complete",
+      item: {
+        type: "tool_call",
+        callId: "speak-1",
+        name: "speak",
+        detail: { type: "unknown", input: "Hello, I am ready.", output: null },
+        status: "completed",
+        error: null,
+      },
+    });
+    expect(result).toBeUndefined();
+  });
 });

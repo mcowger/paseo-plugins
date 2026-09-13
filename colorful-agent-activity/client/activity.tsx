@@ -21,17 +21,21 @@ import {
   type ViewStyle,
 } from "react-native";
 import type { z } from "zod";
-import { useHighlightTokens, isDarkSurface, type HighlightToken } from "./highlight";
+import { useHighlightTokens, type HighlightToken } from "./highlight";
 import { GithubToolDetail } from "./github";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
 import {
   diffLinesForDetail,
+  extractCodeInput,
   fileIconForPath,
   formatUnknownValue,
   paseoToolLeafName,
   parseSubAgentActionLog,
+  previewText,
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
+  MAX_DIFF_CHARS,
+  PREVIEW_LINES,
   type ActivityPalette,
   type ActivityThemeColors,
   type DiffLine,
@@ -241,6 +245,20 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       section: {
         gap: 3,
       } satisfies ViewStyle,
+      showMoreButton: {
+        alignSelf: "flex-start",
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderRadius: 2,
+        marginTop: 3,
+      } satisfies ViewStyle,
+      showMoreText: {
+        color: palette.categoryColors.agent,
+        fontFamily: "monospace",
+        fontSize: 10,
+        fontWeight: "600",
+        lineHeight: 14,
+      } satisfies TextStyle,
       codeSurface: {
         backgroundColor: theme.colors.surface0,
         borderColor: theme.colors.border,
@@ -697,7 +715,11 @@ function HighlightedCodeBlock({
   label?: string;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const tokens = useHighlightTokens(code, language, isDarkSurface(theme.colors.surface0));
+  const [showAll, setShowAll] = useState(false);
+  const preview = useMemo(() => previewText(code), [code]);
+  const displayCode = showAll ? code : preview.text;
+  const tokens = useHighlightTokens(displayCode, language, theme.colors);
+
   return (
     <View style={styles.section}>
       {label ? <DetailLabel style={styles.detailLabel}>{label}</DetailLabel> : null}
@@ -707,11 +729,24 @@ function HighlightedCodeBlock({
             <TokenizedLines lines={tokens} styles={styles} />
           ) : (
             <Text selectable style={styles.codeLine}>
-              {code || " "}
+              {displayCode || " "}
             </Text>
           )}
         </View>
       </ScrollView>
+      {preview.truncated ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setShowAll(!showAll)}
+          style={styles.showMoreButton}
+        >
+          <Text style={styles.showMoreText}>
+            {showAll
+              ? "Show less"
+              : `Show all (${preview.totalLines} lines, ${preview.totalChars.toLocaleString()} chars)`}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -725,19 +760,34 @@ function DiffBlock({
   palette: ActivityPalette;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const lines = useMemo(() => diffLinesForDetail(detail), [detail]);
+  const isTruncated = lines.length > PREVIEW_LINES;
+  const displayLines = showAll || !isTruncated ? lines : lines.slice(0, PREVIEW_LINES);
+
   return (
     <View style={styles.section}>
       <DetailLabel style={styles.detailLabel}>Diff</DetailLabel>
       <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
         <View style={styles.diffSurface}>
-          {lines.length === 0 ? (
+          {displayLines.length === 0 ? (
             <Text style={styles.empty}>No changed lines.</Text>
           ) : (
-            lines.map((line, index) => <DiffRow key={`${line.kind}-${index}`} line={line} palette={palette} styles={styles} />)
+            displayLines.map((line, index) => <DiffRow key={`${line.kind}-${index}`} line={line} palette={palette} styles={styles} />)
           )}
         </View>
       </ScrollView>
+      {isTruncated ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setShowAll(!showAll)}
+          style={styles.showMoreButton}
+        >
+          <Text style={styles.showMoreText}>
+            {showAll ? "Show less" : `Show all (${lines.length} lines)`}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -849,13 +899,44 @@ function DetailBody({
           ) : null}
         </>
       );
-    case "edit":
+    case "edit": {
+      const isOversized =
+        (detail.unifiedDiff?.length ??
+          ((detail.oldString?.length ?? 0) + (detail.newString?.length ?? 0))) > MAX_DIFF_CHARS;
+
+      if (isOversized && detail.unifiedDiff === undefined) {
+        return (
+          <>
+            <PathRow icon={data.presentation.fileIcon ?? "Pencil"} path={detail.filePath} styles={styles} />
+            {detail.oldString ? (
+              <HighlightedCodeBlock
+                code={detail.oldString}
+                language={data.presentation.language ?? "text"}
+                label="Before"
+                styles={styles}
+                theme={theme}
+              />
+            ) : null}
+            {detail.newString ? (
+              <HighlightedCodeBlock
+                code={detail.newString}
+                language={data.presentation.language ?? "text"}
+                label="After"
+                styles={styles}
+                theme={theme}
+              />
+            ) : null}
+          </>
+        );
+      }
+
       return (
         <>
           <PathRow icon={data.presentation.fileIcon ?? "Pencil"} path={detail.filePath} styles={styles} />
           <DiffBlock detail={detail} palette={palette} styles={styles} />
         </>
       );
+    }
     case "search":
       return (
         <>
@@ -938,6 +1019,27 @@ function DetailBody({
             palette={palette}
             styles={styles}
           />
+        );
+      }
+      const codeInput = extractCodeInput(data.name, detail.input);
+      if (codeInput) {
+        return (
+          <>
+            <HighlightedCodeBlock
+              code={codeInput.code}
+              language={codeInput.language}
+              label="Input"
+              styles={styles}
+              theme={theme}
+            />
+            <HighlightedCodeBlock
+              code={formatUnknownValue(detail.output)}
+              language="json"
+              label="Output"
+              styles={styles}
+              theme={theme}
+            />
+          </>
         );
       }
       return (
@@ -1117,7 +1219,10 @@ function ReasoningText({
   theme: Theme;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const revealedText = useRevealedText(text, phase);
+  const [showAll, setShowAll] = useState(false);
+  const preview = useMemo(() => previewText(text), [text]);
+  const targetText = showAll ? text : preview.text;
+  const revealedText = useRevealedText(targetText, phase);
   const scrollRef = useRef<NativeScrollView | null>(null);
   const isNearBottom = useRef(true);
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -1129,17 +1234,32 @@ function ReasoningText({
   }, []);
 
   return (
-    <ScrollView
-      ref={scrollRef}
-      nestedScrollEnabled
-      onContentSizeChange={handleContentSizeChange}
-      onScroll={handleScroll}
-      scrollEventThrottle={16}
-      showsVerticalScrollIndicator
-      style={styles.detailsScroll}
-    >
-      <ReasoningMarkdown text={revealedText} theme={theme} styles={styles} />
-    </ScrollView>
+    <View>
+      <ScrollView
+        ref={scrollRef}
+        nestedScrollEnabled
+        onContentSizeChange={handleContentSizeChange}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator
+        style={styles.detailsScroll}
+      >
+        <ReasoningMarkdown text={revealedText} theme={theme} styles={styles} />
+      </ScrollView>
+      {preview.truncated ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setShowAll(!showAll)}
+          style={styles.showMoreButton}
+        >
+          <Text style={styles.showMoreText}>
+            {showAll
+              ? "Show less"
+              : `Show all (${preview.totalLines} lines, ${preview.totalChars.toLocaleString()} chars)`}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 

@@ -7,7 +7,6 @@ import "prismjs/components/prism-javascript";
 import "prismjs/components/prism-typescript";
 import "prismjs/components/prism-jsx";
 import "prismjs/components/prism-tsx";
-import "prismjs/components/prism-bash";
 import "prismjs/components/prism-python";
 import "prismjs/components/prism-json";
 import "prismjs/components/prism-yaml";
@@ -15,6 +14,54 @@ import "prismjs/components/prism-markdown";
 import "prismjs/components/prism-go";
 import "prismjs/components/prism-rust";
 import { useEffect, useState } from "react";
+
+// Lightweight regex grammar for Bash (avoids large stateful prism-bash dependency)
+Prism.languages.bash = {
+  comment: { pattern: /(^|[\t ])#.*/m, lookbehind: true, greedy: true },
+  string: { pattern: /"(?:\\[\s\S]|[^"\\])*"|'[^']*'/, greedy: true },
+  variable: /\$(?:\w+|\{[^}\r\n]*\}|[?$!#@*-])/,
+  keyword: /\b(?:if|then|else|elif|fi|for|while|until|do|done|case|esac|in|function|select|return|export|local)\b/,
+  builtin: /\b(?:test|echo|cd|pwd|ls|cat|mkdir|rm|cp|mv|touch|grep|find|sed|awk|curl|git|node|npm|bun|deno)\b/,
+  operator: /&&|\|\||[|&;<>]/,
+  punctuation: /[(){}[\]]/,
+};
+
+export interface ThemeSyntaxColors {
+  foreground: string;
+  foregroundMuted: string;
+  accent: string;
+  surface1?: string;
+  statusSuccess?: string;
+  statusWarning?: string;
+  statusDanger?: string;
+}
+
+export type SyntaxColorsInput = ThemeSyntaxColors | boolean;
+
+const DEFAULT_DARK_COLORS: ThemeSyntaxColors = {
+  foreground: "#e6edf3",
+  foregroundMuted: "#8b949e",
+  accent: "#58a6ff",
+  statusSuccess: "#7ee787",
+  statusWarning: "#d29922",
+  statusDanger: "#ff7b72",
+};
+
+const DEFAULT_LIGHT_COLORS: ThemeSyntaxColors = {
+  foreground: "#1f2328",
+  foregroundMuted: "#656d76",
+  accent: "#0969da",
+  statusSuccess: "#1a7f37",
+  statusWarning: "#9a6700",
+  statusDanger: "#cf222e",
+};
+
+export function resolveSyntaxColors(input: SyntaxColorsInput): ThemeSyntaxColors {
+  if (typeof input === "boolean") {
+    return input ? DEFAULT_DARK_COLORS : DEFAULT_LIGHT_COLORS;
+  }
+  return input;
+}
 
 export interface HighlightToken {
   content: string;
@@ -24,49 +71,28 @@ export interface HighlightToken {
 
 export const MAX_HIGHLIGHT_CHARS = 100_000;
 
-const ANSI_DARK_COLORS: Record<number, string> = {
-  30: "#8b949e",
-  31: "#ff7b72",
-  32: "#7ee787",
-  33: "#d29922",
-  34: "#58a6ff",
-  35: "#bc8cff",
-  36: "#39c5cf",
-  37: "#f0f6fc",
-  90: "#8b949e",
-  91: "#ffa198",
-  92: "#56d364",
-  93: "#e3b341",
-  94: "#79c0ff",
-  95: "#d2a8ff",
-  96: "#56d4dd",
-  97: "#ffffff",
-};
-
-const ANSI_LIGHT_COLORS: Record<number, string> = {
-  30: "#24292f",
-  31: "#cf222e",
-  32: "#116329",
-  33: "#9a6700",
-  34: "#0969da",
-  35: "#8250df",
-  36: "#1b7c83",
-  37: "#57606a",
-  90: "#6e7781",
-  91: "#a40e26",
-  92: "#1a7f37",
-  93: "#633c01",
-  94: "#0550ae",
-  95: "#6639ba",
-  96: "#0969da",
-  97: "#24292f",
-};
-
-function parseAnsiToLines(code: string, dark: boolean): HighlightToken[][] {
+function parseAnsiToLines(code: string, colors: ThemeSyntaxColors): HighlightToken[][] {
   const lines: HighlightToken[][] = [];
   // eslint-disable-next-line no-control-regex
   const ansiRegex = /\u001b\[([0-9;]*)m/g;
-  const colors = dark ? ANSI_DARK_COLORS : ANSI_LIGHT_COLORS;
+  const ansiColors: Record<number, string> = {
+    30: colors.foregroundMuted,
+    31: colors.statusDanger ?? "#ff7b72",
+    32: colors.statusSuccess ?? "#7ee787",
+    33: colors.statusWarning ?? "#d29922",
+    34: colors.accent,
+    35: colors.accent,
+    36: colors.accent,
+    37: colors.foreground,
+    90: colors.foregroundMuted,
+    91: colors.statusDanger ?? "#ff7b72",
+    92: colors.statusSuccess ?? "#7ee787",
+    93: colors.statusWarning ?? "#d29922",
+    94: colors.accent,
+    95: colors.accent,
+    96: colors.accent,
+    97: colors.foreground,
+  };
   let currentColor: string | undefined;
   let currentFontStyle = 0;
 
@@ -123,9 +149,9 @@ function parseAnsiToLines(code: string, dark: boolean): HighlightToken[][] {
             const colorIdx = codes[idx + 2];
             if (colorIdx !== undefined && isFg) {
               if (colorIdx < 16) {
-                currentColor = colors[colorIdx < 8 ? 30 + colorIdx : 90 + (colorIdx - 8)];
+                currentColor = ansiColors[colorIdx < 8 ? 30 + colorIdx : 90 + (colorIdx - 8)];
               } else {
-                currentColor = colors[97];
+                currentColor = colors.foreground;
               }
             }
             idx += 3;
@@ -140,8 +166,8 @@ function parseAnsiToLines(code: string, dark: boolean): HighlightToken[][] {
           } else {
             idx++;
           }
-        } else if (colors[c]) {
-          currentColor = colors[c];
+        } else if (ansiColors[c]) {
+          currentColor = ansiColors[c];
           idx++;
         } else {
           idx++;
@@ -161,62 +187,127 @@ function parseAnsiToLines(code: string, dark: boolean): HighlightToken[][] {
   return lines;
 }
 
-const DARK_COLORS: Record<string, string> = {
-  selector: "#ff7b72",
-  important: "#ff7b72",
-  atrule: "#ff7b72",
-  string: "#a5d6ff",
-  char: "#a5d6ff",
-  "attr-value": "#a5d6ff",
-  comment: "#8b949e",
-  prolog: "#8b949e",
-  doctype: "#8b949e",
-  cdata: "#8b949e",
-  function: "#d2a8ff",
-  "function-variable": "#d2a8ff",
-  method: "#d2a8ff",
-  number: "#79c0ff",
-  boolean: "#79c0ff",
-  constant: "#79c0ff",
-  operator: "#ff7b72",
-  punctuation: "#8b949e",
-  property: "#7ee787",
-  "class-name": "#ffa657",
-  variable: "#ffa657",
-  builtin: "#7ee787",
-  tag: "#7ee787",
-  "attr-name": "#79c0ff",
-  regex: "#7ee787",
-};
+function resolveTokenColor(type: string, colors: ThemeSyntaxColors): string {
+  switch (type) {
+    case "comment":
+    case "prolog":
+    case "doctype":
+    case "cdata":
+    case "punctuation":
+    case "operator":
+      return colors.foregroundMuted;
 
-const LIGHT_COLORS: Record<string, string> = {
-  keyword: "#cf222e",
-  selector: "#cf222e",
-  important: "#cf222e",
-  atrule: "#cf222e",
-  string: "#0a3069",
-  char: "#0a3069",
-  "attr-value": "#0a3069",
-  comment: "#6e7781",
-  prolog: "#6e7781",
-  doctype: "#6e7781",
-  cdata: "#6e7781",
-  function: "#8250df",
-  "function-variable": "#8250df",
-  method: "#8250df",
-  number: "#0550ae",
-  boolean: "#0550ae",
-  constant: "#0550ae",
-  operator: "#cf222e",
-  punctuation: "#57606a",
-  property: "#116329",
-  "class-name": "#953800",
-  variable: "#953800",
-  builtin: "#116329",
-  tag: "#116329",
-  "attr-name": "#0550ae",
-  regex: "#116329",
-};
+    case "string":
+    case "char":
+    case "attr-value":
+    case "regex":
+    case "template-string":
+      return colors.statusSuccess ?? colors.accent;
+
+    case "keyword":
+    case "selector":
+    case "important":
+    case "atrule":
+    case "boolean":
+      return colors.accent;
+
+    case "number":
+    case "constant":
+      return colors.statusWarning ?? colors.accent;
+
+    case "function":
+    case "function-variable":
+    case "method":
+    case "builtin":
+    case "class-name":
+      return colors.accent;
+
+    case "variable":
+    case "property":
+    case "tag":
+    case "attr-name":
+    default:
+      return colors.foreground;
+  }
+}
+
+function tokenizeToLines(code: string, grammar: Prism.Grammar, colors: ThemeSyntaxColors): HighlightToken[][] {
+  const rawTokens = Prism.tokenize(code, grammar);
+  const lines: HighlightToken[][] = [[]];
+
+  function pushText(content: string, type?: string) {
+    const parts = content.split("\n");
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) lines.push([]);
+      const part = parts[i];
+      if (part && part.length > 0) {
+        const currentLine = lines[lines.length - 1];
+        if (currentLine) {
+          currentLine.push({
+            content: part,
+            color: type ? resolveTokenColor(type, colors) : colors.foreground,
+            fontStyle: type === "comment" ? 1 : undefined,
+          });
+        }
+      }
+    }
+  }
+
+  function walk(token: string | Prism.Token | (string | Prism.Token)[], parentType?: string) {
+    if (typeof token === "string") {
+      pushText(token, parentType);
+    } else if (Array.isArray(token)) {
+      for (const item of token) walk(item, parentType);
+    } else if (token && typeof token === "object") {
+      const type = token.type || parentType;
+      if (typeof token.content === "string") {
+        pushText(token.content, type);
+      } else {
+        walk(token.content, type);
+      }
+    }
+  }
+
+  for (const token of rawTokens) walk(token);
+  return lines;
+}
+
+const tokenCache = new Map<string, { tokens: HighlightToken[][]; size: number }>();
+const TOKEN_CACHE_LIMIT = 40;
+let cachedChars = 0;
+
+function colorsKey(colors: ThemeSyntaxColors): string {
+  return [
+    colors.foreground,
+    colors.foregroundMuted,
+    colors.accent,
+    colors.statusSuccess ?? "",
+    colors.statusWarning ?? "",
+    colors.statusDanger ?? "",
+  ].join("|");
+}
+
+function cacheKey(code: string, language: string, colors: ThemeSyntaxColors): string {
+  return `${colorsKey(colors)}:${language}:${code}`;
+}
+
+function cacheTokens(key: string, tokens: HighlightToken[][], codeLength: number): void {
+  if (tokenCache.has(key)) {
+    const existing = tokenCache.get(key)!;
+    cachedChars -= existing.size;
+    tokenCache.delete(key);
+  }
+  tokenCache.set(key, { tokens, size: codeLength });
+  cachedChars += codeLength;
+
+  while (tokenCache.size > TOKEN_CACHE_LIMIT || cachedChars > 500_000) {
+    const oldestKey = tokenCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    const oldest = tokenCache.get(oldestKey);
+    if (oldest) cachedChars -= oldest.size;
+    tokenCache.delete(oldestKey);
+  }
+}
 
 function parseHexColor(value: string): [number, number, number] | null {
   const match = value.trim().match(/^#([\da-f]{3}|[\da-f]{6})$/i);
@@ -275,112 +366,51 @@ function normalizeLanguage(language: string): string | null {
   return resolved in Prism.languages ? resolved : null;
 }
 
-function resolveTokenColor(type: string, dark: boolean): string | undefined {
-  const palette = dark ? DARK_COLORS : LIGHT_COLORS;
-  return palette[type];
-}
-
-function tokenizeToLines(code: string, grammar: Prism.Grammar, dark: boolean): HighlightToken[][] {
-  const rawTokens = Prism.tokenize(code, grammar);
-  const lines: HighlightToken[][] = [[]];
-
-  function pushText(content: string, type?: string) {
-    const parts = content.split("\n");
-    for (let i = 0; i < parts.length; i++) {
-      if (i > 0) lines.push([]);
-      const part = parts[i];
-      if (part && part.length > 0) {
-        const currentLine = lines[lines.length - 1];
-        if (currentLine) {
-          currentLine.push({
-            content: part,
-            color: type ? resolveTokenColor(type, dark) : undefined,
-            fontStyle: type === "comment" ? 1 : undefined,
-          });
-        }
-      }
-    }
-  }
-
-  function walk(token: string | Prism.Token | (string | Prism.Token)[], parentType?: string) {
-    if (typeof token === "string") {
-      pushText(token, parentType);
-    } else if (Array.isArray(token)) {
-      for (const item of token) walk(item, parentType);
-    } else if (token && typeof token === "object") {
-      const type = token.type || parentType;
-      if (typeof token.content === "string") {
-        pushText(token.content, type);
-      } else {
-        walk(token.content, type);
-      }
-    }
-  }
-
-  for (const token of rawTokens) walk(token);
-  return lines;
-}
-
-const tokenCache = new Map<string, HighlightToken[][]>();
-const TOKEN_CACHE_LIMIT = 80;
-
-function cacheKey(code: string, language: string, dark: boolean): string {
-  return `${dark ? "dark" : "light"}:${language}:${code}`;
-}
-
-function cacheTokens(key: string, tokens: HighlightToken[][]): void {
-  if (tokenCache.has(key)) tokenCache.delete(key);
-  else if (tokenCache.size >= TOKEN_CACHE_LIMIT) {
-    const oldest = tokenCache.keys().next().value;
-    if (oldest !== undefined) tokenCache.delete(oldest);
-  }
-  tokenCache.set(key, tokens);
-}
-
 export function highlightCodeSync(
   code: string,
   language: string,
-  dark: boolean,
+  colorsInput: SyntaxColorsInput,
 ): HighlightToken[][] | null {
   if (!code || code.length > MAX_HIGHLIGHT_CHARS) return null;
   const normalizedLanguage = normalizeLanguage(language);
   if (!normalizedLanguage) return null;
 
-  const key = cacheKey(code, normalizedLanguage, dark);
+  const colors = resolveSyntaxColors(colorsInput);
+  const key = cacheKey(code, normalizedLanguage, colors);
   const cached = tokenCache.get(key);
   if (cached) {
     tokenCache.delete(key);
     tokenCache.set(key, cached);
-    return cached;
+    return cached.tokens;
   }
 
   let tokens: HighlightToken[][];
   if (normalizedLanguage === "ansi") {
-    tokens = parseAnsiToLines(code, dark);
+    tokens = parseAnsiToLines(code, colors);
   } else if (normalizedLanguage === "text") {
     tokens = code.split("\n").map((line) => [{ content: line }]);
   } else {
     const grammar = Prism.languages[normalizedLanguage];
     if (!grammar) return null;
-    tokens = tokenizeToLines(code, grammar, dark);
+    tokens = tokenizeToLines(code, grammar, colors);
   }
 
-  cacheTokens(key, tokens);
+  cacheTokens(key, tokens, code.length);
   return tokens;
 }
 
 export async function highlightCode(
   code: string,
   language: string,
-  dark: boolean,
+  colorsInput: SyntaxColorsInput,
 ): Promise<HighlightToken[][] | null> {
-  return highlightCodeSync(code, language, dark);
+  return highlightCodeSync(code, language, colorsInput);
 }
 
 export function useHighlightTokens(
   code: string | undefined,
   language: string | undefined,
-  dark: boolean,
+  colorsInput: SyntaxColorsInput,
 ): HighlightToken[][] | null {
   const [tokens, setTokens] = useState<HighlightToken[][] | null>(null);
 
@@ -393,9 +423,10 @@ export function useHighlightTokens(
 
     const normalizedLanguage = normalizeLanguage(language);
     if (normalizedLanguage) {
-      const cached = tokenCache.get(cacheKey(code, normalizedLanguage, dark));
+      const colors = resolveSyntaxColors(colorsInput);
+      const cached = tokenCache.get(cacheKey(code, normalizedLanguage, colors));
       if (cached) {
-        setTokens(cached);
+        setTokens(cached.tokens);
         return () => {};
       }
     }
@@ -403,7 +434,7 @@ export function useHighlightTokens(
     setTokens(null);
     const timer = setTimeout(() => {
       if (cancelled) return;
-      const result = highlightCodeSync(code, language, dark);
+      const result = highlightCodeSync(code, language, colorsInput);
       if (!cancelled) setTokens(result);
     }, 0);
 
@@ -411,7 +442,7 @@ export function useHighlightTokens(
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [code, language, dark]);
+  }, [code, language, typeof colorsInput === "boolean" ? colorsInput : colorsKey(resolveSyntaxColors(colorsInput))]);
 
   return tokens;
 }

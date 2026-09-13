@@ -296,7 +296,7 @@ const PASEO_TOOL_LABELS: Readonly<Record<string, string>> = {
   browser_close_tab: "Close Browser Tab",
 };
 
-const PASEO_TOOL_ICONS: Readonly<Record<string, string>> = {
+export const PASEO_TOOL_ICONS: Readonly<Record<string, string>> = {
   speak: "MicVocal",
   create_workspace: "FolderPlus",
   list_workspaces: "Folders",
@@ -333,7 +333,7 @@ const PASEO_TOOL_ICONS: Readonly<Record<string, string>> = {
   list_models: "Cpu",
   list_profiles: "ContactRound",
   inspect_provider: "ScanSearch",
-  get_agent_activity: "ListActivity",
+  get_agent_activity: "Activity",
   set_agent_mode: "SlidersHorizontal",
   list_pending_permissions: "ShieldAlert",
   respond_to_permission: "ShieldCheck",
@@ -469,6 +469,156 @@ export function paseoToolResult(value: unknown): unknown {
   return record?.ok === true && record.result !== undefined ? record.result : unwrapped;
 }
 
+export const PREVIEW_LINES = 20;
+export const PREVIEW_CHARS = 4_000;
+export const MAX_FORMAT_CHARS = 100_000;
+export const MAX_DIFF_CHARS = 100_000;
+
+export interface TextPreview {
+  text: string;
+  truncated: boolean;
+  totalLines: number;
+  totalChars: number;
+}
+
+export function previewText(
+  text: string,
+  maxLines = PREVIEW_LINES,
+  maxChars = PREVIEW_CHARS,
+): TextPreview {
+  const lines = text.split("\n");
+  const totalLines = lines.length;
+  const totalChars = text.length;
+
+  if (totalLines <= maxLines && totalChars <= maxChars) {
+    return { text, truncated: false, totalLines, totalChars };
+  }
+
+  const candidate = text.slice(0, maxChars + 1);
+  const candidateLines = candidate.split("\n");
+  let preview = candidateLines.slice(0, maxLines).join("\n").slice(0, maxChars);
+
+  // Guard against splitting a UTF-16 surrogate pair
+  const last = preview.charCodeAt(preview.length - 1);
+  const next = text.charCodeAt(preview.length);
+  if (
+    preview.length < text.length &&
+    last >= 0xd800 &&
+    last <= 0xdbff &&
+    next >= 0xdc00 &&
+    next <= 0xdfff
+  ) {
+    preview = preview.slice(0, -1);
+  }
+
+  return {
+    text: preview,
+    truncated: preview.length < text.length,
+    totalLines,
+    totalChars,
+  };
+}
+
+function looksLikeJson(source: string): boolean {
+  return /^\s*[[{"]/.test(source.slice(0, 256));
+}
+
+export interface JsonFormat {
+  text: string | null;
+  limited: boolean;
+}
+
+/** Change whitespace only. Preserve large numbers, key order, duplicate keys and escapes. */
+export function formatJson(source: string): JsonFormat {
+  if (source.length > MAX_FORMAT_CHARS || !source.trim()) {
+    return { text: null, limited: source.length > MAX_FORMAT_CHARS && looksLikeJson(source) };
+  }
+  try {
+    JSON.parse(source);
+  } catch {
+    return { text: null, limited: false };
+  }
+  const tokens = source.match(/"(?:\\[\s\S]|[^"\\])*"|[{}[\],:]|[^\s{}[\],:]+/g) ?? [];
+  let depth = 0;
+  const out: string[] = [];
+  let length = 0;
+  const push = (value: string) => {
+    out.push(value);
+    length += value.length;
+  };
+  const line = () => push("\n" + "  ".repeat(Math.min(depth, 40)));
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token === "{" || token === "[") {
+      push(token);
+      depth += 1;
+      if (tokens[index + 1] !== "}" && tokens[index + 1] !== "]") line();
+    } else if (token === "}" || token === "]") {
+      depth -= 1;
+      if (tokens[index - 1] !== "{" && tokens[index - 1] !== "[") line();
+      push(token);
+    } else if (token === ",") {
+      push(token);
+      line();
+    } else if (token === ":") {
+      push(": ");
+    } else {
+      push(token);
+    }
+    if (length > MAX_FORMAT_CHARS) return { text: null, limited: true };
+  }
+  return { text: out.join(""), limited: false };
+}
+
+export function prettyJson(source: string): string | null {
+  return formatJson(source).text;
+}
+
+export function extractCodeInput(
+  toolName: string,
+  value: unknown,
+): { code: string; language: string } | undefined {
+  let decoded = value;
+  if (typeof value === "string" && value.length <= 1_000_000) {
+    try {
+      decoded = JSON.parse(value);
+    } catch {
+      // may be literal JS
+    }
+  }
+  const record =
+    decoded !== null && typeof decoded === "object" && !Array.isArray(decoded)
+      ? (decoded as Record<string, unknown>)
+      : undefined;
+  const name = toolName
+    .trim()
+    .toLowerCase()
+    .replace(/^(?:functions|tools)\./, "")
+    .replace(/^mcp__.*?__/, "")
+    .replace(/^mcp_/, "");
+
+  const codeTool = ["exec", "mcpscript", "mcp_script", "run_script"].includes(name);
+  if (codeTool) {
+    const code =
+      record?.code ??
+      (typeof decoded === "string" && !decoded.slice(0, 256).trimStart().startsWith("{")
+        ? decoded
+        : undefined);
+    if (typeof code === "string") {
+      return { code, language: "javascript" };
+    }
+  }
+
+  if (name === "evaluate_browser" || name === "browser_evaluate") {
+    const code = record?.expression ?? record?.code;
+    if (typeof code === "string") {
+      return { code, language: "javascript" };
+    }
+  }
+
+  return undefined;
+}
+
 export function diffStatsFromUnifiedDiff(unifiedDiff: string): DiffStats {
   let additions = 0;
   let deletions = 0;
@@ -490,6 +640,13 @@ function splitDiffLines(text: string): { lines: string[]; hasTrailingNewline: bo
 }
 
 function computeLineDiff(oldText: string, newText: string): DiffLine[] {
+  if (oldText.length + newText.length > MAX_DIFF_CHARS) {
+    return [
+      ...(oldText ? [{ kind: "remove" as const, text: `[Previous content: ${oldText.length.toLocaleString()} characters]` }] : []),
+      ...(newText ? [{ kind: "add" as const, text: `[Updated content: ${newText.length.toLocaleString()} characters]` }] : []),
+    ];
+  }
+
   const { lines: oldLines, hasTrailingNewline: oldHasNewline } = splitDiffLines(oldText);
   const { lines: newLines, hasTrailingNewline: newHasNewline } = splitDiffLines(newText);
   const m = oldLines.length;
@@ -573,7 +730,16 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
   return prefix.concat(middle.reverse(), suffix);
 }
 
+function countLines(value: string): number {
+  if (!value) return 0;
+  const lines = value.replace(/\r/g, "").split("\n");
+  return lines.at(-1) === "" ? lines.length - 1 : lines.length;
+}
+
 export function diffStatsFromStrings(oldString: string, newString: string): DiffStats {
+  if (oldString.length + newString.length > MAX_DIFF_CHARS) {
+    return { additions: countLines(newString), deletions: countLines(oldString) };
+  }
   let additions = 0;
   let deletions = 0;
   for (const line of computeLineDiff(oldString, newString)) {
@@ -589,6 +755,14 @@ export function diffStatsForDetail(detail: Extract<ToolCallDetail, { type: "edit
 }
 
 export function diffLinesForDetail(detail: Extract<ToolCallDetail, { type: "edit" }>): DiffLine[] {
+  const size = (detail.unifiedDiff?.length ?? ((detail.oldString?.length ?? 0) + (detail.newString?.length ?? 0)));
+  if (size > MAX_DIFF_CHARS) {
+    return [
+      ...(detail.oldString ? [{ kind: "remove" as const, text: `[Previous content: ${detail.oldString.length.toLocaleString()} characters]` }] : []),
+      ...(detail.newString ? [{ kind: "add" as const, text: `[Updated content: ${detail.newString.length.toLocaleString()} characters]` }] : []),
+    ];
+  }
+
   if (detail.unifiedDiff !== undefined) {
     return detail.unifiedDiff
       .replace(/\r/g, "")
@@ -656,15 +830,19 @@ export function resolveToolCallPresentation(
         summary: compactText(detail.filePath),
         ...commonFileFields,
       };
-    case "edit":
+    case "edit": {
+      const editSize =
+        detail.unifiedDiff?.length ??
+        ((detail.oldString?.length ?? 0) + (detail.newString?.length ?? 0));
       return {
         category: "file",
         icon: commonFileFields.fileIcon ?? "Pencil",
         label: "Edit File",
         summary: compactText(detail.filePath),
-        diffStats: diffStatsForDetail(detail),
+        ...(editSize <= MAX_DIFF_CHARS ? { diffStats: diffStatsForDetail(detail) } : {}),
         ...commonFileFields,
       };
+    }
     case "write":
       return {
         category: "file",
@@ -889,9 +1067,15 @@ export function toJsonValue(value: unknown): JsonValue {
 }
 
 export function formatUnknownValue(value: unknown): string {
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    const formatted = prettyJson(value);
+    return formatted ?? value;
+  }
   try {
-    return JSON.stringify(value, null, 2) ?? String(value);
+    const raw = JSON.stringify(value);
+    if (raw === undefined) return String(value);
+    const formatted = prettyJson(raw);
+    return formatted ?? JSON.stringify(value, null, 2) ?? String(value);
   } catch {
     return String(value);
   }
