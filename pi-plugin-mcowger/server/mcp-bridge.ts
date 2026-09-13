@@ -4,12 +4,17 @@ import { defineTool } from "./pi-sdk.js";
 import type { PiToolDefinition } from "../shared/pi-sdk-types.js";
 import type { ProviderMcpServerConfig } from "@getpaseo/plugin/server/provider";
 
-import { isPaseoToolAllowed, readPiPaseoToolPolicy } from "./paseo-tool-policy.js";
+import { filterPaseoToolNames } from "./tool-policy.js";
+import type { PaseoHostToolPolicy } from "../shared/tool-policy.js";
 
 const PASEO_MCP_PATHNAME = "/mcp/agents";
 
 export interface McpBridgeHandle {
   tools: PiToolDefinition[];
+  paseoToolCount: number;
+  visiblePaseoToolCount: number;
+  paseoToolNames: string[];
+  visiblePaseoToolNames: string[];
   close(): Promise<void>;
 }
 
@@ -52,7 +57,7 @@ function normalizeInputSchema(schema: unknown): Record<string, unknown> {
 function isPaseoMcpServer(config: ProviderMcpServerConfig): boolean {
   if (config.type !== "http" && config.type !== "sse") return false;
   try {
-    return new URL(config.url).pathname === PASEO_MCP_PATHNAME;
+    return new URL(config.url).pathname.replace(/\/+$/, "") === PASEO_MCP_PATHNAME;
   } catch {
     return false;
   }
@@ -65,20 +70,20 @@ function isPaseoMcpServer(config: ProviderMcpServerConfig): boolean {
  */
 export async function createMcpBridge(
   servers: Readonly<Record<string, ProviderMcpServerConfig>>,
+  paseoToolPolicy: PaseoHostToolPolicy,
   log: (message: string) => void,
 ): Promise<McpBridgeHandle> {
   const clients: Client[] = [];
   const tools: PiToolDefinition[] = [];
-  const paseoToolPolicy = readPiPaseoToolPolicy(log);
+  const paseoToolNames: string[] = [];
+  const visiblePaseoToolNames: string[] = [];
+  let paseoToolCount = 0;
+  let visiblePaseoToolCount = 0;
 
   const entries = Object.entries(servers);
-  await Promise.all(
+  const results = await Promise.all(
     entries.map(async ([serverName, config]) => {
       const isPaseoServer = isPaseoMcpServer(config);
-      if (isPaseoServer && !paseoToolPolicy.enabled) {
-        log(`mcp: ${serverName} disabled by the pi Paseo-tool policy`);
-        return;
-      }
       const client = new Client({ name: "pi-plugin-mcowger", version: "0.0.0" });
       try {
         await client.connect(toTransport(config));
@@ -100,11 +105,21 @@ export async function createMcpBridge(
         return;
       }
       const visibleTools = isPaseoServer
-        ? listed.tools.filter((tool) => isPaseoToolAllowed(paseoToolPolicy, tool.name))
+        ? listed.tools.filter((tool) =>
+            filterPaseoToolNames([tool.name], paseoToolPolicy).length > 0,
+          )
         : listed.tools;
-      for (const mcpTool of visibleTools) {
+      if (isPaseoServer) {
+        paseoToolCount += listed.tools.length;
+        visiblePaseoToolCount += visibleTools.length;
+      }
+      const serverTools: PiToolDefinition[] = [];
+      for (const mcpTool of listed.tools) {
         const toolName = `mcp_${sanitizeNamePart(serverName)}_${sanitizeNamePart(mcpTool.name)}`;
-        tools.push(
+        if (isPaseoServer) paseoToolNames.push(toolName);
+        if (!visibleTools.includes(mcpTool)) continue;
+        if (isPaseoServer) visiblePaseoToolNames.push(toolName);
+        serverTools.push(
           defineTool({
             name: toolName,
             label: `${serverName}: ${mcpTool.title ?? mcpTool.name}`,
@@ -135,14 +150,23 @@ export async function createMcpBridge(
       }
       log(
         isPaseoServer
-          ? `mcp: ${serverName} connected (${visibleTools.length}/${listed.tools.length} tools after pi policy)`
+          ? `mcp: ${serverName} connected (${visibleTools.length}/${listed.tools.length} tools after Paseo host policy)`
           : `mcp: ${serverName} connected (${visibleTools.length} tools)`,
       );
+      return serverTools;
     }),
   );
+  for (const serverTools of results) {
+    if (serverTools) tools.push(...serverTools);
+  }
 
   return {
     tools,
+    paseoToolCount,
+    visiblePaseoToolCount,
+    paseoToolNames,
+    visiblePaseoToolNames,
+
     async close() {
       await Promise.all(clients.map((client) => client.close().catch(() => undefined)));
     },

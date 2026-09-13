@@ -18,7 +18,11 @@ describe("parsePiSlashCommand", () => {
 });
 
 describe("buildPiPromptCommands", () => {
-  it("publishes extension commands, prompt templates, and skills", () => {
+  it("does not publish the removed preset command", () => {
+    expect(buildPiPromptCommands([], []).map((command) => command.name)).toEqual(["compact"]);
+  });
+
+  it("publishes extension commands with built-ins and prompt templates", () => {
     const commands = buildPiPromptCommands(
       [
         {
@@ -45,17 +49,6 @@ describe("buildPiPromptCommands", () => {
         description: "Manually compact the session context",
         argumentHint: "[instructions]",
       },
-      {
-        name: "settings",
-        description: "Change Pi runtime settings",
-        argumentHint: "<auto-compaction|auto-retry> <on|off>",
-      },
-      {
-        name: "reload",
-        description: "Reload Pi extensions, skills, prompts, themes, and context files",
-      },
-      { name: "session", description: "Show Pi session info and stats" },
-      { name: "name", description: "Set the Pi session display name", argumentHint: "<name>" },
       { name: "review", description: "Review the current changes" },
       { name: "blank", description: "Uses the registered name" },
       { name: "explain", description: "Prompt template" },
@@ -75,8 +68,8 @@ describe("buildPiPromptCommands", () => {
       [{ name: "deploy" }],
     );
 
-    expect(commands).toHaveLength(7);
-    expect(commands.at(-2)).toEqual({
+    expect(commands).toHaveLength(2);
+    expect(commands.at(-1)).toEqual({
       name: "status",
       description: "Pi extension command",
     });

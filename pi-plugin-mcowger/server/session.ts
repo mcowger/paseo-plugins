@@ -215,7 +215,6 @@ export class PiProviderSession {
   private readonly cleanup?: () => void;
   private readonly promptCommands: ProviderCommand[];
   private readonly mcp: McpBridgeHandle | null;
-  private readonly reloadCommands?: () => ProviderCommand[];
 
   private models: PiModel[];
   private configurationQueue: Promise<unknown> = Promise.resolve();
@@ -246,7 +245,6 @@ export class PiProviderSession {
     this.mcp = options.bundle.mcp;
     this.config = options.config;
     this.models = options.models;
-    this.reloadCommands = options.reloadCommands;
     this.emitEvent = options.emit;
     this.cleanup = options.cleanup;
 
@@ -425,18 +423,7 @@ export class PiProviderSession {
     }
 
     let payload = convertPromptInput(prompt.input, { model: this.currentModel() });
-    const slashInvocation =
-      prompt.input.content.every((part) => part.type === "text")
-        ? parsePiSlashCommand(payload.text)
-        : null;
-    if (slashInvocation && this.isNativeSlashCommand(slashInvocation.name)) {
-      if (this.activeTurnId) await this.interrupt();
-      await this.handleCommand({
-        ...prompt,
-        input: { type: "command", name: slashInvocation.name, arguments: slashInvocation.arguments },
-      });
-      return;
-    }
+    const slashInvocation = this.parseSlashCommandInput(payload.text);
 
     if (prompt.delivery === "steer" && this.activeTurnId && !slashInvocation) {
       await this.steerActiveTurn(payload, prompt);
@@ -455,39 +442,6 @@ export class PiProviderSession {
   private async handleCommand(prompt: ProviderPrompt): Promise<void> {
     const { name, arguments: args } = prompt.input as { name: string; arguments: string };
     const commandText = `/${name}${args ? ` ${args}` : ""}`;
-
-    if (name === "reload") {
-      this.emitCommandUserMessage(prompt.clientMessageId, commandText, this.appendCommandEntry(commandText));
-      await this.handleReload(prompt.clientMessageId);
-      return;
-    }
-
-    if (name === "session") {
-      this.emitCommandUserMessage(prompt.clientMessageId, commandText, this.appendCommandEntry(commandText));
-      await this.handleSessionInfo(prompt.clientMessageId);
-      return;
-    }
-
-    if (name === "name") {
-      this.emitCommandUserMessage(prompt.clientMessageId, commandText, this.appendCommandEntry(commandText));
-      await this.handleSessionName(args, prompt.clientMessageId);
-      return;
-    }
-
-    if (name === "settings") {
-      const runtimeSetting = this.parseRuntimeSettingCommand(commandText);
-      if (!runtimeSetting) {
-        this.emitPromptResult(prompt.clientMessageId, {
-          type: "failed",
-          error: { message: "Usage: /settings <auto-compaction|auto-retry> <on|off>" },
-        });
-        return;
-      }
-      const commandEntry = this.appendCommandEntry(commandText);
-      this.emitCommandUserMessage(prompt.clientMessageId, commandText, commandEntry);
-      await this.applyRuntimeSetting(runtimeSetting.id, runtimeSetting.value, prompt.clientMessageId);
-      return;
-    }
 
     if (name === "compact") {
       const commandEntry = this.appendCommandEntry(commandText);

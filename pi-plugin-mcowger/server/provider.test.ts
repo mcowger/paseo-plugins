@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ProviderEvent, ProviderInput } from "@getpaseo/plugin/server/provider";
 
 import { createPiProvider } from "./provider.js";
+import { createPiToolPolicyStore } from "./tool-policy.js";
 
 function nextEvent(
   events: ProviderEvent[],
@@ -15,7 +16,7 @@ function nextEvent(
 
 describe("Pi provider rewind capability", () => {
   it("advertises conversation rewind when capabilities are negotiated", async () => {
-    const provider = createPiProvider();
+    const provider = createPiProvider(createPiToolPolicyStore());
     const connection = await provider.connect({
       versions: [1],
       capabilities: ["session.persistence", "session.revert.conversation"],
@@ -32,7 +33,7 @@ describe("Pi provider rewind capability", () => {
   });
 
   it("rejects file rewind through the provider boundary", async () => {
-    const provider = createPiProvider();
+    const provider = createPiProvider(createPiToolPolicyStore());
     const connection = await provider.connect({
       versions: [1],
       capabilities: ["session.revert.conversation"],

@@ -18,8 +18,16 @@ import {
 
 import { createMcpBridge } from "./mcp-bridge.js";
 import { buildPiPromptCommands } from "./commands.js";
+import {
+  formatPiToolPolicyDiagnostic,
+  piToolPolicyRequiresKnownBaseline,
+  policyChanged,
+  resolvePiToolPolicy,
+} from "./tool-policy.js";
 import type { PiModelRuntimeLike } from "../shared/pi-sdk-types.js";
 import { buildCatalog, createModelRuntime, listScopedModels } from "./pi-host.js";
+import { PI_PROVIDER_ID as SHARED_PI_PROVIDER_ID } from "../shared/tool-policy.js";
+import { createPiToolPolicyStore, type PiToolPolicyStore } from "./tool-policy.js";
 import { PiProviderSession } from "./session.js";
 import { normalizePiThinkingLevel, parsePiModelReference } from "./thinking.js";
 import {
@@ -44,17 +52,18 @@ const SUPPORTED_CAPABILITIES = [
 
 interface ProviderState {
   sessions: Map<string, PiProviderSession>;
+  toolPolicyStore: PiToolPolicyStore;
   emit(event: ProviderEvent): void;
   capabilities: readonly string[];
   modelRuntimePromise: Promise<PiModelRuntimeLike> | null;
 }
 
-export function createPiProvider(): ProviderRegistration {
+export function createPiProvider(toolPolicyStore = createPiToolPolicyStore()): ProviderRegistration {
   return {
     id: PI_PROVIDER_ID,
     label: PI_PROVIDER_LABEL,
     description:
-      "Pi coding agent via its in-process SDK, with per-model thinking levels, native todos, and subagent rendering",
+      "Pi coding agent via its in-process SDK, with per-model thinking levels, host tool policy, native todos, and subagent rendering",
     icon: "icon.svg",
     async connect(request) {
       if (!request.versions.includes(1)) {
@@ -62,15 +71,20 @@ export function createPiProvider(): ProviderRegistration {
       }
       return createConnection(
         negotiateProviderCapabilities(request.capabilities, SUPPORTED_CAPABILITIES),
+        toolPolicyStore,
       );
     },
   };
 }
 
-function createConnection(capabilities: readonly string[]): ProviderConnection {
+function createConnection(
+  capabilities: readonly string[],
+  toolPolicyStore: PiToolPolicyStore,
+): ProviderConnection {
   const listeners = new Set<(event: ProviderEvent) => void>();
   const state: ProviderState = {
     sessions: new Map(),
+    toolPolicyStore,
     capabilities,
     modelRuntimePromise: null,
     emit(event) {
@@ -200,7 +214,10 @@ async function handleCatalog(
     state.emit({
       type: "catalog",
       requestId: input.requestId,
-      catalog: baseCatalog,
+      catalog: {
+        ...baseCatalog,
+        modes: [],
+      },
     });
   } catch (error) {
     state.emit({
@@ -276,8 +293,13 @@ async function handleSessionOpen(
   // per-server and never block the session.
   let mcp = null;
   const mcpServers = config.mcpServers ?? {};
+  const policy = state.toolPolicyStore.snapshot().settings;
   if (Object.keys(mcpServers).length > 0) {
-    mcp = await createMcpBridge(mcpServers, (message) => startupDiagnostics.push(message));
+    mcp = await createMcpBridge(
+      mcpServers,
+      policy.paseoTools,
+      (message: string) => startupDiagnostics.push(message),
+    );
   }
 
   const systemPrompt = config.systemPrompt;
@@ -344,6 +366,43 @@ async function handleSessionOpen(
     throw error;
   }
   const { session, modelFallbackMessage } = created;
+  const baselineToolNames = session.getActiveToolNames?.();
+  const knownToolNames = session.getAllTools?.().map((tool) => tool.name);
+  const finalToolNames = resolvePiToolPolicy(baselineToolNames, knownToolNames, policy.piTools);
+  const paseoToolCount = mcp?.paseoToolCount ?? 0;
+  const visiblePaseoToolCount = mcp?.visiblePaseoToolCount ?? 0;
+  if (baselineToolNames === undefined || finalToolNames === undefined) {
+    if (piToolPolicyRequiresKnownBaseline(policy.piTools)) {
+      session.setActiveToolsByName([]);
+      startupDiagnostics.push(
+        "Pi tool policy: Pi did not expose its active tool list; disabled tool calls because a restrictive policy could not be resolved safely.",
+      );
+    } else {
+      startupDiagnostics.push(
+        "Pi tool policy: Pi did not expose its active tool list; preserved the SDK's current tool selection.",
+      );
+    }
+  } else {
+    session.setActiveToolsByName(finalToolNames);
+    if (
+      policyChanged(
+        baselineToolNames,
+        finalToolNames,
+        paseoToolCount,
+        visiblePaseoToolCount,
+        policy.paseoTools.enabled,
+      )
+    ) {
+      startupDiagnostics.push(
+        formatPiToolPolicyDiagnostic(
+          baselineToolNames,
+          finalToolNames,
+          mcp?.paseoToolNames ?? [],
+          mcp?.visiblePaseoToolNames ?? [],
+        ),
+      );
+    }
+  }
 
   // Apply the requested model/thinking after creation (fast, direct).
   if (config.model) {
@@ -385,12 +444,6 @@ async function handleSessionOpen(
     },
     config,
     models: await listScopedModels(runtime, config.cwd),
-    reloadCommands: () =>
-      buildPiPromptCommands(
-        loader.getExtensions().extensions,
-        loader.getPrompts().prompts,
-        loader.getSkills().skills,
-      ),
     emit: state.emit,
   });
   state.sessions.set(input.sessionId, providerSession);

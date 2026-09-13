@@ -17,6 +17,8 @@ The plugin is ready for use with Paseo `v0.8.0`. Paseo's provider API is stable 
 
 - Loads pi models, auth, settings, extensions, skills, and prompt templates from `~/.pi/agent`.
 - Exposes pi models with per-model thinking levels in Paseo's composer.
+- Provides a host-scoped Tool Policy screen and Command Center entry for narrowing Pi tools and
+  independently filtering Paseo host tools. Manage it in Settings → Plugins → Pi Tool Policy.
 - Provides a branch-aware `todo` tool when no loaded Pi extension already contributes one, and emits
   its results (along with `@juicesharp/rpiv-todo` results) as native Paseo todo items.
 - Maps foreground pi subagent calls to native Paseo subagent tool rows.
@@ -76,7 +78,9 @@ The plugin uses pi's normal configuration directory, including:
 - `~/.pi/agent/extensions/`
 - `~/.pi/agent/packages`
 
-Project-local `.pi` settings and resources are loaded for the active workspace.
+Tool Policy is managed by Paseo in the plugin's host-scoped settings document. It applies to new
+or refreshed sessions and does not sandbox shell commands or extensions. Project-local `.pi` settings
+and resources are loaded for the active workspace.
 
 ## Development
 

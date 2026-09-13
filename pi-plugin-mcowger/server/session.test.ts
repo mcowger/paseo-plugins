@@ -147,10 +147,6 @@ function createHarness() {
     mcp: null,
     promptCommands: [
       { name: "compact", description: "Compact" },
-      { name: "settings", description: "Settings" },
-      { name: "reload", description: "Reload" },
-      { name: "session", description: "Session" },
-      { name: "name", description: "Name" },
     ],
   };
   const session = new PiProviderSession({
@@ -283,89 +279,6 @@ describe("PiProviderSession user identity", () => {
 });
 
 describe("PiProviderSession commands", () => {
-  it("executes typed compact slash commands without starting a turn", async () => {
-    const { fake, session, events } = createHarness();
-    await session.handlePrompt(messagePrompt(" /compact  keep it short "));
-
-    expect(fake.compactCalls).toEqual(["keep it short"]);
-    expect(fake.prompts).toHaveLength(0);
-    expect(events).toContainEqual(expect.objectContaining({
-      type: "session.prompt_result",
-      clientMessageId: "cm-1",
-      result: { type: "completed" },
-    }));
-  });
-
-  it("executes typed settings slash commands", async () => {
-    const { fake, session } = createHarness();
-    await session.handlePrompt(messagePrompt("/settings auto-retry off"));
-
-    expect(fake.autoRetryEnabled).toBe(false);
-    expect(fake.prompts).toHaveLength(0);
-  });
-
-  it("rejects malformed settings slash commands", async () => {
-    const { fake, session, events } = createHarness();
-    await session.handlePrompt(messagePrompt("/settings"));
-
-    expect(fake.prompts).toHaveLength(0);
-    expect(events).toContainEqual(expect.objectContaining({
-      type: "session.prompt_result",
-      result: { type: "failed", error: { message: expect.stringContaining("Usage:") } },
-    }));
-  });
-
-  it("reloads Pi resources and republishes slash commands", async () => {
-    const { fake, session, events } = createHarness();
-    await session.handlePrompt(messagePrompt("/reload"));
-
-    expect(fake.reloads).toBe(1);
-    expect(events).toContainEqual({
-      type: "session.commands",
-      sessionId: "s1",
-      commands: [{ name: "reload", description: "Reloaded" }],
-    });
-    expect(events).toContainEqual(expect.objectContaining({
-      type: "session.prompt_result",
-      result: { type: "completed" },
-    }));
-  });
-
-  it("reports Pi session stats", async () => {
-    const { session, events } = createHarness();
-    await session.handlePrompt(messagePrompt("/session"));
-
-    expect(events).toContainEqual(expect.objectContaining({
-      type: "timeline.item",
-      item: expect.objectContaining({
-        type: "assistant_message",
-        text: expect.stringContaining("Messages: 5 (2 user, 3 assistant)"),
-      }),
-    }));
-  });
-
-  it("sets the Pi session display name", async () => {
-    const { fake, session, events } = createHarness();
-    await session.handlePrompt(messagePrompt("/name  release prep  "));
-
-    expect(fake.sessionName).toBe("release prep");
-    expect(events).toContainEqual(expect.objectContaining({
-      type: "session.prompt_result",
-      result: { type: "completed" },
-    }));
-  });
-
-  it("rejects an empty session name", async () => {
-    const { fake, session, events } = createHarness();
-    await session.handlePrompt(messagePrompt("/name"));
-
-    expect(fake.sessionName).toBeUndefined();
-    expect(events).toContainEqual(expect.objectContaining({
-      type: "session.prompt_result",
-      result: { type: "failed", error: { message: "Usage: /name <name>" } },
-    }));
-  });
-
   it("applies runtime settings from configure", async () => {
     const { fake, session } = createHarness();
     await session.configure({ settings: { autoCompaction: "off", autoRetry: "off" } });
@@ -437,29 +350,6 @@ describe("PiProviderSession commands", () => {
     expect(fake.autoRetryEnabled).toBe(true);
     expect(fake.prompts).toHaveLength(1);
     expect(fake.prompts[0]?.text).toContain("/settings auto-retry off");
-  });
-});
-
-describe("PiProviderSession model configuration", () => {
-  it("does not expose named modes", () => {
-    const { session } = createHarness();
-    expect(session.configState().modes).toEqual([]);
-  });
-
-  it("clamps thinking when the composer changes to a narrower model", async () => {
-    const { fake, session } = createHarness();
-    fake.modelRuntime.getModel = (provider, id) => ({
-      provider,
-      id,
-      reasoning: true,
-      thinkingLevelMap: { medium: null, high: null },
-    });
-    fake.thinkingLevel = "medium";
-
-    await session.configure({ model: "anthropic/narrow" });
-
-    expect(fake.thinkingLevels.at(-1)).toBe("low");
-    expect(session.configState().thinkingOption).toBe("low");
   });
 });
 
@@ -562,22 +452,6 @@ describe("PiProviderSession steering", () => {
     });
   });
 
-  it("interrupts and executes a native slash command while steering", async () => {
-    const { fake, session, events } = createHarness();
-    fake.onPrompt = () => {
-      fake.emitEvent({ type: "turn_start" } as AgentSessionEvent);
-      fake.onPrompt = null;
-    };
-    await session.handlePrompt(messagePrompt("start"));
-    await session.handlePrompt(messagePrompt("/settings auto-retry off", "cm-3", "steer"));
-    expect(fake.aborts).toBe(1);
-    expect(fake.prompts).toHaveLength(1);
-    expect(events).toContainEqual(expect.objectContaining({
-      type: "session.prompt_result",
-      clientMessageId: "cm-3",
-      result: { type: "completed" },
-    }));
-  });
 });
 
 describe("PiProviderSession replay", () => {

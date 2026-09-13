@@ -30,24 +30,6 @@ const BUILTIN_COMMANDS: readonly ProviderCommand[] = [
     description: "Manually compact the session context",
     argumentHint: "[instructions]",
   },
-  {
-    name: "settings",
-    description: "Change Pi runtime settings",
-    argumentHint: "<auto-compaction|auto-retry> <on|off>",
-  },
-  {
-    name: "reload",
-    description: "Reload Pi extensions, skills, prompts, themes, and context files",
-  },
-  {
-    name: "session",
-    description: "Show Pi session info and stats",
-  },
-  {
-    name: "name",
-    description: "Set the Pi session display name",
-    argumentHint: "<name>",
-  },
 ];
 
 function addCommand(
