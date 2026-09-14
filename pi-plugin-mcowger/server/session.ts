@@ -1,310 +1,372 @@
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { PiAgentSessionEvent, PiAgentSessionLike, PiSessionManagerLike } from "../shared/pi-sdk-types.js";
-import type {
-  ProviderCommand,
-  ProviderConfigChanges,
-  ProviderConfigState,
-  ProviderEvent,
-  ProviderPermissionRequest,
-  ProviderPermissionResponse,
-  ProviderPersistence,
-  ProviderPrompt,
-  ProviderSessionConfig,
-  ProviderUsage,
-} from "@getpaseo/plugin/server/provider";
+import type { ProviderCommand, ProviderConfigChanges, ProviderConfigState, ProviderEvent, ProviderPermissionRequest, ProviderPermissionResponse, ProviderPersistence, ProviderPrompt, ProviderSessionConfig, ProviderTimelineItem, ProviderUsage } from "@getpaseo/plugin/server/provider";
 
-import type { PiAgentMessage, PiImageContent, PiModel, PiThinkingLevel } from "../shared/rpc-types.js";
-import type { McpBridgeHandle } from "./mcp-bridge.js";
-import { parsePiSlashCommand } from "./commands.js";
-import {
-  createHeadlessUiContext,
-  type PiUiDialogRequest,
-  type PiUiDialogResponse,
-} from "./pi-ui-context.js";
-import {
-  getUserMessageText,
-  PiHistoryMapper,
-  type PiCommandHistoryEntry,
-} from "./history-mapper.js";
-import {
-  DEFAULT_PI_THINKING_LEVEL,
-  clampThinkingLevel,
-  mapPiModel,
-  normalizePiThinkingLevel,
-  parsePiModelReference,
-  supportedThinkingLevels,
-  thinkingOptionsForModel,
-} from "./thinking.js";
-import {
-  mapToolDetail,
-  parseToolArgs,
-  parseToolResult,
-  resolveToolCallName,
-  type PiToolResult,
-  type PiTrackedToolCall,
-} from "./tool-call-mapper.js";
-import { extractTodoSnapshot, PI_TODO_TIMELINE_ITEM_ID } from "./todo.js";
+import type { PiAgentMessage, PiAgentSessionEvent, PiModel, PiRuntimeEvent, PiSessionState } from "./rpc-types.js";
+import type { PiRuntimeSession } from "./runtime.js";
+import { thinkingConfigForModel } from "./thinking.js";
+import { mapToolDetail, parseToolArgs, parseToolResult, resolveToolCallName, type PiTrackedToolCall } from "./tool-call-mapper.js";
 
-const QUESTION_RESPONSE_HEADER = "Response";
-const PI_COMMAND_ANCHOR_ENTRY_TYPE = "paseo-command-anchor";
-const PI_COMMAND_ENTRY_TYPE = "paseo-command";
-const TODO_TOOL_NAMES = new Set(["todo"]);
-
-export interface SdkSessionBundle {
-  session: PiAgentSessionLike;
-  sessionManager: PiSessionManagerLike;
-  mcp: McpBridgeHandle | null;
-  promptCommands: ProviderCommand[];
-}
+const DEFAULT_THINKING_LEVEL = "medium";
+const RESPONSE_HEADER = "Response";
+const AUTO_COMPACTION_SETTING = "autoCompaction";
+const AUTO_RETRY_SETTING = "autoRetry";
+const BUILTIN_COMMANDS: readonly ProviderCommand[] = [
+  {
+    name: "compact",
+    description: "Manually compact the session context",
+    argumentHint: "[instructions]",
+  },
+];
 
 export interface PiProviderSessionOptions {
   sessionId: string;
-  bundle: SdkSessionBundle;
   config: ProviderSessionConfig;
-  profileId: string | null;
+  runtime: PiRuntimeSession;
+  state: PiSessionState;
   models: PiModel[];
   emit(event: ProviderEvent): void;
-  reloadCommands?: () => ProviderCommand[];
-  cleanup?: () => void;
+  cleanup(): void;
 }
 
-interface PiPromptPayload {
-  text: string;
-  images?: PiImageContent[];
-}
+interface PendingQuestion { method: string; }
 
-interface PiPendingSteerSubmission {
-  text: string;
-  clientMessageId: string | null;
-}
-
-interface PendingDialog {
-  method: PiUiDialogRequest["method"];
-  resolve(response: PiUiDialogResponse): void;
-}
-
-interface PiCompactionState {
+interface ActiveCompaction {
   id: string;
   trigger: "auto" | "manual";
+}
+
+interface ManualCompactionCommand {
+  clientMessageId: string;
+  started: boolean;
   completed: boolean;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
-const AUTO_COMPACTION_SETTING = "autoCompaction";
-const AUTO_RETRY_SETTING = "autoRetry";
-
-function settingBoolean(settings: Readonly<Record<string, unknown>>, id: string): boolean | undefined {
-  const value = settings[id];
-  if (typeof value === "boolean") return value;
-  if (value === "on") return true;
-  if (value === "off") return false;
-  return undefined;
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
-
-function isAbortError(error: unknown): boolean {
-  if (error instanceof Error && error.name === "AbortError") return true;
-  return /\brequest was aborted\b|\babort(ed)?\b/i.test(toErrorMessage(error));
-}
-
-function modelToId(model: { provider?: string; id?: string } | null | undefined): string | null {
-  return model?.provider && model.id ? `${model.provider}/${model.id}` : null;
-}
-
-function materializeImage(image: { data: string; mimeType: string }): string {
-  const extension = image.mimeType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "png";
-  const dir = mkdtempSync(join(tmpdir(), "paseo-pi-image-"));
-  const filePath = join(dir, `image.${extension}`);
-  writeFileSync(filePath, Buffer.from(image.data, "base64"));
-  return filePath;
-}
-
-function renderTextOnlyImageHint(image: { data: string; mimeType: string }): string {
-  try {
-    return `[Image available at: ${materializeImage(image)}]`;
-  } catch (error) {
-    return `[Image attachment omitted: failed to write local file (${toErrorMessage(error)})]`;
-  }
-}
-
-function renderAttachmentAsText(part: Record<string, unknown>): string {
-  const title = optionalString(part.title);
-  const url = optionalString(part.url);
-  const body = optionalString(part.body);
-  if (part.type === "uploaded_file") {
-    const fileName = optionalString(part.fileName) ?? "file";
-    const path = optionalString(part.path);
-    return path ? `[File: ${fileName}]\nPath: ${path}` : `[File: ${fileName}]`;
-  }
-  if (title || url) {
-    const header = title && url ? `[${title}](${url})` : (title ?? url ?? "Attachment");
-    return body ? `${header}\n\n${body}` : header;
-  }
-  if (typeof part.text === "string") {
-    return part.text;
-  }
-  return `[Attachment: ${JSON.stringify(part)}]`;
-}
-
-function convertPromptInput(
-  prompt: Extract<ProviderPrompt["input"], { type: "message" }>,
-  options: { model: PiModel | null | undefined },
-): PiPromptPayload {
-  const textParts: string[] = [];
-  const images: PiImageContent[] = [];
-  const forwardImages = options.model?.input?.includes("image") === true;
-
-  for (const block of prompt.content) {
-    if (block.type === "text") {
-      textParts.push(block.text);
-      continue;
-    }
-    if (block.type === "image") {
-      if (forwardImages) {
-        images.push({ type: "image", data: block.data, mimeType: block.mimeType });
-      } else {
-        textParts.push(renderTextOnlyImageHint(block));
-      }
-      continue;
-    }
-    textParts.push(renderAttachmentAsText(block as unknown as Record<string, unknown>));
-  }
-
-  const payload: PiPromptPayload = { text: textParts.join("\n\n") };
-  if (images.length > 0) {
-    payload.images = images;
-  }
-  return payload;
-}
-
-function latestPiErrorMessage(messages: readonly PiAgentMessage[]): string | null {
-  const latestAssistant = messages.findLast((message) => message.role === "assistant");
-  if (!latestAssistant || !latestAssistant.errorMessage?.trim()) {
-    return null;
-  }
-  const details = [
-    latestAssistant.stopReason ? `stopReason=${latestAssistant.stopReason}` : null,
-    latestAssistant.provider && latestAssistant.model
-      ? `model=${latestAssistant.provider}/${latestAssistant.model}`
-      : null,
-  ].filter((detail): detail is string => detail !== null);
-  const headline = latestAssistant.errorMessage.trim();
-  return details.length > 0 ? `${headline} (${details.join(", ")})` : headline;
-}
-
-function isAbortedTerminalResponse(messages: readonly PiAgentMessage[]): boolean {
-  const latestAssistant = messages.findLast((message) => message.role === "assistant");
-  return latestAssistant?.stopReason?.toLowerCase() === "aborted";
-}
-
 export class PiProviderSession {
-  private readonly sessionId: string;
-  private readonly sdk: PiAgentSessionLike;
-  private readonly sessionManager: PiSessionManagerLike;
-  private readonly config: ProviderSessionConfig;
-  private readonly profileId: string | null;
-  private readonly emitEvent: (event: ProviderEvent) => void;
-  private readonly cleanup?: () => void;
-  private readonly promptCommands: ProviderCommand[];
-  private readonly reloadCommands?: () => ProviderCommand[];
-  private readonly mcp: McpBridgeHandle | null;
-
-  private models: PiModel[];
-  private configurationQueue: Promise<unknown> = Promise.resolve();
-  private lastConfigStateJson: string | null = null;
-  private lastPersistenceJson: string | null = null;
-
-  private readonly activeToolCalls = new Map<string, PiTrackedToolCall>();
-  private readonly pendingDialogs = new Map<string, PendingDialog>();
-  private activeTurnId: string | null = null;
-  private activeClientMessageId: string | null = null;
-  private activeAssistantMessageId: string | null = null;
-  private activeAssistantText = "";
-  private activeReasoningId: string | null = null;
-  private activeReasoningText = "";
-  private activeTurnStarted = false;
-  private activeCompaction: PiCompactionState | null = null;
-  private pendingSettledMessages: PiAgentMessage[] | null = null;
-  private readonly pendingSteerSubmissions: PiPendingSteerSubmission[] = [];
-  private readonly emittedUserEntryIds = new Set<string>();
-  private interruptingTurn: { turnId: string | undefined } | null = null;
-  private closed = false;
+  private readonly toolCalls = new Map<string, PiTrackedToolCall>();
+  private readonly questions = new Map<string, PendingQuestion>();
   private readonly unsubscribe: () => void;
+  private turnId: string | null = null;
+  private clientMessageId: string | null = null;
+  private assistantMessageId: string | null = null;
+  private turnStarted = false;
+  private pendingTerminalMessages: PiAgentMessage[] | null = null;
+  private autoRetryEnabled = false;
+  private activeCompaction: ActiveCompaction | null = null;
+  private manualCompactionCommand: ManualCompactionCommand | null = null;
+  private usageGeneration = 0;
+  private usageTimer: NodeJS.Timeout | null = null;
+  private closed = false;
 
-  constructor(options: PiProviderSessionOptions) {
-    this.sessionId = options.sessionId;
-    this.sdk = options.bundle.session;
-    this.sessionManager = options.bundle.sessionManager;
-    this.promptCommands = options.bundle.promptCommands;
-    this.reloadCommands = options.reloadCommands;
-    this.mcp = options.bundle.mcp;
-    this.config = options.config;
-    this.profileId = options.profileId;
-    this.models = options.models;
-    this.emitEvent = options.emit;
-    this.cleanup = options.cleanup;
-
-    void this.sdk.bindExtensions({
-      uiContext: createHeadlessUiContext({
-        requestDialog: (request) => this.requestDialog(request),
-        notify: (message, level) => this.emitNotification(message, level),
-      }),
-      mode: "rpc",
-    });
-
-    this.unsubscribe = this.sdk.subscribe((event) => {
-      this.handleSessionEvent(event as PiAgentSessionEvent);
-    });
+  constructor(private readonly options: PiProviderSessionOptions) {
+    this.autoRetryEnabled = settingBoolean(options.config.settings, AUTO_RETRY_SETTING) ?? false;
+    this.unsubscribe = options.runtime.onEvent((event) => this.onEvent(event));
   }
 
   get persistence(): ProviderPersistence {
-    return {
-      version: 2,
-      data: {
-        sessionFile: this.sdk.sessionFile ?? null,
-        leafId: this.sessionManager.getLeafId(),
-        cwd: this.config.cwd,
-        ...(this.profileId ? { profileId: this.profileId } : {}),
-        ...(this.config.model ? { model: this.config.model } : {}),
-        ...(this.config.thinkingOption ? { thinkingOption: this.config.thinkingOption } : {}),
-      },
-    };
+    return { version: 1, data: { sessionFile: this.options.state.sessionFile ?? null, cwd: this.options.config.cwd } };
   }
 
-  configState(): ProviderConfigState {
-    const currentModelId = modelToId(this.sdk.model);
-    const currentModel = this.currentModel();
-    return {
-      ...(currentModelId ? { model: currentModelId } : {}),
-      models: this.models.map((model) => mapPiModel(model)),
+  async initialize(): Promise<void> {
+    const autoCompaction = settingBoolean(this.options.config.settings, AUTO_COMPACTION_SETTING);
+    if (autoCompaction !== undefined) {
+      await this.options.runtime.setAutoCompaction(autoCompaction);
+      this.options.state.autoCompactionEnabled = autoCompaction;
+    }
+    const autoRetry = settingBoolean(this.options.config.settings, AUTO_RETRY_SETTING);
+    if (autoRetry !== undefined) {
+      await this.options.runtime.setAutoRetry(autoRetry);
+      this.autoRetryEnabled = autoRetry;
+    }
+    const commands = await this.options.runtime.getCommands().catch(() => []);
+    this.emitConfig();
+    this.emit({
+      type: "session.commands",
+      sessionId: this.options.sessionId,
+      commands: mergeCommands(commands.map((command): ProviderCommand => ({
+        name: command.name,
+        description: command.description ?? command.source,
+      }))),
+    });
+  }
+
+  async replayHistory(): Promise<void> {
+    const messages = await this.options.runtime.getMessages();
+    let userIndex = 0;
+    for (const message of messages) {
+      if (message.role === "user") {
+        const text = messageText(message.content);
+        if (text) this.timeline({ type: "user_message", id: `history-user-${++userIndex}`, messageId: `history-user-${userIndex}`, text });
+      } else if (message.role === "custom") {
+        const text = messageText(message.content);
+        if (text) this.timeline({ type: "assistant_message", id: randomUUID(), text });
+      } else if (message.role === "assistant") {
+        const messageId = message.responseId ?? randomUUID();
+        for (const content of message.content) {
+          if (content.type === "text" && content.text) this.timeline({ type: "assistant_message", id: messageId, messageId, text: content.text });
+          if (content.type === "thinking" && content.thinking) this.timeline({ type: "reasoning", id: `${messageId}:thinking`, text: content.thinking });
+          if (content.type === "toolCall") {
+            const tracked = parseToolArgs(content.name, content.arguments);
+            this.toolCalls.set(content.id, tracked);
+            this.emitTool(content.id, tracked, "running", null, null);
+          }
+        }
+      } else if (message.role === "toolResult") {
+        const tracked = this.toolCalls.get(message.toolCallId) ?? parseToolArgs(message.toolName, null);
+        this.toolCalls.delete(message.toolCallId);
+        this.emitTool(message.toolCallId, tracked, message.isError ? "failed" : "completed", parseToolResult(message.content), message.isError ? message.content : null);
+      }
+    }
+  }
+
+  async prompt(prompt: ProviderPrompt): Promise<void> {
+    if (this.closed) return this.promptFailed(prompt.clientMessageId, "Pi session is closed");
+    const text = prompt.input.type === "command" ? `/${prompt.input.name}${prompt.input.arguments ? ` ${prompt.input.arguments}` : ""}` : prompt.input.content.filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text").map((part) => part.text).join("\n\n");
+    const images = prompt.input.type === "message" ? prompt.input.content.filter((part): part is Extract<typeof part, { type: "image" }> => part.type === "image") : [];
+    const compactArguments = getCompactArguments(prompt, text);
+    if (compactArguments !== null) {
+      await this.executeCompactCommand(prompt.clientMessageId, compactArguments);
+      return;
+    }
+    if (prompt.delivery === "steer" && this.turnId && !text.startsWith("/")) {
+      try {
+        await this.options.runtime.steer(text, images);
+        this.emit({ type: "session.prompt_result", sessionId: this.options.sessionId, clientMessageId: prompt.clientMessageId, result: { type: "steer", turnId: this.turnId } });
+      } catch (error) { this.promptFailed(prompt.clientMessageId, errorMessage(error)); }
+      return;
+    }
+    if (this.turnId) return this.promptFailed(prompt.clientMessageId, "A Pi turn is already active");
+    const turnId = randomUUID();
+    this.turnId = turnId;
+    this.usageGeneration += 1;
+    this.scheduleUsagePoll(this.usageGeneration, turnId);
+    this.clientMessageId = prompt.clientMessageId;
+    this.turnStarted = false;
+    this.pendingTerminalMessages = null;
+    this.emit({ type: "session.prompt_result", sessionId: this.options.sessionId, clientMessageId: prompt.clientMessageId, result: { type: "turn", turnId } });
+    try {
+      const ack = await this.options.runtime.prompt(text, images);
+      if (ack.agentInvoked === false && this.turnId === turnId) this.finish(turnId, []);
+    } catch (error) {
+      if (this.turnId !== turnId) return;
+      this.finish(turnId, [], errorMessage(error));
+    }
+  }
+
+  async interrupt(): Promise<void> {
+    const turnId = this.turnId;
+    try {
+      await this.options.runtime.clearQueue();
+    } catch (error) {
+      if (errorMessage(error) !== "Unknown command: clear_queue") throw error;
+    }
+    await this.options.runtime.abort();
+    if (turnId && this.turnId === turnId) this.finish(turnId, [], undefined, true);
+  }
+
+  async configure(changes: ProviderConfigChanges): Promise<void> {
+    if (changes.model) {
+      const [provider, ...rest] = changes.model.split("/");
+      const modelId = rest.join("/");
+      if (!provider || !modelId) throw new Error("Pi model id must include a provider");
+      await this.options.runtime.setModel(provider, modelId);
+      this.options.state = await this.options.runtime.getState();
+      this.options.config.model = changes.model;
+      this.options.config.thinkingOption = this.options.state.thinkingLevel;
+    }
+    if (changes.thinkingOption !== undefined) {
+      const level = changes.thinkingOption ?? DEFAULT_THINKING_LEVEL;
+      await this.options.runtime.setThinkingLevel(level);
+      this.options.state = await this.options.runtime.getState();
+      this.options.config.thinkingOption = this.options.state.thinkingLevel;
+    }
+    const autoCompaction = settingBoolean(changes.settings, AUTO_COMPACTION_SETTING);
+    if (autoCompaction !== undefined) {
+      await this.options.runtime.setAutoCompaction(autoCompaction);
+      this.options.state.autoCompactionEnabled = autoCompaction;
+    }
+    const autoRetry = settingBoolean(changes.settings, AUTO_RETRY_SETTING);
+    if (autoRetry !== undefined) {
+      await this.options.runtime.setAutoRetry(autoRetry);
+      this.autoRetryEnabled = autoRetry;
+    }
+    this.emitConfig();
+  }
+
+  respondToPermission(id: string, response: ProviderPermissionResponse): void {
+    const question = this.questions.get(id);
+    if (!question) throw new Error(`No pending permission request with id '${id}'`);
+    this.questions.delete(id);
+    if (response.behavior === "deny") this.options.runtime.respondToExtensionUiRequest(id, { cancelled: true });
+    else {
+      const answers = response.updatedInput?.answers;
+      const answer = answers && typeof answers === "object" && typeof (answers as Record<string, unknown>)[RESPONSE_HEADER] === "string" ? (answers as Record<string, string>)[RESPONSE_HEADER] : undefined;
+      this.options.runtime.respondToExtensionUiRequest(id, question.method === "confirm" ? { confirmed: /^yes$/i.test(answer ?? "") } : answer === undefined ? { cancelled: true } : { value: answer });
+    }
+    this.emit({ type: "session.permission_resolved", sessionId: this.options.sessionId, permissionId: id });
+  }
+
+  async revert(token: unknown): Promise<void> {
+    if (this.turnId) throw new Error("Cannot rewind while a Pi turn is active");
+    if (typeof token !== "string" || !token.trim()) throw new Error("Pi rewind requires a message id");
+    await this.options.runtime.prompt(`/paseo_tree ${Buffer.from(JSON.stringify({ targetId: token.trim() })).toString("base64url")}`);
+  }
+
+  async close(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+    this.usageGeneration += 1;
+    this.clearUsagePoll();
+    this.unsubscribe();
+    this.questions.clear();
+    try { await this.options.runtime.close(); } finally { this.options.cleanup(); }
+  }
+
+  private onEvent(event: PiRuntimeEvent): void {
+    if (this.closed) return;
+    if (event.type === "process_exit") {
+      if (this.turnId) this.finish(this.turnId, [], event.error);
+      return;
+    }
+    if (event.type === "extension_ui_request") { this.handleUi(event); return; }
+    if (event.type === "agent_start" || event.type === "turn_start") {
+      const shouldEmitStarted = !this.turnStarted;
+      this.turnStarted = true;
+      if (shouldEmitStarted && this.turnId) this.emit({ type: "session.turn", sessionId: this.options.sessionId, turnId: this.turnId, state: "started" });
+      return;
+    }
+    if (event.type === "message_start" && event.message.role === "assistant") { this.assistantMessageId = event.message.responseId ?? randomUUID(); return; }
+    if (event.type === "message_update") { this.handleUpdate(event); return; }
+    if (event.type === "message_end") { this.handleMessageEnd(event); return; }
+    if (event.type === "tool_execution_start") { const tracked = parseToolArgs(event.toolName, event.args); this.toolCalls.set(event.toolCallId, tracked); this.emitTool(event.toolCallId, tracked, "running", null, null); return; }
+    if (event.type === "tool_execution_update") { const tracked = this.toolCalls.get(event.toolCallId); if (tracked) this.emitTool(event.toolCallId, tracked, "running", parseToolResult(event.partialResult), null); return; }
+    if (event.type === "tool_execution_end") { const tracked = this.toolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null); this.toolCalls.delete(event.toolCallId); this.emitTool(event.toolCallId, tracked, event.isError ? "failed" : "completed", parseToolResult(event.result), event.isError ? event.result : null); this.emitUsage(); return; }
+    if (event.type === "compaction_start") { this.handleCompactionEvent("loading", event.reason === "manual" ? "manual" : "auto"); return; }
+    if (event.type === "compaction_end") { this.handleCompactionEvent("completed", event.reason === "manual" ? "manual" : "auto"); return; }
+    if (event.type === "auto_retry_start") { this.timeline({ type: "error", id: randomUUID(), message: `Provider retry (attempt ${event.attempt}): ${event.errorMessage}` }); return; }
+    if (event.type === "agent_end") {
+      this.pendingTerminalMessages = event.messages ?? [];
+      if (event.willRetry === undefined) this.finish(this.turnId, this.pendingTerminalMessages);
+      return;
+    }
+    if (event.type === "agent_settled") this.finish(this.turnId, this.pendingTerminalMessages ?? []);
+  }
+
+  private async executeCompactCommand(clientMessageId: string, customInstructions: string | undefined): Promise<void> {
+    if (this.manualCompactionCommand) {
+      this.promptFailed(clientMessageId, "A Pi compact command is already running");
+      return;
+    }
+    const command: ManualCompactionCommand = {
+      clientMessageId,
+      started: false,
+      completed: false,
+    };
+    this.manualCompactionCommand = command;
+    try {
+      await this.options.runtime.compact(customInstructions);
+      this.emit({
+        type: "session.prompt_result",
+        sessionId: this.options.sessionId,
+        clientMessageId,
+        result: { type: "completed" },
+      });
+    } catch (error) {
+      if (this.manualCompactionCommand === command && command.started && !command.completed) {
+        this.handleCompactionEvent("completed", "manual");
+      }
+      this.promptFailed(clientMessageId, `Failed to compact context: ${errorMessage(error)}`);
+    } finally {
+      if (this.manualCompactionCommand === command) {
+        this.manualCompactionCommand = null;
+      }
+    }
+  }
+
+  private handleCompactionEvent(status: "loading" | "completed", trigger: "auto" | "manual"): void {
+    const manualCommand = this.manualCompactionCommand;
+    const activeCompaction = this.activeCompaction ?? {
+      id: `compaction:${this.turnId ?? randomUUID()}`,
+      trigger,
+    };
+    this.activeCompaction = activeCompaction;
+    if (manualCommand && trigger === "manual") {
+      if (status === "loading") manualCommand.started = true;
+      if (status === "completed") manualCommand.completed = true;
+    }
+    this.timeline({
+      type: "compaction",
+      id: activeCompaction.id,
+      status,
+      trigger: activeCompaction.trigger,
+    });
+    if (status === "completed") {
+      this.activeCompaction = null;
+    }
+  }
+
+  private handleUpdate(event: Extract<PiAgentSessionEvent, { type: "message_update" }>): void {
+    if (event.message && event.message.role !== "assistant") return;
+    if (event.assistantMessageEvent.type === "text_delta") { this.assistantMessageId ??= event.message?.role === "assistant" ? event.message.responseId ?? randomUUID() : randomUUID(); this.timeline({ type: "assistant_message", id: this.assistantMessageId, messageId: this.assistantMessageId, text: event.assistantMessageEvent.delta ?? "" }); }
+    if (event.assistantMessageEvent.type === "thinking_delta") this.timeline({ type: "reasoning", id: `${this.assistantMessageId ?? "thinking"}:reasoning`, text: event.assistantMessageEvent.delta ?? "" });
+  }
+
+  private handleMessageEnd(event: Extract<PiAgentSessionEvent, { type: "message_end" }>): void {
+    if (event.message.role === "assistant") { this.assistantMessageId = null; this.emitUsage(); return; }
+    if (event.message.role === "custom") { const text = messageText(event.message.content); if (text) this.timeline({ type: "assistant_message", id: randomUUID(), text }); }
+  }
+
+  private handleUi(event: Extract<PiRuntimeEvent, { type: "extension_ui_request" }>): void {
+    if (event.method === "notify" && typeof event.message === "string") { this.timeline({ type: "notification", id: randomUUID(), level: event.notifyType === "error" || event.notifyType === "warning" ? event.notifyType : "info", message: event.message }); return; }
+    if (!["select", "input", "editor", "confirm"].includes(event.method)) return;
+    const title = [typeof event.title === "string" ? event.title : undefined, typeof event.message === "string" ? event.message : undefined].filter(Boolean).join("\n\n") || "Pi request";
+    const options = event.method === "confirm" ? ["Yes", "No"] : Array.isArray(event.options) ? event.options.filter((value): value is string => typeof value === "string") : [];
+    const request: ProviderPermissionRequest = { id: event.id, name: `Pi ${event.method}`, kind: "question", title, input: { questions: [{ question: title, header: RESPONSE_HEADER, options: options.map((label) => ({ label })), multiSelect: false, ...(typeof event.placeholder === "string" ? { placeholder: event.placeholder } : {}), ...(options.length === 0 ? { allowEmpty: true, dismissLabel: "Skip" } : {}) }] } };
+    this.questions.set(event.id, { method: event.method });
+    this.emit({ type: "session.permission", sessionId: this.options.sessionId, request });
+  }
+
+  private finish(turnId: string | null, messages: PiAgentMessage[], forcedError?: string, canceled = false): void {
+    if (!turnId || this.turnId !== turnId) return;
+    const error = forcedError ?? latestAssistantError(messages);
+    this.turnId = null; this.clientMessageId = null; this.turnStarted = false; this.pendingTerminalMessages = null; this.assistantMessageId = null;
+    this.usageGeneration += 1;
+    this.clearUsagePoll();
+    this.emit({ type: "session.turn", sessionId: this.options.sessionId, turnId, state: canceled ? "canceled" : error ? "failed" : "completed", ...(error && !canceled ? { error: { message: error } } : {}) });
+    this.emitUsage(turnId);
+  }
+
+  private emitTool(id: string, tracked: PiTrackedToolCall, status: "running" | "completed" | "failed", result: ReturnType<typeof parseToolResult>, error: unknown): void { this.timeline({ type: "tool_call", id, callId: id, name: resolveToolCallName(tracked, result), detail: mapToolDetail(tracked, result), status, error: status === "failed" ? (error ?? "Tool failed") as never : null }); }
+  private emitConfig(): void {
+    const model = this.options.state.model;
+    const currentThinking = model ? thinkingConfigForModel(model) : { thinkingOptions: [], defaultThinkingOptionId: undefined };
+    const config: ProviderConfigState = {
+      ...(model ? { model: `${model.provider}/${model.id}` } : {}),
+      models: this.options.models.map((item) => {
+        const thinking = thinkingConfigForModel(item);
+        return {
+          id: `${item.provider}/${item.id}`,
+          label: item.name ?? `${item.provider}/${item.id}`,
+          ...(item.contextWindow ? { contextWindowMaxTokens: item.contextWindow } : {}),
+          ...(item.reasoning ? thinking : {}),
+        };
+      }),
       modes: [],
-      thinkingOption: normalizePiThinkingLevel(this.sdk.thinkingLevel) ?? undefined,
-      thinkingOptions: currentModel ? (thinkingOptionsForModel(currentModel) ?? []) : [],
+      thinkingOption: this.options.state.thinkingLevel,
+      thinkingOptions: currentThinking.thinkingOptions,
       settings: [
         {
           type: "select",
           id: AUTO_COMPACTION_SETTING,
           label: "Compact",
           description: "Compact long conversations automatically.",
-          value: this.sdk.autoCompactionEnabled ? "on" : "off",
+          value: this.options.state.autoCompactionEnabled ? "on" : "off",
           options: [
-            { label: "Compact ✓", value: "on" },
-            { label: "Compact ×", value: "off" },
+            { label: "Compact: ✓", value: "on" },
+            { label: "Compact: ×", value: "off" },
           ],
         },
         {
@@ -312,1148 +374,104 @@ export class PiProviderSession {
           id: AUTO_RETRY_SETTING,
           label: "Retry",
           description: "Retry transient provider errors automatically.",
-          value: this.sdk.autoRetryEnabled ? "on" : "off",
+          value: this.autoRetryEnabled ? "on" : "off",
           options: [
-            { label: "Retry ✓", value: "on" },
-            { label: "Retry ×", value: "off" },
+            { label: "Retry: ✓", value: "on" },
+            { label: "Retry: ×", value: "off" },
           ],
         },
       ],
     };
+    this.emit({ type: "session.config", sessionId: this.options.sessionId, config });
   }
-
-  emitConfigState(): void {
-    const config = this.configState();
-    const json = JSON.stringify(config);
-    if (json === this.lastConfigStateJson) {
-      return;
-    }
-    this.lastConfigStateJson = json;
-    this.emit({ type: "session.config", sessionId: this.sessionId, config });
+  private scheduleUsagePoll(generation: number, turnId: string): void {
+    this.clearUsagePoll();
+    this.usageTimer = setTimeout(() => {
+      this.usageTimer = null;
+      if (this.closed || this.usageGeneration !== generation || this.turnId !== turnId) return;
+      this.emitUsage(turnId);
+      this.scheduleUsagePoll(generation, turnId);
+    }, 3_000);
   }
-
-  emitPersistence(): void {
-    const persistence = this.persistence;
-    const json = JSON.stringify(persistence);
-    if (json === this.lastPersistenceJson) {
-      return;
-    }
-    this.lastPersistenceJson = json;
-    this.emit({ type: "session.persistence", sessionId: this.sessionId, persistence });
+  private clearUsagePoll(): void {
+    if (this.usageTimer) clearTimeout(this.usageTimer);
+    this.usageTimer = null;
   }
+  private emitUsage(turnId = this.turnId ?? undefined): void { void this.options.runtime.getSessionStats().then((stats) => { const usage: ProviderUsage = { inputTokens: stats.tokens?.input, cachedInputTokens: stats.tokens?.cacheRead, outputTokens: stats.tokens?.output, totalCostUsd: stats.cost, contextWindowMaxTokens: stats.contextUsage?.contextWindow ?? undefined, contextWindowUsedTokens: stats.contextUsage?.tokens ?? undefined }; this.emit({ type: "session.usage", sessionId: this.options.sessionId, ...(turnId ? { turnId } : {}), usage }); }).catch(() => undefined); }
+  private timeline(item: ProviderTimelineItem): void { this.emit({ type: "timeline.item", sessionId: this.options.sessionId, item }); }
+  private emit(event: ProviderEvent): void { if (!this.closed) this.options.emit(event); }
+  private promptFailed(clientMessageId: string, message: string): void { this.emit({ type: "session.prompt_result", sessionId: this.options.sessionId, clientMessageId, result: { type: "failed", error: { message } } }); }
+}
 
-  /** Read state directly from the SDK session and re-emit config/persistence. */
-  refreshState(): void {
-    this.emitConfigState();
-    this.emitPersistence();
-  }
+export function createPaseoExtension(systemPrompt?: string): { path: string; cleanup(): void } {
+  const directory = mkdtempSync(join(tmpdir(), "paseo-pi-rpc-"));
+  const path = join(directory, "paseo-bridge.mjs");
+  const systemPromptHook = systemPrompt
+    ? `pi.on("before_agent_start", async (event) => ({
+  systemPrompt: event.systemPrompt + "\\n\\n" + ${JSON.stringify(systemPrompt)},
+}));`
+    : "";
+  writeFileSync(
+    path,
+    `
+function decodePayload(encoded) {
+  return JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+}
 
-  listCommands(): ProviderCommand[] {
-    return this.promptCommands;
-  }
+export default function paseoIntegration(pi) {
+  ${systemPromptHook}
 
-  async replayHistory(): Promise<void> {
-    const commandItemsByUserCount = new Map<number, PiCommandHistoryEntry[]>();
-    const userEntries: { id: string; text: string }[] = [];
-    let userCount = 0;
+  pi.registerCommand("paseo_tree", {
+    description: "Internal Paseo tree navigation bridge",
+    handler: async (args, ctx) => {
+      const payload = decodePayload(args.trim());
+      return await ctx.navigateTree(payload.targetId, { summarize: false });
+    },
+  });
+}
+`.trimStart(),
+    { encoding: "utf8", mode: 0o600 },
+  );
+  return { path, cleanup: () => rmSync(directory, { recursive: true, force: true }) };
+}
 
-    for (const entry of this.sessionManager.getBranch()) {
-      if (!isRecord(entry)) continue;
-      if (entry.type === "message") {
-        const message = entry.message;
-        if (!isRecord(message) || message.role !== "user") continue;
-        const id = optionalString(entry.id);
-        if (!id) continue;
-        const content = message.content as
-          | string
-          | Array<{ type: string; text?: string }>
-          | undefined;
-        const text =
-          typeof content === "string"
-            ? content
-            : Array.isArray(content)
-              ? content
-                  .filter((part) => part && part.type === "text" && typeof part.text === "string")
-                  .map((part) => part.text)
-                  .join("\n\n")
-              : "";
-        if (text) userEntries.push({ id, text });
-        userCount += 1;
-        continue;
-      }
-      if (entry.type !== "custom" || entry.customType !== PI_COMMAND_ENTRY_TYPE) continue;
-      const data = isRecord(entry.data) ? entry.data : null;
-      const id = optionalString(entry.id);
-      const text = optionalString(data?.text);
-      const anchorId = optionalString(data?.anchorId);
-      if (!id || !text || !anchorId) continue;
-      const commandEntry: PiCommandHistoryEntry = { id, text, anchorId, userCount };
-      const commands = commandItemsByUserCount.get(userCount) ?? [];
-      commands.push(commandEntry);
-      commandItemsByUserCount.set(userCount, commands);
-    }
-
-    const mapper = new PiHistoryMapper(userEntries);
-    const messages = this.sdk.messages as unknown as PiAgentMessage[];
-    let mappedUserCount = 0;
-    for (const message of messages) {
-      if (message.role === "user") {
-        for (const command of commandItemsByUserCount.get(mappedUserCount) ?? []) {
-          this.emit({
-            type: "timeline.item",
-            sessionId: this.sessionId,
-            item: mapper.mapCommandEntry(command),
-          });
-        }
-        mappedUserCount += 1;
-      }
-      for (const item of mapper.mapMessage(message) ?? []) {
-        this.emit({ type: "timeline.item", sessionId: this.sessionId, item });
-      }
-    }
-    for (const command of commandItemsByUserCount.get(mappedUserCount) ?? []) {
-      this.emit({
-        type: "timeline.item",
-        sessionId: this.sessionId,
-        item: mapper.mapCommandEntry(command),
-      });
-    }
-  }
-
-  async handlePrompt(prompt: ProviderPrompt): Promise<void> {
-    if (this.closed) {
-      this.emitPromptResult(prompt.clientMessageId, {
-        type: "failed",
-        error: { message: "Pi session is closed" },
-      });
-      return;
-    }
-
-    if (prompt.input.type === "command") {
-      await this.handleCommand(prompt);
-      return;
-    }
-
-    const textParts = prompt.input.content.filter(
-      (part): part is Extract<typeof prompt.input.content[number], { type: "text" }> =>
-        part.type === "text",
-    );
-    const text =
-      textParts.length === prompt.input.content.length
-        ? textParts.map((part) => part.text).join("\n")
-        : "";
-    const runtimeSetting = this.parseRuntimeSettingCommand(text);
-    if (runtimeSetting) {
-      await this.applyRuntimeSetting(runtimeSetting.id, runtimeSetting.value, prompt.clientMessageId);
-      return;
-    }
-
-    const payload = convertPromptInput(prompt.input, { model: this.currentModel() });
-    const slashInvocation =
-      textParts.length === prompt.input.content.length ? parsePiSlashCommand(payload.text) : null;
-    if (slashInvocation && this.isNativeSlashCommand(slashInvocation.name)) {
-      if (this.activeTurnId) await this.interrupt();
-      await this.handleCommand({
-        ...prompt,
-        input: {
-          type: "command",
-          name: slashInvocation.name,
-          arguments: slashInvocation.arguments,
-        },
-      });
-      return;
-    }
-
-    if (prompt.delivery === "steer" && this.activeTurnId && !slashInvocation) {
-      await this.steerActiveTurn(payload, prompt);
-      return;
-    }
-    if (prompt.delivery === "steer" && this.activeTurnId && slashInvocation) {
-      await this.interrupt();
-    }
-    await this.startTurn(payload, prompt);
-  }
-
-  private isNativeSlashCommand(name: string): boolean {
-    return ["compact", "settings", "reload", "session", "name"].includes(name);
-  }
-
-  private async handleCommand(prompt: ProviderPrompt): Promise<void> {
-    const { name, arguments: args } = prompt.input as { name: string; arguments: string };
-    const commandText = `/${name}${args ? ` ${args}` : ""}`;
-
-    if (name === "reload") {
-      this.emitCommandUserMessage(
-        prompt.clientMessageId,
-        commandText,
-        this.appendCommandEntry(commandText),
-      );
-      await this.handleReload(prompt.clientMessageId);
-      return;
-    }
-
-    if (name === "session") {
-      this.emitCommandUserMessage(
-        prompt.clientMessageId,
-        commandText,
-        this.appendCommandEntry(commandText),
-      );
-      await this.handleSessionInfo(prompt.clientMessageId);
-      return;
-    }
-
-    if (name === "name") {
-      this.emitCommandUserMessage(
-        prompt.clientMessageId,
-        commandText,
-        this.appendCommandEntry(commandText),
-      );
-      await this.handleSessionName(args, prompt.clientMessageId);
-      return;
-    }
-
-    if (name === "settings") {
-      const runtimeSetting = this.parseRuntimeSettingCommand(commandText);
-      if (!runtimeSetting) {
-        this.emitPromptResult(prompt.clientMessageId, {
-          type: "failed",
-          error: { message: "Usage: /settings <auto-compaction|auto-retry> <on|off>" },
-        });
-        return;
-      }
-      const commandEntry = this.appendCommandEntry(commandText);
-      this.emitCommandUserMessage(prompt.clientMessageId, commandText, commandEntry);
-      await this.applyRuntimeSetting(
-        runtimeSetting.id,
-        runtimeSetting.value,
-        prompt.clientMessageId,
-      );
-      return;
-    }
-
-    if (name === "compact") {
-      const commandEntry = this.appendCommandEntry(commandText);
-      this.emitCommandUserMessage(prompt.clientMessageId, commandText, commandEntry);
-      this.beginCompaction("manual");
-      try {
-        await this.sdk.compact(args.trim() || undefined);
-        this.completeCompaction("manual", false);
-        this.emitPromptResult(prompt.clientMessageId, { type: "completed" });
-      } catch (error) {
-        this.completeCompaction("manual", false);
-        this.emitPromptResult(prompt.clientMessageId, {
-          type: "failed",
-          error: { message: toErrorMessage(error) },
-        });
-      }
-      return;
-    }
-
-    // Any other published command (prompt templates): forward through pi's
-    // prompt pipeline, which expands templates / dispatches extension commands.
-    const payload: PiPromptPayload = { text: commandText };
-    await this.startTurn(payload, prompt);
-  }
-
-  private async handleReload(clientMessageId: string): Promise<void> {
-    try {
-      await this.sdk.reload();
-      const commands = this.reloadCommands?.();
-      if (commands) {
-        this.emit({ type: "session.commands", sessionId: this.sessionId, commands });
-      }
-      this.emitPromptResult(clientMessageId, { type: "completed" });
-      this.emitNotification("Pi resources reloaded.", "info");
-    } catch (error) {
-      this.emitPromptResult(clientMessageId, {
-        type: "failed",
-        error: { message: toErrorMessage(error) },
-      });
-    }
-  }
-
-  private async handleSessionInfo(clientMessageId: string): Promise<void> {
-    try {
-      const stats = this.sdk.getSessionStats();
-      const name = this.sdk.sessionName?.trim();
-      const lines = [
-        name ? `Name: ${name}` : "Name: (unnamed)",
-        `Session: ${stats.sessionId}`,
-        `Messages: ${stats.totalMessages} (${stats.userMessages} user, ${stats.assistantMessages} assistant)`,
-        `Tools: ${stats.toolCalls} calls, ${stats.toolResults} results`,
-        `Tokens: ${stats.tokens.total}`,
-        `Cost: $${stats.cost.toFixed(4)}`,
-      ];
-      this.emit({
-        type: "timeline.item",
-        sessionId: this.sessionId,
-        item: { type: "assistant_message", id: `session-info:${randomUUID()}`, text: lines.join("\n") },
-      });
-      this.emitPromptResult(clientMessageId, { type: "completed" });
-    } catch (error) {
-      this.emitPromptResult(clientMessageId, {
-        type: "failed",
-        error: { message: toErrorMessage(error) },
-      });
-    }
-  }
-
-  private async handleSessionName(rawName: string, clientMessageId: string): Promise<void> {
-    const name = rawName.trim();
-    if (!name) {
-      this.emitPromptResult(clientMessageId, {
-        type: "failed",
-        error: { message: "Usage: /name <name>" },
-      });
-      return;
-    }
-    try {
-      if (!this.sdk.sessionManager.appendSessionInfo) {
-        throw new Error("Pi session naming is unavailable");
-      }
-      this.sdk.sessionManager.appendSessionInfo(name);
-      this.emit({
-        type: "timeline.item",
-        sessionId: this.sessionId,
-        item: { type: "notification", id: `session-name:${randomUUID()}`, level: "info", message: `Session renamed to ${name}.` },
-      });
-      this.emitPersistence();
-      this.emitPromptResult(clientMessageId, { type: "completed" });
-    } catch (error) {
-      this.emitPromptResult(clientMessageId, {
-        type: "failed",
-        error: { message: toErrorMessage(error) },
-      });
-    }
-  }
-
-  private appendCommandEntry(text: string): { id: string; anchorId: string } {
-    const anchorId = this.sessionManager.appendCustomEntry(PI_COMMAND_ANCHOR_ENTRY_TYPE, { text });
-    const id = this.sessionManager.appendCustomEntry(PI_COMMAND_ENTRY_TYPE, {
-      text,
-      anchorId,
-    });
-    return { id, anchorId };
-  }
-
-  private emitCommandUserMessage(
-    clientMessageId: string,
-    text: string,
-    commandEntry: { id: string; anchorId: string },
-  ): void {
-    this.emit({
-      type: "timeline.item",
-      sessionId: this.sessionId,
-      item: {
-        type: "user_message",
-        id: commandEntry.id,
-        messageId: commandEntry.id,
-        revertToken: commandEntry.anchorId,
-        text,
-        clientMessageId,
-      },
+function mergeCommands(commands: readonly ProviderCommand[]): ProviderCommand[] {
+  const merged = new Map(BUILTIN_COMMANDS.map((command) => [command.name, { ...command }]));
+  for (const command of commands) {
+    const builtin = merged.get(command.name);
+    merged.set(command.name, {
+      ...command,
+      ...(builtin?.argumentHint && !command.argumentHint ? { argumentHint: builtin.argumentHint } : {}),
     });
   }
+  return [...merged.values()];
+}
 
-  private async steerActiveTurn(payload: PiPromptPayload, prompt: ProviderPrompt): Promise<void> {
-    const turnId = this.activeTurnId;
-    try {
-      await this.sdk.steer(payload.text, payload.images);
-    } catch (error) {
-      this.emitPromptResult(prompt.clientMessageId, {
-        type: "failed",
-        error: { message: toErrorMessage(error) },
-      });
-      return;
-    }
-    if (this.closed || this.activeTurnId !== turnId || !turnId) {
-      this.emitPromptResult(prompt.clientMessageId, {
-        type: "failed",
-        error: { message: "The active turn ended before the steer was queued" },
-      });
-      return;
-    }
-    this.pendingSteerSubmissions.push({
-      text: payload.text,
-      clientMessageId: prompt.clientMessageId,
-    });
-    if (prompt.clearPendingPermissions) {
-      this.cancelPendingDialogs("The user answered with a message instead of approving.");
-    }
-    this.emitPromptResult(prompt.clientMessageId, { type: "steer", turnId });
+function getCompactArguments(prompt: ProviderPrompt, text: string): string | null {
+  if (prompt.input.type === "command") {
+    return prompt.input.name.toLowerCase() === "compact" ? prompt.input.arguments.trim() : null;
   }
+  if (prompt.input.content.some((part) => part.type !== "text")) return null;
+  const match = /^\/compact(?:\s+([\s\S]*))?$/iu.exec(text.trim());
+  return match ? match[1]?.trim() ?? "" : null;
+}
 
-  private async startTurn(payload: PiPromptPayload, prompt: ProviderPrompt): Promise<void> {
-    const turnId = randomUUID();
-    this.activeTurnId = turnId;
-    this.activeClientMessageId = prompt.clientMessageId;
-    this.activeAssistantMessageId = null;
-    this.activeAssistantText = "";
-    this.activeReasoningId = null;
-    this.activeReasoningText = "";
-    this.activeTurnStarted = false;
-    this.pendingSettledMessages = null;
-    this.pendingSteerSubmissions.length = 0;
-
-    this.emitPromptResult(prompt.clientMessageId, { type: "turn", turnId });
-    this.emit({ type: "session.turn", sessionId: this.sessionId, turnId, state: "started" });
-
-    void (async () => {
-      try {
-        await this.sdk.prompt(payload.text, {
-          ...(payload.images?.length
-            ? {
-                images: payload.images.map((image) => ({
-                  type: "image" as const,
-                  data: image.data,
-                  mimeType: image.mimeType,
-                })),
-              }
-            : {}),
-          ...(this.activeTurnStarted ? { streamingBehavior: "steer" as const } : {}),
-        });
-        if (this.closed || this.activeTurnId !== turnId) {
-          return;
-        }
-        // prompt() resolution is the backstop for turns that never produced
-        // agent activity (extension commands, rejected prompts). Real agent
-        // turns complete via agent_end/agent_settled events.
-        if (!this.activeTurnStarted) {
-          this.completeTurn(turnId, this.sdk.messages as PiAgentMessage[]);
-        }
-      } catch (error) {
-        if (this.closed || this.activeTurnId !== turnId) {
-          return;
-        }
-        this.resetTurnState();
-        if (isAbortError(error)) {
-          this.emit({
-            type: "session.turn",
-            sessionId: this.sessionId,
-            turnId,
-            state: "canceled",
-            error: { message: toErrorMessage(error) },
-          });
-          return;
-        }
-        this.emit({
-          type: "session.turn",
-          sessionId: this.sessionId,
-          turnId,
-          state: "failed",
-          error: { message: toErrorMessage(error) },
-        });
-      }
-    })();
+function settingBoolean(
+  settings: Readonly<Record<string, unknown>> | undefined,
+  id: string,
+): boolean | undefined {
+  const value = settings?.[id];
+  if (typeof value === "boolean") return value;
+  if (value === "on") return true;
+  if (value === "off") return false;
+  return undefined;
+}
+function messageText(content: string | Array<{ type: string; text?: string }>): string { return typeof content === "string" ? content : content.filter((part) => part.type === "text" && typeof part.text === "string").map((part) => part.text!).join("\n\n"); }
+function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+function latestAssistantError(messages: PiAgentMessage[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "assistant" && message.errorMessage?.trim()) return message.errorMessage;
   }
-
-  async interrupt(): Promise<void> {
-    const turnId = this.activeTurnId ?? undefined;
-    if (this.activeTurnId || this.activeTurnStarted) {
-      this.interruptingTurn = { turnId };
-    }
-    try {
-      await this.sdk.abort();
-    } catch (error) {
-      this.interruptingTurn = null;
-      throw error;
-    }
-    if (
-      this.interruptingTurn?.turnId === turnId &&
-      (this.activeTurnId || this.activeTurnStarted) &&
-      (this.activeTurnId ?? undefined) === turnId
-    ) {
-      this.resetTurnState();
-      this.emit({
-        type: "session.turn",
-        sessionId: this.sessionId,
-        turnId: turnId ?? randomUUID(),
-        state: "canceled",
-      });
-    }
-    this.interruptingTurn = null;
-  }
-
-  respondToPermission(requestId: string, response: ProviderPermissionResponse): void {
-    const pending = this.pendingDialogs.get(requestId);
-    if (!pending) {
-      throw new Error(`No pending permission request with id '${requestId}'`);
-    }
-    this.pendingDialogs.delete(requestId);
-
-    if (response.behavior === "deny") {
-      pending.resolve({ kind: "cancelled" });
-    } else if (pending.method === "confirm") {
-      const answer = this.firstAnswer(response.updatedInput);
-      pending.resolve({ kind: "confirmed", confirmed: /^yes$/i.test(answer?.trim() ?? "") });
-    } else {
-      const answer = this.firstAnswer(response.updatedInput);
-      pending.resolve(answer === null ? { kind: "cancelled" } : { kind: "value", value: answer });
-    }
-    this.emit({
-      type: "session.permission_resolved",
-      sessionId: this.sessionId,
-      permissionId: requestId,
-    });
-  }
-
-  async configure(changes: ProviderConfigChanges): Promise<void> {
-    await this.enqueueConfiguration(() => this.configureNow(changes));
-  }
-
-  private async configureNow(changes: ProviderConfigChanges): Promise<void> {
-    if (changes.model) {
-      const reference = parsePiModelReference(changes.model);
-      if (!reference?.provider) {
-        throw new Error(`Pi model id must include a provider: ${changes.model}`);
-      }
-      const model = this.sdk.modelRuntime.getModel(reference.provider, reference.id);
-      if (!model) {
-        throw new Error(`Model not found: ${changes.model}`);
-      }
-      await this.sdk.setModel(model);
-      this.config.model = modelToId(model) ?? this.config.model;
-      this.upsertModel(model as unknown as PiModel);
-      this.syncThinkingToCurrentModel();
-    }
-    if (changes.thinkingOption !== undefined) {
-      const level = normalizePiThinkingLevel(changes.thinkingOption) ?? DEFAULT_PI_THINKING_LEVEL;
-      this.syncThinkingToCurrentModel(level);
-    }
-    if (changes.settings) {
-      const autoCompaction = settingBoolean(changes.settings, AUTO_COMPACTION_SETTING);
-      const autoRetry = settingBoolean(changes.settings, AUTO_RETRY_SETTING);
-      if (autoCompaction !== undefined) this.sdk.setAutoCompactionEnabled(autoCompaction);
-      if (autoRetry !== undefined) this.sdk.setAutoRetryEnabled(autoRetry);
-    }
-    this.refreshState();
-  }
-
-  async revertConversation(token: unknown): Promise<void> {
-    if (this.activeTurnId) {
-      throw new Error("Cannot rewind the Pi conversation while a turn is active");
-    }
-    const targetId = typeof token === "string" ? token.trim() : "";
-    if (!targetId) {
-      throw new Error("Pi rewind requires a user message id revert token");
-    }
-    const target = this.sessionManager.getEntry(targetId);
-    if (!isRecord(target)) {
-      throw new Error(`Pi rewind target ${targetId} was not found in the session tree`);
-    }
-    if (!this.sessionManager.getBranch().some((entry) => isRecord(entry) && entry.id === targetId)) {
-      throw new Error(`Pi rewind target ${targetId} is not on the active branch`);
-    }
-    const isUserMessage =
-      target.type === "message" && isRecord(target.message) && target.message.role === "user";
-    const isCommandAnchor =
-      target.type === "custom" && target.customType === PI_COMMAND_ANCHOR_ENTRY_TYPE;
-    if (!isUserMessage && !isCommandAnchor) {
-      throw new Error(`Pi rewind target ${targetId} is not a user message or command anchor`);
-    }
-    const result = await this.sdk.navigateTree(targetId, { summarize: false });
-    if (isRecord(result) && result.cancelled === true) {
-      throw new Error(`Pi rewind target ${targetId} was not selected`);
-    }
-    this.activeToolCalls.clear();
-    this.activeAssistantMessageId = null;
-    this.activeAssistantText = "";
-    this.activeReasoningId = null;
-    this.activeReasoningText = "";
-    this.pendingSettledMessages = null;
-    this.pendingSteerSubmissions.length = 0;
-    this.cancelPendingDialogs("The Pi conversation was rewound.");
-    this.refreshState();
-  }
-
-  async close(): Promise<void> {
-    if (this.closed) {
-      return;
-    }
-    this.closed = true;
-    this.unsubscribe();
-    this.cancelAllDialogs(new Error("Pi session closed"));
-    try {
-      if (this.mcp) {
-        await this.mcp.close().catch(() => undefined);
-      }
-    } finally {
-      this.sdk.dispose();
-      this.cleanup?.();
-    }
-  }
-
-  private enqueueConfiguration<T>(operation: () => Promise<T>): Promise<T> {
-    const next = this.configurationQueue.then(operation, operation);
-    this.configurationQueue = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    return next;
-  }
-
-  private syncThinkingToCurrentModel(preferredLevel?: string): void {
-    const requested =
-      normalizePiThinkingLevel(preferredLevel) ??
-      normalizePiThinkingLevel(this.sdk.thinkingLevel) ??
-      DEFAULT_PI_THINKING_LEVEL;
-    const clamped = this.clampToCurrentModel(requested);
-    this.sdk.setThinkingLevel(clamped);
-    this.config.thinkingOption = clamped;
-  }
-
-  private currentModel(): PiModel | null {
-    const model = this.sdk.model;
-    if (!model) {
-      return null;
-    }
-    return (model as unknown as PiModel) ?? null;
-  }
-
-  private upsertModel(model: PiModel): void {
-    const index = this.models.findIndex(
-      (candidate) => candidate.provider === model.provider && candidate.id === model.id,
-    );
-    if (index === -1) {
-      this.models = [...this.models, model];
-    } else {
-      this.models = this.models.map((candidate, i) => (i === index ? model : candidate));
-    }
-  }
-
-  private clampToCurrentModel(level: string): PiThinkingLevel {
-    const current = this.currentModel();
-    const requested = normalizePiThinkingLevel(level) ?? DEFAULT_PI_THINKING_LEVEL;
-    if (!current) {
-      return requested;
-    }
-    const supported = supportedThinkingLevels(current);
-    if (supported.length === 0) {
-      return requested;
-    }
-    return clampThinkingLevel(requested, supported) ?? requested;
-  }
-
-  private emit(event: ProviderEvent): void {
-    if (this.closed) {
-      return;
-    }
-    this.emitEvent(event);
-  }
-
-  private emitPromptResult(
-    clientMessageId: string,
-    result: Extract<ProviderEvent, { type: "session.prompt_result" }>["result"],
-  ): void {
-    this.emit({
-      type: "session.prompt_result",
-      sessionId: this.sessionId,
-      clientMessageId,
-      result,
-    });
-  }
-
-  private resetTurnState(): void {
-    this.activeTurnId = null;
-    this.activeClientMessageId = null;
-    this.activeAssistantMessageId = null;
-    this.activeAssistantText = "";
-    this.activeReasoningId = null;
-    this.activeReasoningText = "";
-    this.activeTurnStarted = false;
-    this.pendingSettledMessages = null;
-    this.pendingSteerSubmissions.length = 0;
-  }
-
-  private parseRuntimeSettingCommand(text: string): { id: string; value: boolean } | null {
-    const match = /^\/settings\s+(auto-compaction|auto-retry)\s+(on|off)$/i.exec(text.trim());
-    if (!match) return null;
-    return {
-      id:
-        match[1].toLowerCase() === "auto-compaction"
-          ? AUTO_COMPACTION_SETTING
-          : AUTO_RETRY_SETTING,
-      value: match[2].toLowerCase() === "on",
-    };
-  }
-
-  private async applyRuntimeSetting(id: string, value: boolean, clientMessageId: string): Promise<void> {
-    if (id === AUTO_COMPACTION_SETTING) this.sdk.setAutoCompactionEnabled(value);
-    else if (id === AUTO_RETRY_SETTING) this.sdk.setAutoRetryEnabled(value);
-    else throw new Error(`Unsupported Pi runtime setting: ${id}`);
-    this.emitPromptResult(clientMessageId, { type: "completed" });
-    this.emitConfigState();
-  }
-
-  private takePendingSteerSubmission(text: string): PiPendingSteerSubmission | undefined {
-    const index = this.pendingSteerSubmissions.findIndex(
-      (submission) => submission.text === text,
-    );
-    if (index < 0) {
-      return undefined;
-    }
-    const [submission] = this.pendingSteerSubmissions.splice(index, 1);
-    return submission;
-  }
-
-  private firstAnswer(input: Record<string, unknown> | undefined): string | null {
-    const answers = isRecord(input?.answers) ? input.answers : null;
-    if (!answers) {
-      return null;
-    }
-    const first = Object.values(answers).find((value) => typeof value === "string");
-    return typeof first === "string" ? first : null;
-  }
-
-  private requestDialog(dialog: PiUiDialogRequest): Promise<PiUiDialogResponse> {
-    if (this.closed) {
-      return Promise.resolve({ kind: "cancelled" });
-    }
-    const id = randomUUID();
-    const question = this.dialogQuestion(dialog);
-    const request: ProviderPermissionRequest = {
-      id,
-      name: `Pi ${dialog.method}`,
-      kind: "question",
-      title: question.title,
-      input: {
-        questions: [
-          {
-            question: question.title,
-            header: QUESTION_RESPONSE_HEADER,
-            options: question.options.map((label) => ({ label })),
-            multiSelect: false,
-            ...(question.placeholder ? { placeholder: question.placeholder } : {}),
-            ...(question.options.length === 0 ? { allowEmpty: true } : {}),
-            ...(question.options.length === 0 ? { dismissLabel: "Skip" } : {}),
-          },
-        ],
-      },
-      metadata: { extensionUiMethod: dialog.method },
-    };
-    const promise = new Promise<PiUiDialogResponse>((resolve) => {
-      this.pendingDialogs.set(id, { method: dialog.method, resolve });
-    });
-    this.emit({ type: "session.permission", sessionId: this.sessionId, request });
-    return promise;
-  }
-
-  private dialogQuestion(dialog: PiUiDialogRequest): {
-    title: string;
-    options: string[];
-    placeholder?: string;
-  } {
-    switch (dialog.method) {
-      case "select":
-        return { title: dialog.title ?? "Select an option", options: dialog.options ?? [] };
-      case "confirm":
-        return {
-          title: [dialog.title, dialog.message].filter(Boolean).join("\n\n"),
-          options: ["Yes", "No"],
-        };
-      case "input":
-        return {
-          title: dialog.title ?? "Enter a value",
-          options: [],
-          ...(dialog.placeholder ? { placeholder: dialog.placeholder } : {}),
-        };
-      case "editor":
-        return {
-          title: dialog.title ?? "Edit text",
-          options: [],
-          ...(dialog.placeholder ? { placeholder: dialog.placeholder } : {}),
-        };
-    }
-  }
-
-  private cancelPendingDialogs(message: string): void {
-    void message;
-    for (const [, pending] of this.pendingDialogs) {
-      pending.resolve({ kind: "cancelled" });
-    }
-    this.pendingDialogs.clear();
-  }
-
-  private cancelAllDialogs(error: Error): void {
-    void error;
-    this.cancelPendingDialogs("closed");
-  }
-
-  private beginCompaction(trigger: "auto" | "manual"): void {
-    if (this.activeCompaction && !this.activeCompaction.completed) {
-      return;
-    }
-    const state: PiCompactionState = {
-      id: `pi-compaction-${randomUUID()}`,
-      trigger,
-      completed: false,
-    };
-    this.activeCompaction = state;
-    this.emit({
-      type: "timeline.item",
-      sessionId: this.sessionId,
-      item: {
-        type: "compaction",
-        id: state.id,
-        status: "loading",
-        trigger: state.trigger,
-      },
-    });
-  }
-
-  private completeCompaction(trigger: "auto" | "manual", createIfMissing = true): void {
-    if (!this.activeCompaction && createIfMissing) {
-      this.beginCompaction(trigger);
-    }
-    const state = this.activeCompaction;
-    if (!state || state.completed) {
-      return;
-    }
-    state.completed = true;
-    this.emit({
-      type: "timeline.item",
-      sessionId: this.sessionId,
-      item: {
-        type: "compaction",
-        id: state.id,
-        status: "completed",
-        trigger: state.trigger,
-      },
-    });
-    this.activeCompaction = null;
-  }
-
-  private emitNotification(message: string, level: "info" | "warning" | "error"): void {
-    this.emit({
-      type: "timeline.item",
-      sessionId: this.sessionId,
-      item: {
-        type: "notification",
-        id: `notification:${randomUUID()}`,
-        level,
-        message,
-      },
-    });
-  }
-
-  private emitUsage(): void {
-    let stats: ReturnType<PiAgentSessionLike["getSessionStats"]>;
-    try {
-      stats = this.sdk.getSessionStats();
-    } catch {
-      return;
-    }
-    const usage: ProviderUsage = {
-      inputTokens: stats.tokens.input,
-      outputTokens: stats.tokens.output,
-      cachedInputTokens: stats.tokens.cacheRead,
-      totalCostUsd: stats.cost,
-      ...(typeof stats.contextUsage?.contextWindow === "number"
-        ? { contextWindowMaxTokens: stats.contextUsage.contextWindow }
-        : {}),
-      ...(typeof stats.contextUsage?.tokens === "number"
-        ? { contextWindowUsedTokens: stats.contextUsage.tokens }
-        : {}),
-    };
-    this.emit({
-      type: "session.usage",
-      sessionId: this.sessionId,
-      usage,
-      ...(this.activeTurnId ? { turnId: this.activeTurnId } : {}),
-    });
-  }
-
-  private handleSessionEvent(event: PiAgentSessionEvent): void {
-    switch (event.type) {
-      case "agent_start":
-        if (!this.activeTurnId) return;
-        this.activeTurnStarted = true;
-        return;
-      case "turn_start":
-        if (!this.activeTurnId) return;
-        this.activeTurnStarted = true;
-        return;
-      case "message_start":
-        if ((event.message as { role?: string }).role === "assistant") {
-          this.activeAssistantMessageId =
-            optionalString(
-              (event.message as unknown as Record<string, unknown>).responseId,
-            ) ?? randomUUID();
-          this.activeAssistantText = "";
-          this.activeReasoningId = `${this.activeAssistantMessageId}:reasoning`;
-          this.activeReasoningText = "";
-        }
-        return;
-      case "message_end":
-        this.handleMessageEnd(event as { message: PiAgentMessage });
-        return;
-      case "message_update":
-        this.handleMessageUpdate(event as never);
-        return;
-      case "tool_execution_start": {
-        const toolCall = parseToolArgs(event.toolName, event.args);
-        this.activeToolCalls.set(event.toolCallId, toolCall);
-        this.emitToolCallEvent(event.toolCallId, toolCall, "running", null, null);
-        return;
-      }
-      case "tool_execution_update": {
-        const toolCall = this.activeToolCalls.get(event.toolCallId);
-        if (!toolCall) {
-          return;
-        }
-        const partialResult = parseToolResult(event.partialResult);
-        this.emitToolCallEvent(event.toolCallId, toolCall, "running", partialResult, null);
-        return;
-      }
-      case "tool_execution_end":
-        this.handleToolExecutionEnd(event);
-        this.emitUsage();
-        return;
-      case "compaction_start":
-        this.beginCompaction(event.reason === "manual" ? "manual" : "auto");
-        return;
-      case "compaction_end":
-        this.completeCompaction(event.reason === "manual" ? "manual" : "auto");
-        return;
-      case "auto_retry_start":
-        this.emit({
-          type: "timeline.item",
-          sessionId: this.sessionId,
-          item: {
-            type: "error",
-            id: `retry:${randomUUID()}`,
-            message: `Provider retry (attempt ${event.attempt}): ${event.errorMessage}`,
-          },
-        });
-        return;
-      case "entry_appended":
-        this.handleEntryAppended(event.entry);
-        return;
-      case "agent_end":
-        if (!this.activeTurnId && !this.activeTurnStarted) return;
-        this.pendingSettledMessages = (event.messages ?? []) as unknown as PiAgentMessage[];
-        if (!event.willRetry) {
-          this.completeTurn(this.activeTurnId ?? undefined, this.pendingSettledMessages);
-        }
-        return;
-      case "agent_settled":
-        if (!this.activeTurnId && !this.activeTurnStarted) return;
-        this.completeTurn(this.activeTurnId ?? undefined, this.pendingSettledMessages ?? []);
-        return;
-      default:
-        return;
-    }
-  }
-
-  private handleEntryAppended(entry: unknown): void {
-    if (!isRecord(entry) || entry.type !== "message") {
-      return;
-    }
-    const message = entry.message;
-    if (!isRecord(message) || message.role !== "user") {
-      return;
-    }
-    this.emitPersistedUserMessage(entry, message);
-  }
-
-  private emitPersistedUserMessage(entry: Record<string, unknown>, message: Record<string, unknown>): void {
-    const entryId = optionalString(entry.id);
-    if (!entryId || this.emittedUserEntryIds.has(entryId)) {
-      return;
-    }
-    const text = getUserMessageText(
-      message.content as Extract<PiAgentMessage, { role: "user" }>["content"],
-    );
-    if (!text) {
-      return;
-    }
-    this.emittedUserEntryIds.add(entryId);
-    const pendingSteer = this.takePendingSteerSubmission(text);
-    const clientMessageId = pendingSteer
-      ? pendingSteer.clientMessageId
-      : this.activeClientMessageId;
-    this.emit({
-      type: "timeline.item",
-      sessionId: this.sessionId,
-      item: {
-        type: "user_message",
-        id: entryId,
-        text,
-        messageId: entryId,
-        revertToken: entryId,
-        ...(clientMessageId ? { clientMessageId } : {}),
-      },
-    });
-  }
-
-  private emitUserMessageAfterPersistence(
-    message: Extract<PiAgentMessage, { role: "user" }>,
-  ): void {
-    queueMicrotask(() => {
-      const entry = this.sessionManager.getEntries().find((candidate) => {
-        if (!isRecord(candidate) || candidate.type !== "message") return false;
-        return candidate.message === message;
-      });
-      if (isRecord(entry)) {
-        this.emitPersistedUserMessage(entry, message as unknown as Record<string, unknown>);
-      }
-    });
-  }
-
-  private handleMessageEnd(event: { message: PiAgentMessage }): void {
-    if (event.message.role === "user") {
-      this.emitUserMessageAfterPersistence(event.message);
-      return;
-    }
-    if (event.message.role === "assistant") {
-      this.activeAssistantMessageId = null;
-      this.activeReasoningId = null;
-      this.emitUsage();
-      return;
-    }
-    if (event.message.role === "custom") {
-      const text = getUserMessageText(event.message.content);
-      if (text) {
-        this.emit({
-          type: "timeline.item",
-          sessionId: this.sessionId,
-          item: { type: "assistant_message", id: `custom:${randomUUID()}`, text },
-        });
-      }
-    }
-  }
-
-  private handleMessageUpdate(event: {
-    message?: PiAgentMessage;
-    assistantMessageEvent: { type: string; delta?: string };
-  }): void {
-    if (event.message && event.message.role !== "assistant") {
-      return;
-    }
-    if (event.assistantMessageEvent.type === "text_delta") {
-      this.activeAssistantMessageId ??=
-        (event.message?.role === "assistant" && event.message.responseId) || randomUUID();
-      this.activeAssistantText += event.assistantMessageEvent.delta ?? "";
-      this.emit({
-        type: "timeline.item",
-        sessionId: this.sessionId,
-        item: {
-          type: "assistant_message",
-          id: this.activeAssistantMessageId,
-          text: this.activeAssistantText,
-          messageId: this.activeAssistantMessageId,
-        },
-      });
-      return;
-    }
-    if (event.assistantMessageEvent.type === "thinking_delta") {
-      this.activeReasoningId ??= `${randomUUID()}:reasoning`;
-      this.activeReasoningText += event.assistantMessageEvent.delta ?? "";
-      this.emit({
-        type: "timeline.item",
-        sessionId: this.sessionId,
-        item: {
-          type: "reasoning",
-          id: this.activeReasoningId,
-          text: this.activeReasoningText,
-        },
-      });
-    }
-  }
-
-  private emitToolCallEvent(
-    toolCallId: string,
-    toolCall: PiTrackedToolCall,
-    status: "running" | "completed" | "failed",
-    result: PiToolResult,
-    error: unknown,
-  ): void {
-    const detail = mapToolDetail(toolCall, result);
-    const baseItem = {
-      type: "tool_call" as const,
-      id: toolCallId,
-      callId: toolCallId,
-      name: resolveToolCallName(toolCall, result),
-      detail,
-    };
-    const item =
-      status === "failed"
-        ? { ...baseItem, status, error: (error ?? "Tool call failed") as never }
-        : { ...baseItem, status, error: null };
-    this.emit({ type: "timeline.item", sessionId: this.sessionId, item });
-  }
-
-  private handleToolExecutionEnd(event: {
-    toolCallId: string;
-    toolName: string;
-    result: unknown;
-    isError?: boolean;
-  }): void {
-    const toolCall =
-      this.activeToolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null);
-    this.activeToolCalls.delete(event.toolCallId);
-
-    const result = parseToolResult(event.result);
-    const error = event.isError ? event.result : null;
-    const status = event.isError ? "failed" : "completed";
-    this.emitToolCallEvent(event.toolCallId, toolCall, status, result, error);
-
-    if (TODO_TOOL_NAMES.has(event.toolName)) {
-      const todos = extractTodoSnapshot(toolCall, result);
-      if (todos) {
-        this.emit({
-          type: "timeline.item",
-          sessionId: this.sessionId,
-          item: {
-            type: "todo",
-            id: PI_TODO_TIMELINE_ITEM_ID,
-            items: todos.map((todo) => ({
-              text: todo.text,
-              completed: todo.status === "completed",
-              ...(todo.id ? { id: todo.id } : {}),
-              status: todo.status,
-              ...(todo.activeForm ? { activeForm: todo.activeForm } : {}),
-            })),
-          },
-        });
-      }
-    }
-  }
-
-  private completeTurn(turnId: string | undefined, messages: readonly PiAgentMessage[]): void {
-    const errorMessage = latestPiErrorMessage(messages);
-    if (
-      this.interruptingTurn &&
-      this.interruptingTurn.turnId === turnId &&
-      (errorMessage || isAbortedTerminalResponse(messages))
-    ) {
-      // Interrupted on purpose: swallow the abort-shaped terminal error.
-      this.interruptingTurn = null;
-      this.resetTurnState();
-      this.emitUsage();
-      this.refreshState();
-      return;
-    }
-    this.interruptingTurn = null;
-    const finalTurnId = turnId ?? randomUUID();
-    this.resetTurnState();
-    if (errorMessage) {
-      this.emit({
-        type: "session.turn",
-        sessionId: this.sessionId,
-        turnId: finalTurnId,
-        state: "failed",
-        error: { message: errorMessage },
-      });
-    } else {
-      this.emit({
-        type: "session.turn",
-        sessionId: this.sessionId,
-        turnId: finalTurnId,
-        state: "completed",
-      });
-    }
-    this.emitUsage();
-    this.refreshState();
-  }
+  return undefined;
 }

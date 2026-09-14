@@ -1,34 +1,24 @@
 {
   "name": "pi-plugin-mcowger",
-  "version": "0.1.1",
+  "version": "0.2.0",
+  "description": "Pi coding agent provider for Paseo over isolated JSON-RPC subprocesses",
+  "author": "Matt Cowger",
   "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "postinstall": "node scripts/postinstall.mjs && node scripts/build-vendor.mjs",
-    "build:vendor": "node scripts/build-vendor.mjs"
+    "test": "vitest run"
   },
   "devDependencies": {
     "@getpaseo/client": "0.8.0",
     "@getpaseo/plugin": "0.8.0",
     "@getpaseo/protocol": "0.8.0",
     "@types/node": "^20.9.0",
-    "@types/react": "~19.2.0",
-    "esbuild": "^0.28.2",
     "oxlint": "1.61.0",
-    "react": "19.1.0",
-    "react-native": "0.81.5",
     "typescript": "^5.9.3",
-    "undici-types": "^8.10.2",
     "vitest": "^4.1.6",
     "zod": "^4.4.3"
-  },
-  "dependencies": {
-    "@earendil-works/pi-coding-agent": "^0.85.1",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "minimatch": "^10.2.5"
   }
 }
