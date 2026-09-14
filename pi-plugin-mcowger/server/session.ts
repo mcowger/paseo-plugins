@@ -128,7 +128,13 @@ export class PiProviderSession {
     }
     this.longContextExtension = hasExtensionCommand(commands, LONG_CONTEXT_COMMAND)
       && hasExtensionCommand(commands, LONG_CONTEXT_STATUS_COMMAND);
-    if (this.longContextExtension) await this.applyLongContextStatus(await this.queryLongContext().catch(() => undefined));
+    if (this.longContextExtension) {
+      await this.applyLongContextStatus(await this.queryLongContext().catch(() => undefined));
+      const configuredLongContext = settingBoolean(this.options.config.settings, LONG_CONTEXT_SETTING);
+      if (this.longContextAvailable && configuredLongContext !== undefined && configuredLongContext !== this.longContextEnabled) {
+        await this.setLongContext();
+      }
+    }
     this.emitConfig();
     this.emit({
       type: "session.commands",
