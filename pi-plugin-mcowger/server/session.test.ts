@@ -306,8 +306,8 @@ describe("PiProviderSession commands", () => {
     ]);
   });
 
-  it("intercepts the compact command", async () => {
-    const { fake, session } = createHarness();
+  it("intercepts the compact command and emits its timeline marker", async () => {
+    const { fake, session, events } = createHarness();
     await session.handlePrompt({
       clientMessageId: "cm-c",
       delivery: "auto",
@@ -315,6 +315,45 @@ describe("PiProviderSession commands", () => {
     });
     expect(fake.compactCalls).toEqual(["keep it short"]);
     expect(fake.prompts).toHaveLength(0);
+    expect(events.filter((event) => event.type === "timeline.item")).toEqual([
+      expect.objectContaining({
+        item: expect.objectContaining({ type: "user_message", text: "/compact keep it short" }),
+      }),
+      expect.objectContaining({
+        item: expect.objectContaining({
+          type: "compaction",
+          status: "loading",
+          trigger: "manual",
+        }),
+      }),
+      expect.objectContaining({
+        item: expect.objectContaining({
+          type: "compaction",
+          status: "completed",
+          trigger: "manual",
+        }),
+      }),
+    ]);
+  });
+
+  it("uses a distinct marker for each manual compaction", async () => {
+    const { session, events } = createHarness();
+    for (const clientMessageId of ["cm-c1", "cm-c2"]) {
+      await session.handlePrompt({
+        clientMessageId,
+        delivery: "auto",
+        input: { type: "command", name: "compact", arguments: "" },
+      });
+    }
+
+    const markers = events.filter(
+      (event): event is Extract<ProviderEvent, { type: "timeline.item" }> =>
+        event.type === "timeline.item" && event.item.type === "compaction",
+    );
+    expect(markers).toHaveLength(4);
+    expect(markers[0]?.item.id).toBe(markers[1]?.item.id);
+    expect(markers[2]?.item.id).toBe(markers[3]?.item.id);
+    expect(markers[0]?.item.id).not.toBe(markers[2]?.item.id);
   });
 
   it("applies runtime settings from the composer command path", async () => {

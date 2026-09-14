@@ -50,7 +50,6 @@ import {
 import { extractTodoSnapshot, PI_TODO_TIMELINE_ITEM_ID } from "./todo.js";
 
 const QUESTION_RESPONSE_HEADER = "Response";
-const PI_COMPACTION_ITEM_ID = "pi-compaction";
 const PI_COMMAND_ANCHOR_ENTRY_TYPE = "paseo-command-anchor";
 const PI_COMMAND_ENTRY_TYPE = "paseo-command";
 const TODO_TOOL_NAMES = new Set(["todo"]);
@@ -85,6 +84,12 @@ interface PiPendingSteerSubmission {
 interface PendingDialog {
   method: PiUiDialogRequest["method"];
   resolve(response: PiUiDialogResponse): void;
+}
+
+interface PiCompactionState {
+  id: string;
+  trigger: "auto" | "manual";
+  completed: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -231,6 +236,7 @@ export class PiProviderSession {
   private activeReasoningId: string | null = null;
   private activeReasoningText = "";
   private activeTurnStarted = false;
+  private activeCompaction: PiCompactionState | null = null;
   private pendingSettledMessages: PiAgentMessage[] | null = null;
   private readonly pendingSteerSubmissions: PiPendingSteerSubmission[] = [];
   private readonly emittedUserEntryIds = new Set<string>();
@@ -524,10 +530,13 @@ export class PiProviderSession {
     if (name === "compact") {
       const commandEntry = this.appendCommandEntry(commandText);
       this.emitCommandUserMessage(prompt.clientMessageId, commandText, commandEntry);
+      this.beginCompaction("manual");
       try {
         await this.sdk.compact(args.trim() || undefined);
+        this.completeCompaction("manual", false);
         this.emitPromptResult(prompt.clientMessageId, { type: "completed" });
       } catch (error) {
+        this.completeCompaction("manual", false);
         this.emitPromptResult(prompt.clientMessageId, {
           type: "failed",
           error: { message: toErrorMessage(error) },
@@ -1066,6 +1075,50 @@ export class PiProviderSession {
     this.cancelPendingDialogs("closed");
   }
 
+  private beginCompaction(trigger: "auto" | "manual"): void {
+    if (this.activeCompaction && !this.activeCompaction.completed) {
+      return;
+    }
+    const state: PiCompactionState = {
+      id: `pi-compaction-${randomUUID()}`,
+      trigger,
+      completed: false,
+    };
+    this.activeCompaction = state;
+    this.emit({
+      type: "timeline.item",
+      sessionId: this.sessionId,
+      item: {
+        type: "compaction",
+        id: state.id,
+        status: "loading",
+        trigger: state.trigger,
+      },
+    });
+  }
+
+  private completeCompaction(trigger: "auto" | "manual", createIfMissing = true): void {
+    if (!this.activeCompaction && createIfMissing) {
+      this.beginCompaction(trigger);
+    }
+    const state = this.activeCompaction;
+    if (!state || state.completed) {
+      return;
+    }
+    state.completed = true;
+    this.emit({
+      type: "timeline.item",
+      sessionId: this.sessionId,
+      item: {
+        type: "compaction",
+        id: state.id,
+        status: "completed",
+        trigger: state.trigger,
+      },
+    });
+    this.activeCompaction = null;
+  }
+
   private emitNotification(message: string, level: "info" | "warning" | "error"): void {
     this.emit({
       type: "timeline.item",
@@ -1153,28 +1206,10 @@ export class PiProviderSession {
         this.emitUsage();
         return;
       case "compaction_start":
-        this.emit({
-          type: "timeline.item",
-          sessionId: this.sessionId,
-          item: {
-            type: "compaction",
-            id: PI_COMPACTION_ITEM_ID,
-            status: "loading",
-            trigger: event.reason === "manual" ? "manual" : "auto",
-          },
-        });
+        this.beginCompaction(event.reason === "manual" ? "manual" : "auto");
         return;
       case "compaction_end":
-        this.emit({
-          type: "timeline.item",
-          sessionId: this.sessionId,
-          item: {
-            type: "compaction",
-            id: PI_COMPACTION_ITEM_ID,
-            status: "completed",
-            trigger: event.reason === "manual" ? "manual" : "auto",
-          },
-        });
+        this.completeCompaction(event.reason === "manual" ? "manual" : "auto");
         return;
       case "auto_retry_start":
         this.emit({
