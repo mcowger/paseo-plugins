@@ -899,6 +899,40 @@ export function diffStatsFromStrings(oldString: string, newString: string): Diff
   return { additions, deletions };
 }
 
+const DIFF_CONTEXT_LINES = 3;
+
+function focusDiffChanges(lines: DiffLine[], contextLines = DIFF_CONTEXT_LINES): DiffLine[] {
+  const changedIndexes = lines.flatMap((line, index) =>
+    line.kind === "add" || line.kind === "remove" ? [index] : [],
+  );
+  if (changedIndexes.length === 0) return lines;
+
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const changedIndex of changedIndexes) {
+    const range = {
+      start: Math.max(0, changedIndex - contextLines),
+      end: Math.min(lines.length, changedIndex + contextLines + 1),
+    };
+    const previous = ranges[ranges.length - 1];
+    if (previous && range.start <= previous.end) {
+      previous.end = Math.max(previous.end, range.end);
+    } else {
+      ranges.push(range);
+    }
+  }
+
+  const focused: DiffLine[] = [];
+  for (const [index, range] of ranges.entries()) {
+    if (index > 0) focused.push({ kind: "meta", text: "…" });
+    if (range.start > 0 && index === 0) focused.push({ kind: "meta", text: "…" });
+    focused.push(...lines.slice(range.start, range.end));
+    if (range.end < lines.length && index === ranges.length - 1) {
+      focused.push({ kind: "meta", text: "…" });
+    }
+  }
+  return focused;
+}
+
 export function diffStatsForDetail(detail: Extract<ToolCallDetail, { type: "edit" }>): DiffStats {
   if (detail.unifiedDiff !== undefined) return diffStatsFromUnifiedDiff(detail.unifiedDiff);
   return diffStatsFromStrings(detail.oldString ?? "", detail.newString ?? "");
@@ -914,11 +948,11 @@ export function diffLinesForDetail(detail: Extract<ToolCallDetail, { type: "edit
   }
 
   if (detail.unifiedDiff !== undefined) {
-    return detail.unifiedDiff
+    const lines: DiffLine[] = detail.unifiedDiff
       .replace(/\r/g, "")
       .split("\n")
       .filter((line, index, lines) => !(index === lines.length - 1 && line === ""))
-      .map((line) => {
+      .map((line): DiffLine => {
         if (line.startsWith("@@") || line.startsWith("+++") || line.startsWith("---")) {
           return { kind: "meta", text: line };
         }
@@ -927,9 +961,10 @@ export function diffLinesForDetail(detail: Extract<ToolCallDetail, { type: "edit
         if (line.startsWith(" ")) return { kind: "context", text: line.slice(1) };
         return { kind: "context", text: line };
       });
+    return focusDiffChanges(lines);
   }
 
-  return computeLineDiff(detail.oldString ?? "", detail.newString ?? "");
+  return focusDiffChanges(computeLineDiff(detail.oldString ?? "", detail.newString ?? ""));
 }
 
 function shellSummary(detail: Extract<ToolCallDetail, { type: "shell" }>): string | undefined {

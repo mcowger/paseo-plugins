@@ -84,6 +84,21 @@ describe("colorful activity presentation", () => {
     ]);
   });
 
+  it("centers diff rows on changes instead of rendering the whole file", () => {
+    const before = Array.from({ length: 10 }, (_, index) => `line ${index + 1}`).join("\n");
+    const after = before.replace("line 9", "changed line 9");
+
+    expect(diffLinesForDetail({ type: "edit", filePath: "file.txt", oldString: before, newString: after })).toEqual([
+      { kind: "meta", text: "…" },
+      { kind: "context", text: "line 6" },
+      { kind: "context", text: "line 7" },
+      { kind: "context", text: "line 8" },
+      { kind: "remove", text: "line 9" },
+      { kind: "add", text: "changed line 9" },
+      { kind: "context", text: "line 10" },
+    ]);
+  });
+
   it("maps known tool details to screenshot-style presentation", () => {
     expect(
       resolveToolCallPresentation({
