@@ -33,6 +33,7 @@ import {
   parsePiLsOutput,
   parseSubAgentActionLog,
   previewText,
+  readErrorMessage,
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
   MAX_DIFF_CHARS,
@@ -869,6 +870,9 @@ function DetailBody({
         </>
       );
     case "read":
+      if (readErrorMessage(detail.content) && data.errorText) {
+        return <PathRow icon={data.presentation.fileIcon ?? "Eye"} path={detail.filePath} styles={styles} />;
+      }
       return (
         <>
           <PathRow icon={data.presentation.fileIcon ?? "Eye"} path={detail.filePath} styles={styles} />

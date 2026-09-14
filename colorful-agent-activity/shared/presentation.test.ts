@@ -14,11 +14,13 @@ import {
   paseoToolSummary,
   paseoToolResult,
   parsePiLsOutput,
+  readErrorMessage,
   unwrapPaseoToolOutput,
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
   resolveToolCallPresentation,
   formatJson,
+  formatError,
   prettyJson,
   formatUnknownValue,
   extractCodeInput,
@@ -153,6 +155,23 @@ describe("colorful activity presentation", () => {
     ).toEqual([".git/", "README.md", "package.json"]);
     expect(parsePiLsOutput({ content: [] })).toEqual([]);
     expect(parsePiLsOutput({ content: [{ type: "image", text: "README.md" }] })).toBeNull();
+  });
+
+  it("recognizes Pi read errors without treating regular content as an error", () => {
+    expect(readErrorMessage("ENOENT: no such file or directory, access 'missing.ts'"))
+      .toBe("ENOENT: no such file or directory, access 'missing.ts'");
+    expect(readErrorMessage("Error: permission denied")).toBe("Error: permission denied");
+    expect(readErrorMessage("Error handling example")).toBeUndefined();
+    expect(readErrorMessage("const value = 1;")).toBeUndefined();
+  });
+
+  it("extracts Pi error text from the error envelope", () => {
+    expect(
+      formatError({
+        content: [{ type: "text", text: "ENOENT: no such file or directory" }],
+        details: {},
+      }),
+    ).toBe("ENOENT: no such file or directory");
   });
 
   it("maps sub-agent actions to readable inline progress rows", () => {
