@@ -21,6 +21,8 @@ import {
   prettyJson,
   formatUnknownValue,
   extractCodeInput,
+  extractApplyPatchEdits,
+  isApplyPatchTool,
   previewText,
   MAX_DIFF_CHARS,
   MAX_FORMAT_CHARS,
@@ -267,6 +269,70 @@ describe("colorful activity presentation", () => {
       language: "javascript",
     });
     expect(extractCodeInput("read_file", { path: "foo.ts" })).toBeUndefined();
+  });
+
+  it("extracts every file operation from a multi-file apply_patch input", () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: src/index.ts",
+      "@@",
+      "-old()",
+      "+new()",
+      "*** Add File: docs/notes.md",
+      "+Notes",
+      "*** Delete File: src/obsolete.ts",
+      "*** End Patch",
+    ].join("\n");
+
+    expect(extractApplyPatchEdits({ input: patch }, undefined)).toEqual([
+      { filePath: "src/index.ts", operation: "update", unifiedDiff: "@@\n-old()\n+new()" },
+      { filePath: "docs/notes.md", operation: "add", unifiedDiff: "+Notes" },
+      { filePath: "src/obsolete.ts", operation: "delete", unifiedDiff: "" },
+    ]);
+    expect(isApplyPatchTool("apply_patch")).toBe(true);
+    expect(isApplyPatchTool("mcp__codex__apply_patch")).toBe(true);
+    expect(isApplyPatchTool("edit")).toBe(false);
+  });
+
+  it("extracts file operations from canonical multi-file unified diffs", () => {
+    const unifiedDiff = [
+      "diff --git a/src/index.ts b/src/index.ts",
+      "--- a/src/index.ts",
+      "+++ b/src/index.ts",
+      "@@ -1 +1 @@",
+      "-old()",
+      "+new()",
+      "diff --git a/src/obsolete.ts b/src/obsolete.ts",
+      "--- a/src/obsolete.ts",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-obsolete()",
+    ].join("\n");
+
+    expect(extractApplyPatchEdits({
+      type: "edit",
+      filePath: "src/index.ts",
+      unifiedDiff,
+    }, undefined)).toEqual([
+      { filePath: "src/index.ts", operation: "update", unifiedDiff: "@@ -1 +1 @@\n-old()\n+new()" },
+      { filePath: "src/obsolete.ts", operation: "delete", unifiedDiff: "@@ -1 +0,0 @@\n-obsolete()" },
+    ]);
+  });
+
+  it("uses apply_patch preview files when the result contains them", () => {
+    expect(extractApplyPatchEdits(undefined, {
+      details: {
+        preview: {
+          files: [
+            { filePath: "src/index.ts", operation: "update", diff: "- 1 old\n+ 1 new" },
+            { filePath: "README.md", operation: "add", diff: "+ 1 Notes" },
+          ],
+        },
+      },
+    })).toEqual([
+      { filePath: "src/index.ts", operation: "update", unifiedDiff: "-old\n+new" },
+      { filePath: "README.md", operation: "add", unifiedDiff: "+Notes" },
+    ]);
   });
 
   it("protects against oversized diff calculations", () => {
