@@ -38,6 +38,7 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
 ## Development reminders
 
 - The Paseo 0.8 plugin API is stable.
+- Fix every lint, typecheck, and test warning or failure before completing the task. Never dismiss one as pre-existing.
 - Modifying Paseo itself is never a viable path; solve plugin work within the supported plugin API.
 - Plugins are trusted, unsandboxed code. Keep daemon-only work and credentials in server modules;
   client modules run inside Paseo.

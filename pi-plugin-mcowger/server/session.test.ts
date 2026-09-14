@@ -169,6 +169,7 @@ test("emits composer settings for auto-compaction and retry", async () => {
 
   expect(events.find((event) => event.type === "session.config")).toMatchObject({
     config: {
+      modes: [{ id: "build", label: "Build" }],
       settings: [
         {
           type: "select",
@@ -193,6 +194,7 @@ test("emits composer settings for auto-compaction and retry", async () => {
       ],
     },
   });
+  expect(events.find((event) => event.type === "session.config")).not.toHaveProperty("config.mode");
   await session.close();
 });
 

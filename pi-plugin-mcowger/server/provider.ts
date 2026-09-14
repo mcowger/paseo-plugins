@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { negotiateProviderCapabilities, type ProviderConnection, type ProviderEvent, type ProviderInput, type ProviderRegistration } from "@getpaseo/plugin/server/provider";
 
 import { createPiMcpConfig } from "./mcp-config.js";
+import { PI_COMPATIBILITY_MODES } from "./modes.js";
 import { startPiSession } from "./runtime.js";
 import { createPaseoExtension, PiProviderSession } from "./session.js";
 import { thinkingConfigForModel } from "./thinking.js";
@@ -89,7 +90,7 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
                 ...(model.reasoning ? thinking : {}),
               };
             }),
-            modes: [],
+            modes: PI_COMPATIBILITY_MODES,
           },
         });
       } finally { await runtime.close(); }

@@ -8,6 +8,7 @@ import type { ProviderCommand, ProviderConfigChanges, ProviderConfigState, Provi
 import type { PiAgentMessage, PiAgentSessionEvent, PiModel, PiRuntimeEvent, PiSessionState } from "./rpc-types.js";
 import type { PiRuntimeSession } from "./runtime.js";
 import { thinkingConfigForModel } from "./thinking.js";
+import { PI_COMPATIBILITY_MODES } from "./modes.js";
 import { mapToolDetail, parseToolArgs, parseToolResult, resolveToolCallName, type PiTrackedToolCall } from "./tool-call-mapper.js";
 
 const DEFAULT_THINKING_LEVEL = "medium";
@@ -354,7 +355,7 @@ export class PiProviderSession {
           ...(item.reasoning ? thinking : {}),
         };
       }),
-      modes: [],
+      modes: PI_COMPATIBILITY_MODES,
       thinkingOption: this.options.state.thinkingLevel,
       thinkingOptions: currentThinking.thinkingOptions,
       settings: [
