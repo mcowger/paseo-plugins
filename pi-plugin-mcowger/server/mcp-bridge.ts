@@ -4,17 +4,28 @@ import { defineTool } from "./pi-sdk.js";
 import type { PiToolDefinition } from "../shared/pi-sdk-types.js";
 import type { ProviderMcpServerConfig } from "@getpaseo/plugin/server/provider";
 
-import { filterPaseoToolNames } from "./tool-policy.js";
+import { filterPaseoToolNames, filterPaseoToolNamesForProfile } from "./tool-policy.js";
 import type { PaseoHostToolPolicy } from "../shared/tool-policy.js";
 
 const PASEO_MCP_PATHNAME = "/mcp/agents";
 
+export type McpBridgeToolSource = "paseo" | "external";
+
+export interface McpBridgeToolMetadata {
+  piToolName: string;
+  mcpToolName: string;
+  serverName: string;
+  source: McpBridgeToolSource;
+}
+
 export interface McpBridgeHandle {
   tools: PiToolDefinition[];
+  toolMetadata: ReadonlyMap<string, McpBridgeToolMetadata>;
   paseoToolCount: number;
   visiblePaseoToolCount: number;
   paseoToolNames: string[];
   visiblePaseoToolNames: string[];
+  getToolMetadata(piToolName: string): McpBridgeToolMetadata | undefined;
   close(): Promise<void>;
 }
 
@@ -72,17 +83,28 @@ export async function createMcpBridge(
   servers: Readonly<Record<string, ProviderMcpServerConfig>>,
   paseoToolPolicy: PaseoHostToolPolicy,
   log: (message: string) => void,
+  allowedPaseoToolNames?: readonly string[],
 ): Promise<McpBridgeHandle> {
   const clients: Client[] = [];
+  const closedClients = new Set<Client>();
+  const closeClient = async (client: Client): Promise<void> => {
+    if (closedClients.has(client)) return;
+    closedClients.add(client);
+    await client.close().catch(() => undefined);
+  };
   const tools: PiToolDefinition[] = [];
+  const toolMetadata = new Map<string, McpBridgeToolMetadata>();
+  const claimedToolNames = new Set<string>();
+  const collidingToolNames = new Set<string>();
   const paseoToolNames: string[] = [];
   const visiblePaseoToolNames: string[] = [];
   let paseoToolCount = 0;
   let visiblePaseoToolCount = 0;
 
   const entries = Object.entries(servers);
-  const results = await Promise.all(
-    entries.map(async ([serverName, config]) => {
+  try {
+    const results = await Promise.allSettled(
+      entries.map(async ([serverName, config]) => {
       const isPaseoServer = isPaseoMcpServer(config);
       const client = new Client({ name: "pi-plugin-mcowger", version: "0.0.0" });
       try {
@@ -91,6 +113,7 @@ export async function createMcpBridge(
         log(
           `mcp: failed to connect to ${serverName}: ${error instanceof Error ? error.message : String(error)}`,
         );
+        await closeClient(client);
         return;
       }
       clients.push(client);
@@ -101,13 +124,13 @@ export async function createMcpBridge(
         log(
           `mcp: failed to list tools from ${serverName}: ${error instanceof Error ? error.message : String(error)}`,
         );
-        await client.close().catch(() => undefined);
+        await closeClient(client);
         return;
       }
       const visibleTools = isPaseoServer
-        ? listed.tools.filter((tool) =>
-            filterPaseoToolNames([tool.name], paseoToolPolicy).length > 0,
-          )
+        ? listed.tools.filter((tool) => allowedPaseoToolNames
+          ? filterPaseoToolNamesForProfile([tool.name], allowedPaseoToolNames).length > 0
+          : filterPaseoToolNames([tool.name], paseoToolPolicy).length > 0)
         : listed.tools;
       if (isPaseoServer) {
         paseoToolCount += listed.tools.length;
@@ -118,9 +141,21 @@ export async function createMcpBridge(
         const toolName = `mcp_${sanitizeNamePart(serverName)}_${sanitizeNamePart(mcpTool.name)}`;
         if (isPaseoServer) paseoToolNames.push(toolName);
         if (!visibleTools.includes(mcpTool)) continue;
+        if (claimedToolNames.has(toolName)) {
+          collidingToolNames.add(toolName);
+          toolMetadata.delete(toolName);
+          log(`mcp: skipped colliding tool name ${toolName}`);
+          continue;
+        }
+        claimedToolNames.add(toolName);
         if (isPaseoServer) visiblePaseoToolNames.push(toolName);
-        serverTools.push(
-          defineTool({
+        toolMetadata.set(toolName, {
+          piToolName: toolName,
+          mcpToolName: mcpTool.name,
+          serverName,
+          source: isPaseoServer ? "paseo" : "external",
+        });
+        const definedTool = defineTool({
             name: toolName,
             label: `${serverName}: ${mcpTool.title ?? mcpTool.name}`,
             description: mcpTool.description ?? `MCP tool ${mcpTool.name} from ${serverName}`,
@@ -145,8 +180,8 @@ export async function createMcpBridge(
                 } as unknown as Record<string, never>,
               };
             },
-          }) as unknown as PiToolDefinition,
-        );
+          }) as unknown as PiToolDefinition;
+        serverTools.push(definedTool);
       }
       log(
         isPaseoServer
@@ -154,21 +189,30 @@ export async function createMcpBridge(
           : `mcp: ${serverName} connected (${visibleTools.length} tools)`,
       );
       return serverTools;
-    }),
-  );
-  for (const serverTools of results) {
-    if (serverTools) tools.push(...serverTools);
+      }),
+    );
+    for (const result of results) {
+      if (result.status === "rejected") throw result.reason;
+      if (result.value) tools.push(...result.value.filter((tool) => !collidingToolNames.has(tool.name)));
+    }
+  } catch (error) {
+    await Promise.all(clients.map((client) => closeClient(client)));
+    throw error;
   }
 
   return {
     tools,
+    toolMetadata,
     paseoToolCount,
     visiblePaseoToolCount,
     paseoToolNames,
     visiblePaseoToolNames,
+    getToolMetadata(piToolName) {
+      return toolMetadata.get(piToolName);
+    },
 
     async close() {
-      await Promise.all(clients.map((client) => client.close().catch(() => undefined)));
+      await Promise.all(clients.map((client) => closeClient(client)));
     },
   };
 }
