@@ -12,9 +12,9 @@
     <rect x="290" y="150" width="142" height="44" rx="22" fill="#21262d" stroke="#3d444d"/>
     <text x="308" y="178" fill="#e6edf3" font-size="15">Thinking: High</text>
     <rect x="42" y="218" width="156" height="44" rx="22" fill="#21262d" stroke="#3d444d"/>
-    <text x="60" y="246" fill="#e6edf3" font-size="15">Compact: ✓</text>
+    <text x="60" y="246" fill="#e6edf3" font-size="15">Compact: On</text>
     <rect x="214" y="218" width="136" height="44" rx="22" fill="#21262d" stroke="#3d444d"/>
-    <text x="232" y="246" fill="#e6edf3" font-size="15">Retry: ×</text>
+    <text x="232" y="246" fill="#e6edf3" font-size="15">Retry: Off</text>
     <rect x="42" y="302" width="556" height="64" rx="9" fill="#0d1117" stroke="#3d444d"/>
     <text x="60" y="340" fill="#8b949e" font-size="15">Message Pi…</text>
   </g>

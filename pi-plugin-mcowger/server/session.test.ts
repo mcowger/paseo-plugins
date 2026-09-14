@@ -177,24 +177,16 @@ test("emits composer settings for auto-compaction and retry", async () => {
       modes: [{ id: "build", label: "Build" }],
       settings: [
         {
-          type: "select",
+          type: "toggle",
           id: "autoCompaction",
           label: "Compact",
-          value: "off",
-          options: [
-            { label: "Compact: ✓", value: "on" },
-            { label: "Compact: ×", value: "off" },
-          ],
+          value: false,
         },
         {
-          type: "select",
+          type: "toggle",
           id: "autoRetry",
           label: "Retry",
-          value: "off",
-          options: [
-            { label: "Retry: ✓", value: "on" },
-            { label: "Retry: ×", value: "off" },
-          ],
+          value: false,
         },
       ],
     },
@@ -236,7 +228,7 @@ test("probes and exposes fast mode only for a supported model", async () => {
 
   expect(requests).toHaveLength(1);
   expect(events.find((event) => event.type === "session.config")).toMatchObject({
-    config: { settings: [{ id: "autoCompaction" }, { id: "autoRetry" }, { id: "fastMode", value: "off" }] },
+    config: { settings: [{ id: "autoCompaction" }, { id: "autoRetry" }, { id: "fastMode", value: false }] },
   });
 
   await session.configure({ settings: { fastMode: "on" } });

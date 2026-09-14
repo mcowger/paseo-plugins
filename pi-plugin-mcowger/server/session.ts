@@ -403,37 +403,25 @@ export class PiProviderSession {
       thinkingOptions: currentThinking.thinkingOptions,
       settings: [
         {
-          type: "select",
+          type: "toggle",
           id: AUTO_COMPACTION_SETTING,
           label: "Compact",
           description: "Compact long conversations automatically.",
-          value: this.options.state.autoCompactionEnabled ? "on" : "off",
-          options: [
-            { label: "Compact: ✓", value: "on" },
-            { label: "Compact: ×", value: "off" },
-          ],
+          value: Boolean(this.options.state.autoCompactionEnabled),
         },
         {
-          type: "select",
+          type: "toggle",
           id: AUTO_RETRY_SETTING,
           label: "Retry",
           description: "Retry transient provider errors automatically.",
-          value: this.autoRetryEnabled ? "on" : "off",
-          options: [
-            { label: "Retry: ✓", value: "on" },
-            { label: "Retry: ×", value: "off" },
-          ],
+          value: this.autoRetryEnabled,
         },
         ...(this.fastModeAvailable ? [{
-          type: "select" as const,
+          type: "toggle" as const,
           id: FAST_MODE_SETTING,
           label: "Fast",
           description: "Use the provider's priority service tier when supported.",
-          value: this.fastModeEnabled ? "on" : "off",
-          options: [
-            { label: "Fast: ✓", value: "on" },
-            { label: "Fast: ×", value: "off" },
-          ],
+          value: this.fastModeEnabled,
         }] : []),
       ],
     };
