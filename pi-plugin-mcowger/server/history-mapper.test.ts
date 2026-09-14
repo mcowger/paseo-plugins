@@ -122,4 +122,11 @@ describe("PiHistoryMapper", () => {
       detail: { type: "shell", command: "ls" },
     });
   });
+
+  it("ignores unknown message roles instead of throwing", () => {
+    const mapper = new PiHistoryMapper();
+    const unknown = { role: "extension", content: "future" } as unknown as PiAgentMessage;
+    expect(mapper.mapMessage(unknown)).toEqual([]);
+    expect(() => mapper.mapMessages([unknown])).not.toThrow();
+  });
 });

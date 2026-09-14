@@ -80,6 +80,8 @@ export class PiHistoryMapper {
       }
       case "bashExecution":
         return [this.mapBashExecutionMessage(message)];
+      default:
+        return [];
     }
   }
 

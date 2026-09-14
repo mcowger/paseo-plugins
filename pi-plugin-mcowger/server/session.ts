@@ -403,7 +403,7 @@ export class PiProviderSession {
         }
         mappedUserCount += 1;
       }
-      for (const item of mapper.mapMessage(message)) {
+      for (const item of mapper.mapMessage(message) ?? []) {
         this.emit({ type: "timeline.item", sessionId: this.sessionId, item });
       }
     }

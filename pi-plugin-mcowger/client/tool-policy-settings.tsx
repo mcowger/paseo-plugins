@@ -199,7 +199,8 @@ function ProfilePolicyCard({
       {knownToolsState.status === "ready" && visibleTools.length === 0 ? <Text>No known Pi tools match this search.</Text> : null}
       {staleTools.map((name) => <SettingsSwitch key={name} label={name} hint="Stale selection: unavailable from the current global Pi discovery." value onValueChange={(value) => { if (!value) update({ allowedPiToolNames: toggleAllowedTool(policy.allowedPiToolNames, name, false) }); }} disabled={disabled} />)}
     </SettingsRow>
-    <SettingsRow label="Paseo host tools" hint="Canonical Paseo tool names only. Bridge aliases are never shown.">
+    <SettingsRow label="Paseo host tools" hint="Canonical Paseo tool names only. Bridge aliases are never shown." />
+    <View>
       {PASEO_TOOL_GROUPS.map((group) => {
         const selectedCount = group.tools.filter((tool) => policy.allowedPaseoToolNames.includes(tool)).length;
         const groupExpanded = expandedGroups[group.label] ?? false;
@@ -211,7 +212,7 @@ function ProfilePolicyCard({
           </> : null}
         </View>;
       })}
-    </SettingsRow>
+    </View>
     <SettingsRow label="External MCP allow patterns" hint="Advanced: one case-sensitive minimatch pattern per line. These apply only to non-Paseo MCP tools.">
       <TextInput accessibilityLabel={`${profile.name} external MCP allow patterns`} value={externalPatterns} onChangeText={(value) => { setExternalPatterns(value); update({ allowedExternalMcpPatterns: patternsFromText(value) }); }} multiline numberOfLines={4} editable={!disabled} style={styles.input} />
     </SettingsRow>
