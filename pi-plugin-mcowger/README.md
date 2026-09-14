@@ -19,6 +19,8 @@ Version `0.1.0` is ready for use with Paseo `v0.8.0`. Paseo's provider API is st
 - Exposes pi models with per-model thinking levels in Paseo's composer.
 - Provides a host-scoped Tool Policy screen and Command Center entry for narrowing Pi tools and
   independently filtering Paseo host tools. Manage it in Settings → Plugins → Pi Tool Policy.
+- Provides strict profile-specific tool policies for saved Pi-provider profiles. A configured profile
+  replaces, rather than layers on, the host policy fallback.
 - Provides a branch-aware `todo` tool when no loaded Pi extension already contributes one, and emits
   its results (along with `@juicesharp/rpiv-todo` results) as native Paseo todo items.
 - Maps foreground pi subagent calls to native Paseo subagent tool rows.
@@ -81,6 +83,44 @@ The plugin uses pi's normal configuration directory, including:
 Tool Policy is managed by Paseo in the plugin's host-scoped settings document. It applies to new
 or refreshed sessions and does not sandbox shell commands or extensions. Project-local `.pi` settings
 and resources are loaded for the active workspace.
+
+The fallback and profile editors share nine focused Paseo host-tool categories: Agent delegation,
+Workspaces and worktrees, Terminals and workspace scripts, Schedules and heartbeats, Browser
+automation, Voice, Providers and profiles, Permissions, and Agent sessions. Each category is a UI
+convenience; individual canonical tool IDs are the runtime controls. The UI shows canonical IDs once,
+never `mcp_paseo_*` bridge aliases, and `wait_for_agent` is not listed.
+
+## Profile-specific tool policies
+
+The host policy remains the fallback. When a saved Paseo profile has a configured Pi tool policy,
+that strict policy fully replaces the fallback for sessions using that profile. An empty profile
+policy is intentional and allows no tools.
+
+The profile editor selects:
+
+- exact Pi built-in and extension tool names;
+- canonical Paseo tool IDs, grouped into the same nine categories as the fallback editor, with
+  individual overrides (for example `create_agent`, never `mcp_paseo_create_agent`); and
+- advanced globs for external, non-Paseo MCP tools.
+
+Fallback host-tool access remains default-allow: disabling a canonical ID removes it, while the
+category controls only batch-edit those disabled IDs. Configured profiles remain strict/default-deny:
+their allowed canonical IDs are the complete Paseo host-tool set for that profile. Categories are UI
+conveniences; exact IDs determine runtime behavior.
+
+All Pi-provider profiles receive a plugin-owned profile marker automatically. Paseo currently
+passes materialized profile values to provider sessions, not the profile identity, so the marker
+selects the configured policy. It is not a security boundary: a caller that can construct provider
+settings can spoof it, and a model with `bash` can still use local commands.
+
+Profile and known-tool discovery run through narrow config RPCs before a provider session opens.
+Known Pi tools come from the global Pi environment, so project-local extensions may be absent. Saved
+selections missing from discovery stay as stale selections instead of being removed. Settings sync
+prunes policies for deleted profiles or profiles that no longer use this provider.
+
+Policy is captured when a session opens. Changes take effect after an agent is opened, refreshed, or
+reopened. `/reload` reloads Pi resources; it does not change an open session's MCP bridge or tool
+catalog. See [`docs/tool-policy.md`](./docs/tool-policy.md) for the behavior and limits.
 
 ## Development
 

@@ -22,9 +22,12 @@ import {
   formatPiToolPolicyDiagnostic,
   piToolPolicyRequiresKnownBaseline,
   policyChanged,
+  resolveConfiguredToolPolicy,
   resolvePiToolPolicy,
+  resolveStrictActiveToolNames,
 } from "./tool-policy.js";
 import type { PiModelRuntimeLike } from "../shared/pi-sdk-types.js";
+import { PI_TOOL_POLICY_PROFILE_ID_SETTING } from "../shared/tool-policy.js";
 import { buildCatalog, createModelRuntime, listScopedModels } from "./pi-host.js";
 import { createPiToolPolicyStore, type PiToolPolicyStore } from "./tool-policy.js";
 import { PiProviderSession } from "./session.js";
@@ -37,6 +40,29 @@ import {
 
 export const PI_PROVIDER_ID = "pi-plugin-mcowger";
 export const PI_PROVIDER_LABEL = "Pi (mcowger)";
+
+export function stripPiToolPolicyProfileMarker(settings: Readonly<Record<string, unknown>>): {
+  marker: unknown;
+  settings: Record<string, unknown>;
+} {
+  const next = { ...settings };
+  const marker = next[PI_TOOL_POLICY_PROFILE_ID_SETTING];
+  delete next[PI_TOOL_POLICY_PROFILE_ID_SETTING];
+  return { marker, settings: next };
+}
+
+export async function setActiveToolsOrCleanup(
+  session: { setActiveToolsByName(toolNames: string[]): void },
+  toolNames: string[],
+  cleanupFailedOpen: () => Promise<void>,
+): Promise<void> {
+  try {
+    session.setActiveToolsByName(toolNames);
+  } catch (error) {
+    await cleanupFailedOpen();
+    throw error;
+  }
+}
 
 const SUPPORTED_CAPABILITIES = [
   "prompt.message",
@@ -270,7 +296,18 @@ async function handleSessionOpen(
       "Pi cannot open a session with toolPolicy because the embedded SDK does not enforce MCP approvals.",
     );
   }
-  const sessionSettings = config.settings;
+  const policySnapshot = state.toolPolicyStore.snapshot();
+  const { marker, settings: sessionSettings } = stripPiToolPolicyProfileMarker(config.settings);
+  const resolvedPolicy = resolveConfiguredToolPolicy(
+    marker,
+    policySnapshot.settings.piTools,
+    policySnapshot.settings.profilePolicies,
+  );
+  if (marker !== undefined && resolvedPolicy.source === "fallback") {
+    startupDiagnostics.push(
+      "Pi tool policy: profile marker did not match a configured policy; using the fallback policy.",
+    );
+  }
   const settingsManager = SettingsManager.inMemory({
     ...(typeof sessionSettings.autoCompaction === "boolean"
       ? { compaction: { enabled: sessionSettings.autoCompaction } }
@@ -292,12 +329,16 @@ async function handleSessionOpen(
   // per-server and never block the session.
   let mcp = null;
   const mcpServers = config.mcpServers ?? {};
-  const policy = state.toolPolicyStore.snapshot().settings;
   if (Object.keys(mcpServers).length > 0) {
     mcp = await createMcpBridge(
       mcpServers,
-      policy.paseoTools,
+      resolvedPolicy.source === "profile"
+        ? { enabled: true, disabledTools: [] }
+        : policySnapshot.settings.paseoTools,
       (message: string) => startupDiagnostics.push(message),
+      resolvedPolicy.source === "profile"
+        ? resolvedPolicy.policy.allowedPaseoToolNames
+        : undefined,
     );
   }
 
@@ -309,7 +350,12 @@ async function handleSessionOpen(
       ? (base: string[]) => [...base, systemPrompt]
       : undefined,
   });
-  await loader.reload();
+  try {
+    await loader.reload();
+  } catch (error) {
+    await mcp?.close().catch(() => undefined);
+    throw error;
+  }
   for (const diagnostic of loader.getExtensions().errors) {
     startupDiagnostics.push(
       `Pi extension failed to load${diagnostic.path ? ` (${diagnostic.path})` : ""}: ${String(diagnostic.error)}`,
@@ -327,17 +373,25 @@ async function handleSessionOpen(
     }
   }
 
-  const sessionManager = persistedSessionFile
-    ? SessionManager.open(persistedSessionFile)
-    : config.persist === false
-      ? SessionManager.inMemory(config.cwd)
-      : SessionManager.create(config.cwd);
+  let sessionManager;
+  try {
+    sessionManager = persistedSessionFile
+      ? SessionManager.open(persistedSessionFile)
+      : config.persist === false
+        ? SessionManager.inMemory(config.cwd)
+        : SessionManager.create(config.cwd);
+  } catch (error) {
+    await mcp?.close().catch(() => undefined);
+    throw error;
+  }
   const extensions = loader.getExtensions();
 
   const customTools = mcp?.tools ? [...mcp.tools] : [];
   const hasExtensionTodoTool = hasPiTodoExtensionTool(extensions);
+  const shouldAddFallbackTodo = resolvedPolicy.source === "fallback" ||
+    resolvedPolicy.policy.allowedPiToolNames.includes(PI_TODO_TOOL_NAME);
   const hasCustomTodoTool = customTools.some((tool) => tool.name === PI_TODO_TOOL_NAME);
-  if (!hasExtensionTodoTool && !hasCustomTodoTool) {
+  if (shouldAddFallbackTodo && !hasExtensionTodoTool && !hasCustomTodoTool) {
     customTools.push(createPiTodoTool(sessionManager));
   }
 
@@ -365,14 +419,45 @@ async function handleSessionOpen(
     throw error;
   }
   const { session, modelFallbackMessage } = created;
-  const baselineToolNames = session.getActiveToolNames?.();
-  const knownToolNames = session.getAllTools?.().map((tool) => tool.name);
-  const finalToolNames = resolvePiToolPolicy(baselineToolNames, knownToolNames, policy.piTools);
+  const cleanupFailedOpen = async (): Promise<void> => {
+    await mcp?.close().catch(() => undefined);
+    session.dispose();
+  };
+  let baselineToolNames;
+  try {
+    baselineToolNames = session.getActiveToolNames?.();
+  } catch (error) {
+    await cleanupFailedOpen();
+    throw error;
+  }
+  let knownToolNames;
+  try {
+    knownToolNames = session.getAllTools?.().map((tool) => tool.name);
+  } catch (error) {
+    await cleanupFailedOpen();
+    throw error;
+  }
+  const bridgeTools = mcp ? [...mcp.toolMetadata.values()].map((metadata) => ({
+    piName: metadata.piToolName,
+    canonicalName: metadata.mcpToolName,
+    isPaseoTool: metadata.source === "paseo",
+  })) : [];
+  const finalToolNames = resolvedPolicy.source === "profile"
+    ? resolveStrictActiveToolNames(
+        baselineToolNames,
+        knownToolNames,
+        resolvedPolicy.policy,
+        bridgeTools,
+      )
+    : resolvePiToolPolicy(baselineToolNames, knownToolNames, resolvedPolicy.policy);
   const paseoToolCount = mcp?.paseoToolCount ?? 0;
   const visiblePaseoToolCount = mcp?.visiblePaseoToolCount ?? 0;
   if (baselineToolNames === undefined || finalToolNames === undefined) {
-    if (piToolPolicyRequiresKnownBaseline(policy.piTools)) {
-      session.setActiveToolsByName([]);
+    if (
+      resolvedPolicy.source === "profile" ||
+      piToolPolicyRequiresKnownBaseline(resolvedPolicy.policy)
+    ) {
+      await setActiveToolsOrCleanup(session, [], cleanupFailedOpen);
       startupDiagnostics.push(
         "Pi tool policy: Pi did not expose its active tool list; disabled tool calls because a restrictive policy could not be resolved safely.",
       );
@@ -382,14 +467,16 @@ async function handleSessionOpen(
       );
     }
   } else {
-    session.setActiveToolsByName(finalToolNames);
+    await setActiveToolsOrCleanup(session, finalToolNames, cleanupFailedOpen);
     if (
       policyChanged(
         baselineToolNames,
         finalToolNames,
         paseoToolCount,
         visiblePaseoToolCount,
-        policy.paseoTools.enabled,
+        resolvedPolicy.source === "profile"
+          ? true
+          : policySnapshot.settings.paseoTools.enabled,
       )
     ) {
       startupDiagnostics.push(
@@ -411,7 +498,12 @@ async function handleSessionOpen(
     } else {
       const model = runtime.getModel(reference.provider, reference.id);
       if (model) {
-        await session.setModel(model);
+        try {
+          await session.setModel(model);
+        } catch (error) {
+          await cleanupFailedOpen();
+          throw error;
+        }
       } else {
         startupDiagnostics.push(`Pi requested model is unavailable: ${config.model}`);
       }
@@ -427,13 +519,28 @@ async function handleSessionOpen(
   if (!session.model) {
     startupDiagnostics.push("Pi has no available model. Select an available model before prompting.");
   }
-  const promptCommands = buildPiPromptCommands(
-    extensions.extensions,
-    loader.getPrompts().prompts,
-    loader.getSkills().skills,
-  );
+  let promptCommands;
+  try {
+    promptCommands = buildPiPromptCommands(
+      extensions.extensions,
+      loader.getPrompts().prompts,
+      loader.getSkills().skills,
+    );
+  } catch (error) {
+    await cleanupFailedOpen();
+    throw error;
+  }
 
-  const providerSession = new PiProviderSession({
+  let models;
+  try {
+    models = await listScopedModels(runtime, config.cwd);
+  } catch (error) {
+    await cleanupFailedOpen();
+    throw error;
+  }
+  let providerSession;
+  try {
+    providerSession = new PiProviderSession({
     sessionId: input.sessionId,
     bundle: {
       session,
@@ -442,7 +549,7 @@ async function handleSessionOpen(
       promptCommands,
     },
     config,
-    models: await listScopedModels(runtime, config.cwd),
+    models,
     reloadCommands: () =>
       buildPiPromptCommands(
         loader.getExtensions().extensions,
@@ -450,7 +557,11 @@ async function handleSessionOpen(
         loader.getSkills().skills,
       ),
     emit: state.emit,
-  });
+    });
+  } catch (error) {
+    await cleanupFailedOpen();
+    throw error;
+  }
   state.sessions.set(input.sessionId, providerSession);
 
   state.emit({
