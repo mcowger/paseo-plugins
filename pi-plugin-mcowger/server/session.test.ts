@@ -15,6 +15,7 @@ function createRuntime(options: { abortError?: Error } = {}) {
     async clearQueue() {},
     async compact() {},
     async setAutoCompaction() {},
+    async setAutoRetry() {},
     async abort() { if (options.abortError) throw options.abortError; },
     async getState() { return state; },
     async getMessages() { return []; },
@@ -46,10 +47,14 @@ const config: ProviderSessionConfig = {
   persist: true,
 };
 
-function createSession(runtime: PiRuntimeSession, events: ProviderEvent[]) {
+function createSession(
+  runtime: PiRuntimeSession,
+  events: ProviderEvent[],
+  settings: ProviderSessionConfig["settings"] = {},
+) {
   return new PiProviderSession({
     sessionId: "paseo-session",
-    config: { ...config },
+    config: { ...config, settings },
     runtime,
     state: { ...state },
     models: [],
@@ -57,6 +62,68 @@ function createSession(runtime: PiRuntimeSession, events: ProviderEvent[]) {
     cleanup() {},
   });
 }
+
+test("applies initial composer settings to Pi", async () => {
+  const calls: string[] = [];
+  const { runtime } = createRuntime();
+  runtime.setAutoCompaction = async (enabled) => { calls.push(`compact:${enabled}`); };
+  runtime.setAutoRetry = async (enabled) => { calls.push(`retry:${enabled}`); };
+  const session = createSession(runtime, [], { autoCompaction: "on", autoRetry: "on" });
+
+  await session.initialize();
+
+  expect(calls).toEqual(["compact:true", "retry:true"]);
+  await session.close();
+});
+
+test("emits composer settings for auto-compaction and retry", async () => {
+  const { runtime } = createRuntime();
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events);
+
+  await session.initialize();
+
+  expect(events.find((event) => event.type === "session.config")).toMatchObject({
+    config: {
+      settings: [
+        {
+          type: "select",
+          id: "autoCompaction",
+          label: "Compact",
+          value: "off",
+          options: [
+            { label: "Compact: ✓", value: "on" },
+            { label: "Compact: ×", value: "off" },
+          ],
+        },
+        {
+          type: "select",
+          id: "autoRetry",
+          label: "Retry",
+          value: "off",
+          options: [
+            { label: "Retry: ✓", value: "on" },
+            { label: "Retry: ×", value: "off" },
+          ],
+        },
+      ],
+    },
+  });
+  await session.close();
+});
+
+test("configures Pi auto-compaction and retry from composer settings", async () => {
+  const calls: string[] = [];
+  const { runtime } = createRuntime();
+  runtime.setAutoCompaction = async (enabled) => { calls.push(`compact:${enabled}`); };
+  runtime.setAutoRetry = async (enabled) => { calls.push(`retry:${enabled}`); };
+  const session = createSession(runtime, []);
+
+  await session.configure({ settings: { autoCompaction: "on", autoRetry: "on" } });
+
+  expect(calls).toEqual(["compact:true", "retry:true"]);
+  await session.close();
+});
 
 test("does not cancel a turn when Pi rejects abort", async () => {
   const { runtime } = createRuntime({ abortError: new Error("Pi disconnected") });

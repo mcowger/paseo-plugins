@@ -8,6 +8,7 @@ export interface PiRuntimeSession {
   clearQueue(): Promise<void>;
   compact(customInstructions?: string): Promise<void>;
   setAutoCompaction(enabled: boolean): Promise<void>;
+  setAutoRetry(enabled: boolean): Promise<void>;
   abort(): Promise<void>;
   getState(): Promise<PiSessionState>;
   getMessages(): Promise<PiAgentMessage[]>;
@@ -75,6 +76,7 @@ class RpcSession implements PiRuntimeSession {
   async clearQueue(): Promise<void> { await this.process.request({ type: "clear_queue" }); }
   async compact(customInstructions?: string): Promise<void> { await this.process.request({ type: "compact", ...(customInstructions ? { customInstructions } : {}) }, JSONL_RPC_NO_TIMEOUT); }
   async setAutoCompaction(enabled: boolean): Promise<void> { await this.process.request({ type: "set_auto_compaction", enabled }); }
+  async setAutoRetry(enabled: boolean): Promise<void> { await this.process.request({ type: "set_auto_retry", enabled }); }
   async abort(): Promise<void> { await this.process.request({ type: "abort" }); }
   async getState(): Promise<PiSessionState> { return await this.process.request({ type: "get_state" }) as PiSessionState; }
   async getMessages(): Promise<PiAgentMessage[]> { return ((await this.process.request({ type: "get_messages" })) as { messages?: PiAgentMessage[] }).messages ?? []; }

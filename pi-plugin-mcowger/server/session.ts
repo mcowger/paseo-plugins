@@ -12,6 +12,8 @@ import { mapToolDetail, parseToolArgs, parseToolResult, resolveToolCallName, typ
 
 const DEFAULT_THINKING_LEVEL = "medium";
 const RESPONSE_HEADER = "Response";
+const AUTO_COMPACTION_SETTING = "autoCompaction";
+const AUTO_RETRY_SETTING = "autoRetry";
 
 export interface PiProviderSessionOptions {
   sessionId: string;
@@ -34,11 +36,13 @@ export class PiProviderSession {
   private assistantMessageId: string | null = null;
   private turnStarted = false;
   private pendingTerminalMessages: PiAgentMessage[] | null = null;
+  private autoRetryEnabled = false;
   private usageGeneration = 0;
   private usageTimer: NodeJS.Timeout | null = null;
   private closed = false;
 
   constructor(private readonly options: PiProviderSessionOptions) {
+    this.autoRetryEnabled = settingBoolean(options.config.settings, AUTO_RETRY_SETTING) ?? false;
     this.unsubscribe = options.runtime.onEvent((event) => this.onEvent(event));
   }
 
@@ -47,6 +51,16 @@ export class PiProviderSession {
   }
 
   async initialize(): Promise<void> {
+    const autoCompaction = settingBoolean(this.options.config.settings, AUTO_COMPACTION_SETTING);
+    if (autoCompaction !== undefined) {
+      await this.options.runtime.setAutoCompaction(autoCompaction);
+      this.options.state.autoCompactionEnabled = autoCompaction;
+    }
+    const autoRetry = settingBoolean(this.options.config.settings, AUTO_RETRY_SETTING);
+    if (autoRetry !== undefined) {
+      await this.options.runtime.setAutoRetry(autoRetry);
+      this.autoRetryEnabled = autoRetry;
+    }
     const commands = await this.options.runtime.getCommands().catch(() => []);
     this.emitConfig();
     this.emit({ type: "session.commands", sessionId: this.options.sessionId, commands: commands.map((command): ProviderCommand => ({ name: command.name, description: command.description ?? command.source })) });
@@ -137,9 +151,15 @@ export class PiProviderSession {
       this.options.state = await this.options.runtime.getState();
       this.options.config.thinkingOption = this.options.state.thinkingLevel;
     }
-    if (changes.settings && typeof changes.settings.autoCompaction === "boolean") {
-      await this.options.runtime.setAutoCompaction(changes.settings.autoCompaction);
-      this.options.state.autoCompactionEnabled = changes.settings.autoCompaction;
+    const autoCompaction = settingBoolean(changes.settings, AUTO_COMPACTION_SETTING);
+    if (autoCompaction !== undefined) {
+      await this.options.runtime.setAutoCompaction(autoCompaction);
+      this.options.state.autoCompactionEnabled = autoCompaction;
+    }
+    const autoRetry = settingBoolean(changes.settings, AUTO_RETRY_SETTING);
+    if (autoRetry !== undefined) {
+      await this.options.runtime.setAutoRetry(autoRetry);
+      this.autoRetryEnabled = autoRetry;
     }
     this.emitConfig();
   }
@@ -251,7 +271,30 @@ export class PiProviderSession {
       modes: [],
       thinkingOption: this.options.state.thinkingLevel,
       thinkingOptions: currentThinking.thinkingOptions,
-      settings: [{ type: "toggle", id: "autoCompaction", label: "Automatic compaction", value: this.options.state.autoCompactionEnabled ?? false }],
+      settings: [
+        {
+          type: "select",
+          id: AUTO_COMPACTION_SETTING,
+          label: "Compact",
+          description: "Compact long conversations automatically.",
+          value: this.options.state.autoCompactionEnabled ? "on" : "off",
+          options: [
+            { label: "Compact: ✓", value: "on" },
+            { label: "Compact: ×", value: "off" },
+          ],
+        },
+        {
+          type: "select",
+          id: AUTO_RETRY_SETTING,
+          label: "Retry",
+          description: "Retry transient provider errors automatically.",
+          value: this.autoRetryEnabled ? "on" : "off",
+          options: [
+            { label: "Retry: ✓", value: "on" },
+            { label: "Retry: ×", value: "off" },
+          ],
+        },
+      ],
     };
     this.emit({ type: "session.config", sessionId: this.options.sessionId, config });
   }
@@ -306,6 +349,16 @@ export default function paseoIntegration(pi) {
   return { path, cleanup: () => rmSync(directory, { recursive: true, force: true }) };
 }
 
+function settingBoolean(
+  settings: Readonly<Record<string, unknown>> | undefined,
+  id: string,
+): boolean | undefined {
+  const value = settings?.[id];
+  if (typeof value === "boolean") return value;
+  if (value === "on") return true;
+  if (value === "off") return false;
+  return undefined;
+}
 function messageText(content: string | Array<{ type: string; text?: string }>): string { return typeof content === "string" ? content : content.filter((part) => part.type === "text" && typeof part.text === "string").map((part) => part.text!).join("\n\n"); }
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 function latestAssistantError(messages: PiAgentMessage[]): string | undefined {
