@@ -21,6 +21,8 @@ Version `0.1.1` is ready for use with Paseo `v0.8.0`. Paseo's provider API is st
   independently filtering Paseo host tools. Manage it in Settings → Plugins → Pi Tool Policy.
 - Provides strict profile-specific tool policies for saved Pi-provider profiles. A configured profile
   replaces, rather than layers on, the host policy fallback.
+- Shows the exact active Pi profile in the composer when Paseo provides its profile identity, and
+  explains when the host did not provide one in the pill popover.
 - Provides a branch-aware `todo` tool when no loaded Pi extension already contributes one, and emits
   its results (along with `@juicesharp/rpiv-todo` results) as native Paseo todo items.
 - Maps foreground pi subagent calls to native Paseo subagent tool rows.

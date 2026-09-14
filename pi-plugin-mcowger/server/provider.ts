@@ -16,6 +16,10 @@ import {
   type ProviderRegistration,
 } from "@getpaseo/plugin/server/provider";
 
+import {
+  activePiProfileIdFromPersistenceData,
+  readActivePiProfileId,
+} from "./active-profile.js";
 import { createMcpBridge } from "./mcp-bridge.js";
 import { buildPiPromptCommands } from "./commands.js";
 import {
@@ -50,6 +54,8 @@ export function stripPiToolPolicyProfileMarker(settings: Readonly<Record<string,
   delete next[PI_TOOL_POLICY_PROFILE_ID_SETTING];
   return { marker, settings: next };
 }
+
+export { readActivePiProfileId as readPiActiveProfileId } from "./active-profile.js";
 
 export async function setActiveToolsOrCleanup(
   session: { setActiveToolsByName(toolNames: string[]): void },
@@ -298,6 +304,8 @@ async function handleSessionOpen(
   }
   const policySnapshot = state.toolPolicyStore.snapshot();
   const { marker, settings: sessionSettings } = stripPiToolPolicyProfileMarker(config.settings);
+  const activeProfileId = readActivePiProfileId(marker) ?? activePiProfileIdFromPersistenceData(persistenceData);
+  console.info(`[pi-profile] session-opened session=${input.sessionId} profile=${activeProfileId ?? "none"}`);
   const resolvedPolicy = resolveConfiguredToolPolicy(
     marker,
     policySnapshot.settings.piTools,
@@ -559,6 +567,7 @@ async function handleSessionOpen(
       promptCommands,
     },
     config,
+    profileId: activeProfileId,
     models,
     reloadCommands: () =>
       buildPiPromptCommands(

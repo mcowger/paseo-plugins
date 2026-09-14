@@ -131,7 +131,7 @@ function makeSessionManager(fake: FakeSdkSession): SessionManager {
   } as unknown as SessionManager;
 }
 
-function createHarness() {
+function createHarness(profileId: string | null = null) {
   const fake = new FakeSdkSession();
   const events: ProviderEvent[] = [];
   const config: ProviderSessionConfig = {
@@ -153,6 +153,7 @@ function createHarness() {
     sessionId: "s1",
     bundle,
     config,
+    profileId,
     models: [TEST_MODEL],
     reloadCommands: () => [{ name: "reload", description: "Reloaded" }],
     emit: (event) => events.push(event),
@@ -505,6 +506,11 @@ describe("PiProviderSession replay", () => {
         cwd: "/tmp/work",
       },
     });
+  });
+
+  it("persists the exact profile ID with the Pi session", () => {
+    const { session } = createHarness("profile-build");
+    expect(session.persistence.data).toMatchObject({ profileId: "profile-build" });
   });
 
   it("replays only the active Pi branch", async () => {

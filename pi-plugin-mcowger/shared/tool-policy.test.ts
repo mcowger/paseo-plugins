@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getPiActiveProfileRpc,
   getPiToolPolicyKnownToolsRpc,
   getPiToolPolicyProfilesRpc,
   piToolPolicySettings,
@@ -107,6 +108,12 @@ describe("profile tool-policy RPC contracts", () => {
     expect(() => getPiToolPolicyProfilesRpc.output.parse({
       profiles: [{ id: "profile-1", name: "Explore", credentials: { token: "secret" } }],
     })).toThrow();
+  });
+
+  it("validates the exact active profile identity response", () => {
+    expect(getPiActiveProfileRpc.input.parse({ agentId: "agent-1" })).toEqual({ agentId: "agent-1" });
+    expect(getPiActiveProfileRpc.output.parse({ profileId: "profile-1" })).toEqual({ profileId: "profile-1" });
+    expect(getPiActiveProfileRpc.output.parse({ profileId: null })).toEqual({ profileId: null });
   });
 
   it("keeps marker sync narrow and returns sanitized profiles", () => {

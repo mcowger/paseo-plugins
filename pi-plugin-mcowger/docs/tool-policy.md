@@ -89,6 +89,8 @@ Paseo v0.8 materializes profile values into `session.open`, but does not provide
 
 Marker synchronization automatically adds or corrects that reserved marker on every saved profile using `pi-plugin-mcowger`, while preserving its other feature values. It does not change non-Pi profiles.
 
+The composer profile indicator stores the exact marker in the provider's persisted session payload at `session.open`. Paseo keeps that payload across reloads and resume, so the indicator does not infer a profile from model, mode, or thinking settings. If the marker is absent, the indicator reports that the profile was not identified.
+
 At session open, the provider reads and strips the marker before passing runtime settings to Pi:
 
 - an exact marker match to a configured policy selects that profile's strict policy;

@@ -1,8 +1,10 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 
+import { contributePiProfilePill } from "./client/pi-profile-pill.js";
 import { PiToolPolicySettings } from "./client/tool-policy-settings.js";
 
 export default function contribute(client: PluginClientContext) {
+  const removeProfilePill = contributePiProfilePill(client);
   const removeSettings = client.addSettingsScreen({
     id: "tool-policy",
     title: "Pi Tool Policy",
@@ -18,6 +20,7 @@ export default function contribute(client: PluginClientContext) {
     onSelect: (context) => context.openSettings("tool-policy"),
   });
   return () => {
+    removeProfilePill();
     removeSettings();
     removeCommand();
   };

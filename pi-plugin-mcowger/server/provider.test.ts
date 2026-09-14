@@ -4,6 +4,7 @@ import type { ProviderEvent, ProviderInput } from "@getpaseo/plugin/server/provi
 
 import {
   createPiProvider,
+  readPiActiveProfileId,
   setActiveToolsOrCleanup,
   stripPiToolPolicyProfileMarker,
 } from "./provider.js";
@@ -38,6 +39,12 @@ describe("Pi provider profile marker", () => {
       marker: { invalid: true },
       settings: {},
     });
+  });
+
+  it("accepts only bounded string markers as active profile identities", () => {
+    expect(readPiActiveProfileId(" profile-build ")).toBe("profile-build");
+    expect(readPiActiveProfileId({ invalid: true })).toBeNull();
+    expect(readPiActiveProfileId(" ")).toBeNull();
   });
 });
 

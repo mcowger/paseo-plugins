@@ -17,7 +17,7 @@ const MAX_KNOWN_TOOL_SUMMARIES = 1_024;
 
 const policyPattern = z.string().trim().min(1).max(MAX_PROFILE_ID_LENGTH);
 const canonicalToolId = z.string().trim().min(1).max(MAX_PROFILE_ID_LENGTH);
-const profileId = z.string().trim().min(1).max(MAX_PROFILE_ID_LENGTH);
+export const piProfileIdSchema = z.string().trim().min(1).max(MAX_PROFILE_ID_LENGTH);
 const profileName = z.string().trim().min(1).max(MAX_PROFILE_NAME_LENGTH);
 
 function normalizedUniqueStrings(values: readonly string[]): string[] {
@@ -55,7 +55,7 @@ export const profileLaunchSignatureSchema = z.object({
 }).strict();
 
 export const profileToolPolicySchema = z.object({
-  profileId,
+  profileId: piProfileIdSchema,
   launchSignature: profileLaunchSignatureSchema.optional(),
   allowedPiToolNames: normalizedToolIdList.default([]),
   allowedPaseoToolNames: normalizedToolIdList.default([]),
@@ -115,7 +115,7 @@ export const syncPiToolPolicyRpc = defineRpc({
 });
 
 export const piProfileSummarySchema = z.object({
-  id: profileId,
+  id: piProfileIdSchema,
   name: profileName,
   model: z.string().trim().min(1).max(MAX_PROFILE_ID_LENGTH).optional(),
   modeId: z.string().trim().min(1).max(MAX_PROFILE_ID_LENGTH).optional(),
@@ -129,6 +129,12 @@ export const getPiToolPolicyProfilesRpc = defineRpc({
   name: "pi-tool-policy.profiles",
   input: z.object({}).strict(),
   output: z.object({ profiles: piProfileSummariesSchema }).strict(),
+});
+
+export const getPiActiveProfileRpc = defineRpc({
+  name: "pi-tool-policy.active-profile",
+  input: z.object({ agentId: piProfileIdSchema }).strict(),
+  output: z.object({ profileId: piProfileIdSchema.nullable() }).strict(),
 });
 
 export const syncPiToolPolicyProfileMarkersRpc = defineRpc({

@@ -65,6 +65,7 @@ export interface PiProviderSessionOptions {
   sessionId: string;
   bundle: SdkSessionBundle;
   config: ProviderSessionConfig;
+  profileId: string | null;
   models: PiModel[];
   emit(event: ProviderEvent): void;
   reloadCommands?: () => ProviderCommand[];
@@ -216,6 +217,7 @@ export class PiProviderSession {
   private readonly sdk: PiAgentSessionLike;
   private readonly sessionManager: PiSessionManagerLike;
   private readonly config: ProviderSessionConfig;
+  private readonly profileId: string | null;
   private readonly emitEvent: (event: ProviderEvent) => void;
   private readonly cleanup?: () => void;
   private readonly promptCommands: ProviderCommand[];
@@ -252,6 +254,7 @@ export class PiProviderSession {
     this.reloadCommands = options.reloadCommands;
     this.mcp = options.bundle.mcp;
     this.config = options.config;
+    this.profileId = options.profileId;
     this.models = options.models;
     this.emitEvent = options.emit;
     this.cleanup = options.cleanup;
@@ -276,6 +279,7 @@ export class PiProviderSession {
         sessionFile: this.sdk.sessionFile ?? null,
         leafId: this.sessionManager.getLeafId(),
         cwd: this.config.cwd,
+        ...(this.profileId ? { profileId: this.profileId } : {}),
         ...(this.config.model ? { model: this.config.model } : {}),
         ...(this.config.thinkingOption ? { thinkingOption: this.config.thinkingOption } : {}),
       },
