@@ -7,18 +7,21 @@ The current target host and SDK baseline is **Paseo v0.8.0**. Pin `@getpaseo/cli
 `@getpaseo/plugin`, and `@getpaseo/protocol` to 0.8.0. Declare compatibility in
 `paseo-plugin.json` via `requirements: { "paseo": ">=0.8.0" }` to enforce version checks at startup.
 
+When researching Paseo contracts (plugin SDK types, protocol, examples), use the local
+Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
+`plugin-examples`) instead of web calls to GitHub.
+
 - [Plugin guide](https://paseo.sh/docs/plugins.md): setup, installation, development workflow,
   lifecycle, and debugging.
 - [Plugin API reference](https://paseo.sh/docs/plugins/v0.8/reference.md): contribution surfaces,
   components, SDK usage, RPC, themes, hosts, and troubleshooting.
 - [Runtime entry migration guide](https://paseo.sh/docs/plugins/v0.8/migration.md): migrating from
   mixed root entries to explicit client and server runtime entries.
-- [Provider plugin guide](https://paseo.sh/docs/plugins/v0.8/providers.md): direct and ACP coding agent
-  providers, session lifecycle, composer settings, and provider timeline renderers.
 - [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples):
   working examples for panels and commands (`local-plugin`), RPC, attachment sources (`linear`),
-  themes (`catppuccin`), timeline items (`timeline-items`, `inline-thinking`), direct providers
-  (`provider-direct`), and ACP adapter providers (`provider-acp-transformer`).
+  themes (`catppuccin`), and timeline items (`timeline-items`, `inline-thinking`).
+  Provider examples (`provider-direct`, `provider-acp-transformer`) are covered in
+  `pi-plugin-mcowger/AGENTS.md`.
 - [Community plugin registry (paseo.cafe)](https://paseo.cafe/): community-run directory indexing
   Paseo plugins from GitHub. Machine-readable endpoints:
   - Catalog JSON: [`https://paseo.cafe/api/plugins`](https://paseo.cafe/api/plugins)
@@ -28,8 +31,9 @@ The current target host and SDK baseline is **Paseo v0.8.0**. Pin `@getpaseo/cli
   - GitHub registry source: [`https://github.com/paseo-cafe/paseo-cafe/tree/main/registry`](https://github.com/paseo-cafe/paseo-cafe/tree/main/registry)
   - Per-plugin markdown: `https://paseo.cafe/plugins/<id>.md`
 - [Community reference index](examples/README.md): reviewed public plugins from the paseo.cafe registry
-  grouped by the techniques they demonstrate (surfaces, panels, timeline transformers, pills, providers,
-  ACP adapters, lifecycle hooks, telemetry) with direct GitHub and paseo.cafe links.
+  grouped by the techniques they demonstrate (surfaces, panels, timeline transformers, pills,
+  lifecycle hooks, telemetry) with direct GitHub and paseo.cafe links.
+  Provider and ACP adapter entries are covered in `pi-plugin-mcowger/AGENTS.md`.
 
 ## Development reminders
 
@@ -56,8 +60,8 @@ The current target host and SDK baseline is **Paseo v0.8.0**. Pin `@getpaseo/cli
   - `@getpaseo/plugin/client`: client contexts, contribution types, hooks, and navigation (`PluginClientContext`, `useRpc`, `usePaseo`, `useWorkspace`, `useAgent`).
   - `@getpaseo/plugin/client/react-native`: Paseo React Native UI components (`Icon`, `Modal`, `useToast`, `useRevealedText`).
   - `@getpaseo/plugin/server`: server contexts and handler-only types such as `PluginHandlerContext`.
-  - `@getpaseo/plugin/server/provider`: provider registration and event contracts (`ProviderRegistration`, `negotiateProviderCapabilities`).
-  - `@getpaseo/plugin/server/acp`: command-backed ACP adapter (`runAcpProvider`) and `AcpTransformer` hooks.
+  - Provider-only imports (`@getpaseo/plugin/server/provider`, `@getpaseo/plugin/server/acp`)
+    are covered in `pi-plugin-mcowger/AGENTS.md`.
 - Cross-platform and mobile guardrails:
   - Omit `"DOM"` from `tsconfig.json` `lib` and never add `/// <reference lib="dom" />`. Browser globals
     (`window`, `document`, `localStorage`) are type errors by default.
@@ -87,22 +91,7 @@ Patterns observed across Paseo plugins:
   - Custom themes (`client.addTheme`) with semantic palette tokens.
   - Timeline transformers and renderers (`client.addTimelineTransformer`, `client.addTimelineRenderer`).
   - RPC handlers (`server.handle(contract, handler)`).
-  - Coding agent providers (`server.registerProvider(provider)`).
-- Coding agent providers (Paseo v0.8):
-  - Register providers in `index.server.ts` via `server.registerProvider(createProvider())` implementing
-    `ProviderRegistration` from `@getpaseo/plugin/server/provider`, or adapt an ACP agent using `runAcpProvider`
-    from `@getpaseo/plugin/server/acp`.
-  - Provider SVG icons (`ProviderRegistration.icon`) must be a relative file path to a local SVG file
-    (<= 64 KiB), sanitized and self-contained (no scripts, styles, foreignObject, event handlers, or external hrefs).
-  - Publish provider catalogs (`models`, `modes`, `thinkingOptions`) to populate the agent form before session
-    creation. Hub execution credentials also have provider catalog snapshot access (`provider.snapshot`) so
-    remote workflow editors can present models and modes without broader daemon read authority.
-  - Manage session lifecycles: handle `session.open` with complete launch configs; emit `session.opened`,
-    `session.config` (with toggle/select composer `settings` and opaque `providerOptions`), `session.ready`,
-    and `session.turn`; process user messages and commands via `session.prompt` (supporting `delivery: "steer"`
-    when `prompt.steer` is advertised).
-  - Support persistence and replay (`session.persistence`, `history: "replay" | "skip"`). Refresh closes and
-    reopens the provider session (`session.open` re-reads env, credentials, and MCP servers; there is no reload RPC).
+  - Coding agent providers (`server.registerProvider(provider)`); see `pi-plugin-mcowger/AGENTS.md`.
 - Put `defineRpc` contracts, their Zod schemas, and serializable view models in `shared/`. Pass stable IDs
   through RPC, then re-resolve and authorize resources on the server rather than trusting client-provided paths.
 - Scope query keys to every relevant identity, such as host, workspace, agent, and resource ID.
