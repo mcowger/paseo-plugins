@@ -11,8 +11,10 @@ Run [Pi](https://github.com/earendil-works/pi) in Paseo through one isolated `pi
 - Persists native Pi sessions and supports conversation rewind.
 - Bridges Pi extension questions to Paseo permissions.
 - Applies session system prompts, environment overrides, and injected MCP servers.
-- Exposes `/compact` plus composer controls for automatic compaction and retry.
-- Recognizes [`pi-gpt-fast-mode`](https://github.com/mcowger/pi-gpt-fast-mode) and adds a Fast composer control for supported models.
+- Exposes `/compact` plus a Pi composer pill for automatic compaction, retry, Fast mode, and future runtime controls.
+- Recognizes [`pi-gpt-fast-mode`](https://github.com/mcowger/pi-gpt-fast-mode) and includes Fast in that pill for supported models.
+- Recognizes [`pi-openai-long-context`](https://github.com/johnhenaot/pi-openai-long-context) and includes Long context only for supported models.
+- Recognizes [`pi-openai-long-context`](https://github.com/johnhenaot/pi-openai-long-context) and includes Long context only for supported models.
 - Stops each Pi process and removes its temporary files when Paseo closes or reloads the provider.
 
 ## Installation
@@ -42,14 +44,22 @@ Install [`pi-gpt-fast-mode`](https://github.com/mcowger/pi-gpt-fast-mode) in the
 pi install git:github.com/mcowger/pi-gpt-fast-mode
 ```
 
-The provider probes for the extension and its supported model before showing the Fast control. If the extension is not installed, or the current model is unsupported, the control stays hidden.
+The provider probes for the extension and its supported model before showing Fast in the Pi settings pill. If the extension is not installed, or the current model is unsupported, the control stays hidden.
+
+### Long context
+
+Install [`pi-openai-long-context`](https://github.com/johnhenaot/pi-openai-long-context) in the Pi profile used by Paseo. The pill hides Long context unless the extension reports the active model as supported.
+
+### Long context
+
+Install [`pi-openai-long-context`](https://github.com/johnhenaot/pi-openai-long-context) in the Pi profile used by Paseo. The pill hides Long context unless the extension reports the active model as supported.
 
 ## Limitations
 
 - Requires a Pi CLI build with `--mode rpc` support.
 - Imported session listing is not implemented yet.
 - Rewind changes Pi conversation history only. It does not revert workspace files.
-- Plugin-provider settings have generic composer glyphs in Paseo 0.8. The Compact and Retry selectors still render inside the composer with their current state.
+- Pi runtime settings apply only to the active session. New sessions use their configured defaults.
 
 ## Development
 

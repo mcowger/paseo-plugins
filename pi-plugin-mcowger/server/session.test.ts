@@ -165,7 +165,7 @@ test("closes a compact loading item when Pi compact fails after starting", async
   await session.close();
 });
 
-test("emits composer settings for auto-compaction and retry", async () => {
+test("keeps composer settings empty while exposing runtime settings for the Pi pill", async () => {
   const { runtime } = createRuntime();
   const events: ProviderEvent[] = [];
   const session = createSession(runtime, events);
@@ -175,21 +175,27 @@ test("emits composer settings for auto-compaction and retry", async () => {
   expect(events.find((event) => event.type === "session.config")).toMatchObject({
     config: {
       modes: [{ id: "build", label: "Build" }],
-      settings: [
-        {
-          type: "toggle",
-          id: "autoCompaction",
-          label: "Compact",
-          value: false,
-        },
-        {
-          type: "toggle",
-          id: "autoRetry",
-          label: "Retry",
-          value: false,
-        },
-      ],
+      settings: [],
     },
+  });
+  expect(session.getRuntimeSettings()).toEqual([
+    {
+      id: "autoCompaction",
+      label: "Compact",
+      description: "Compact long conversations automatically.",
+      value: false,
+    },
+    {
+      id: "autoRetry",
+      label: "Retry",
+      description: "Retry transient provider errors automatically.",
+      value: false,
+    },
+  ]);
+  await session.updateRuntimeSetting("autoCompaction", true);
+  expect(session.getRuntimeSettings()[0]).toMatchObject({
+    id: "autoCompaction",
+    value: true,
   });
   expect(events.find((event) => event.type === "session.config")).not.toHaveProperty("config.mode");
   await session.close();
@@ -227,11 +233,13 @@ test("probes and exposes fast mode only for a supported model", async () => {
   await session.initialize();
 
   expect(requests).toHaveLength(1);
-  expect(events.find((event) => event.type === "session.config")).toMatchObject({
-    config: { settings: [{ id: "autoCompaction" }, { id: "autoRetry" }, { id: "fastMode", value: false }] },
-  });
+  expect(session.getRuntimeSettings()).toMatchObject([
+    { id: "autoCompaction" },
+    { id: "autoRetry" },
+    { id: "fastMode", value: false },
+  ]);
 
-  await session.configure({ settings: { fastMode: "on" } });
+  await session.updateRuntimeSetting("fastMode", true);
   expect(requests).toHaveLength(3);
   expect(requests[1]).toBe("/fast on");
   expect(requests[2]).toMatch(/^\/fast-status /);
@@ -281,6 +289,70 @@ test("does not expose fast mode when the installed extension reports an unsuppor
   expect(events.find((event) => event.type === "session.config")).not.toMatchObject({
     config: { settings: expect.arrayContaining([{ id: "fastMode" }]) },
   });
+  await session.close();
+});
+
+test("shows long context only when the extension supports the active model", async () => {
+  const { runtime } = createRuntime({
+    commands: [
+      { name: "long-context", source: "extension" },
+      { name: "long-context-status", source: "extension" },
+    ],
+    prompt(message, emit) {
+      if (!message.startsWith("/long-context-status ")) return;
+      emit({
+        type: "extension_ui_request",
+        id: "status",
+        method: "notify",
+        message: JSON.stringify({
+          type: "pi-openai-long-context.status",
+          requestId: message.slice("/long-context-status ".length),
+          enabled: false,
+          supported: true,
+          provider: "openai",
+          model: "gpt-5.6",
+          contextWindow: 1_050_000,
+        }),
+      });
+    },
+  });
+  const session = createSession(runtime, []);
+
+  await session.initialize();
+
+  expect(session.getRuntimeSettings()).toContainEqual(expect.objectContaining({ id: "longContext", value: false }));
+  await session.close();
+});
+
+test("hides long context when the extension rejects the active model", async () => {
+  const { runtime } = createRuntime({
+    commands: [
+      { name: "long-context", source: "extension" },
+      { name: "long-context-status", source: "extension" },
+    ],
+    prompt(message, emit) {
+      if (!message.startsWith("/long-context-status ")) return;
+      emit({
+        type: "extension_ui_request",
+        id: "status",
+        method: "notify",
+        message: JSON.stringify({
+          type: "pi-openai-long-context.status",
+          requestId: message.slice("/long-context-status ".length),
+          enabled: false,
+          supported: false,
+          provider: "anthropic",
+          model: "claude-opus-4-8",
+          contextWindow: 200_000,
+        }),
+      });
+    },
+  });
+  const session = createSession(runtime, []);
+
+  await session.initialize();
+
+  expect(session.getRuntimeSettings()).not.toContainEqual(expect.objectContaining({ id: "longContext" }));
   await session.close();
 });
 

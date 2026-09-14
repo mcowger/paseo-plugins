@@ -6,17 +6,21 @@ import { createPiMcpConfig } from "./mcp-config.js";
 import { PI_COMPATIBILITY_MODES } from "./modes.js";
 import { startPiSession } from "./runtime.js";
 import { createPaseoExtension, PiProviderSession } from "./session.js";
+import type { PiRuntimeSetting, PiRuntimeSettingId } from "../shared/runtime-settings.js";
 import { thinkingConfigForModel } from "./thinking.js";
 
 export const PI_PROVIDER_ID = "pi-plugin-mcowger";
 const CAPABILITIES = ["prompt.message", "prompt.command", "prompt.image", "prompt.steer", "session.persistence", "session.configure", "session.revert.conversation", "permission"] as const;
 
 export interface ManagedPiProvider extends ProviderRegistration {
+  getRuntimeSettings(agentId: string): PiRuntimeSetting[];
+  updateRuntimeSetting(agentId: string, id: PiRuntimeSettingId, value: boolean): Promise<PiRuntimeSetting[]>;
   close(): Promise<void>;
 }
 
 export function createPiProvider(): ManagedPiProvider {
   const connections = new Set<ProviderConnection>();
+  const sessions = new Map<string, PiProviderSession>();
   return {
     id: PI_PROVIDER_ID,
     label: "Pi (JSON-RPC)",
@@ -27,6 +31,7 @@ export function createPiProvider(): ManagedPiProvider {
       const connection = createConnection(
         negotiateProviderCapabilities(request.capabilities, CAPABILITIES),
         () => connections.delete(connection),
+        sessions,
       );
       connections.add(connection);
       return connection;
@@ -35,12 +40,19 @@ export function createPiProvider(): ManagedPiProvider {
       await Promise.all([...connections].map((connection) => connection.close()));
       connections.clear();
     },
+    getRuntimeSettings(agentId) {
+      return requireSession(sessions, agentId).getRuntimeSettings();
+    },
+    async updateRuntimeSetting(agentId, id, value) {
+      return await requireSession(sessions, agentId).updateRuntimeSetting(id, value);
+    },
   };
 }
 
 function createConnection(
   capabilities: readonly string[],
   onClose: () => void,
+  allSessions: Map<string, PiProviderSession>,
 ): ProviderConnection {
   const listeners = new Set<(event: ProviderEvent) => void>();
   const sessions = new Map<string, PiProviderSession>();
@@ -51,7 +63,7 @@ function createConnection(
     capabilities,
     async send(input) {
       if (closed) throw new Error("Pi provider connection is closed");
-      try { await dispatch(input, sessions, emit, capabilities); }
+      try { await dispatch(input, sessions, allSessions, emit, capabilities); }
       catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if ("requestId" in input) { emit({ type: "request.failed", requestId: input.requestId, error: { message } }); return; }
@@ -64,6 +76,7 @@ function createConnection(
       if (closed) return;
       closed = true;
       await Promise.all([...sessions.values()].map((session) => session.close().catch(() => undefined)));
+      for (const sessionId of sessions.keys()) allSessions.delete(sessionId);
       sessions.clear();
       listeners.clear();
       onClose();
@@ -71,7 +84,7 @@ function createConnection(
   };
 }
 
-async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSession>, emit: (event: ProviderEvent) => void, capabilities: readonly string[]): Promise<void> {
+async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSession>, allSessions: Map<string, PiProviderSession>, emit: (event: ProviderEvent) => void, capabilities: readonly string[]): Promise<void> {
   switch (input.type) {
     case "catalog": {
       const runtime = await startPiSession({ cwd: input.cwd ?? homedir(), env: {}, persist: false });
@@ -117,12 +130,14 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
           cleanup: () => { mcpConfig?.cleanup(); extension.cleanup(); },
         });
         sessions.set(input.sessionId, session);
+        allSessions.set(input.sessionId, session);
         emit({ type: "session.opened", requestId: input.requestId, sessionId: input.sessionId, capabilities, restoration: "core", persistence: session.persistence, ...(input.config.title ? { title: input.config.title } : {}), cwd: input.config.cwd });
         await session.initialize();
         if (input.history === "replay" && persisted) await session.replayHistory();
         emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
       } catch (error) {
         sessions.delete(input.sessionId);
+        allSessions.delete(input.sessionId);
         if (session) await session.close().catch(() => undefined);
         else {
           await runtime?.close().catch(() => undefined);
@@ -139,7 +154,7 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
     case "session.configure": await requireSession(sessions, input.sessionId).configure(input.changes); emit({ type: "request.completed", requestId: input.requestId }); return;
     case "session.revert": if (input.scope !== "conversation") throw new Error(`Pi does not support ${input.scope} rewind`); await requireSession(sessions, input.sessionId).revert(input.token); emit({ type: "request.completed", requestId: input.requestId }); return;
     case "session.archive": case "session.unarchive": emit({ type: "request.completed", requestId: input.requestId }); return;
-    case "session.close": { const session = sessions.get(input.sessionId); sessions.delete(input.sessionId); await session?.close(); emit({ type: "session.closed", sessionId: input.sessionId }); emit({ type: "request.completed", requestId: input.requestId }); return; }
+    case "session.close": { const session = sessions.get(input.sessionId); sessions.delete(input.sessionId); allSessions.delete(input.sessionId); await session?.close(); emit({ type: "session.closed", sessionId: input.sessionId }); emit({ type: "request.completed", requestId: input.requestId }); return; }
   }
 }
 
