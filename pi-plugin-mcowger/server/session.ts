@@ -7,9 +7,9 @@ import type { ProviderCommand, ProviderConfigChanges, ProviderConfigState, Provi
 
 import type { PiAgentMessage, PiAgentSessionEvent, PiModel, PiRuntimeEvent, PiSessionState } from "./rpc-types.js";
 import type { PiRuntimeSession } from "./runtime.js";
+import { thinkingConfigForModel } from "./thinking.js";
 import { mapToolDetail, parseToolArgs, parseToolResult, resolveToolCallName, type PiTrackedToolCall } from "./tool-call-mapper.js";
 
-const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 const DEFAULT_THINKING_LEVEL = "medium";
 const RESPONSE_HEADER = "Response";
 
@@ -126,14 +126,16 @@ export class PiProviderSession {
       const [provider, ...rest] = changes.model.split("/");
       const modelId = rest.join("/");
       if (!provider || !modelId) throw new Error("Pi model id must include a provider");
-      this.options.state.model = await this.options.runtime.setModel(provider, modelId);
+      await this.options.runtime.setModel(provider, modelId);
+      this.options.state = await this.options.runtime.getState();
       this.options.config.model = changes.model;
+      this.options.config.thinkingOption = this.options.state.thinkingLevel;
     }
     if (changes.thinkingOption !== undefined) {
-      const level = changes.thinkingOption && THINKING_LEVELS.includes(changes.thinkingOption as never) ? changes.thinkingOption : DEFAULT_THINKING_LEVEL;
+      const level = changes.thinkingOption ?? DEFAULT_THINKING_LEVEL;
       await this.options.runtime.setThinkingLevel(level);
-      this.options.state.thinkingLevel = level as PiSessionState["thinkingLevel"];
-      this.options.config.thinkingOption = level;
+      this.options.state = await this.options.runtime.getState();
+      this.options.config.thinkingOption = this.options.state.thinkingLevel;
     }
     if (changes.settings && typeof changes.settings.autoCompaction === "boolean") {
       await this.options.runtime.setAutoCompaction(changes.settings.autoCompaction);
@@ -232,7 +234,27 @@ export class PiProviderSession {
   }
 
   private emitTool(id: string, tracked: PiTrackedToolCall, status: "running" | "completed" | "failed", result: ReturnType<typeof parseToolResult>, error: unknown): void { this.timeline({ type: "tool_call", id, callId: id, name: resolveToolCallName(tracked, result), detail: mapToolDetail(tracked, result), status, error: status === "failed" ? (error ?? "Tool failed") as never : null }); }
-  private emitConfig(): void { const model = this.options.state.model; const thinking = model?.reasoning ? THINKING_LEVELS.map((id) => ({ id, label: id === "xhigh" ? "XHigh" : `${id[0]?.toUpperCase()}${id.slice(1)}`, ...(id === DEFAULT_THINKING_LEVEL ? { isDefault: true } : {}) })) : []; const config: ProviderConfigState = { ...(model ? { model: `${model.provider}/${model.id}` } : {}), models: this.options.models.map((item) => ({ id: `${item.provider}/${item.id}`, label: item.name ?? `${item.provider}/${item.id}`, ...(item.contextWindow ? { contextWindowMaxTokens: item.contextWindow } : {}), ...(item.reasoning ? { thinkingOptions: thinking, defaultThinkingOptionId: DEFAULT_THINKING_LEVEL } : {}) })), modes: [], thinkingOption: this.options.state.thinkingLevel, thinkingOptions: thinking, settings: [{ type: "toggle", id: "autoCompaction", label: "Automatic compaction", value: this.options.state.autoCompactionEnabled ?? false }] }; this.emit({ type: "session.config", sessionId: this.options.sessionId, config }); }
+  private emitConfig(): void {
+    const model = this.options.state.model;
+    const currentThinking = model ? thinkingConfigForModel(model) : { thinkingOptions: [], defaultThinkingOptionId: undefined };
+    const config: ProviderConfigState = {
+      ...(model ? { model: `${model.provider}/${model.id}` } : {}),
+      models: this.options.models.map((item) => {
+        const thinking = thinkingConfigForModel(item);
+        return {
+          id: `${item.provider}/${item.id}`,
+          label: item.name ?? `${item.provider}/${item.id}`,
+          ...(item.contextWindow ? { contextWindowMaxTokens: item.contextWindow } : {}),
+          ...(item.reasoning ? thinking : {}),
+        };
+      }),
+      modes: [],
+      thinkingOption: this.options.state.thinkingLevel,
+      thinkingOptions: currentThinking.thinkingOptions,
+      settings: [{ type: "toggle", id: "autoCompaction", label: "Automatic compaction", value: this.options.state.autoCompactionEnabled ?? false }],
+    };
+    this.emit({ type: "session.config", sessionId: this.options.sessionId, config });
+  }
   private scheduleUsagePoll(generation: number, turnId: string): void {
     this.clearUsagePoll();
     this.usageTimer = setTimeout(() => {

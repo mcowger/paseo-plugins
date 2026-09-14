@@ -5,6 +5,7 @@ import { negotiateProviderCapabilities, type ProviderConnection, type ProviderEv
 import { createPiMcpConfig } from "./mcp-config.js";
 import { startPiSession } from "./runtime.js";
 import { createPaseoExtension, PiProviderSession } from "./session.js";
+import { thinkingConfigForModel } from "./thinking.js";
 
 export const PI_PROVIDER_ID = "pi-plugin-mcowger";
 const CAPABILITIES = ["prompt.message", "prompt.command", "prompt.image", "prompt.steer", "session.persistence", "session.configure", "session.revert.conversation", "permission"] as const;
@@ -75,7 +76,22 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
       const runtime = await startPiSession({ cwd: input.cwd ?? homedir(), env: {}, persist: false });
       try {
         const models = await runtime.getAvailableModels();
-        emit({ type: "catalog", requestId: input.requestId, catalog: { models: models.map((model) => ({ id: `${model.provider}/${model.id}`, label: model.name ?? `${model.provider}/${model.id}`, ...(model.contextWindow ? { contextWindowMaxTokens: model.contextWindow } : {}), ...(model.reasoning ? { thinkingOptions: thinkingOptions(), defaultThinkingOptionId: "medium" } : {}) })), modes: [], thinkingOptions: thinkingOptions() } });
+        emit({
+          type: "catalog",
+          requestId: input.requestId,
+          catalog: {
+            models: models.map((model) => {
+              const thinking = thinkingConfigForModel(model);
+              return {
+                id: `${model.provider}/${model.id}`,
+                label: model.name ?? `${model.provider}/${model.id}`,
+                ...(model.contextWindow ? { contextWindowMaxTokens: model.contextWindow } : {}),
+                ...(model.reasoning ? thinking : {}),
+              };
+            }),
+            modes: [],
+          },
+        });
       } finally { await runtime.close(); }
       return;
     }
@@ -151,4 +167,3 @@ async function supportsPiMcpAdapter(cwd: string, env: Readonly<Record<string, st
 
 function requireSession(sessions: Map<string, PiProviderSession>, id: string): PiProviderSession { const session = sessions.get(id); if (!session) throw new Error(`Unknown session: ${id}`); return session; }
 function sessionFile(data: unknown): string | undefined { return data && typeof data === "object" && !Array.isArray(data) && typeof (data as Record<string, unknown>).sessionFile === "string" ? (data as Record<string, string>).sessionFile : undefined; }
-function thinkingOptions() { return ["off", "minimal", "low", "medium", "high", "xhigh", "max"].map((id) => ({ id, label: id === "xhigh" ? "XHigh" : `${id[0]?.toUpperCase()}${id.slice(1)}`, ...(id === "medium" ? { isDefault: true } : {}) })); }

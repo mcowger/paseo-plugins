@@ -10,7 +10,7 @@ export type PiAgentMessage =
   | { role: "assistant"; content: Array<PiTextContent | PiThinkingContent | PiToolCallContent>; provider?: string; model?: string; responseId?: string; errorMessage?: string | null; stopReason?: string }
   | { role: "toolResult"; toolCallId: string; toolName: string; content: unknown; isError?: boolean; details?: unknown }
   | { role: "bashExecution"; command: string; output?: string; exitCode?: number | null; cancelled?: boolean; timestamp: number };
-export interface PiModel { provider: string; id: string; name?: string; reasoning?: boolean; contextWindow?: number; input?: string[]; }
+export interface PiModel { provider: string; id: string; name?: string; reasoning?: boolean; thinkingLevelMap?: Partial<Record<PiThinkingLevel, string | null>>; contextWindow?: number; input?: string[]; }
 export interface PiSessionState { model?: PiModel | null; thinkingLevel: PiThinkingLevel; isStreaming: boolean; isCompacting: boolean; autoCompactionEnabled?: boolean; sessionFile?: string; sessionId: string; sessionName?: string; messageCount: number; pendingMessageCount: number; contextUsage?: { tokens?: number | null; contextWindow?: number | null }; }
 export interface PiSessionStats { tokens?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number }; cost?: number; contextUsage?: { tokens?: number | null; contextWindow?: number | null }; }
 export interface PiRpcSlashCommand { name: string; description?: string; source: "extension" | "prompt" | "skill"; sourceInfo?: Record<string, unknown>; }
