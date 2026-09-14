@@ -2,6 +2,7 @@ import {
   DEFAULT_PI_TOOL_POLICY_SETTINGS,
   type PiToolPolicy,
   type PiToolPolicySettings,
+  type ProfileLaunchSignature,
   type ProfileToolPolicy,
 } from "../shared/tool-policy.js";
 import { resolvePiToolPatterns } from "./tool-patterns.js";
@@ -12,6 +13,12 @@ export interface BridgedMcpTool {
   piName: string;
   canonicalName: string;
   isPaseoTool: boolean;
+}
+
+export interface ProfilePolicyLaunchConfig {
+  model?: string;
+  mode?: string;
+  thinkingOption?: string;
 }
 
 export type ResolvedToolPolicy =
@@ -42,11 +49,43 @@ function cloneSettings(settings: PiToolPolicySettings): PiToolPolicySettings {
     },
     profilePolicies: settings.profilePolicies.map((policy) => ({
       profileId: policy.profileId,
+      ...(policy.launchSignature
+        ? {
+            launchSignature: {
+              model: policy.launchSignature.model,
+              mode: policy.launchSignature.mode,
+              thinkingOption: policy.launchSignature.thinkingOption,
+            },
+          }
+        : {}),
       allowedPiToolNames: [...policy.allowedPiToolNames],
       allowedPaseoToolNames: [...policy.allowedPaseoToolNames],
       allowedExternalMcpPatterns: [...policy.allowedExternalMcpPatterns],
     })),
   };
+}
+
+function normalizedLaunchValue(value: string | undefined): string {
+  return value?.trim() ?? "";
+}
+
+function launchSignatureMatches(
+  signature: ProfileLaunchSignature | undefined,
+  config: ProfilePolicyLaunchConfig | undefined,
+): boolean {
+  return signature !== undefined &&
+    config !== undefined &&
+    signature.model === normalizedLaunchValue(config.model) &&
+    signature.mode === normalizedLaunchValue(config.mode) &&
+    signature.thinkingOption === normalizedLaunchValue(config.thinkingOption);
+}
+
+function resolveUniqueLaunchSignaturePolicy(
+  profilePolicies: readonly ProfileToolPolicy[] | undefined,
+  config: ProfilePolicyLaunchConfig | undefined,
+): ProfileToolPolicy | undefined {
+  const matches = profilePolicies?.filter((policy) => launchSignatureMatches(policy.launchSignature, config)) ?? [];
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 export function createPiToolPolicyStore(): PiToolPolicyStore {
@@ -74,16 +113,24 @@ export function createPiToolPolicyStore(): PiToolPolicyStore {
 }
 
 /**
- * Selects a complete profile rule only when its marker is an exact configured
- * profile ID. All malformed or unmatched markers retain the fallback policy.
+ * Prefers an exact profile marker. Paseo drops unknown provider settings from
+ * draft profiles, so a missing marker may use one unique saved launch signature.
+ * Malformed or unmatched markers never fall through to signature matching.
  */
 export function resolveConfiguredToolPolicy(
   marker: unknown,
   fallbackPolicy: PiToolPolicy,
   profilePolicies: readonly ProfileToolPolicy[] | undefined,
+  launchConfig?: ProfilePolicyLaunchConfig,
 ): ResolvedToolPolicy {
-  if (typeof marker !== "string") return { source: "fallback", policy: fallbackPolicy };
-  const profile = profilePolicies?.find((candidate) => candidate.profileId === marker);
+  if (marker !== undefined) {
+    if (typeof marker !== "string") return { source: "fallback", policy: fallbackPolicy };
+    const profile = profilePolicies?.find((candidate) => candidate.profileId === marker);
+    return profile
+      ? { source: "profile", policy: profile }
+      : { source: "fallback", policy: fallbackPolicy };
+  }
+  const profile = resolveUniqueLaunchSignaturePolicy(profilePolicies, launchConfig);
   return profile
     ? { source: "profile", policy: profile }
     : { source: "fallback", policy: fallbackPolicy };

@@ -78,6 +78,23 @@ describe("piToolPolicySettings", () => {
       allowedExternalMcpPatterns: [],
     }]);
   });
+
+  it("normalizes an optional profile launch signature", () => {
+    expect(piToolPolicySettings.schema.parse({
+      profilePolicies: [{
+        profileId: "default",
+        launchSignature: {
+          model: " plexus/gpt-5.6-terra ",
+          mode: " ",
+          thinkingOption: " medium ",
+        },
+      }],
+    }).profilePolicies[0]?.launchSignature).toEqual({
+      model: "plexus/gpt-5.6-terra",
+      mode: "",
+      thinkingOption: "medium",
+    });
+  });
 });
 
 describe("profile tool-policy RPC contracts", () => {

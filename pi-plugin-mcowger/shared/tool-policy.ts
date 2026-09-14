@@ -48,8 +48,15 @@ export const paseoHostToolPolicySchema = z.object({
   disabledTools: normalizedToolIdList.default([]),
 });
 
+export const profileLaunchSignatureSchema = z.object({
+  model: z.string().trim().min(1).max(MAX_PROFILE_ID_LENGTH),
+  mode: z.string().trim().max(MAX_PROFILE_ID_LENGTH),
+  thinkingOption: z.string().trim().max(MAX_PROFILE_ID_LENGTH),
+}).strict();
+
 export const profileToolPolicySchema = z.object({
   profileId,
+  launchSignature: profileLaunchSignatureSchema.optional(),
   allowedPiToolNames: normalizedToolIdList.default([]),
   allowedPaseoToolNames: normalizedToolIdList.default([]),
   allowedExternalMcpPatterns: normalizedPatternList.default([]),
@@ -150,6 +157,7 @@ export const getPiToolPolicyKnownToolsRpc = defineRpc({
 
 export type PiToolPolicy = z.output<typeof piToolPolicySchema>;
 export type PaseoHostToolPolicy = z.output<typeof paseoHostToolPolicySchema>;
+export type ProfileLaunchSignature = z.output<typeof profileLaunchSignatureSchema>;
 export type ProfileToolPolicy = z.output<typeof profileToolPolicySchema>;
 export type PiToolPolicySettings = z.output<typeof piToolPolicySettings.schema>;
 export type PiProfileSummary = z.output<typeof piProfileSummarySchema>;

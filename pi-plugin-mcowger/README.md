@@ -84,7 +84,7 @@ Tool Policy is managed by Paseo in the plugin's host-scoped settings document. I
 or refreshed sessions and does not sandbox shell commands or extensions. Project-local `.pi` settings
 and resources are loaded for the active workspace.
 
-The fallback and profile editors share nine focused Paseo host-tool categories: Agent delegation,
+The fallback and profile editors share nine focused Paseo host-tool categories: Agent orchestration,
 Workspaces and worktrees, Terminals and workspace scripts, Schedules and heartbeats, Browser
 automation, Voice, Providers and profiles, Permissions, and Agent sessions. Each category is a UI
 convenience; individual canonical tool IDs are the runtime controls. The UI shows canonical IDs once,
@@ -109,9 +109,12 @@ their allowed canonical IDs are the complete Paseo host-tool set for that profil
 conveniences; exact IDs determine runtime behavior.
 
 All Pi-provider profiles receive a plugin-owned profile marker automatically. Paseo currently
-passes materialized profile values to provider sessions, not the profile identity, so the marker
-selects the configured policy. It is not a security boundary: a caller that can construct provider
-settings can spoof it, and a model with `bash` can still use local commands.
+passes materialized profile values to provider sessions, not the profile identity. Paseo can also
+drop an unrecognized marker from draft feature state, so the plugin stores each configured
+profile's model, mode, and thinking configuration and uses it only when it uniquely identifies one
+policy. Ambiguous or mismatched launches use the fallback. This is not a security boundary: a
+caller that can construct provider settings can spoof the marker, and a model with `bash` can still
+use local commands.
 
 Profile and known-tool discovery run through narrow config RPCs before a provider session opens.
 Known Pi tools come from the global Pi environment, so project-local extensions may be absent. Saved
