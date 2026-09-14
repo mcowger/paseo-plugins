@@ -23,4 +23,9 @@ describe("reasoning expansion", () => {
     expect(getActivityExpansionState(false, true, null)).toBe(true);
     expect(getActivityExpansionState(false, false, null)).toBe(false);
   });
+
+  it("keeps the latest read-file call collapsed by default", () => {
+    expect(getActivityExpansionState(false, true, null, false)).toBe(false);
+    expect(getActivityExpansionState(false, true, true, false)).toBe(true);
+  });
 });
