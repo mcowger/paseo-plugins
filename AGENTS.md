@@ -226,6 +226,22 @@ See `colorful-agent-activity/client/bundle.test.ts` for the reference test imple
   adapters with fixtures and deterministic clocks. Verify client and server bundle boundaries so
   server-only or Node imports cannot leak into the client bundle.
 
+## Cora review
+
+Never run `cora` or `cora-code` unless the user explicitly requests that specific Cora action in the current turn. A request to commit, test, review, stage, push, or open a PR does not grant Cora permission.
+
+## Plugin CLI workflow
+
+Run the plugin CLI help before using a subcommand: `paseo plugin <command> --help`.
+
+- `paseo plugin init <directory> [--id <id>]` creates a local plugin.
+- `paseo plugin install <directory> [--id <id>]` installs a local directory. It also accepts a Git source, `--ref`, and `--path`.
+- `paseo plugin ls [id] [--json]` checks install, enablement, and load state. Use `--host` or `--home` to target a specific daemon.
+- `paseo plugin reload <id>` reloads an installed plugin. Use it after every server or client change.
+- `paseo plugin logs <id>` checks daemon-side load and runtime errors after install or reload.
+- `paseo plugin enable <id>`, `disable <id>`, `remove <id>`, and `update [id|--all]` manage existing plugin configuration.
+
 For the normal local workflow, install dependencies, run `npm run lint`, `npm run typecheck`, and
-`npm test` from the plugin directory, then reload the installed plugin explicitly with
-`paseo plugin reload <plugin-id>`.
+`npm test` from the plugin directory, then install the plugin with `paseo plugin install <directory>`
+(if it is not already configured), reload it explicitly with `paseo plugin reload <plugin-id>`, and
+confirm it loaded with `paseo plugin ls <plugin-id>` and `paseo plugin logs <plugin-id>`.
