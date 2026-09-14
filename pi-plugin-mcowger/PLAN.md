@@ -72,11 +72,13 @@ Use a plugin-owned feature value, with a named shared constant such as
 The plugin must automatically maintain that value for every profile whose provider
 is `pi-plugin-mcowger`:
 
-- A profile policy applies only when the marker exactly matches one configured policy
+- A profile policy first applies when the marker exactly matches one configured policy
   record.
-- A marked Pi profile with no configured policy still uses the host fallback.
-- A missing, malformed, or unmatched marker uses the host fallback and produces a
-  bounded startup diagnostic where useful.
+- Paseo can drop an unrecognized marker from draft feature state. In that case, one unique
+  saved model/mode/thinking signature applies its policy; matching signatures shared by multiple
+  policies deliberately use the fallback.
+- A marked Pi profile with no configured policy, or a malformed or unmatched marker, uses the
+  host fallback and produces a bounded startup diagnostic where useful.
 - The provider strips this marker before constructing Pi runtime settings and before
   reporting unsupported Pi setting IDs. It must not reach Pi as a composer setting.
 - The marker is plugin-owned. Marker sync corrects a value that points at a different

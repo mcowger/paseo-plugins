@@ -42,6 +42,36 @@ describe("resolveConfiguredToolPolicy", () => {
     }
   });
 
+  it("uses one matching launch signature only when the marker is absent", () => {
+    const launchSignature = {
+      model: "plexus/gpt-5.6-terra",
+      mode: "",
+      thinkingOption: "medium",
+    };
+    const policy = { ...explorePolicy, launchSignature };
+    const launchConfig = {
+      model: "plexus/gpt-5.6-terra",
+      mode: "",
+      thinkingOption: "medium",
+    };
+
+    expect(resolveConfiguredToolPolicy(undefined, fallbackPolicy, [policy], launchConfig)).toEqual({
+      source: "profile",
+      policy,
+    });
+    expect(resolveConfiguredToolPolicy("unknown", fallbackPolicy, [policy], launchConfig)).toEqual({
+      source: "fallback",
+      policy: fallbackPolicy,
+    });
+    expect(resolveConfiguredToolPolicy(undefined, fallbackPolicy, [policy, {
+      ...policy,
+      profileId: "profile-same-launch-config",
+    }], launchConfig)).toEqual({
+      source: "fallback",
+      policy: fallbackPolicy,
+    });
+  });
+
   it("preserves a deliberately empty configured policy", () => {
     const emptyPolicy: ProfileToolPolicy = {
       profileId: "profile-chat-only",

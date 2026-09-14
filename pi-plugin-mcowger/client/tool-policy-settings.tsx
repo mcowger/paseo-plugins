@@ -12,7 +12,12 @@ import {
 } from "@getpaseo/plugin/client/ui";
 import { TextInput } from "@getpaseo/plugin/client/react-native";
 
-import { saveProfilePolicyWithRetry } from "./profile-policy-sync.js";
+import {
+  createProfileToolPolicy,
+  reconcileProfilePolicies,
+  saveProfilePolicyWithRetry,
+  withProfileLaunchSignature,
+} from "./profile-policy-sync.js";
 import {
   getPiToolPolicyKnownToolsRpc,
   getPiToolPolicyProfilesRpc,
@@ -76,13 +81,6 @@ function updateAllowedGroup(policy: ProfileToolPolicy, tools: readonly string[],
   let allowed = policy.allowedPaseoToolNames;
   for (const tool of tools) allowed = toggleAllowedTool(allowed, tool, enabled);
   return { ...policy, allowedPaseoToolNames: allowed };
-}
-
-export function pruneProfilePolicies(values: PiToolPolicySettings, profiles: readonly PiProfileSummary[]): PiToolPolicySettings {
-  const validProfileIds = new Set(profiles.map((profile) => profile.id));
-  const profilePolicies = values.profilePolicies.filter((policy) => validProfileIds.has(policy.profileId));
-  if (profilePolicies.length === values.profilePolicies.length) return values;
-  return { ...values, profilePolicies };
 }
 
 function profilePolicyFor(values: PiToolPolicySettings, profileId: string): ProfileToolPolicy | undefined {
@@ -170,13 +168,14 @@ function ProfilePolicyCard({
         label={profile.name}
         hint="Use the global fallback policy for this profile."
         value={false}
-        onValueChange={(value) => onChange(value ? { profileId: profile.id, allowedPiToolNames: [], allowedPaseoToolNames: [], allowedExternalMcpPatterns: [] } : undefined)}
+        onValueChange={(value) => onChange(value ? createProfileToolPolicy(profile) : undefined)}
         disabled={disabled}
       /> : null}
     </SettingsCard>;
   }
 
-  const update = (patch: Partial<ProfileToolPolicy>) => onChange({ ...policy, ...patch });
+  const update = (patch: Partial<ProfileToolPolicy>) =>
+    onChange(withProfileLaunchSignature({ ...policy, ...patch }, profile));
   const emptyPolicy = policy.allowedPiToolNames.length + policy.allowedPaseoToolNames.length + policy.allowedExternalMcpPatterns.length === 0;
 
   return <SettingsCard>
@@ -261,7 +260,10 @@ function PolicyEditor({ settings, theme, profilesState, knownToolsState, onRetry
   const save = async () => {
     setSaveMessage(null);
     const values = { ...draft, piTools: { ...draft.piTools, allowedPatterns: patternsFromText(allowedPatternsText), blockedPatterns: patternsFromText(blockedPatternsText) } };
-    const saved = await settings.save(profilesState.status === "ready" ? pruneProfilePolicies(values, profilesState.value) : values, settings.revision);
+    const saved = await settings.save(
+      profilesState.status === "ready" ? reconcileProfilePolicies(values, profilesState.value) : values,
+      settings.revision,
+    );
     if (saved) {
       setDirty(false);
       setSaveMessage("Saved. Refresh or reopen affected Pi agents to apply the policy.");
@@ -371,8 +373,8 @@ export function PiToolPolicySettings({ theme }: PluginSurfaceProps) {
       pruningRevision.current === settings.revision ||
       pruneFailureRevision.current === settings.revision
     ) return;
-    const pruned = pruneProfilePolicies(settings.values, profilesState.value);
-    if (pruned === settings.values) {
+    const reconciled = reconcileProfilePolicies(settings.values, profilesState.value);
+    if (reconciled === settings.values) {
       prunedRevision.current = settings.revision;
       return;
     }
@@ -380,7 +382,7 @@ export function PiToolPolicySettings({ theme }: PluginSurfaceProps) {
     pruningRevision.current = targetRevision;
     let active = true;
     void saveProfilePolicyWithRetry(
-      () => settings.save(pruned, targetRevision),
+      () => settings.save(reconciled, targetRevision),
       settings.reload,
     ).then(() => {
       if (!active) return;
@@ -431,5 +433,5 @@ export function PiToolPolicySettings({ theme }: PluginSurfaceProps) {
   const styles = useMemo(() => ({ secondary: { color: theme.colors.foregroundMuted }, error: { color: theme.colors.statusDanger } }), [theme]);
   if (settings.status === "loading") return <Text style={styles.secondary}>Loading Pi tool policy…</Text>;
   if (settings.status !== "ready") return <SettingsSection title="Pi tool policy"><Text accessibilityRole="alert" style={styles.error}>{settings.error}</Text><SettingsAction label="Settings" actionLabel="Reload" onPress={settings.reload} />{settings.status === "invalid" ? <SettingsAction label="Restore defaults" actionLabel="Reset" onPress={settings.reset} /> : null}</SettingsSection>;
-  return <View><PolicyEditor settings={settings} theme={theme} profilesState={profilesState} knownToolsState={knownToolsState} onRetryProfiles={refreshProfiles} onRetryKnownTools={refreshKnownTools} />{pruneError ? <><Text accessibilityRole="alert" style={styles.error}>Could not remove stale Pi profile policies: {pruneError}</Text><SettingsAction label="Profile policy cleanup" actionLabel="Retry" onPress={() => void retryProfilePruning()} disabled={settings.saving} /></> : null}{syncError ? <Text accessibilityRole="alert" style={styles.error}>Could not sync policy with the Pi provider: {syncError}</Text> : null}</View>;
+  return <View><PolicyEditor settings={settings} theme={theme} profilesState={profilesState} knownToolsState={knownToolsState} onRetryProfiles={refreshProfiles} onRetryKnownTools={refreshKnownTools} />{pruneError ? <><Text accessibilityRole="alert" style={styles.error}>Could not synchronize saved Pi profile policies: {pruneError}</Text><SettingsAction label="Profile policy cleanup" actionLabel="Retry" onPress={() => void retryProfilePruning()} disabled={settings.saving} /></> : null}{syncError ? <Text accessibilityRole="alert" style={styles.error}>Could not sync policy with the Pi provider: {syncError}</Text> : null}</View>;
 }

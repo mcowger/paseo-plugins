@@ -302,7 +302,17 @@ async function handleSessionOpen(
     marker,
     policySnapshot.settings.piTools,
     policySnapshot.settings.profilePolicies,
+    {
+      model: config.model,
+      mode: config.mode,
+      thinkingOption: config.thinkingOption,
+    },
   );
+  if (marker === undefined && resolvedPolicy.source === "profile") {
+    startupDiagnostics.push(
+      "Pi tool policy: the profile marker was unavailable; matched one saved launch configuration.",
+    );
+  }
   if (marker !== undefined && resolvedPolicy.source === "fallback") {
     startupDiagnostics.push(
       "Pi tool policy: profile marker did not match a configured policy; using the fallback policy.",

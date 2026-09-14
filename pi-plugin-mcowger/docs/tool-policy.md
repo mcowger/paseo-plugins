@@ -29,15 +29,15 @@ The fallback has two parts:
 The fallback editor organizes Paseo host tools into nine focused categories, with individual canonical
 ID overrides in each category:
 
-- Agent delegation
+- Agent orchestration
+- Agent sessions
 - Workspaces and worktrees
 - Terminals and workspace scripts
 - Schedules and heartbeats
-- Browser automation
-- Voice
 - Providers and profiles
 - Permissions
-- Agent sessions
+- Browser automation
+- Voice
 
 Categories are UI conveniences. The disabled canonical IDs are what the runtime uses, so an individual
 override can differ from its category toggle.
@@ -92,10 +92,11 @@ Marker synchronization automatically adds or corrects that reserved marker on ev
 At session open, the provider reads and strips the marker before passing runtime settings to Pi:
 
 - an exact marker match to a configured policy selects that profile's strict policy;
+- when Paseo drops the marker from its draft feature state, one uniquely matching saved model, mode, and thinking configuration selects that profile's strict policy;
 - a marked Pi profile with no configured policy uses the host fallback; and
-- a missing, malformed, or unmatched marker uses the host fallback.
+- a missing marker with no unique saved launch configuration, or a malformed or unmatched marker, uses the host fallback.
 
-The marker is a compatibility workaround, not authentication. A caller that can construct provider settings can spoof it. If Paseo later supplies an authenticated profile ID at launch, that should replace marker matching without changing the fallback-versus-profile resolution model.
+The settings screen backfills each configured profile policy's launch configuration automatically. It is a compatibility fallback, not authentication: profiles sharing the same materialized launch configuration remain deliberately ambiguous and use the host fallback. A caller that can construct provider settings can also spoof the marker. If Paseo later supplies an authenticated profile ID at launch, that should replace both matching paths without changing the fallback-versus-profile resolution model.
 
 ## Discovery, stale selections, and cleanup
 
