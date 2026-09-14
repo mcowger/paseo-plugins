@@ -2,15 +2,20 @@ import { expect, test } from "vitest";
 
 import type { ProviderEvent, ProviderSessionConfig } from "@getpaseo/plugin/server/provider";
 
-import type { PiRuntimeEvent, PiSessionState } from "./rpc-types.js";
+import type { PiRpcSlashCommand, PiRuntimeEvent, PiSessionState } from "./rpc-types.js";
 import type { PiRuntimeSession } from "./runtime.js";
 import { PiProviderSession } from "./session.js";
 
-function createRuntime(options: { abortError?: Error } = {}) {
+function createRuntime(options: {
+  abortError?: Error;
+  commands?: PiRpcSlashCommand[];
+  prompt?: (message: string, emit: (event: PiRuntimeEvent) => void) => void;
+} = {}) {
   const listeners = new Set<(event: PiRuntimeEvent) => void>();
+  const emit = (event: PiRuntimeEvent) => { for (const listener of listeners) listener(event); };
   const runtime: PiRuntimeSession = {
     onEvent(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    async prompt() { return {}; },
+    async prompt(message) { options.prompt?.(message, emit); return {}; },
     async steer() {},
     async clearQueue() {},
     async compact() {},
@@ -23,11 +28,11 @@ function createRuntime(options: { abortError?: Error } = {}) {
     async setModel() { throw new Error("unused"); },
     async setThinkingLevel() {},
     async getSessionStats() { return {}; },
-    async getCommands() { return []; },
+    async getCommands() { return options.commands ?? []; },
     respondToExtensionUiRequest() {},
     async close() {},
   };
-  return { runtime, emit(event: PiRuntimeEvent) { for (const listener of listeners) listener(event); } };
+  return { runtime, emit };
 }
 
 const state: PiSessionState = {
@@ -195,6 +200,95 @@ test("emits composer settings for auto-compaction and retry", async () => {
     },
   });
   expect(events.find((event) => event.type === "session.config")).not.toHaveProperty("config.mode");
+  await session.close();
+});
+
+test("probes and exposes fast mode only for a supported model", async () => {
+  const commands: PiRpcSlashCommand[] = [
+    { name: "fast", source: "extension" },
+    { name: "fast-status", source: "extension" },
+  ];
+  const requests: string[] = [];
+  const { runtime } = createRuntime({
+    commands,
+    prompt(message, emit) {
+      requests.push(message);
+      if (message.startsWith("/fast-status ")) {
+        emit({
+          type: "extension_ui_request",
+          id: "status",
+          method: "notify",
+          message: JSON.stringify({
+            type: "pi-gpt-fast-mode.status",
+            requestId: message.slice("/fast-status ".length),
+            enabled: false,
+            model: "openai-codex/gpt-5.6",
+            supported: true,
+          }),
+        });
+      }
+    },
+  });
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events);
+
+  await session.initialize();
+
+  expect(requests).toHaveLength(1);
+  expect(events.find((event) => event.type === "session.config")).toMatchObject({
+    config: { settings: [{ id: "autoCompaction" }, { id: "autoRetry" }, { id: "fastMode", value: "off" }] },
+  });
+
+  await session.configure({ settings: { fastMode: "on" } });
+  expect(requests).toHaveLength(3);
+  expect(requests[1]).toBe("/fast on");
+  expect(requests[2]).toMatch(/^\/fast-status /);
+  await session.close();
+});
+
+test("does not expose fast mode when its commands are absent", async () => {
+  const { runtime } = createRuntime({ commands: [{ name: "fast", source: "extension" }] });
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events);
+
+  await session.initialize();
+
+  expect(events.find((event) => event.type === "session.config")).not.toMatchObject({
+    config: { settings: expect.arrayContaining([{ id: "fastMode" }]) },
+  });
+  await session.close();
+});
+
+test("does not expose fast mode when the installed extension reports an unsupported model", async () => {
+  const { runtime } = createRuntime({
+    commands: [
+      { name: "fast", source: "extension" },
+      { name: "fast-status", source: "extension" },
+    ],
+    prompt(message, emit) {
+      if (!message.startsWith("/fast-status ")) return;
+      emit({
+        type: "extension_ui_request",
+        id: "status",
+        method: "notify",
+        message: JSON.stringify({
+          type: "pi-gpt-fast-mode.status",
+          requestId: message.slice("/fast-status ".length),
+          enabled: false,
+          model: "anthropic/claude-opus-4-8",
+          supported: false,
+        }),
+      });
+    },
+  });
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events);
+
+  await session.initialize();
+
+  expect(events.find((event) => event.type === "session.config")).not.toMatchObject({
+    config: { settings: expect.arrayContaining([{ id: "fastMode" }]) },
+  });
   await session.close();
 });
 

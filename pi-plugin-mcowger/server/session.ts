@@ -15,6 +15,10 @@ const DEFAULT_THINKING_LEVEL = "medium";
 const RESPONSE_HEADER = "Response";
 const AUTO_COMPACTION_SETTING = "autoCompaction";
 const AUTO_RETRY_SETTING = "autoRetry";
+const FAST_MODE_SETTING = "fastMode";
+const FAST_MODE_COMMAND = "fast";
+const FAST_MODE_STATUS_COMMAND = "fast-status";
+const FAST_MODE_QUERY_TIMEOUT_MS = 5_000;
 const BUILTIN_COMMANDS: readonly ProviderCommand[] = [
   {
     name: "compact",
@@ -46,6 +50,14 @@ interface ManualCompactionCommand {
   completed: boolean;
 }
 
+interface FastModeStatus {
+  type: "pi-gpt-fast-mode.status";
+  requestId?: string;
+  enabled: boolean;
+  model: string;
+  supported: boolean;
+}
+
 export class PiProviderSession {
   private readonly toolCalls = new Map<string, PiTrackedToolCall>();
   private readonly questions = new Map<string, PendingQuestion>();
@@ -58,6 +70,10 @@ export class PiProviderSession {
   private autoRetryEnabled = false;
   private activeCompaction: ActiveCompaction | null = null;
   private manualCompactionCommand: ManualCompactionCommand | null = null;
+  private fastModeExtension = false;
+  private fastModeAvailable = false;
+  private fastModeEnabled = false;
+  private readonly fastModeQueries = new Map<string, (status: FastModeStatus) => void>();
   private usageGeneration = 0;
   private usageTimer: NodeJS.Timeout | null = null;
   private closed = false;
@@ -83,6 +99,14 @@ export class PiProviderSession {
       this.autoRetryEnabled = autoRetry;
     }
     const commands = await this.options.runtime.getCommands().catch(() => []);
+    this.fastModeExtension = hasExtensionCommand(commands, FAST_MODE_COMMAND)
+      && hasExtensionCommand(commands, FAST_MODE_STATUS_COMMAND);
+    if (this.fastModeExtension) {
+      const status = await this.queryFastMode().catch(() => undefined);
+      this.applyFastModeStatus(status);
+      const configuredFastMode = settingBoolean(this.options.config.settings, FAST_MODE_SETTING);
+      if (this.fastModeAvailable && configuredFastMode !== undefined) await this.setFastMode(configuredFastMode);
+    }
     this.emitConfig();
     this.emit({
       type: "session.commands",
@@ -184,6 +208,9 @@ export class PiProviderSession {
       this.options.state = await this.options.runtime.getState();
       this.options.config.thinkingOption = this.options.state.thinkingLevel;
     }
+    if (changes.model && this.fastModeExtension) {
+      this.applyFastModeStatus(await this.queryFastMode().catch(() => undefined));
+    }
     const autoCompaction = settingBoolean(changes.settings, AUTO_COMPACTION_SETTING);
     if (autoCompaction !== undefined) {
       await this.options.runtime.setAutoCompaction(autoCompaction);
@@ -194,6 +221,8 @@ export class PiProviderSession {
       await this.options.runtime.setAutoRetry(autoRetry);
       this.autoRetryEnabled = autoRetry;
     }
+    const fastMode = settingBoolean(changes.settings, FAST_MODE_SETTING);
+    if (fastMode !== undefined && this.fastModeAvailable) await this.setFastMode(fastMode);
     this.emitConfig();
   }
 
@@ -232,7 +261,21 @@ export class PiProviderSession {
       if (this.turnId) this.finish(this.turnId, [], event.error);
       return;
     }
-    if (event.type === "extension_ui_request") { this.handleUi(event); return; }
+    if (event.type === "extension_ui_request") {
+      if (event.method === "notify" && typeof event.message === "string") {
+        const status = parseFastModeStatus(event.message);
+        if (status) {
+          const resolve = status.requestId ? this.fastModeQueries.get(status.requestId) : undefined;
+          if (resolve) {
+            this.fastModeQueries.delete(status.requestId!);
+            resolve(status);
+          }
+          return;
+        }
+      }
+      this.handleUi(event);
+      return;
+    }
     if (event.type === "agent_start" || event.type === "turn_start") {
       const shouldEmitStarted = !this.turnStarted;
       this.turnStarted = true;
@@ -381,6 +424,17 @@ export class PiProviderSession {
             { label: "Retry: ×", value: "off" },
           ],
         },
+        ...(this.fastModeAvailable ? [{
+          type: "select" as const,
+          id: FAST_MODE_SETTING,
+          label: "Fast",
+          description: "Use the provider's priority service tier when supported.",
+          value: this.fastModeEnabled ? "on" : "off",
+          options: [
+            { label: "Fast: ✓", value: "on" },
+            { label: "Fast: ×", value: "off" },
+          ],
+        }] : []),
       ],
     };
     this.emit({ type: "session.config", sessionId: this.options.sessionId, config });
@@ -399,6 +453,34 @@ export class PiProviderSession {
     this.usageTimer = null;
   }
   private emitUsage(turnId = this.turnId ?? undefined): void { void this.options.runtime.getSessionStats().then((stats) => { const usage: ProviderUsage = { inputTokens: stats.tokens?.input, cachedInputTokens: stats.tokens?.cacheRead, outputTokens: stats.tokens?.output, totalCostUsd: stats.cost, contextWindowMaxTokens: stats.contextUsage?.contextWindow ?? undefined, contextWindowUsedTokens: stats.contextUsage?.tokens ?? undefined }; this.emit({ type: "session.usage", sessionId: this.options.sessionId, ...(turnId ? { turnId } : {}), usage }); }).catch(() => undefined); }
+  private async setFastMode(enabled: boolean): Promise<void> {
+    await this.options.runtime.prompt(`/fast ${enabled ? "on" : "off"}`);
+    this.applyFastModeStatus(await this.queryFastMode());
+  }
+  private async queryFastMode(): Promise<FastModeStatus> {
+    const requestId = randomUUID();
+    const status = new Promise<FastModeStatus>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.fastModeQueries.delete(requestId);
+        reject(new Error("Timed out querying Pi GPT Fast mode"));
+      }, FAST_MODE_QUERY_TIMEOUT_MS);
+      this.fastModeQueries.set(requestId, (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      });
+    });
+    try {
+      await this.options.runtime.prompt(`/fast-status ${requestId}`);
+      return await status;
+    } catch (error) {
+      this.fastModeQueries.delete(requestId);
+      throw error;
+    }
+  }
+  private applyFastModeStatus(status: FastModeStatus | undefined): void {
+    this.fastModeAvailable = Boolean(this.fastModeExtension && status?.supported);
+    if (status) this.fastModeEnabled = status.enabled;
+  }
   private timeline(item: ProviderTimelineItem): void { this.emit({ type: "timeline.item", sessionId: this.options.sessionId, item }); }
   private emit(event: ProviderEvent): void { if (!this.closed) this.options.emit(event); }
   private promptFailed(clientMessageId: string, message: string): void { this.emit({ type: "session.prompt_result", sessionId: this.options.sessionId, clientMessageId, result: { type: "failed", error: { message } } }); }
@@ -448,6 +530,10 @@ function mergeCommands(commands: readonly ProviderCommand[]): ProviderCommand[] 
   return [...merged.values()];
 }
 
+function hasExtensionCommand(commands: readonly { name: string; source: string }[], name: string): boolean {
+  return commands.some((command) => command.name === name && command.source === "extension");
+}
+
 function getCompactArguments(prompt: ProviderPrompt, text: string): string | null {
   if (prompt.input.type === "command") {
     return prompt.input.name.toLowerCase() === "compact" ? prompt.input.arguments.trim() : null;
@@ -466,6 +552,15 @@ function settingBoolean(
   if (value === "on") return true;
   if (value === "off") return false;
   return undefined;
+}
+function parseFastModeStatus(message: string): FastModeStatus | undefined {
+  try {
+    const value = JSON.parse(message) as Partial<FastModeStatus>;
+    if (value.type !== "pi-gpt-fast-mode.status" || typeof value.enabled !== "boolean" || typeof value.model !== "string" || typeof value.supported !== "boolean") return undefined;
+    return value as FastModeStatus;
+  } catch {
+    return undefined;
+  }
 }
 function messageText(content: string | Array<{ type: string; text?: string }>): string { return typeof content === "string" ? content : content.filter((part) => part.type === "text" && typeof part.text === "string").map((part) => part.text!).join("\n\n"); }
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
