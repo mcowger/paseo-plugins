@@ -13,6 +13,7 @@ Run [Pi](https://github.com/earendil-works/pi) in Paseo through one isolated `pi
 - Applies session system prompts, environment overrides, and injected MCP servers.
 - Exposes `/compact` plus composer controls for automatic compaction and retry.
 - Recognizes [`pi-gpt-fast-mode`](https://github.com/mcowger/pi-gpt-fast-mode) and adds a Fast composer control for supported models.
+- Recognizes [`pi-openai-long-context`](https://github.com/johnhenaot/pi-openai-long-context) and adds a Long context composer control when its status protocol is available.
 - Stops each Pi process and removes its temporary files when Paseo closes or reloads the provider.
 
 ## Installation
@@ -43,6 +44,10 @@ pi install git:github.com/mcowger/pi-gpt-fast-mode
 ```
 
 The provider probes for the extension and its supported model before showing the Fast control. If the extension is not installed, or the current model is unsupported, the control stays hidden.
+
+### Long context
+
+Install [`pi-openai-long-context`](https://github.com/johnhenaot/pi-openai-long-context) in the same Pi profile used by the Paseo daemon. The provider probes `/long-context` and `/long-context-status`, then refreshes Pi's effective model and usage state after toggling. The control stays hidden when the extension is absent or reports the current model as unsupported.
 
 ## Limitations
 

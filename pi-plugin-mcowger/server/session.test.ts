@@ -284,6 +284,116 @@ test("does not expose fast mode when the installed extension reports an unsuppor
   await session.close();
 });
 
+test("probes and exposes long context, then refreshes effective Pi state after toggling", async () => {
+  const commands: PiRpcSlashCommand[] = [
+    { name: "long-context", source: "extension" },
+    { name: "long-context-status", source: "extension" },
+  ];
+  const requests: string[] = [];
+  let enabled = false;
+  const model = { provider: "openai", id: "gpt-5.6-sol", contextWindow: 272_000 };
+  const { runtime } = createRuntime({
+    commands,
+    prompt(message, emit) {
+      requests.push(message);
+      if (message.startsWith("/long-context-status ")) {
+        enabled = enabled || requests.includes("/long-context");
+        emit({
+          type: "extension_ui_request",
+          id: "status",
+          method: "notify",
+          message: JSON.stringify({
+            type: "pi-openai-long-context.status",
+            requestId: message.slice("/long-context-status ".length),
+            enabled,
+            supported: true,
+            provider: model.provider,
+            model: model.id,
+            contextWindow: enabled ? 1_050_000 : model.contextWindow,
+          }),
+        });
+      }
+    },
+  });
+  runtime.getState = async () => ({ ...state, model: { ...model, contextWindow: enabled ? 1_050_000 : model.contextWindow } });
+  runtime.getAvailableModels = async () => [{ ...model }];
+  runtime.getSessionStats = async () => ({ contextUsage: { contextWindow: enabled ? 1_050_000 : model.contextWindow } });
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events);
+
+  await session.initialize();
+
+  expect(events.find((event) => event.type === "session.config")).toMatchObject({
+    config: {
+      models: [{ id: "openai/gpt-5.6-sol", contextWindowMaxTokens: 272_000 }],
+      settings: expect.arrayContaining([expect.objectContaining({ id: "longContext", value: false })]),
+    },
+  });
+
+  await session.configure({ settings: { longContext: "on" } });
+
+  expect(requests).toHaveLength(3);
+  expect(requests[1]).toBe("/long-context");
+  expect(requests[2]).toMatch(/^\/long-context-status /);
+  expect(events.at(-1)).toMatchObject({
+    type: "session.config",
+    config: {
+      models: [{ id: "openai/gpt-5.6-sol", contextWindowMaxTokens: 1_050_000 }],
+      settings: expect.arrayContaining([expect.objectContaining({ id: "longContext", value: true })]),
+    },
+  });
+  expect(events.some((event) => event.type === "session.usage" && event.usage.contextWindowMaxTokens === 1_050_000)).toBe(true);
+  await session.close();
+});
+
+test("does not expose long context when its commands are absent", async () => {
+  const { runtime } = createRuntime({ commands: [{ name: "long-context", source: "extension" }] });
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events);
+
+  await session.initialize();
+
+  expect(events.find((event) => event.type === "session.config")).not.toMatchObject({
+    config: { settings: expect.arrayContaining([{ id: "longContext" }]) },
+  });
+  await session.close();
+});
+
+test("does not expose long context when the installed extension reports an unsupported model", async () => {
+  const { runtime } = createRuntime({
+    commands: [
+      { name: "long-context", source: "extension" },
+      { name: "long-context-status", source: "extension" },
+    ],
+    prompt(message, emit) {
+      if (!message.startsWith("/long-context-status ")) return;
+      emit({
+        type: "extension_ui_request",
+        id: "status",
+        method: "notify",
+        message: JSON.stringify({
+          type: "pi-openai-long-context.status",
+          requestId: message.slice("/long-context-status ".length),
+          enabled: false,
+          supported: false,
+          provider: "anthropic",
+          model: "claude-opus-4-8",
+          contextWindow: 200_000,
+        }),
+      });
+    },
+  });
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events);
+
+  await session.initialize();
+
+  expect(events.find((event) => event.type === "session.config")).not.toMatchObject({
+    config: { settings: expect.arrayContaining([{ id: "longContext" }]) },
+  });
+  await session.close();
+});
+
 test("configures Pi auto-compaction and retry from composer settings", async () => {
   const calls: string[] = [];
   const { runtime } = createRuntime();

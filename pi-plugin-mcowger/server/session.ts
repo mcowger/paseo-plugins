@@ -19,6 +19,10 @@ const FAST_MODE_SETTING = "fastMode";
 const FAST_MODE_COMMAND = "fast";
 const FAST_MODE_STATUS_COMMAND = "fast-status";
 const FAST_MODE_QUERY_TIMEOUT_MS = 5_000;
+const LONG_CONTEXT_SETTING = "longContext";
+const LONG_CONTEXT_COMMAND = "long-context";
+const LONG_CONTEXT_STATUS_COMMAND = "long-context-status";
+const LONG_CONTEXT_QUERY_TIMEOUT_MS = 5_000;
 const BUILTIN_COMMANDS: readonly ProviderCommand[] = [
   {
     name: "compact",
@@ -58,6 +62,16 @@ interface FastModeStatus {
   supported: boolean;
 }
 
+interface LongContextStatus {
+  type: "pi-openai-long-context.status";
+  requestId?: string;
+  enabled: boolean;
+  supported: boolean;
+  provider: string;
+  model: string;
+  contextWindow: number;
+}
+
 export class PiProviderSession {
   private readonly toolCalls = new Map<string, PiTrackedToolCall>();
   private readonly questions = new Map<string, PendingQuestion>();
@@ -74,6 +88,10 @@ export class PiProviderSession {
   private fastModeAvailable = false;
   private fastModeEnabled = false;
   private readonly fastModeQueries = new Map<string, (status: FastModeStatus) => void>();
+  private longContextExtension = false;
+  private longContextAvailable = false;
+  private longContextEnabled = false;
+  private readonly longContextQueries = new Map<string, (status: LongContextStatus) => void>();
   private usageGeneration = 0;
   private usageTimer: NodeJS.Timeout | null = null;
   private closed = false;
@@ -106,6 +124,16 @@ export class PiProviderSession {
       this.applyFastModeStatus(status);
       const configuredFastMode = settingBoolean(this.options.config.settings, FAST_MODE_SETTING);
       if (this.fastModeAvailable && configuredFastMode !== undefined) await this.setFastMode(configuredFastMode);
+    }
+    this.longContextExtension = hasExtensionCommand(commands, LONG_CONTEXT_COMMAND)
+      && hasExtensionCommand(commands, LONG_CONTEXT_STATUS_COMMAND);
+    if (this.longContextExtension) {
+      const status = await this.queryLongContext().catch(() => undefined);
+      await this.applyLongContextStatus(status);
+      const configuredLongContext = settingBoolean(this.options.config.settings, LONG_CONTEXT_SETTING);
+      if (this.longContextAvailable && configuredLongContext !== undefined && configuredLongContext !== this.longContextEnabled) {
+        await this.setLongContext();
+      }
     }
     this.emitConfig();
     this.emit({
@@ -211,6 +239,9 @@ export class PiProviderSession {
     if (changes.model && this.fastModeExtension) {
       this.applyFastModeStatus(await this.queryFastMode().catch(() => undefined));
     }
+    if (changes.model && this.longContextExtension) {
+      await this.applyLongContextStatus(await this.queryLongContext().catch(() => undefined));
+    }
     const autoCompaction = settingBoolean(changes.settings, AUTO_COMPACTION_SETTING);
     if (autoCompaction !== undefined) {
       await this.options.runtime.setAutoCompaction(autoCompaction);
@@ -223,6 +254,8 @@ export class PiProviderSession {
     }
     const fastMode = settingBoolean(changes.settings, FAST_MODE_SETTING);
     if (fastMode !== undefined && this.fastModeAvailable) await this.setFastMode(fastMode);
+    const longContext = settingBoolean(changes.settings, LONG_CONTEXT_SETTING);
+    if (longContext !== undefined && this.longContextAvailable && longContext !== this.longContextEnabled) await this.setLongContext();
     this.emitConfig();
   }
 
@@ -269,6 +302,15 @@ export class PiProviderSession {
           if (resolve) {
             this.fastModeQueries.delete(status.requestId!);
             resolve(status);
+          }
+          return;
+        }
+        const longContextStatus = parseLongContextStatus(event.message);
+        if (longContextStatus) {
+          const resolve = longContextStatus.requestId ? this.longContextQueries.get(longContextStatus.requestId) : undefined;
+          if (resolve) {
+            this.longContextQueries.delete(longContextStatus.requestId!);
+            resolve(longContextStatus);
           }
           return;
         }
@@ -423,6 +465,13 @@ export class PiProviderSession {
           description: "Use the provider's priority service tier when supported.",
           value: this.fastModeEnabled,
         }] : []),
+        ...(this.longContextAvailable ? [{
+          type: "toggle" as const,
+          id: LONG_CONTEXT_SETTING,
+          label: "Long context",
+          description: "Raise supported OpenAI models to their larger context window. Higher usage rates may apply.",
+          value: this.longContextEnabled,
+        }] : []),
       ],
     };
     this.emit({ type: "session.config", sessionId: this.options.sessionId, config });
@@ -444,6 +493,30 @@ export class PiProviderSession {
   private async setFastMode(enabled: boolean): Promise<void> {
     await this.options.runtime.prompt(`/fast ${enabled ? "on" : "off"}`);
     this.applyFastModeStatus(await this.queryFastMode());
+  }
+  private async setLongContext(): Promise<void> {
+    await this.options.runtime.prompt(`/${LONG_CONTEXT_COMMAND}`);
+    await this.applyLongContextStatus(await this.queryLongContext());
+  }
+  private async queryLongContext(): Promise<LongContextStatus> {
+    const requestId = randomUUID();
+    const status = new Promise<LongContextStatus>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.longContextQueries.delete(requestId);
+        reject(new Error("Timed out querying Pi OpenAI long context"));
+      }, LONG_CONTEXT_QUERY_TIMEOUT_MS);
+      this.longContextQueries.set(requestId, (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      });
+    });
+    try {
+      await this.options.runtime.prompt(`/${LONG_CONTEXT_STATUS_COMMAND} ${requestId}`);
+      return await status;
+    } catch (error) {
+      this.longContextQueries.delete(requestId);
+      throw error;
+    }
   }
   private async queryFastMode(): Promise<FastModeStatus> {
     const requestId = randomUUID();
@@ -468,6 +541,28 @@ export class PiProviderSession {
   private applyFastModeStatus(status: FastModeStatus | undefined): void {
     this.fastModeAvailable = Boolean(this.fastModeExtension && status?.supported);
     if (status) this.fastModeEnabled = status.enabled;
+  }
+  private async applyLongContextStatus(status: LongContextStatus | undefined): Promise<void> {
+    this.longContextAvailable = Boolean(this.longContextExtension && status?.supported);
+    if (!status) return;
+    this.longContextEnabled = status.enabled;
+    await this.refreshPiState(status);
+  }
+  private async refreshPiState(longContextStatus?: LongContextStatus): Promise<void> {
+    const [state, models] = await Promise.all([
+      this.options.runtime.getState(),
+      this.options.runtime.getAvailableModels(),
+    ]);
+    const effectiveState = longContextStatus && state.model?.provider === longContextStatus.provider && state.model.id === longContextStatus.model
+      ? { ...state, model: { ...state.model, contextWindow: longContextStatus.contextWindow } }
+      : state;
+    this.options.state = effectiveState;
+    this.options.models = longContextStatus
+      ? models.map((model) => model.provider === longContextStatus.provider && model.id === longContextStatus.model
+        ? { ...model, contextWindow: longContextStatus.contextWindow }
+        : model)
+      : models;
+    this.emitUsage();
   }
   private timeline(item: ProviderTimelineItem): void { this.emit({ type: "timeline.item", sessionId: this.options.sessionId, item }); }
   private emit(event: ProviderEvent): void { if (!this.closed) this.options.emit(event); }
@@ -546,6 +641,23 @@ function parseFastModeStatus(message: string): FastModeStatus | undefined {
     const value = JSON.parse(message) as Partial<FastModeStatus>;
     if (value.type !== "pi-gpt-fast-mode.status" || typeof value.enabled !== "boolean" || typeof value.model !== "string" || typeof value.supported !== "boolean") return undefined;
     return value as FastModeStatus;
+  } catch {
+    return undefined;
+  }
+}
+function parseLongContextStatus(message: string): LongContextStatus | undefined {
+  try {
+    const value = JSON.parse(message) as Partial<LongContextStatus>;
+    if (
+      value.type !== "pi-openai-long-context.status" ||
+      typeof value.enabled !== "boolean" ||
+      typeof value.supported !== "boolean" ||
+      typeof value.provider !== "string" ||
+      typeof value.model !== "string" ||
+      typeof value.contextWindow !== "number" ||
+      (value.requestId !== undefined && typeof value.requestId !== "string")
+    ) return undefined;
+    return value as LongContextStatus;
   } catch {
     return undefined;
   }
