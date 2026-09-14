@@ -136,6 +136,10 @@ describe("colorful activity presentation", () => {
       icon: "Search",
       label: "Find Files",
     });
+    expect(resolveSubAgentActionPresentation("Ls")).toEqual({
+      icon: "List",
+      label: "List Files",
+    });
     expect(resolveSubAgentActionPresentation("shell", "git status")).toEqual({
       icon: "SquareTerminal",
       label: "Shell Command",

@@ -1123,6 +1123,9 @@ export function resolveSubAgentActionPresentation(
   summary?: string,
 ): SubAgentActionPresentation {
   const normalized = toolName.trim().toLowerCase().replace(/[\s.-]+/g, "_");
+  if (normalized === "ls") {
+    return { icon: "List", label: "List Files" };
+  }
   if (normalized === "read" || normalized.includes("read_file") || normalized.includes("readfile")) {
     return { icon: "FileText", label: "Read File", summaryIcon: fileIconForPath(summary) };
   }
