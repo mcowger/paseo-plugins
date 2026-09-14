@@ -34,6 +34,7 @@ The current target host and SDK baseline is **Paseo v0.8.0**. Pin `@getpaseo/cli
 ## Development reminders
 
 - The Paseo 0.8 plugin API is stable.
+- Modifying Paseo itself is never a viable path; solve plugin work within the supported plugin API.
 - Plugins are trusted, unsandboxed code. Keep daemon-only work and credentials in server modules;
   client modules run inside Paseo.
 - Paseo v0.8 splits runtime entries into explicit `index.client.tsx` and `index.server.ts`. A mixed
