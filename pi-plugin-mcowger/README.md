@@ -11,7 +11,7 @@ Run [Pi](https://github.com/earendil-works/pi) in Paseo through one isolated `pi
 - Persists native Pi sessions and supports conversation rewind.
 - Bridges Pi extension questions to Paseo permissions.
 - Applies session system prompts, environment overrides, and injected MCP servers.
-- Exposes composer controls for automatic compaction and retry.
+- Exposes `/compact` plus composer controls for automatic compaction and retry.
 - Stops each Pi process and removes its temporary files when Paseo closes or reloads the provider.
 
 ## Installation

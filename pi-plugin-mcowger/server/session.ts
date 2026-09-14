@@ -14,6 +14,13 @@ const DEFAULT_THINKING_LEVEL = "medium";
 const RESPONSE_HEADER = "Response";
 const AUTO_COMPACTION_SETTING = "autoCompaction";
 const AUTO_RETRY_SETTING = "autoRetry";
+const BUILTIN_COMMANDS: readonly ProviderCommand[] = [
+  {
+    name: "compact",
+    description: "Manually compact the session context",
+    argumentHint: "[instructions]",
+  },
+];
 
 export interface PiProviderSessionOptions {
   sessionId: string;
@@ -27,6 +34,17 @@ export interface PiProviderSessionOptions {
 
 interface PendingQuestion { method: string; }
 
+interface ActiveCompaction {
+  id: string;
+  trigger: "auto" | "manual";
+}
+
+interface ManualCompactionCommand {
+  clientMessageId: string;
+  started: boolean;
+  completed: boolean;
+}
+
 export class PiProviderSession {
   private readonly toolCalls = new Map<string, PiTrackedToolCall>();
   private readonly questions = new Map<string, PendingQuestion>();
@@ -37,6 +55,8 @@ export class PiProviderSession {
   private turnStarted = false;
   private pendingTerminalMessages: PiAgentMessage[] | null = null;
   private autoRetryEnabled = false;
+  private activeCompaction: ActiveCompaction | null = null;
+  private manualCompactionCommand: ManualCompactionCommand | null = null;
   private usageGeneration = 0;
   private usageTimer: NodeJS.Timeout | null = null;
   private closed = false;
@@ -63,7 +83,14 @@ export class PiProviderSession {
     }
     const commands = await this.options.runtime.getCommands().catch(() => []);
     this.emitConfig();
-    this.emit({ type: "session.commands", sessionId: this.options.sessionId, commands: commands.map((command): ProviderCommand => ({ name: command.name, description: command.description ?? command.source })) });
+    this.emit({
+      type: "session.commands",
+      sessionId: this.options.sessionId,
+      commands: mergeCommands(commands.map((command): ProviderCommand => ({
+        name: command.name,
+        description: command.description ?? command.source,
+      }))),
+    });
   }
 
   async replayHistory(): Promise<void> {
@@ -99,6 +126,11 @@ export class PiProviderSession {
     if (this.closed) return this.promptFailed(prompt.clientMessageId, "Pi session is closed");
     const text = prompt.input.type === "command" ? `/${prompt.input.name}${prompt.input.arguments ? ` ${prompt.input.arguments}` : ""}` : prompt.input.content.filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text").map((part) => part.text).join("\n\n");
     const images = prompt.input.type === "message" ? prompt.input.content.filter((part): part is Extract<typeof part, { type: "image" }> => part.type === "image") : [];
+    const compactArguments = getCompactArguments(prompt, text);
+    if (compactArguments !== null) {
+      await this.executeCompactCommand(prompt.clientMessageId, compactArguments);
+      return;
+    }
     if (prompt.delivery === "steer" && this.turnId && !text.startsWith("/")) {
       try {
         await this.options.runtime.steer(text, images);
@@ -212,7 +244,8 @@ export class PiProviderSession {
     if (event.type === "tool_execution_start") { const tracked = parseToolArgs(event.toolName, event.args); this.toolCalls.set(event.toolCallId, tracked); this.emitTool(event.toolCallId, tracked, "running", null, null); return; }
     if (event.type === "tool_execution_update") { const tracked = this.toolCalls.get(event.toolCallId); if (tracked) this.emitTool(event.toolCallId, tracked, "running", parseToolResult(event.partialResult), null); return; }
     if (event.type === "tool_execution_end") { const tracked = this.toolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null); this.toolCalls.delete(event.toolCallId); this.emitTool(event.toolCallId, tracked, event.isError ? "failed" : "completed", parseToolResult(event.result), event.isError ? event.result : null); this.emitUsage(); return; }
-    if (event.type === "compaction_start" || event.type === "compaction_end") { this.timeline({ type: "compaction", id: `compaction:${this.turnId ?? randomUUID()}`, status: event.type === "compaction_start" ? "loading" : "completed", trigger: event.reason === "manual" ? "manual" : "auto" }); return; }
+    if (event.type === "compaction_start") { this.handleCompactionEvent("loading", event.reason === "manual" ? "manual" : "auto"); return; }
+    if (event.type === "compaction_end") { this.handleCompactionEvent("completed", event.reason === "manual" ? "manual" : "auto"); return; }
     if (event.type === "auto_retry_start") { this.timeline({ type: "error", id: randomUUID(), message: `Provider retry (attempt ${event.attempt}): ${event.errorMessage}` }); return; }
     if (event.type === "agent_end") {
       this.pendingTerminalMessages = event.messages ?? [];
@@ -220,6 +253,59 @@ export class PiProviderSession {
       return;
     }
     if (event.type === "agent_settled") this.finish(this.turnId, this.pendingTerminalMessages ?? []);
+  }
+
+  private async executeCompactCommand(clientMessageId: string, customInstructions: string | undefined): Promise<void> {
+    if (this.manualCompactionCommand) {
+      this.promptFailed(clientMessageId, "A Pi compact command is already running");
+      return;
+    }
+    const command: ManualCompactionCommand = {
+      clientMessageId,
+      started: false,
+      completed: false,
+    };
+    this.manualCompactionCommand = command;
+    try {
+      await this.options.runtime.compact(customInstructions);
+      this.emit({
+        type: "session.prompt_result",
+        sessionId: this.options.sessionId,
+        clientMessageId,
+        result: { type: "completed" },
+      });
+    } catch (error) {
+      if (this.manualCompactionCommand === command && command.started && !command.completed) {
+        this.handleCompactionEvent("completed", "manual");
+      }
+      this.promptFailed(clientMessageId, `Failed to compact context: ${errorMessage(error)}`);
+    } finally {
+      if (this.manualCompactionCommand === command) {
+        this.manualCompactionCommand = null;
+      }
+    }
+  }
+
+  private handleCompactionEvent(status: "loading" | "completed", trigger: "auto" | "manual"): void {
+    const manualCommand = this.manualCompactionCommand;
+    const activeCompaction = this.activeCompaction ?? {
+      id: `compaction:${this.turnId ?? randomUUID()}`,
+      trigger,
+    };
+    this.activeCompaction = activeCompaction;
+    if (manualCommand && trigger === "manual") {
+      if (status === "loading") manualCommand.started = true;
+      if (status === "completed") manualCommand.completed = true;
+    }
+    this.timeline({
+      type: "compaction",
+      id: activeCompaction.id,
+      status,
+      trigger: activeCompaction.trigger,
+    });
+    if (status === "completed") {
+      this.activeCompaction = null;
+    }
   }
 
   private handleUpdate(event: Extract<PiAgentSessionEvent, { type: "message_update" }>): void {
@@ -347,6 +433,27 @@ export default function paseoIntegration(pi) {
     { encoding: "utf8", mode: 0o600 },
   );
   return { path, cleanup: () => rmSync(directory, { recursive: true, force: true }) };
+}
+
+function mergeCommands(commands: readonly ProviderCommand[]): ProviderCommand[] {
+  const merged = new Map(BUILTIN_COMMANDS.map((command) => [command.name, { ...command }]));
+  for (const command of commands) {
+    const builtin = merged.get(command.name);
+    merged.set(command.name, {
+      ...command,
+      ...(builtin?.argumentHint && !command.argumentHint ? { argumentHint: builtin.argumentHint } : {}),
+    });
+  }
+  return [...merged.values()];
+}
+
+function getCompactArguments(prompt: ProviderPrompt, text: string): string | null {
+  if (prompt.input.type === "command") {
+    return prompt.input.name.toLowerCase() === "compact" ? prompt.input.arguments.trim() : null;
+  }
+  if (prompt.input.content.some((part) => part.type !== "text")) return null;
+  const match = /^\/compact(?:\s+([\s\S]*))?$/iu.exec(text.trim());
+  return match ? match[1]?.trim() ?? "" : null;
 }
 
 function settingBoolean(

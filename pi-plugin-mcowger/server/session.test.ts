@@ -76,6 +76,90 @@ test("applies initial composer settings to Pi", async () => {
   await session.close();
 });
 
+test("publishes the built-in compact command", async () => {
+  const { runtime } = createRuntime();
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events);
+
+  await session.initialize();
+
+  expect(events.find((event) => event.type === "session.commands")).toMatchObject({
+    commands: [
+      {
+        name: "compact",
+        description: "Manually compact the session context",
+        argumentHint: "[instructions]",
+      },
+    ],
+  });
+  await session.close();
+});
+
+test("executes compact through Pi RPC and forwards compaction lifecycle events", async () => {
+  const { runtime, emit } = createRuntime();
+  let instructions: string | undefined;
+  runtime.compact = async (customInstructions) => {
+    instructions = customInstructions;
+    emit({ type: "compaction_start", reason: "manual" });
+    emit({ type: "compaction_end", reason: "manual" });
+  };
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events);
+
+  await session.prompt({
+    clientMessageId: "compact-1",
+    delivery: "auto",
+    input: { type: "command", name: "compact", arguments: "focus on tests" },
+  });
+
+  expect(instructions).toBe("focus on tests");
+  expect(events.filter((event) => event.type === "timeline.item").map((event) => event.item)).toEqual([
+    { type: "compaction", id: expect.any(String), status: "loading", trigger: "manual" },
+    { type: "compaction", id: expect.any(String), status: "completed", trigger: "manual" },
+  ]);
+  const compactionItems = events
+    .filter((event): event is Extract<ProviderEvent, { type: "timeline.item" }> => event.type === "timeline.item")
+    .map((event) => event.item)
+    .filter((item) => item.type === "compaction");
+  expect(compactionItems[0]?.id).toBe(compactionItems[1]?.id);
+  expect(events).toContainEqual({
+    type: "session.prompt_result",
+    sessionId: "paseo-session",
+    clientMessageId: "compact-1",
+    result: { type: "completed" },
+  });
+  expect(events.some((event) => event.type === "session.turn")).toBe(false);
+  await session.close();
+});
+
+test("closes a compact loading item when Pi compact fails after starting", async () => {
+  const { runtime, emit } = createRuntime();
+  runtime.compact = async () => {
+    emit({ type: "compaction_start", reason: "manual" });
+    throw new Error("summarizer failed");
+  };
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events);
+
+  await session.prompt({
+    clientMessageId: "compact-2",
+    delivery: "auto",
+    input: { type: "command", name: "compact", arguments: "" },
+  });
+
+  expect(events.filter((event) => event.type === "timeline.item").map((event) => event.item)).toEqual([
+    { type: "compaction", id: expect.any(String), status: "loading", trigger: "manual" },
+    { type: "compaction", id: expect.any(String), status: "completed", trigger: "manual" },
+  ]);
+  expect(events).toContainEqual({
+    type: "session.prompt_result",
+    sessionId: "paseo-session",
+    clientMessageId: "compact-2",
+    result: { type: "failed", error: { message: "Failed to compact context: summarizer failed" } },
+  });
+  await session.close();
+});
+
 test("emits composer settings for auto-compaction and retry", async () => {
   const { runtime } = createRuntime();
   const events: ProviderEvent[] = [];
