@@ -1076,6 +1076,9 @@ export function resolveToolCallPresentation(
       if (name === "thinking") {
         return { category: "plan", icon: "Brain", label: "Thinking" };
       }
+      if (name === "ls") {
+        return { category: "file", icon: "List", label: "List Files" };
+      }
       if (name === "task") {
         return { category: "agent", icon: "Bot", label: "Task", summary: compactText(item.name) };
       }

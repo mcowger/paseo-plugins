@@ -126,6 +126,19 @@ describe("colorful activity presentation", () => {
     });
   });
 
+  it("labels top-level Ls tool calls as List Files", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "Ls",
+        detail: { type: "unknown", input: { path: "", limit: 200 }, output: { content: [] } },
+      }),
+    ).toMatchObject({
+      category: "file",
+      icon: "List",
+      label: "List Files",
+    });
+  });
+
   it("maps sub-agent actions to readable inline progress rows", () => {
     expect(resolveSubAgentActionPresentation("read", "README.md")).toEqual({
       icon: "FileText",
