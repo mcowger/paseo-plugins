@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420" role="img" aria-labelledby="title desc">
+  <title id="title">Pi JSON-RPC provider preview</title>
+  <desc id="desc">A dark Paseo composer showing Pi model, thinking, compaction, and retry controls.</desc>
+  <rect width="640" height="420" rx="14" fill="#0d1117"/>
+  <rect x="18" y="18" width="604" height="384" rx="10" fill="#161b22" stroke="#30363d"/>
+  <text x="42" y="62" fill="#e6edf3" font-family="system-ui, sans-serif" font-size="24" font-weight="700">Pi JSON-RPC provider</text>
+  <text x="42" y="90" fill="#8b949e" font-family="system-ui, sans-serif" font-size="14">One isolated Pi process per Paseo session</text>
+  <g font-family="system-ui, sans-serif">
+    <text x="42" y="138" fill="#8b949e" font-size="13">Composer controls</text>
+    <rect x="42" y="150" width="232" height="44" rx="22" fill="#21262d" stroke="#3d444d"/>
+    <text x="60" y="178" fill="#e6edf3" font-size="15">Model: Pi</text>
+    <rect x="290" y="150" width="142" height="44" rx="22" fill="#21262d" stroke="#3d444d"/>
+    <text x="308" y="178" fill="#e6edf3" font-size="15">Thinking: High</text>
+    <rect x="42" y="218" width="156" height="44" rx="22" fill="#21262d" stroke="#3d444d"/>
+    <text x="60" y="246" fill="#e6edf3" font-size="15">Compact: ✓</text>
+    <rect x="214" y="218" width="136" height="44" rx="22" fill="#21262d" stroke="#3d444d"/>
+    <text x="232" y="246" fill="#e6edf3" font-size="15">Retry: ×</text>
+    <rect x="42" y="302" width="556" height="64" rx="9" fill="#0d1117" stroke="#3d444d"/>
+    <text x="60" y="340" fill="#8b949e" font-size="15">Message Pi…</text>
+  </g>
+</svg>

@@ -1,6 +1,8 @@
 {
   "name": "pi-plugin-mcowger",
   "version": "0.2.0",
+  "description": "Pi coding agent provider for Paseo over isolated JSON-RPC subprocesses",
+  "author": "Matt Cowger",
   "license": "MIT",
   "private": true,
   "type": "module",

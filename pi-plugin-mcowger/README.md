@@ -1,30 +1,49 @@
 # Pi JSON-RPC provider
 
-This plugin runs each Pi session in its own `pi --mode rpc` subprocess.
+Run [Pi](https://github.com/earendil-works/pi) in Paseo through one isolated `pi --mode rpc` process per agent session.
 
-It intentionally does not load Pi as a module. A child crash rejects its pending RPCs and fails the active turn without affecting another session's Pi state or deleting its persistence handle.
+![Pi provider controls](./images/pi-provider.svg)
 
-## What it supports
+## What it does
 
-- Model catalog and thinking-level selection.
-- Streaming text, reasoning, tool calls, compaction, retry notices, and usage.
-- Native Pi session persistence and conversation rewind.
-- Pi extension prompts through Paseo permissions.
-- Per-session system prompts, environment overrides, and native MCP config files.
-- Steer, interrupt (`clear_queue` then `abort`), and deterministic child cleanup.
+- Lists Pi models with only the thinking levels each model supports.
+- Streams messages, reasoning, tools, compaction, retries, and usage into Paseo.
+- Persists native Pi sessions and supports conversation rewind.
+- Bridges Pi extension questions to Paseo permissions.
+- Applies session system prompts, environment overrides, and injected MCP servers.
+- Exposes composer controls for automatic compaction and retry.
+- Stops each Pi process and removes its temporary files when Paseo closes or reloads the provider.
 
-## Development
+## Installation
+
+Pi must be installed and available as `pi` on the daemon host. Set `PI_COMMAND` if the executable has a different name or path.
 
 ```sh
-cd pi-plugin-mcowger
+paseo plugin add mcowger/paseo-plugins:pi-plugin-mcowger
+```
+
+For a local checkout:
+
+```sh
+cd /absolute/path/to/pi-plugin-mcowger
 npm install --legacy-peer-deps
 npm run lint
 npm run typecheck
 npm test
+paseo plugin add "$PWD"
 ```
 
-Reload it explicitly after changes:
+## Limitations
+
+- Requires a Pi CLI build with `--mode rpc` support.
+- Imported session listing is not implemented yet.
+- Rewind changes Pi conversation history only. It does not revert workspace files.
+- Plugin-provider settings have generic composer glyphs in Paseo 0.8. The Compact and Retry selectors still render inside the composer with their current state.
+
+## Development
 
 ```sh
-paseo plugin reload pi-plugin-mcowger
+npm run lint
+npm run typecheck
+npm test
 ```
