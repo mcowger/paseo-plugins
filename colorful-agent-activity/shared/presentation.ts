@@ -619,6 +619,156 @@ export function extractCodeInput(
   return undefined;
 }
 
+export type ApplyPatchOperation = "add" | "delete" | "update";
+
+export interface ApplyPatchEdit {
+  filePath: string;
+  operation: ApplyPatchOperation;
+  unifiedDiff: string;
+}
+
+function parseJsonString(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function applyPatchInput(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const parsed = parseJsonString(value);
+    return parsed === value ? value : applyPatchInput(parsed);
+  }
+  if (!isRecord(value)) return undefined;
+  if (value.input !== undefined) {
+    const nestedInput = applyPatchInput(value.input);
+    if (nestedInput) return nestedInput;
+  }
+  for (const key of ["input", "patch", "patchText"]) {
+    if (typeof value[key] === "string") return value[key];
+  }
+  return undefined;
+}
+
+function applyPatchToolName(name: string): boolean {
+  const normalized = name
+    .trim()
+    .toLowerCase()
+    .replace(/^(?:functions|tools)\./, "")
+    .replace(/^mcp__.*?__/, "")
+    .replace(/^mcp_/, "");
+  return normalized === "apply_patch" || normalized === "apply-patch";
+}
+
+function patchInputEdits(input: string): ApplyPatchEdit[] {
+  const lines = input.replace(/\r\n?/g, "\n").split("\n");
+  const edits: ApplyPatchEdit[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    const header = lines[index]?.match(/^\*\*\* (Add|Delete|Update) File: (.+)$/);
+    if (!header?.[1] || !header[2]) {
+      index++;
+      continue;
+    }
+
+    const operation = header[1].toLowerCase() as ApplyPatchOperation;
+    const filePath = header[2];
+    index++;
+    const diffLines: string[] = [];
+    while (index < lines.length && !lines[index]?.match(/^\*\*\* (?:Add|Delete|Update) File: /)) {
+      const line = lines[index] ?? "";
+      if (operation === "add" && line.startsWith("+")) {
+        diffLines.push(`+${line.slice(1)}`);
+      } else if (operation === "update") {
+        if (line.startsWith("@@")) diffLines.push(line);
+        else if (line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")) diffLines.push(line);
+      }
+      index++;
+    }
+    edits.push({ filePath, operation, unifiedDiff: diffLines.join("\n") });
+  }
+  return edits;
+}
+
+function unifiedDiffEdits(unifiedDiff: string, firstFilePath?: string): ApplyPatchEdit[] {
+  const sections = unifiedDiff
+    .replace(/\r\n?/g, "\n")
+    .split(/(?=^diff --git )/m)
+    .filter((section) => section.trim());
+  const edits: ApplyPatchEdit[] = [];
+  for (const [index, section] of sections.entries()) {
+    const plusHeader = section.match(/^\+\+\+ (?:b\/)?(.+)$/m)?.[1];
+    const minusHeader = section.match(/^--- (?:a\/)?(.+)$/m)?.[1];
+    const operation: ApplyPatchOperation = plusHeader === "/dev/null" ? "delete" : minusHeader === "/dev/null" ? "add" : "update";
+    const filePath = index === 0 && firstFilePath ? firstFilePath : operation === "delete" ? minusHeader : plusHeader ?? minusHeader;
+    if (!filePath || filePath === "/dev/null") continue;
+    const body = section
+      .split("\n")
+      .filter((line) => line.startsWith("@@") || line.startsWith("+") || line.startsWith("-") || line.startsWith(" "))
+      .filter((line) => !line.startsWith("+++") && !line.startsWith("---"))
+      .join("\n");
+    edits.push({ filePath, operation, unifiedDiff: body });
+  }
+  return edits;
+}
+
+function previewDiffToUnifiedDiff(diff: string): string {
+  return diff
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .filter((line, index, lines) => !(index === lines.length - 1 && line === ""))
+    .map((line) => {
+      const match = line.match(/^([+\- ])\s*\d+\s(.*)$/);
+      return match?.[1] && match[2] !== undefined ? `${match[1]}${match[2]}` : line;
+    })
+    .join("\n");
+}
+
+function patchPreviewEdits(value: unknown): ApplyPatchEdit[] {
+  if (!isRecord(value)) return [];
+  const nested = [value, value.details, value.result].find((candidate) => {
+    if (!isRecord(candidate)) return false;
+    return isRecord(candidate.preview) || (isRecord(candidate.details) && isRecord(candidate.details.preview));
+  });
+  if (!isRecord(nested)) return [];
+  const details = isRecord(nested.details) ? nested.details : nested;
+  const preview = isRecord(details.preview) ? details.preview : undefined;
+  const files = preview && Array.isArray(preview.files) ? preview.files : undefined;
+  if (!files) return [];
+
+  return files.flatMap((file): ApplyPatchEdit[] => {
+    if (!isRecord(file) || typeof file.filePath !== "string") return [];
+    const operation = file.operation;
+    if (operation !== "add" && operation !== "delete" && operation !== "update") return [];
+    return [{
+      filePath: file.filePath,
+      operation,
+      unifiedDiff: typeof file.diff === "string" ? previewDiffToUnifiedDiff(file.diff) : "",
+    }];
+  });
+}
+
+export function extractApplyPatchEdits(input: unknown, output: unknown): ApplyPatchEdit[] {
+  const outputEdits = patchPreviewEdits(output);
+  if (outputEdits.length > 0) return outputEdits;
+  if (isRecord(input) && input.type === "edit" && typeof input.unifiedDiff === "string") {
+    return unifiedDiffEdits(input.unifiedDiff, typeof input.filePath === "string" ? input.filePath : undefined);
+  }
+  const inputText = applyPatchInput(input);
+  if (inputText) {
+    const parsed = patchInputEdits(inputText);
+    if (parsed.length > 0) return parsed;
+    if (inputText.includes("diff --git ")) return unifiedDiffEdits(inputText);
+  }
+  if (typeof output === "string" && output.includes("diff --git ")) return unifiedDiffEdits(output);
+  return [];
+}
+
+export function isApplyPatchTool(toolName: string): boolean {
+  return applyPatchToolName(toolName);
+}
+
 export function diffStatsFromUnifiedDiff(unifiedDiff: string): DiffStats {
   let additions = 0;
   let deletions = 0;

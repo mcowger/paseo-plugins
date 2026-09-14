@@ -1,4 +1,5 @@
 import type { PluginTimelineTransformerContribution } from "@getpaseo/plugin/client";
+import type { ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
 import {
   createReasoningData,
   createToolCallData,
@@ -7,6 +8,7 @@ import {
   TOOL_CALL_RENDERER_KIND,
   TOOL_CALL_RENDERER_VERSION,
 } from "../shared/timeline";
+import { extractApplyPatchEdits, isApplyPatchTool } from "../shared/presentation";
 
 type ReasoningTransformer = PluginTimelineTransformerContribution<"reasoning">["transform"];
 type ToolCallTransformer = PluginTimelineTransformerContribution<"tool_call">["transform"];
@@ -22,7 +24,41 @@ export const transformReasoning: ReasoningTransformer = ({ item, phase }) => ({
   ],
 });
 
+function transformApplyPatch(item: Extract<ToolCallTimelineItem, { type: "tool_call" }>) {
+  const edits = extractApplyPatchEdits(item.detail, item.detail.type === "unknown" ? item.detail.output : undefined);
+  if (edits.length === 0) return undefined;
+
+  return {
+    items: edits.map((edit, index) => {
+      const data = createToolCallData({
+        ...item,
+        name: "apply_patch",
+        detail: {
+          type: "edit",
+          filePath: edit.filePath,
+          unifiedDiff: edit.unifiedDiff,
+        },
+      });
+      const label = edit.operation === "add" ? "Add File" : edit.operation === "delete" ? "Delete File" : "Edit File";
+      return {
+        type: "plugin" as const,
+        id: `${item.callId}:apply-patch:${index}`,
+        kind: TOOL_CALL_RENDERER_KIND,
+        version: TOOL_CALL_RENDERER_VERSION,
+        data: {
+          ...data,
+          presentation: { ...data.presentation, label },
+        },
+      };
+    }),
+  };
+}
+
 export const transformToolCall: ToolCallTransformer = ({ item }) => {
+  if (isApplyPatchTool(item.name)) {
+    const transformed = transformApplyPatch(item);
+    if (transformed) return transformed;
+  }
   // Paseo renders this exact shape as a SpeakMessage, not an ordinary tool card.
   if (
     item.name === "speak" &&

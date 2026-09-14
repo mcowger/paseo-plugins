@@ -96,6 +96,44 @@ describe("colorful activity timeline transforms", () => {
     });
   });
 
+  it("emits one edit timeline item per apply_patch file", () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: src/index.ts",
+      "@@",
+      "-old()",
+      "+new()",
+      "*** Add File: docs/notes.md",
+      "+Notes",
+      "*** End Patch",
+    ].join("\n");
+    const result = transformToolCall({
+      phase: "complete",
+      item: {
+        ...toolCall({ type: "unknown", input: { input: patch }, output: null }),
+        name: "apply_patch",
+      },
+    });
+
+    expect(result?.items).toHaveLength(2);
+    expect(result?.items.map((item) => item.id)).toEqual([
+      "call-1:apply-patch:0",
+      "call-1:apply-patch:1",
+    ]);
+    expect(result?.items.map((item) => item.data)).toEqual([
+      expect.objectContaining({
+        name: "apply_patch",
+        detail: { type: "edit", filePath: "src/index.ts", unifiedDiff: "@@\n-old()\n+new()" },
+        presentation: expect.objectContaining({ label: "Edit File", diffStats: { additions: 1, deletions: 1 } }),
+      }),
+      expect.objectContaining({
+        name: "apply_patch",
+        detail: { type: "edit", filePath: "docs/notes.md", unifiedDiff: "+Notes" },
+        presentation: expect.objectContaining({ label: "Add File", diffStats: { additions: 1, deletions: 0 } }),
+      }),
+    ]);
+  });
+
   it("preserves native speak tool calls with text input", () => {
     const result = transformToolCall({
       phase: "complete",
