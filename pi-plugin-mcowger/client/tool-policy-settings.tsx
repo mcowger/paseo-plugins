@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import type { PluginSurfaceProps, SettingsState } from "@getpaseo/plugin/client";
 import { useRpc, useSettings } from "@getpaseo/plugin/client";
 import {
@@ -95,9 +95,36 @@ function sourceLabel(tool: PiKnownToolSummary): string {
   return `${tool.source.kind}${label}${tool.baselineActive ? " · Pi default" : ""}`;
 }
 
+function DisclosureHeader({
+  label,
+  summary,
+  expanded,
+  onPress,
+  theme,
+}: {
+  label: string;
+  summary: string;
+  expanded: boolean;
+  onPress(): void;
+  theme: PluginSurfaceProps["theme"];
+}) {
+  const styles = useMemo(() => ({
+    header: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, paddingVertical: 8 },
+    indicator: { color: theme.colors.foregroundMuted, fontSize: 16, width: 18 },
+    label: { flex: 1, color: theme.colors.foreground, fontWeight: "600" as const },
+    summary: { color: theme.colors.foregroundMuted, fontSize: 12 },
+  }), [theme]);
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${label} section`} accessibilityState={{ expanded }} onPress={onPress} style={styles.header}>
+    <Text style={styles.indicator}>{expanded ? "▾" : "▸"}</Text>
+    <Text style={styles.label}>{label}</Text>
+    <Text style={styles.summary}>{summary}</Text>
+  </Pressable>;
+}
+
 function ProfilePolicyCard({
   profile,
   policy,
+  theme,
   knownTools,
   knownToolsState,
   disabled,
@@ -106,12 +133,15 @@ function ProfilePolicyCard({
 }: {
   profile: PiProfileSummary;
   policy: ProfileToolPolicy | undefined;
+  theme: PluginSurfaceProps["theme"];
   knownTools: readonly PiKnownToolSummary[];
   knownToolsState: LoadState<readonly PiKnownToolSummary[]>;
   disabled: boolean;
   onChange(policy: ProfileToolPolicy | undefined): void;
   onRetryKnownTools(): Promise<void>;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
   const [externalPatterns, setExternalPatterns] = useState(() => patternsText(policy?.allowedExternalMcpPatterns ?? []));
   const styles = useMemo(() => ({
@@ -129,15 +159,20 @@ function ProfilePolicyCard({
   const knownNames = new Set(knownTools.map((tool) => tool.name));
   const staleTools = policy?.allowedPiToolNames.filter((name) => !knownNames.has(name)) ?? [];
 
+  const profileSummary = policy
+    ? `Enabled · ${policy.allowedPiToolNames.length} Pi · ${policy.allowedPaseoToolNames.length} Paseo`
+    : "Disabled · using fallback";
+
   if (!policy) {
     return <SettingsCard>
-      <SettingsSwitch
+      <DisclosureHeader label={profile.name} summary={profileSummary} expanded={expanded} onPress={() => setExpanded((current) => !current)} theme={theme} />
+      {expanded ? <SettingsSwitch
         label={profile.name}
         hint="Use the global fallback policy for this profile."
         value={false}
         onValueChange={(value) => onChange(value ? { profileId: profile.id, allowedPiToolNames: [], allowedPaseoToolNames: [], allowedExternalMcpPatterns: [] } : undefined)}
         disabled={disabled}
-      />
+      /> : null}
     </SettingsCard>;
   }
 
@@ -145,6 +180,8 @@ function ProfilePolicyCard({
   const emptyPolicy = policy.allowedPiToolNames.length + policy.allowedPaseoToolNames.length + policy.allowedExternalMcpPatterns.length === 0;
 
   return <SettingsCard>
+    <DisclosureHeader label={profile.name} summary={profileSummary} expanded={expanded} onPress={() => setExpanded((current) => !current)} theme={theme} />
+    {expanded ? <>
     <SettingsSwitch
       label={profile.name}
       hint="Strict profile policy enabled. It replaces the global fallback for this profile."
@@ -164,16 +201,24 @@ function ProfilePolicyCard({
       {staleTools.map((name) => <SettingsSwitch key={name} label={name} hint="Stale selection: unavailable from the current global Pi discovery." value onValueChange={(value) => { if (!value) update({ allowedPiToolNames: toggleAllowedTool(policy.allowedPiToolNames, name, false) }); }} disabled={disabled} />)}
     </SettingsRow>
     <SettingsRow label="Paseo host tools" hint="Canonical Paseo tool names only. Bridge aliases are never shown.">
-      {PASEO_TOOL_GROUPS.map((group) => <View key={group.label}>
-        <SettingsSwitch label={group.label} value={group.tools.every((tool) => policy.allowedPaseoToolNames.includes(tool))} onValueChange={(value) => onChange(updateAllowedGroup(policy, group.tools, value))} disabled={disabled} />
-        {group.tools.map((tool) => <SettingsSwitch key={tool} label={tool} value={policy.allowedPaseoToolNames.includes(tool)} onValueChange={(value) => update({ allowedPaseoToolNames: toggleAllowedTool(policy.allowedPaseoToolNames, tool, value) })} disabled={disabled} />)}
-      </View>)}
+      {PASEO_TOOL_GROUPS.map((group) => {
+        const selectedCount = group.tools.filter((tool) => policy.allowedPaseoToolNames.includes(tool)).length;
+        const groupExpanded = expandedGroups[group.label] ?? false;
+        return <View key={group.label}>
+          <DisclosureHeader label={group.label} summary={`${selectedCount}/${group.tools.length} selected`} expanded={groupExpanded} onPress={() => setExpandedGroups((current) => ({ ...current, [group.label]: !groupExpanded }))} theme={theme} />
+          {groupExpanded ? <>
+            <SettingsSwitch label={group.label} value={selectedCount === group.tools.length} onValueChange={(value) => onChange(updateAllowedGroup(policy, group.tools, value))} disabled={disabled} />
+            {group.tools.map((tool) => <SettingsSwitch key={tool} label={tool} value={policy.allowedPaseoToolNames.includes(tool)} onValueChange={(value) => update({ allowedPaseoToolNames: toggleAllowedTool(policy.allowedPaseoToolNames, tool, value) })} disabled={disabled} />)}
+          </> : null}
+        </View>;
+      })}
     </SettingsRow>
     <SettingsRow label="External MCP allow patterns" hint="Advanced: one case-sensitive minimatch pattern per line. These apply only to non-Paseo MCP tools.">
       <TextInput accessibilityLabel={`${profile.name} external MCP allow patterns`} value={externalPatterns} onChangeText={(value) => { setExternalPatterns(value); update({ allowedExternalMcpPatterns: patternsFromText(value) }); }} multiline numberOfLines={4} editable={!disabled} style={styles.input} />
     </SettingsRow>
     {emptyPolicy ? <Text accessibilityRole="alert">This enabled profile policy allows no tools. Agents using this profile will be chat-only.</Text> : null}
     <Text>Policy changes apply when an agent using this profile is opened or refreshed.</Text>
+    </> : null}
   </SettingsCard>;
 }
 
@@ -190,6 +235,9 @@ function PolicyEditor({ settings, theme, profilesState, knownToolsState, onRetry
   const [blockedPatternsText, setBlockedPatternsText] = useState(() => patternsText(settings.values.piTools.blockedPatterns));
   const [dirty, setDirty] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [fallbackPiExpanded, setFallbackPiExpanded] = useState(false);
+  const [fallbackPaseoExpanded, setFallbackPaseoExpanded] = useState(false);
+  const [fallbackGroupsExpanded, setFallbackGroupsExpanded] = useState<Record<string, boolean>>({});
   const styles = useMemo(() => ({
     input: { minHeight: 88, padding: 10, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, backgroundColor: theme.colors.surface2, color: theme.colors.foreground, textAlignVertical: "top" as const },
     secondary: { color: theme.colors.foregroundMuted },
@@ -225,25 +273,38 @@ function PolicyEditor({ settings, theme, profilesState, knownToolsState, onRetry
   return <>
     <SettingsSection title="Fallback Pi tool access" info="This global policy is used only when a Pi agent profile has no strict policy.">
       <SettingsCard>
-        <SettingsSelect label="Tool selection" value={draft.piTools.mode} options={[{ label: "Inherit Pi defaults", value: "inherit" }, { label: "Allow only matching tools", value: "allowlist" }]} onValueChange={(mode) => setPi({ mode })} disabled={settings.saving} />
-        {draft.piTools.mode === "allowlist" ? <SettingsRow label="Allowed patterns" hint="One case-sensitive exact name or glob per line."><TextInput accessibilityLabel="Fallback allowed patterns" value={allowedPatternsText} onChangeText={(value) => { setAllowedPatternsText(value); setDirty(true); }} multiline numberOfLines={4} editable={!settings.saving} style={styles.input} placeholder="read\nfind\ngrep" placeholderTextColor={theme.colors.foregroundMuted} /></SettingsRow> : null}
-        <SettingsRow label="Blocked patterns" hint="Blocks always win. Glob matching is case-sensitive and uses minimatch."><TextInput accessibilityLabel="Fallback blocked patterns" value={blockedPatternsText} onChangeText={(value) => { setBlockedPatternsText(value); setDirty(true); }} multiline numberOfLines={4} editable={!settings.saving} style={styles.input} placeholder="bash\nmcp_linear_*" placeholderTextColor={theme.colors.foregroundMuted} /></SettingsRow>
+        <DisclosureHeader label="Fallback Pi policy" summary={`${draft.piTools.mode === "allowlist" ? "Allowlist" : "Inherit defaults"} · ${draft.piTools.blockedPatterns.length} blocked`} expanded={fallbackPiExpanded} onPress={() => setFallbackPiExpanded((current) => !current)} theme={theme} />
+        {fallbackPiExpanded ? <>
+          <SettingsSelect label="Tool selection" value={draft.piTools.mode} options={[{ label: "Inherit Pi defaults", value: "inherit" }, { label: "Allow only matching tools", value: "allowlist" }]} onValueChange={(mode) => setPi({ mode })} disabled={settings.saving} />
+          {draft.piTools.mode === "allowlist" ? <SettingsRow label="Allowed patterns" hint="One case-sensitive exact name or glob per line."><TextInput accessibilityLabel="Fallback allowed patterns" value={allowedPatternsText} onChangeText={(value) => { setAllowedPatternsText(value); setDirty(true); }} multiline numberOfLines={4} editable={!settings.saving} style={styles.input} placeholder="read\nfind\ngrep" placeholderTextColor={theme.colors.foregroundMuted} /></SettingsRow> : null}
+          <SettingsRow label="Blocked patterns" hint="Blocks always win. Glob matching is case-sensitive and uses minimatch."><TextInput accessibilityLabel="Fallback blocked patterns" value={blockedPatternsText} onChangeText={(value) => { setBlockedPatternsText(value); setDirty(true); }} multiline numberOfLines={4} editable={!settings.saving} style={styles.input} placeholder="bash\nmcp_linear_*" placeholderTextColor={theme.colors.foregroundMuted} /></SettingsRow>
+        </> : null}
       </SettingsCard>
     </SettingsSection>
     <SettingsSection title="Fallback Paseo host tools" info="This global catalog policy is the fallback, not a filesystem or shell sandbox.">
       <SettingsCard>
-        <SettingsSwitch label="Expose Paseo host tools" hint="Hiding create_workspace does not stop bash from running git worktree or the Paseo CLI." value={draft.paseoTools.enabled} onValueChange={(enabled) => setPaseo({ enabled })} disabled={settings.saving} />
-        {PASEO_TOOL_GROUPS.map((group) => <View key={group.label}>
-          <SettingsSwitch label={group.label} value={groupEnabled(draft.paseoTools, group.tools)} onValueChange={(enabled) => setPaseo(updateGroup(draft.paseoTools, group.tools, enabled))} disabled={settings.saving || !draft.paseoTools.enabled} />
-          {group.tools.map((tool) => <SettingsSwitch key={tool} label={tool} value={!draft.paseoTools.disabledTools.includes(tool)} onValueChange={(enabled) => setPaseo(updateGroup(draft.paseoTools, [tool], enabled))} disabled={settings.saving || !draft.paseoTools.enabled} />)}
-        </View>)}
+        <DisclosureHeader label="Fallback Paseo tools" summary={`${draft.paseoTools.enabled ? "Enabled" : "Disabled"} · ${PASEO_TOOL_GROUPS.reduce((count, group) => count + group.tools.filter((tool) => !draft.paseoTools.disabledTools.includes(tool)).length, 0)} selected`} expanded={fallbackPaseoExpanded} onPress={() => setFallbackPaseoExpanded((current) => !current)} theme={theme} />
+        {fallbackPaseoExpanded ? <>
+          <SettingsSwitch label="Expose Paseo host tools" hint="Hiding create_workspace does not stop bash from running git worktree or the Paseo CLI." value={draft.paseoTools.enabled} onValueChange={(enabled) => setPaseo({ enabled })} disabled={settings.saving} />
+          {PASEO_TOOL_GROUPS.map((group) => {
+            const selectedCount = group.tools.filter((tool) => !draft.paseoTools.disabledTools.includes(tool)).length;
+            const groupExpanded = fallbackGroupsExpanded[group.label] ?? false;
+            return <View key={group.label}>
+              <DisclosureHeader label={group.label} summary={`${selectedCount}/${group.tools.length} enabled`} expanded={groupExpanded} onPress={() => setFallbackGroupsExpanded((current) => ({ ...current, [group.label]: !groupExpanded }))} theme={theme} />
+              {groupExpanded ? <>
+                <SettingsSwitch label={group.label} value={groupEnabled(draft.paseoTools, group.tools)} onValueChange={(enabled) => setPaseo(updateGroup(draft.paseoTools, group.tools, enabled))} disabled={settings.saving || !draft.paseoTools.enabled} />
+                {group.tools.map((tool) => <SettingsSwitch key={tool} label={tool} value={!draft.paseoTools.disabledTools.includes(tool)} onValueChange={(enabled) => setPaseo(updateGroup(draft.paseoTools, [tool], enabled))} disabled={settings.saving || !draft.paseoTools.enabled} />)}
+              </> : null}
+            </View>;
+          })}
+        </> : null}
       </SettingsCard>
     </SettingsSection>
     <SettingsSection title="Profile policies" info="A strict policy replaces the fallback for its saved Pi profile. Changes apply after an agent is opened or refreshed.">
       {profilesState.status === "loading" ? <Text style={styles.secondary}>Loading Pi profiles and synchronizing profile markers…</Text> : null}
       {profilesState.status === "error" ? <><Text accessibilityRole="alert" style={styles.error}>Profile policies are unavailable: {profilesState.error}. Saved profile rules were kept.</Text><SettingsAction label="Profile access" actionLabel="Retry" onPress={() => void onRetryProfiles()} disabled={settings.saving} /></> : null}
       {profilesState.status === "ready" && profilesState.value.length === 0 ? <Text style={styles.secondary}>No saved Pi-provider profiles are available. The fallback policy remains active.</Text> : null}
-      {profilesState.status === "ready" ? profilesState.value.map((profile) => <ProfilePolicyCard key={profile.id} profile={profile} policy={profilePolicyFor(draft, profile.id)} knownTools={knownToolsState.status === "ready" ? knownToolsState.value : []} knownToolsState={knownToolsState} disabled={settings.saving} onChange={(policy) => setProfilePolicy(profile.id, policy)} onRetryKnownTools={onRetryKnownTools} />) : null}
+      {profilesState.status === "ready" ? profilesState.value.map((profile) => <ProfilePolicyCard key={profile.id} profile={profile} policy={profilePolicyFor(draft, profile.id)} theme={theme} knownTools={knownToolsState.status === "ready" ? knownToolsState.value : []} knownToolsState={knownToolsState} disabled={settings.saving} onChange={(policy) => setProfilePolicy(profile.id, policy)} onRetryKnownTools={onRetryKnownTools} />) : null}
     </SettingsSection>
     <SettingsSection title="Effective behavior">
       <Text style={styles.secondary}>Paseo tools are removed before Pi registers them. Fallback Pi rules narrow active tools for every new Pi session.</Text>
