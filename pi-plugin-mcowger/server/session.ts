@@ -103,7 +103,14 @@ export class PiProviderSession {
   }
 
   get persistence(): ProviderPersistence {
-    return { version: 1, data: { sessionFile: this.options.state.sessionFile ?? null, cwd: this.options.config.cwd } };
+    return {
+      version: 1,
+      data: {
+        bridgeSessionId: this.options.sessionId,
+        sessionFile: this.options.state.sessionFile ?? null,
+        cwd: this.options.config.cwd,
+      },
+    };
   }
 
   async initialize(): Promise<void> {

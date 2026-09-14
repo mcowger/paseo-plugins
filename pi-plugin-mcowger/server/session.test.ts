@@ -81,6 +81,22 @@ test("applies initial composer settings to Pi", async () => {
   await session.close();
 });
 
+test("persists the current Paseo bridge session ID", async () => {
+  const { runtime } = createRuntime();
+  const session = createSession(runtime, []);
+
+  expect(session.persistence).toEqual({
+    version: 1,
+    data: {
+      bridgeSessionId: "paseo-session",
+      sessionFile: null,
+      cwd: "/workspace",
+    },
+  });
+
+  await session.close();
+});
+
 test("publishes the built-in compact command", async () => {
   const { runtime } = createRuntime();
   const events: ProviderEvent[] = [];

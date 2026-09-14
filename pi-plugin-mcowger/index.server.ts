@@ -6,9 +6,11 @@ import { getPiRuntimeSettingsRpc, updatePiRuntimeSettingRpc } from "./shared/run
 export default function contribute(server: PluginServerContext) {
   const provider = createPiProvider();
   server.registerProvider(provider);
-  server.handle(getPiRuntimeSettingsRpc, ({ agentId }) => ({ settings: provider.getRuntimeSettings(agentId) }));
-  server.handle(updatePiRuntimeSettingRpc, async ({ agentId, id, value }) => ({
-    settings: await provider.updateRuntimeSetting(agentId, id, value),
+  server.handle(getPiRuntimeSettingsRpc, async ({ agentId }, { paseo }) => ({
+    settings: await provider.getRuntimeSettings(agentId, paseo),
+  }));
+  server.handle(updatePiRuntimeSettingRpc, async ({ agentId, id, value }, { paseo }) => ({
+    settings: await provider.updateRuntimeSetting(agentId, id, value, paseo),
   }));
   return async () => {
     await provider.close();

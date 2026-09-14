@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 
+import type { PaseoApi } from "@getpaseo/client";
 import { negotiateProviderCapabilities, type ProviderConnection, type ProviderEvent, type ProviderInput, type ProviderRegistration } from "@getpaseo/plugin/server/provider";
 
 import { createPiMcpConfig } from "./mcp-config.js";
@@ -11,10 +12,12 @@ import { thinkingConfigForModel } from "./thinking.js";
 
 export const PI_PROVIDER_ID = "pi-plugin-mcowger";
 const CAPABILITIES = ["prompt.message", "prompt.command", "prompt.image", "prompt.steer", "session.persistence", "session.configure", "session.revert.conversation", "permission"] as const;
+const PLUGIN_PERSISTENCE_PREFIX = "plugin:";
+const MAX_PROVIDER_SESSION_ID_LENGTH = 160;
 
 export interface ManagedPiProvider extends ProviderRegistration {
-  getRuntimeSettings(agentId: string): PiRuntimeSetting[];
-  updateRuntimeSetting(agentId: string, id: PiRuntimeSettingId, value: boolean): Promise<PiRuntimeSetting[]>;
+  getRuntimeSettings(agentId: string, paseo: PaseoApi): Promise<PiRuntimeSetting[]>;
+  updateRuntimeSetting(agentId: string, id: PiRuntimeSettingId, value: boolean, paseo: PaseoApi): Promise<PiRuntimeSetting[]>;
   close(): Promise<void>;
 }
 
@@ -40,11 +43,11 @@ export function createPiProvider(): ManagedPiProvider {
       await Promise.all([...connections].map((connection) => connection.close()));
       connections.clear();
     },
-    getRuntimeSettings(agentId) {
-      return requireSession(sessions, agentId).getRuntimeSettings();
+    async getRuntimeSettings(agentId, paseo) {
+      return (await requireSessionForAgent(sessions, agentId, paseo)).getRuntimeSettings();
     },
-    async updateRuntimeSetting(agentId, id, value) {
-      return await requireSession(sessions, agentId).updateRuntimeSetting(id, value);
+    async updateRuntimeSetting(agentId, id, value, paseo) {
+      return await (await requireSessionForAgent(sessions, agentId, paseo)).updateRuntimeSetting(id, value);
     },
   };
 }
@@ -183,3 +186,35 @@ async function supportsPiMcpAdapter(cwd: string, env: Readonly<Record<string, st
 
 function requireSession(sessions: Map<string, PiProviderSession>, id: string): PiProviderSession { const session = sessions.get(id); if (!session) throw new Error(`Unknown session: ${id}`); return session; }
 function sessionFile(data: unknown): string | undefined { return data && typeof data === "object" && !Array.isArray(data) && typeof (data as Record<string, unknown>).sessionFile === "string" ? (data as Record<string, string>).sessionFile : undefined; }
+
+async function requireSessionForAgent(
+  sessions: Map<string, PiProviderSession>,
+  agentId: string,
+  paseo: PaseoApi,
+): Promise<PiProviderSession> {
+  const agent = (await paseo.agents.ref(agentId).refresh())?.agent;
+  if (agent?.provider !== PI_PROVIDER_ID) throw new Error("Pi settings are only available for Pi sessions");
+  for (const runtimeSessionId of [agent.runtimeInfo?.sessionId, agent.persistence?.sessionId]) {
+    const bridgeSessionId = bridgeSessionIdFromRuntimeSessionId(runtimeSessionId);
+    if (bridgeSessionId) {
+      const session = sessions.get(bridgeSessionId);
+      if (session) return session;
+    }
+  }
+  throw new Error("Pi session is not active");
+}
+
+function bridgeSessionIdFromRuntimeSessionId(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.startsWith(PLUGIN_PERSISTENCE_PREFIX)) return undefined;
+  try {
+    const persistence = JSON.parse(value.slice(PLUGIN_PERSISTENCE_PREFIX.length)) as { data?: unknown };
+    const data = persistence.data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
+    const bridgeSessionId = (data as { bridgeSessionId?: unknown }).bridgeSessionId;
+    return typeof bridgeSessionId === "string" && bridgeSessionId.length > 0 && bridgeSessionId.length <= MAX_PROVIDER_SESSION_ID_LENGTH
+      ? bridgeSessionId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
