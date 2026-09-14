@@ -56,8 +56,9 @@ export function getActivityExpansionState(
   isStreaming: boolean,
   isLatest: boolean,
   userExpanded: boolean | null,
+  expandLatest = true,
 ): boolean {
-  return isStreaming || (userExpanded !== null ? userExpanded : isLatest);
+  return isStreaming || (userExpanded !== null ? userExpanded : expandLatest && isLatest);
 }
 
 export function getReasoningExpansionState(

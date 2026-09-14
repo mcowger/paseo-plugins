@@ -1362,7 +1362,7 @@ export function ColorfulToolCall({
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const categoryColor = palette.categoryColors[item.data.presentation.category];
   const statusColor = palette.statusColors[item.data.status];
-  const expanded = getActivityExpansionState(isRunning, isLatest, userExpanded);
+  const expanded = getActivityExpansionState(isRunning, isLatest, userExpanded, detail?.type !== "read");
   const toggle = useCallback(() => {
     if (!isRunning) setUserExpanded(!expanded);
   }, [expanded, isRunning]);
