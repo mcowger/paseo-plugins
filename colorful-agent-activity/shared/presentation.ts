@@ -1257,6 +1257,21 @@ export function toJsonValue(value: unknown): JsonValue {
   }
 }
 
+export function parsePiLsOutput(value: unknown): string[] | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const content = (value as Record<string, unknown>).content;
+  if (!Array.isArray(content)) return null;
+
+  const textBlocks = content.flatMap((block) => {
+    if (block === null || typeof block !== "object" || Array.isArray(block)) return [];
+    const record = block as Record<string, unknown>;
+    return record.type === "text" && typeof record.text === "string" ? [record.text] : [];
+  });
+  if (textBlocks.length !== content.length) return null;
+
+  return textBlocks.flatMap((text) => text.split("\n").filter((entry) => entry.length > 0));
+}
+
 export function formatUnknownValue(value: unknown): string {
   if (typeof value === "string") {
     const formatted = prettyJson(value);

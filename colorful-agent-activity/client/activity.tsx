@@ -30,6 +30,7 @@ import {
   fileIconForPath,
   formatUnknownValue,
   paseoToolLeafName,
+  parsePiLsOutput,
   parseSubAgentActionLog,
   previewText,
   resolveActivityPalette,
@@ -986,6 +987,28 @@ function DetailBody({
     case "plan":
       return <Text selectable style={styles.detailText}>{detail.text}</Text>;
     case "unknown": {
+      if (data.name.trim().toLowerCase() === "ls") {
+        const entries = parsePiLsOutput(detail.output);
+        if (entries !== null) {
+          return (
+            <View style={styles.section}>
+              <DetailLabel style={styles.detailLabel}>Files</DetailLabel>
+              {entries.length === 0 ? (
+                <Text style={styles.empty}>No files returned.</Text>
+              ) : (
+                entries.map((entry) => (
+                  <PathRow
+                    key={entry}
+                    icon={entry.endsWith("/") ? "Folder" : fileIconForPath(entry)}
+                    path={entry}
+                    styles={styles}
+                  />
+                ))
+              )}
+            </View>
+          );
+        }
+      }
       if (githubToolKind(data.name)) {
         return (
           <GithubToolDetail

@@ -13,6 +13,7 @@ import {
   paseoToolLeafName,
   paseoToolSummary,
   paseoToolResult,
+  parsePiLsOutput,
   unwrapPaseoToolOutput,
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
@@ -137,6 +138,21 @@ describe("colorful activity presentation", () => {
       icon: "List",
       label: "List Files",
     });
+  });
+
+  it("parses Pi ls text envelopes into file entries", () => {
+    expect(
+      parsePiLsOutput({
+        content: [
+          {
+            type: "text",
+            text: ".git/\nREADME.md\npackage.json\n",
+          },
+        ],
+      }),
+    ).toEqual([".git/", "README.md", "package.json"]);
+    expect(parsePiLsOutput({ content: [] })).toEqual([]);
+    expect(parsePiLsOutput({ content: [{ type: "image", text: "README.md" }] })).toBeNull();
   });
 
   it("maps sub-agent actions to readable inline progress rows", () => {
