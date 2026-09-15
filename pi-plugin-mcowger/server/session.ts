@@ -11,6 +11,7 @@ import { thinkingConfigForModel } from "./thinking.js";
 import { PI_COMPATIBILITY_MODES } from "./modes.js";
 import { mapToolDetail, parseToolArgs, parseToolResult, resolveToolCallName, type PiTrackedToolCall } from "./tool-call-mapper.js";
 import type { PiRuntimeSetting, PiRuntimeSettingId } from "../shared/runtime-settings.js";
+import { NicoSubagentProjector } from "./subagent-projector.js";
 
 const DEFAULT_THINKING_LEVEL = "medium";
 const RESPONSE_HEADER = "Response";
@@ -45,6 +46,7 @@ export interface PiProviderSessionOptions {
   runtime: PiRuntimeSession;
   state: PiSessionState;
   models: PiModel[];
+  subagentSessions?: boolean;
   emit(event: ProviderEvent): void;
   cleanup(): void;
 }
@@ -96,11 +98,20 @@ export class PiProviderSession {
   private usageGeneration = 0;
   private usageTimer: NodeJS.Timeout | null = null;
   private closed = false;
+  private readonly subagents: NicoSubagentProjector;
 
   constructor(private readonly options: PiProviderSessionOptions) {
     this.autoRetryEnabled = settingBoolean(options.config.settings, AUTO_RETRY_SETTING) ?? false;
+    this.subagents = new NicoSubagentProjector({
+      rootSessionId: options.sessionId,
+      cwd: options.config.cwd,
+      enabled: options.subagentSessions ?? false,
+      emit: (event) => this.options.emit(event),
+    });
     this.unsubscribe = options.runtime.onEvent((event) => this.onEvent(event));
   }
+
+  markRootReady(): void { this.subagents.markRootReady(); }
 
   get persistence(): ProviderPersistence {
     return {
@@ -171,6 +182,7 @@ export class PiProviderSession {
       } else if (message.role === "toolResult") {
         const tracked = this.toolCalls.get(message.toolCallId) ?? parseToolArgs(message.toolName, null);
         this.toolCalls.delete(message.toolCallId);
+        this.subagents.observeHistory(message.toolCallId, message.toolName, { content: message.content, details: message.details }, message.isError);
         this.emitTool(message.toolCallId, tracked, message.isError ? "failed" : "completed", parseToolResult(message.content), message.isError ? message.content : null);
       }
     }
@@ -326,6 +338,7 @@ export class PiProviderSession {
 
   async close(): Promise<void> {
     if (this.closed) return;
+    this.subagents.cancelActive();
     this.closed = true;
     this.usageGeneration += 1;
     this.clearUsagePoll();
@@ -337,6 +350,7 @@ export class PiProviderSession {
   private onEvent(event: PiRuntimeEvent): void {
     if (this.closed) return;
     if (event.type === "process_exit") {
+      this.subagents.cancelActive();
       if (this.turnId) this.finish(this.turnId, [], event.error);
       return;
     }
@@ -372,14 +386,15 @@ export class PiProviderSession {
     if (event.type === "message_start" && event.message.role === "assistant") { this.assistantMessageId = event.message.responseId ?? randomUUID(); return; }
     if (event.type === "message_update") { this.handleUpdate(event); return; }
     if (event.type === "message_end") { this.handleMessageEnd(event); return; }
-    if (event.type === "tool_execution_start") { const tracked = parseToolArgs(event.toolName, event.args); this.toolCalls.set(event.toolCallId, tracked); this.emitTool(event.toolCallId, tracked, "running", null, null); return; }
-    if (event.type === "tool_execution_update") { const tracked = this.toolCalls.get(event.toolCallId); if (tracked) this.emitTool(event.toolCallId, tracked, "running", parseToolResult(event.partialResult), null); return; }
-    if (event.type === "tool_execution_end") { const tracked = this.toolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null); this.toolCalls.delete(event.toolCallId); this.emitTool(event.toolCallId, tracked, event.isError ? "failed" : "completed", parseToolResult(event.result), event.isError ? event.result : null); this.emitUsage(); return; }
+    if (event.type === "tool_execution_start") { this.subagents.observeStart(event.toolCallId, event.toolName, event.args); const tracked = parseToolArgs(event.toolName, event.args); this.toolCalls.set(event.toolCallId, tracked); this.emitTool(event.toolCallId, tracked, "running", null, null); return; }
+    if (event.type === "tool_execution_update") { this.subagents.observeUpdate(event.toolCallId, event.partialResult); const tracked = this.toolCalls.get(event.toolCallId); if (tracked) this.emitTool(event.toolCallId, tracked, "running", parseToolResult(event.partialResult), null); return; }
+    if (event.type === "tool_execution_end") { this.subagents.observeEnd(event.toolCallId, event.result, Boolean(event.isError)); const tracked = this.toolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null); this.toolCalls.delete(event.toolCallId); this.emitTool(event.toolCallId, tracked, event.isError ? "failed" : "completed", parseToolResult(event.result), event.isError ? event.result : null); this.emitUsage(); return; }
     if (event.type === "compaction_start") { this.handleCompactionEvent("loading", event.reason === "manual" ? "manual" : "auto"); return; }
     if (event.type === "compaction_end") { this.handleCompactionEvent("completed", event.reason === "manual" ? "manual" : "auto"); return; }
     if (event.type === "auto_retry_start") { this.timeline({ type: "error", id: randomUUID(), message: `Provider retry (attempt ${event.attempt}): ${event.errorMessage}` }); return; }
     if (event.type === "agent_end") {
       this.pendingTerminalMessages = event.messages ?? [];
+      this.subagents.finishActive(latestAssistantError(this.pendingTerminalMessages) ? "failed" : "completed");
       if (event.willRetry === undefined) this.finish(this.turnId, this.pendingTerminalMessages);
       return;
     }
@@ -470,7 +485,10 @@ export class PiProviderSession {
     this.emitUsage(turnId);
   }
 
-  private emitTool(id: string, tracked: PiTrackedToolCall, status: "running" | "completed" | "failed", result: ReturnType<typeof parseToolResult>, error: unknown): void { this.timeline({ type: "tool_call", id, callId: id, name: resolveToolCallName(tracked, result), detail: mapToolDetail(tracked, result), status, error: status === "failed" ? (error ?? "Tool failed") as never : null }); }
+  private emitTool(id: string, tracked: PiTrackedToolCall, status: "running" | "completed" | "failed", result: ReturnType<typeof parseToolResult>, error: unknown): void {
+    const childSessionId = this.subagents.parentChildSessionId(id);
+    this.timeline({ type: "tool_call", id, callId: id, name: resolveToolCallName(tracked, result), detail: childSessionId ? { type: "sub_agent", subAgentType: "subagent", childSessionId, log: "Foreground subagent delegation" } : mapToolDetail(tracked, result), status, error: status === "failed" ? (error ?? "Tool failed") as never : null });
+  }
   private emitConfig(): void {
     const model = this.options.state.model;
     const currentThinking = model ? thinkingConfigForModel(model) : { thinkingOptions: [], defaultThinkingOptionId: undefined };

@@ -60,6 +60,7 @@ function createSession(
   runtime: PiRuntimeSession,
   events: ProviderEvent[],
   settings: ProviderSessionConfig["settings"] = {},
+  subagentSessions = false,
 ) {
   return new PiProviderSession({
     sessionId: "paseo-session",
@@ -67,6 +68,7 @@ function createSession(
     runtime,
     state: { ...state },
     models: [],
+    subagentSessions,
     emit: (event) => events.push(event),
     cleanup() {},
   });
@@ -402,5 +404,56 @@ test("waits for agent_settled after a retriable agent_end", async () => {
   expect(events.filter((event) => event.type === "session.turn" && event.state === "completed")).toHaveLength(0);
   emit({ type: "agent_settled" });
   expect(events.filter((event) => event.type === "session.turn" && event.state === "completed")).toHaveLength(1);
+  await session.close();
+});
+
+test("projects a qualifying foreground subagent beneath the root session", async () => {
+  const { runtime, emit } = createRuntime();
+  const events: ProviderEvent[] = [];
+  const session = createSession(runtime, events, {}, true);
+  session.markRootReady();
+
+  emit({ type: "tool_execution_start", toolCallId: "parent", toolName: "subagent", args: { agent: "scout", task: "Inspect package.json" } });
+  emit({
+    type: "tool_execution_update",
+    toolCallId: "parent",
+    toolName: "subagent",
+    partialResult: {
+      content: [{ type: "text", text: "Looking now." }],
+      details: {
+        runId: "foreground-run",
+        results: [{
+          index: 0,
+          agent: "scout",
+          toolCalls: [{ expandedText: 'read {"path":"package.json"}' }],
+          usage: { input: 10, output: 2, cacheRead: 1, cacheWrite: 0, cost: 0.01, turns: 1 },
+          progress: {
+            index: 0,
+            agent: "scout",
+            status: "running",
+            currentTool: "read",
+            currentToolArgs: "package.json",
+            inputTokens: 10,
+            outputTokens: 2,
+            window: 11,
+          },
+        }],
+      },
+    },
+  });
+
+  const child = events.find((event): event is Extract<ProviderEvent, { type: "session.opened" }> => event.type === "session.opened" && event.parentSessionId === "paseo-session");
+  expect(child).toMatchObject({ restoration: "parent", title: "scout", capabilities: [] });
+  const parentTool = events.filter((event): event is Extract<ProviderEvent, { type: "timeline.item" }> => event.type === "timeline.item")
+    .map((event) => event.item)
+    .filter((item): item is Extract<typeof item, { type: "tool_call" }> => item.type === "tool_call" && item.callId === "parent")
+    .at(-1);
+  expect(parentTool).toMatchObject({ detail: { type: "sub_agent", childSessionId: child?.sessionId } });
+  expect(events).toContainEqual(expect.objectContaining({
+    type: "session.usage",
+    sessionId: child?.sessionId,
+    usage: { inputTokens: 10, outputTokens: 2, cachedInputTokens: 1, totalCostUsd: 0.01, contextWindowUsedTokens: 11 },
+  }));
+
   await session.close();
 });

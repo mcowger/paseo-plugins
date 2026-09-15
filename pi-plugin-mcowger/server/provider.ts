@@ -11,7 +11,7 @@ import type { PiRuntimeSetting, PiRuntimeSettingId } from "../shared/runtime-set
 import { thinkingConfigForModel } from "./thinking.js";
 
 export const PI_PROVIDER_ID = "pi-plugin-mcowger";
-const CAPABILITIES = ["prompt.message", "prompt.command", "prompt.image", "prompt.steer", "session.persistence", "session.configure", "session.revert.conversation", "permission"] as const;
+const CAPABILITIES = ["prompt.message", "prompt.command", "prompt.image", "prompt.steer", "session.persistence", "session.configure", "session.revert.conversation", "session.subsession", "permission"] as const;
 const PLUGIN_PERSISTENCE_PREFIX = "plugin:";
 const MAX_PROVIDER_SESSION_ID_LENGTH = 160;
 
@@ -129,6 +129,7 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
           runtime,
           state,
           models,
+          subagentSessions: capabilities.includes("session.subsession"),
           emit,
           cleanup: () => { mcpConfig?.cleanup(); extension.cleanup(); },
         });
@@ -138,6 +139,7 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
         await session.initialize();
         if (input.history === "replay" && persisted) await session.replayHistory();
         emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
+        session.markRootReady();
       } catch (error) {
         sessions.delete(input.sessionId);
         allSessions.delete(input.sessionId);
