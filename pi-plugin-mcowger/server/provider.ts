@@ -117,7 +117,7 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
       if (sessions.has(input.sessionId)) throw new Error(`Session already exists: ${input.sessionId}`);
       const persisted = sessionFile(input.persistence?.data);
       const extension = createPaseoExtension(input.config.systemPrompt);
-      const mcpConfig = await prepareMcpConfig(input.config.cwd, input.config.mcpServers, input.config.env);
+      const mcpConfig = createPiMcpConfig(input.config.mcpServers, input.config.env);
       let runtime: Awaited<ReturnType<typeof startPiSession>> | undefined;
       let session: PiProviderSession | undefined;
       try {
@@ -158,29 +158,6 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
     case "session.revert": if (input.scope !== "conversation") throw new Error(`Pi does not support ${input.scope} rewind`); await requireSession(sessions, input.sessionId).revert(input.token); emit({ type: "request.completed", requestId: input.requestId }); return;
     case "session.archive": case "session.unarchive": emit({ type: "request.completed", requestId: input.requestId }); return;
     case "session.close": { const session = sessions.get(input.sessionId); sessions.delete(input.sessionId); allSessions.delete(input.sessionId); await session?.close(); emit({ type: "session.closed", sessionId: input.sessionId }); emit({ type: "request.completed", requestId: input.requestId }); return; }
-  }
-}
-
-async function prepareMcpConfig(
-  cwd: string,
-  servers: Readonly<Record<string, import("@getpaseo/plugin/server/provider").ProviderMcpServerConfig>>,
-  env: Readonly<Record<string, string>>,
-) {
-  if (Object.keys(servers).length === 0 || !(await supportsPiMcpAdapter(cwd, env))) return null;
-  return createPiMcpConfig(servers, env);
-}
-
-async function supportsPiMcpAdapter(cwd: string, env: Readonly<Record<string, string>>): Promise<boolean> {
-  let runtime: Awaited<ReturnType<typeof startPiSession>> | undefined;
-  try {
-    runtime = await startPiSession({ cwd, env: { ...env }, persist: false });
-    return (await runtime.getCommands()).some((command) =>
-      command.source === "extension" && /^mcp(?::\d+)?$/.test(command.name) && (!command.sourceInfo || JSON.stringify(command.sourceInfo).includes("pi-mcp-adapter")),
-    );
-  } catch {
-    return false;
-  } finally {
-    await runtime?.close().catch(() => undefined);
   }
 }
 

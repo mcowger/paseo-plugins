@@ -11,9 +11,8 @@ Run [Pi](https://github.com/earendil-works/pi) in Paseo through one isolated `pi
 - Persists native Pi sessions and supports conversation rewind.
 - Bridges Pi extension questions to Paseo permissions.
 - Applies session system prompts, environment overrides, and injected MCP servers.
-- Exposes `/compact` plus a Pi composer pill for automatic compaction, retry, Fast mode, and future runtime controls.
-- Recognizes [`pi-gpt-fast-mode`](https://github.com/mcowger/pi-gpt-fast-mode) and includes Fast in that pill for supported models.
-- Recognizes [`pi-openai-long-context`](https://github.com/johnhenaot/pi-openai-long-context) and includes Long context only for supported models.
+- Exposes `/compact` plus a Pi composer pill for automatic compaction, retry, Fast mode, Long context, and future runtime controls.
+- Probes only [`@mcowger/pi-microgpt`](https://github.com/mcowger/pi-plugins/tree/main/packages/pi-microgpt). It adds Fast mode, Long context, multi-agent tools, and native Codex `apply_patch` for supported models.
 - Stops each Pi process and removes its temporary files when Paseo closes or reloads the provider.
 
 ## Installation
@@ -35,19 +34,11 @@ npm test
 paseo plugin add "$PWD"
 ```
 
-### Fast mode
+### pi-microgpt
 
-Install [`pi-gpt-fast-mode`](https://github.com/mcowger/pi-gpt-fast-mode) in the same Pi profile used by the Paseo daemon:
+Install `@mcowger/pi-microgpt` in the same Pi profile used by the Paseo daemon using any supported Pi package source, including a local path, npm, or git.
 
-```sh
-pi install git:github.com/mcowger/pi-gpt-fast-mode
-```
-
-The provider probes for the extension and its supported model before showing Fast in the Pi settings pill. If the extension is not installed, or the current model is unsupported, the control stays hidden.
-
-### Long context
-
-Install [`pi-openai-long-context`](https://github.com/johnhenaot/pi-openai-long-context) in the Pi profile used by Paseo. The pill hides Long context unless the extension reports the active model as supported.
+The provider verifies pi-microgpt's JSON response before showing Fast or Long context in the Pi settings pill. Unsupported models keep both controls hidden. Its `spawn_agent`, `send_message`, `followup_task`, `wait_agent`, `list_agents`, and `interrupt_agent` tools stream into the Paseo timeline. Native `apply_patch` calls appear as edits.
 
 ## Limitations
 

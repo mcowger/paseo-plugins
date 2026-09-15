@@ -1,4 +1,8 @@
-import { expect, test } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterAll, expect, test } from "vitest";
 
 import type { ProviderEvent, ProviderSessionConfig } from "@getpaseo/plugin/server/provider";
 
@@ -217,158 +221,147 @@ test("keeps composer settings empty while exposing runtime settings for the Pi p
   await session.close();
 });
 
-test("probes and exposes fast mode only for a supported model", async () => {
-  const commands: PiRpcSlashCommand[] = [
-    { name: "fast", source: "extension" },
-    { name: "fast-status", source: "extension" },
-  ];
+const microGptPackageDirectory = mkdtempSync(join(tmpdir(), "paseo-pi-microgpt-"));
+writeFileSync(join(microGptPackageDirectory, "package.json"), JSON.stringify({ name: "@mcowger/pi-microgpt" }));
+afterAll(() => rmSync(microGptPackageDirectory, { recursive: true, force: true }));
+
+const microGptCommands: PiRpcSlashCommand[] = [
+  "fast",
+  "fast-status",
+  "long-context",
+  "long-context-status",
+].map((name) => ({
+  name,
+  source: "extension",
+  sourceInfo: {
+    source: "local-package-source",
+    baseDir: microGptPackageDirectory,
+    origin: "package",
+  },
+}));
+
+function microGptStatus(command: "fast" | "long-context", requestId: string, supported: boolean) {
+  return {
+    type: "pi-microgpt.response",
+    command,
+    success: true,
+    requestId,
+    enabled: false,
+    supported,
+    provider: "openai-codex",
+    model: supported ? "gpt-5.6" : "claude-opus-4-8",
+    ...(command === "long-context" ? { contextWindow: supported ? 1_050_000 : 200_000 } : {}),
+  };
+}
+
+test("probes pi-microgpt and exposes its supported controls", async () => {
   const requests: string[] = [];
   const { runtime } = createRuntime({
-    commands,
+    commands: microGptCommands,
     prompt(message, emit) {
       requests.push(message);
       if (message.startsWith("/fast-status ")) {
         emit({
           type: "extension_ui_request",
-          id: "status",
+          id: "fast-status",
           method: "notify",
-          message: JSON.stringify({
-            type: "pi-gpt-fast-mode.status",
-            requestId: message.slice("/fast-status ".length),
-            enabled: false,
-            model: "openai-codex/gpt-5.6",
-            supported: true,
-          }),
+          message: JSON.stringify(microGptStatus("fast", message.slice("/fast-status ".length), true)),
+        });
+      }
+      if (message.startsWith("/long-context-status ")) {
+        emit({
+          type: "extension_ui_request",
+          id: "long-context-status",
+          method: "notify",
+          message: JSON.stringify(microGptStatus("long-context", message.slice("/long-context-status ".length), true)),
         });
       }
     },
   });
-  const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events);
+  const session = createSession(runtime, []);
 
   await session.initialize();
 
-  expect(requests).toHaveLength(1);
   expect(session.getRuntimeSettings()).toMatchObject([
     { id: "autoCompaction" },
     { id: "autoRetry" },
     { id: "fastMode", value: false },
+    { id: "longContext", value: false },
   ]);
 
   await session.updateRuntimeSetting("fastMode", true);
-  expect(requests).toHaveLength(3);
-  expect(requests[1]).toBe("/fast on");
-  expect(requests[2]).toMatch(/^\/fast-status /);
+  await session.updateRuntimeSetting("longContext", true);
+  expect(requests).toEqual([
+    expect.stringMatching(/^\/fast-status /),
+    expect.stringMatching(/^\/long-context-status /),
+    "/fast on",
+    expect.stringMatching(/^\/fast-status /),
+    "/long-context on",
+    expect.stringMatching(/^\/long-context-status /),
+  ]);
   await session.close();
 });
 
-test("does not expose fast mode when its commands are absent", async () => {
-  const { runtime } = createRuntime({ commands: [{ name: "fast", source: "extension" }] });
-  const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events);
+test("does not probe similarly named commands from another extension", async () => {
+  const requests: string[] = [];
+  const { runtime } = createRuntime({
+    commands: microGptCommands.map((command) => ({
+      ...command,
+      sourceInfo: { source: "npm:unrelated-extension", origin: "package" },
+    })),
+    prompt(message) { requests.push(message); },
+  });
+  const session = createSession(runtime, []);
 
   await session.initialize();
 
-  expect(events.find((event) => event.type === "session.config")).not.toMatchObject({
-    config: { settings: expect.arrayContaining([{ id: "fastMode" }]) },
-  });
+  expect(requests).toEqual([]);
+  expect(session.getRuntimeSettings()).toHaveLength(2);
   await session.close();
 });
 
-test("does not expose fast mode when the installed extension reports an unsupported model", async () => {
+test("does not probe an incomplete pi-microgpt installation", async () => {
+  const requests: string[] = [];
   const { runtime } = createRuntime({
-    commands: [
-      { name: "fast", source: "extension" },
-      { name: "fast-status", source: "extension" },
-    ],
-    prompt(message, emit) {
-      if (!message.startsWith("/fast-status ")) return;
-      emit({
-        type: "extension_ui_request",
-        id: "status",
-        method: "notify",
-        message: JSON.stringify({
-          type: "pi-gpt-fast-mode.status",
-          requestId: message.slice("/fast-status ".length),
-          enabled: false,
-          model: "anthropic/claude-opus-4-8",
-          supported: false,
-        }),
-      });
-    },
+    commands: microGptCommands.slice(0, 3),
+    prompt(message) { requests.push(message); },
   });
-  const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events);
+  const session = createSession(runtime, []);
 
   await session.initialize();
 
-  expect(events.find((event) => event.type === "session.config")).not.toMatchObject({
-    config: { settings: expect.arrayContaining([{ id: "fastMode" }]) },
-  });
+  expect(requests).toEqual([]);
+  expect(session.getRuntimeSettings()).toHaveLength(2);
   await session.close();
 });
 
-test("shows long context only when the extension supports the active model", async () => {
+test("hides pi-microgpt controls for unsupported models", async () => {
   const { runtime } = createRuntime({
-    commands: [
-      { name: "long-context", source: "extension" },
-      { name: "long-context-status", source: "extension" },
-    ],
+    commands: microGptCommands,
     prompt(message, emit) {
-      if (!message.startsWith("/long-context-status ")) return;
-      emit({
-        type: "extension_ui_request",
-        id: "status",
-        method: "notify",
-        message: JSON.stringify({
-          type: "pi-openai-long-context.status",
-          requestId: message.slice("/long-context-status ".length),
-          enabled: false,
-          supported: true,
-          provider: "openai",
-          model: "gpt-5.6",
-          contextWindow: 1_050_000,
-        }),
-      });
+      if (message.startsWith("/fast-status ")) {
+        emit({
+          type: "extension_ui_request",
+          id: "fast-status",
+          method: "notify",
+          message: JSON.stringify(microGptStatus("fast", message.slice("/fast-status ".length), false)),
+        });
+      }
+      if (message.startsWith("/long-context-status ")) {
+        emit({
+          type: "extension_ui_request",
+          id: "long-context-status",
+          method: "notify",
+          message: JSON.stringify(microGptStatus("long-context", message.slice("/long-context-status ".length), false)),
+        });
+      }
     },
   });
   const session = createSession(runtime, []);
 
   await session.initialize();
 
-  expect(session.getRuntimeSettings()).toContainEqual(expect.objectContaining({ id: "longContext", value: false }));
-  await session.close();
-});
-
-test("hides long context when the extension rejects the active model", async () => {
-  const { runtime } = createRuntime({
-    commands: [
-      { name: "long-context", source: "extension" },
-      { name: "long-context-status", source: "extension" },
-    ],
-    prompt(message, emit) {
-      if (!message.startsWith("/long-context-status ")) return;
-      emit({
-        type: "extension_ui_request",
-        id: "status",
-        method: "notify",
-        message: JSON.stringify({
-          type: "pi-openai-long-context.status",
-          requestId: message.slice("/long-context-status ".length),
-          enabled: false,
-          supported: false,
-          provider: "anthropic",
-          model: "claude-opus-4-8",
-          contextWindow: 200_000,
-        }),
-      });
-    },
-  });
-  const session = createSession(runtime, []);
-
-  await session.initialize();
-
-  expect(session.getRuntimeSettings()).not.toContainEqual(expect.objectContaining({ id: "longContext" }));
+  expect(session.getRuntimeSettings()).toHaveLength(2);
   await session.close();
 });
 

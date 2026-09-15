@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,11 +19,18 @@ const AUTO_RETRY_SETTING = "autoRetry";
 const FAST_MODE_SETTING = "fastMode";
 const FAST_MODE_COMMAND = "fast";
 const FAST_MODE_STATUS_COMMAND = "fast-status";
-const FAST_MODE_QUERY_TIMEOUT_MS = 5_000;
 const LONG_CONTEXT_SETTING = "longContext";
 const LONG_CONTEXT_COMMAND = "long-context";
 const LONG_CONTEXT_STATUS_COMMAND = "long-context-status";
-const LONG_CONTEXT_QUERY_TIMEOUT_MS = 5_000;
+const MICROGPT_PACKAGE_NAME = "@mcowger/pi-microgpt";
+const MICROGPT_RESPONSE_TYPE = "pi-microgpt.response";
+const MICROGPT_QUERY_TIMEOUT_MS = 5_000;
+const MICROGPT_COMMANDS = [
+  FAST_MODE_COMMAND,
+  FAST_MODE_STATUS_COMMAND,
+  LONG_CONTEXT_COMMAND,
+  LONG_CONTEXT_STATUS_COMMAND,
+] as const;
 const BUILTIN_COMMANDS: readonly ProviderCommand[] = [
   {
     name: "compact",
@@ -55,22 +62,16 @@ interface ManualCompactionCommand {
   completed: boolean;
 }
 
-interface FastModeStatus {
-  type: "pi-gpt-fast-mode.status";
-  requestId?: string;
-  enabled: boolean;
-  model: string;
-  supported: boolean;
-}
-
-interface LongContextStatus {
-  type: "pi-openai-long-context.status";
+interface MicroGptStatus {
+  type: "pi-microgpt.response";
+  command: typeof FAST_MODE_COMMAND | typeof LONG_CONTEXT_COMMAND;
+  success: boolean;
   requestId?: string;
   enabled: boolean;
   supported: boolean;
-  provider: string;
-  model: string;
-  contextWindow: number;
+  provider?: string;
+  model?: string;
+  contextWindow?: number;
 }
 
 export class PiProviderSession {
@@ -85,14 +86,13 @@ export class PiProviderSession {
   private autoRetryEnabled = false;
   private activeCompaction: ActiveCompaction | null = null;
   private manualCompactionCommand: ManualCompactionCommand | null = null;
-  private fastModeExtension = false;
+  private microgptExtension = false;
   private fastModeAvailable = false;
   private fastModeEnabled = false;
-  private readonly fastModeQueries = new Map<string, (status: FastModeStatus) => void>();
-  private longContextExtension = false;
+  private readonly fastModeQueries = new Map<string, (status: MicroGptStatus) => void>();
   private longContextAvailable = false;
   private longContextEnabled = false;
-  private readonly longContextQueries = new Map<string, (status: LongContextStatus) => void>();
+  private readonly longContextQueries = new Map<string, (status: MicroGptStatus) => void>();
   private usageGeneration = 0;
   private usageTimer: NodeJS.Timeout | null = null;
   private closed = false;
@@ -125,21 +125,15 @@ export class PiProviderSession {
       this.autoRetryEnabled = autoRetry;
     }
     const commands = await this.options.runtime.getCommands().catch(() => []);
-    this.fastModeExtension = hasExtensionCommand(commands, FAST_MODE_COMMAND)
-      && hasExtensionCommand(commands, FAST_MODE_STATUS_COMMAND);
-    if (this.fastModeExtension) {
-      const status = await this.queryFastMode().catch(() => undefined);
-      this.applyFastModeStatus(status);
+    this.microgptExtension = hasMicroGptCommands(commands);
+    if (this.microgptExtension) {
+      this.applyFastModeStatus(await this.queryFastMode().catch(() => undefined));
       const configuredFastMode = settingBoolean(this.options.config.settings, FAST_MODE_SETTING);
       if (this.fastModeAvailable && configuredFastMode !== undefined) await this.setFastMode(configuredFastMode);
-    }
-    this.longContextExtension = hasExtensionCommand(commands, LONG_CONTEXT_COMMAND)
-      && hasExtensionCommand(commands, LONG_CONTEXT_STATUS_COMMAND);
-    if (this.longContextExtension) {
       await this.applyLongContextStatus(await this.queryLongContext().catch(() => undefined));
       const configuredLongContext = settingBoolean(this.options.config.settings, LONG_CONTEXT_SETTING);
       if (this.longContextAvailable && configuredLongContext !== undefined && configuredLongContext !== this.longContextEnabled) {
-        await this.setLongContext();
+        await this.setLongContext(configuredLongContext);
       }
     }
     this.emitConfig();
@@ -243,10 +237,10 @@ export class PiProviderSession {
       this.options.state = await this.options.runtime.getState();
       this.options.config.thinkingOption = this.options.state.thinkingLevel;
     }
-    if (changes.model && this.fastModeExtension) {
+    if (changes.model && this.microgptExtension) {
       this.applyFastModeStatus(await this.queryFastMode().catch(() => undefined));
+      await this.applyLongContextStatus(await this.queryLongContext().catch(() => undefined));
     }
-    if (changes.model && this.longContextExtension) await this.applyLongContextStatus(await this.queryLongContext().catch(() => undefined));
     const autoCompaction = settingBoolean(changes.settings, AUTO_COMPACTION_SETTING);
     if (autoCompaction !== undefined) {
       await this.options.runtime.setAutoCompaction(autoCompaction);
@@ -260,7 +254,7 @@ export class PiProviderSession {
     const fastMode = settingBoolean(changes.settings, FAST_MODE_SETTING);
     if (fastMode !== undefined && this.fastModeAvailable) await this.setFastMode(fastMode);
     const longContext = settingBoolean(changes.settings, LONG_CONTEXT_SETTING);
-    if (longContext !== undefined && this.longContextAvailable && longContext !== this.longContextEnabled) await this.setLongContext();
+    if (longContext !== undefined && this.longContextAvailable && longContext !== this.longContextEnabled) await this.setLongContext(longContext);
     this.emitConfig();
   }
 
@@ -305,7 +299,7 @@ export class PiProviderSession {
       await this.setFastMode(value);
     } else if (id === LONG_CONTEXT_SETTING) {
       if (!this.longContextAvailable) throw new Error("Long context is not available for this model");
-      if (value !== this.longContextEnabled) await this.setLongContext();
+      if (value !== this.longContextEnabled) await this.setLongContext(value);
     }
     this.emitConfig();
     return this.getRuntimeSettings();
@@ -348,8 +342,8 @@ export class PiProviderSession {
     }
     if (event.type === "extension_ui_request") {
       if (event.method === "notify" && typeof event.message === "string") {
-        const status = parseFastModeStatus(event.message);
-        if (status) {
+        const status = parseMicroGptStatus(event.message);
+        if (status?.command === FAST_MODE_COMMAND) {
           const resolve = status.requestId ? this.fastModeQueries.get(status.requestId) : undefined;
           if (resolve) {
             this.fastModeQueries.delete(status.requestId!);
@@ -357,12 +351,11 @@ export class PiProviderSession {
           }
           return;
         }
-        const longContextStatus = parseLongContextStatus(event.message);
-        if (longContextStatus) {
-          const resolve = longContextStatus.requestId ? this.longContextQueries.get(longContextStatus.requestId) : undefined;
+        if (status?.command === LONG_CONTEXT_COMMAND) {
+          const resolve = status.requestId ? this.longContextQueries.get(status.requestId) : undefined;
           if (resolve) {
-            this.longContextQueries.delete(longContextStatus.requestId!);
-            resolve(longContextStatus);
+            this.longContextQueries.delete(status.requestId!);
+            resolve(status);
           }
           return;
         }
@@ -517,17 +510,17 @@ export class PiProviderSession {
     await this.options.runtime.prompt(`/fast ${enabled ? "on" : "off"}`);
     this.applyFastModeStatus(await this.queryFastMode());
   }
-  private async setLongContext(): Promise<void> {
-    await this.options.runtime.prompt(`/${LONG_CONTEXT_COMMAND}`);
+  private async setLongContext(enabled: boolean): Promise<void> {
+    await this.options.runtime.prompt(`/${LONG_CONTEXT_COMMAND} ${enabled ? "on" : "off"}`);
     await this.applyLongContextStatus(await this.queryLongContext());
   }
-  private async queryLongContext(): Promise<LongContextStatus> {
+  private async queryLongContext(): Promise<MicroGptStatus> {
     const requestId = randomUUID();
-    const status = new Promise<LongContextStatus>((resolve, reject) => {
+    const status = new Promise<MicroGptStatus>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.longContextQueries.delete(requestId);
-        reject(new Error("Timed out querying Pi OpenAI long context"));
-      }, LONG_CONTEXT_QUERY_TIMEOUT_MS);
+        reject(new Error("Timed out querying pi-microgpt long context"));
+      }, MICROGPT_QUERY_TIMEOUT_MS);
       this.longContextQueries.set(requestId, (value) => {
         clearTimeout(timer);
         resolve(value);
@@ -541,13 +534,13 @@ export class PiProviderSession {
       throw error;
     }
   }
-  private async queryFastMode(): Promise<FastModeStatus> {
+  private async queryFastMode(): Promise<MicroGptStatus> {
     const requestId = randomUUID();
-    const status = new Promise<FastModeStatus>((resolve, reject) => {
+    const status = new Promise<MicroGptStatus>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.fastModeQueries.delete(requestId);
-        reject(new Error("Timed out querying Pi GPT Fast mode"));
-      }, FAST_MODE_QUERY_TIMEOUT_MS);
+        reject(new Error("Timed out querying pi-microgpt Fast mode"));
+      }, MICROGPT_QUERY_TIMEOUT_MS);
       this.fastModeQueries.set(requestId, (value) => {
         clearTimeout(timer);
         resolve(value);
@@ -561,14 +554,15 @@ export class PiProviderSession {
       throw error;
     }
   }
-  private applyFastModeStatus(status: FastModeStatus | undefined): void {
-    this.fastModeAvailable = Boolean(this.fastModeExtension && status?.supported);
-    if (status) this.fastModeEnabled = status.enabled;
+  private applyFastModeStatus(status: MicroGptStatus | undefined): void {
+    this.fastModeAvailable = Boolean(this.microgptExtension && status?.success && status.supported);
+    if (status?.success) this.fastModeEnabled = status.enabled;
   }
-  private async applyLongContextStatus(status: LongContextStatus | undefined): Promise<void> {
-    this.longContextAvailable = Boolean(this.longContextExtension && status?.supported);
-    if (!status) return;
+  private async applyLongContextStatus(status: MicroGptStatus | undefined): Promise<void> {
+    this.longContextAvailable = Boolean(this.microgptExtension && status?.success && status.supported);
+    if (!status?.success) return;
     this.longContextEnabled = status.enabled;
+    if (!status.provider || !status.model || status.contextWindow === undefined) return;
     const [state, models] = await Promise.all([this.options.runtime.getState(), this.options.runtime.getAvailableModels()]);
     this.options.state = state.model?.provider === status.provider && state.model.id === status.model
       ? { ...state, model: { ...state.model, contextWindow: status.contextWindow } }
@@ -627,8 +621,22 @@ function mergeCommands(commands: readonly ProviderCommand[]): ProviderCommand[] 
   return [...merged.values()];
 }
 
-function hasExtensionCommand(commands: readonly { name: string; source: string }[], name: string): boolean {
-  return commands.some((command) => command.name === name && command.source === "extension");
+function hasMicroGptCommands(commands: readonly { name: string; source: string; sourceInfo?: Record<string, unknown> }[]): boolean {
+  return MICROGPT_COMMANDS.every((name) => commands.some((command) =>
+    command.name === name
+    && command.source === "extension"
+    && isMicroGptSource(command.sourceInfo),
+  ));
+}
+
+function isMicroGptSource(sourceInfo: Record<string, unknown> | undefined): boolean {
+  if (!sourceInfo || sourceInfo.origin !== "package" || typeof sourceInfo.baseDir !== "string") return false;
+  try {
+    const manifest = JSON.parse(readFileSync(join(sourceInfo.baseDir, "package.json"), "utf8")) as { name?: unknown };
+    return manifest.name === MICROGPT_PACKAGE_NAME;
+  } catch {
+    return false;
+  }
 }
 
 function getCompactArguments(prompt: ProviderPrompt, text: string): string | null {
@@ -650,20 +658,21 @@ function settingBoolean(
   if (value === "off") return false;
   return undefined;
 }
-function parseFastModeStatus(message: string): FastModeStatus | undefined {
+function parseMicroGptStatus(message: string): MicroGptStatus | undefined {
   try {
-    const value = JSON.parse(message) as Partial<FastModeStatus>;
-    if (value.type !== "pi-gpt-fast-mode.status" || typeof value.enabled !== "boolean" || typeof value.model !== "string" || typeof value.supported !== "boolean") return undefined;
-    return value as FastModeStatus;
-  } catch {
-    return undefined;
-  }
-}
-function parseLongContextStatus(message: string): LongContextStatus | undefined {
-  try {
-    const value = JSON.parse(message) as Partial<LongContextStatus>;
-    if (value.type !== "pi-openai-long-context.status" || typeof value.enabled !== "boolean" || typeof value.supported !== "boolean" || typeof value.provider !== "string" || typeof value.model !== "string" || typeof value.contextWindow !== "number") return undefined;
-    return value as LongContextStatus;
+    const value = JSON.parse(message) as Partial<MicroGptStatus>;
+    if (
+      value.type !== MICROGPT_RESPONSE_TYPE
+      || (value.command !== FAST_MODE_COMMAND && value.command !== LONG_CONTEXT_COMMAND)
+      || typeof value.success !== "boolean"
+      || typeof value.enabled !== "boolean"
+      || typeof value.supported !== "boolean"
+      || (value.requestId !== undefined && typeof value.requestId !== "string")
+      || (value.provider !== undefined && typeof value.provider !== "string")
+      || (value.model !== undefined && typeof value.model !== "string")
+      || (value.contextWindow !== undefined && typeof value.contextWindow !== "number")
+    ) return undefined;
+    return value as MicroGptStatus;
   } catch {
     return undefined;
   }

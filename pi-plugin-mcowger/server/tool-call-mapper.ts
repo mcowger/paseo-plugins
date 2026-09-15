@@ -28,10 +28,23 @@ export function mapToolDetail(call: PiTrackedToolCall, result?: PiToolResult): P
     case "bash": return { type: "shell", command: typeof args.command === "string" ? args.command : "", output: extractTextFromToolResult(result ?? null), exitCode: result && typeof result !== "string" ? result.exitCode ?? result.code ?? null : null };
     case "read": return { type: "read", filePath: typeof args.path === "string" ? args.path : "", content: extractTextFromToolResult(result ?? null), ...(typeof args.offset === "number" ? { offset: args.offset } : {}), ...(typeof args.limit === "number" ? { limit: args.limit } : {}) };
     case "edit": { const edit = Array.isArray(args.edits) ? record(args.edits[0]) : args; return { type: "edit", filePath: typeof args.path === "string" ? args.path : "", ...(typeof (edit.oldText ?? edit.old_string) === "string" ? { oldString: String(edit.oldText ?? edit.old_string) } : {}), ...(typeof (edit.newText ?? edit.new_string) === "string" ? { newString: String(edit.newText ?? edit.new_string) } : {}), ...(result && typeof result !== "string" && typeof result.details?.diff === "string" ? { unifiedDiff: result.details.diff } : {}) }; }
+    case "apply_patch": return { type: "edit", filePath: patchPaths(typeof args.patch === "string" ? args.patch : "")[0] ?? "", ...(typeof args.patch === "string" ? { newString: args.patch } : {}) };
     case "write": return { type: "write", filePath: typeof args.path === "string" ? args.path : "", ...(typeof args.content === "string" ? { content: args.content } : {}) };
     case "find": return { type: "search", query: typeof args.pattern === "string" ? args.pattern : "", toolName: "search", content: extractTextFromToolResult(result ?? null) };
     case "grep": return { type: "search", query: typeof args.pattern === "string" ? args.pattern : "", toolName: "grep", content: extractTextFromToolResult(result ?? null) };
-    case "task": case "subagent": return { type: "sub_agent", ...(typeof args.agent === "string" ? { subAgentType: args.agent } : {}), ...(typeof args.task === "string" ? { description: args.task } : {}), log: extractTextFromToolResult(result ?? null) ?? "" };
+    case "spawn_agent": return { type: "sub_agent", ...(typeof args.agent_type === "string" ? { subAgentType: args.agent_type } : {}), ...(typeof args.message === "string" ? { description: args.message } : {}), log: extractTextFromToolResult(result ?? null) ?? "" };
+    case "send_message": case "followup_task": case "wait_agent": case "list_agents": case "interrupt_agent": return { type: "plain_text", label: call.toolName, text: extractTextFromToolResult(result ?? null) };
     default: return { type: "unknown", input: call.args as never, output: result as never };
   }
+}
+
+function patchPaths(patch: string): string[] {
+  const paths = new Set<string>();
+  for (const line of patch.split("\n")) {
+    const path = /^\*\*\* (?:Add|Delete|Update) File: (.+)$/u.exec(line)?.[1];
+    const move = /^\*\*\* Move to: (.+)$/u.exec(line)?.[1];
+    if (path) paths.add(path);
+    if (move) paths.add(move);
+  }
+  return [...paths];
 }
