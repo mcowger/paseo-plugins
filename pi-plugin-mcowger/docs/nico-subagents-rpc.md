@@ -30,6 +30,31 @@ ${details.runId}:${result.index}
 For a normal one-child call this is `runId:0`. Keep the parent `toolCallId` as
 the correlation key until the first update supplies `runId`.
 
+### Workflow result identity
+
+Workflow results are different. Each workflow step may return its own nested
+foreground result at `index: 0`, so `runId:index` is not unique across the
+top-level `details.results` array. The terminal result for a three-step
+workflow observed this exact shape:
+
+```json
+{
+  "mode": "workflow",
+  "runId": "workflow-run",
+  "results": [
+    { "index": 0, "workflowKey": "num-agent-1", "agent": "delegate" },
+    { "index": 0, "workflowKey": "num-agent-2", "agent": "delegate" },
+    { "index": 0, "workflowKey": "num-agent-3", "agent": "delegate" }
+  ]
+}
+```
+
+When `workflowKey` exists, use it with the workflow run ID as the child key.
+It is the stable identity of the workflow-owned child. `workflowChildren` is
+also an authoritative inventory of workflow children and supplies their
+state, agent, session name, model, thinking level, and live activity when
+individual result rows are absent or compacted.
+
 ## Live update shape
 
 `partialResult.details` has this relevant shape. `results[index]` and

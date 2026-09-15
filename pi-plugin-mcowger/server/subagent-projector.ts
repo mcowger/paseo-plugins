@@ -46,6 +46,7 @@ const usageSchema = z.object({
 
 const resultSchema = z.object({
   index: z.number().int().nonnegative(),
+  workflowKey: z.string().min(1).optional(),
   agent: z.string().min(1),
   sessionName: z.string().optional(),
   task: z.string().optional(),
@@ -64,6 +65,28 @@ const resultSchema = z.object({
   progress: progressSchema.optional(),
 }).strip();
 
+const workflowChildActivitySchema = z.object({
+  currentTool: z.string().optional(),
+  currentToolStartedAt: z.number().optional(),
+  lastActivityAt: z.number().optional(),
+  durationMs: z.number().optional(),
+  toolCount: z.number().optional(),
+  turnCount: z.number().optional(),
+  tokens: z.number().optional(),
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+}).strip();
+
+const workflowChildSchema = z.object({
+  childId: z.string().min(1),
+  agent: z.string().min(1).optional(),
+  sessionName: z.string().optional(),
+  model: z.string().optional(),
+  thinking: z.string().optional(),
+  state: z.string().optional(),
+  activity: workflowChildActivitySchema.optional(),
+}).strip();
+
 interface ChildUsage {
   input?: number;
   output?: number;
@@ -74,7 +97,9 @@ interface ChildUsage {
 }
 
 interface ChildSnapshot {
+  identity: string;
   index: number;
+  workflowKey?: string;
   agent: string;
   sessionName?: string;
   task?: string;
@@ -156,6 +181,7 @@ interface ParsedDetails {
   runId: string;
   children: ChildSnapshot[];
   hasChildFinalOutput: boolean;
+  workflow: boolean;
 }
 
 export class NicoSubagentProjector {
@@ -249,8 +275,8 @@ export class NicoSubagentProjector {
     this.pending.set(toolCallId, delegation);
     const snapshots = details.children.slice(0, MAX_SUBAGENT_CHILDREN_PER_TOOL);
     for (const snapshot of snapshots) {
-      if (delegation.children.size >= MAX_SUBAGENT_CHILDREN_PER_TOOL && !delegation.children.has(childKey(details.runId, snapshot.index))) continue;
-      const key = childKey(details.runId, snapshot.index);
+      const key = childKey(details.runId, snapshot);
+      if (delegation.children.size >= MAX_SUBAGENT_CHILDREN_PER_TOOL && !delegation.children.has(key)) continue;
       if (!delegation.children.has(key) && this.children.size >= MAX_SUBAGENT_CHILDREN_PER_SESSION) continue;
       delegation.children.add(key);
       let child = this.children.get(key);
@@ -315,7 +341,7 @@ export class NicoSubagentProjector {
     }
     const recentTools = snapshot.recentTools.slice(0, MAX_SUBAGENT_RECENT_TOOLS);
     for (const tool of recordedTools) {
-      const status = recordedToolStatus(tool, currentRecordedTool, recentTools, terminal || Boolean(snapshot.status && snapshot.status !== "running"), terminalStatusOverride);
+      const status = recordedToolStatus(tool, currentRecordedTool, recentTools, terminal || isTerminalStatus(snapshot.status), terminalStatusOverride);
       this.emitRecordedTool(child, tool, status);
     }
     for (const tool of recentTools) {
@@ -346,7 +372,7 @@ export class NicoSubagentProjector {
       }
     }
     if (terminalStatusOverride) this.finishChild(child, terminalStatusOverride);
-    else if (terminal || snapshot.status && snapshot.status !== "running") this.finishChild(child, terminalStatus(snapshot));
+    else if (terminal || isTerminalStatus(snapshot.status)) this.finishChild(child, terminalStatus(snapshot));
     void raw;
   }
 
@@ -421,17 +447,21 @@ function parseDetails(value: unknown, useEnvelopeContent: boolean): ParsedDetail
   if (!isObject(details)) return undefined;
   const parsed = z.object({
     runId: z.string().min(1),
+    mode: z.string().optional(),
     results: z.array(z.unknown()).optional(),
     progress: z.array(z.unknown()).optional(),
   }).strip().safeParse(details);
   if (!parsed.success) return undefined;
-  const snapshots = new Map<number, ChildSnapshot>();
+  const snapshots = new Map<string, ChildSnapshot>();
   let hasChildFinalOutput = false;
   for (const value of parsed.data.results ?? []) {
     const result = resultSchema.safeParse(value);
     if (!result.success) continue;
-    snapshots.set(result.data.index, {
+    const identity = snapshotIdentity(result.data.index, result.data.workflowKey);
+    snapshots.set(identity, {
+      identity,
       index: result.data.index,
+      workflowKey: result.data.workflowKey,
       agent: result.data.agent,
       sessionName: result.data.sessionName,
       task: result.data.task,
@@ -453,26 +483,97 @@ function parseDetails(value: unknown, useEnvelopeContent: boolean): ParsedDetail
     const parsedProgress = progressSchema.safeParse(value);
     if (!parsedProgress.success) continue;
     const progress = parsedProgress.data;
-    const existing = snapshots.get(progress.index);
-    snapshots.set(progress.index, {
-      ...(existing ?? { index: progress.index, agent: progress.agent, toolCalls: [], recentTools: [], recentOutput: [] }),
+    const matchingIdentities = [...snapshots.values()]
+      .filter((snapshot) => snapshot.index === progress.index)
+      .map((snapshot) => snapshot.identity);
+    if (matchingIdentities.length > 1) continue;
+    const identity = matchingIdentities[0] ?? snapshotIdentity(progress.index);
+    const existing = snapshots.get(identity);
+    snapshots.set(identity, {
+      ...(existing ?? { identity, index: progress.index, agent: progress.agent, toolCalls: [], recentTools: [], recentOutput: [] }),
       ...progressSnapshot(progress),
       agent: progress.agent,
       ...(existing?.model ? { model: existing.model } : {}),
       ...(existing?.thinking ? { thinking: existing.thinking } : {}),
     });
   }
+  const workflowChildren = parseWorkflowChildren(details.workflowChildren);
+  for (const workflowChild of workflowChildren) {
+    const existing = snapshots.get(workflowChild.identity);
+    snapshots.set(workflowChild.identity, existing ? mergeWorkflowChildSnapshot(existing, workflowChild) : workflowChild);
+  }
   const children = [...snapshots.values()]
     .filter((snapshot) => snapshot.agent.length > 0)
     .sort((left, right) => left.index - right.index)
     .slice(0, MAX_SUBAGENT_CHILDREN_PER_TOOL);
   if (children.length === 0) return undefined;
-  const content = useEnvelopeContent ? extractText(value.content) : undefined;
+  const workflow = parsed.data.mode === "workflow" || workflowChildren.length > 0;
+  const content = useEnvelopeContent && !workflow ? extractText(value.content) : undefined;
   if (content) for (const child of children) if (!child.content) {
     child.content = content;
     child.contentFromEnvelope = true;
   }
-  return { runId: parsed.data.runId, children, hasChildFinalOutput };
+  return { runId: parsed.data.runId, children, hasChildFinalOutput, workflow };
+}
+
+function parseWorkflowChildren(value: unknown): ChildSnapshot[] {
+  if (!isObject(value) || !Array.isArray(value.children)) return [];
+  const snapshots = new Map<string, ChildSnapshot>();
+  for (const childValue of value.children) {
+    const child = workflowChildSchema.safeParse(childValue);
+    if (!child.success) continue;
+    const identity = snapshotIdentity(0, child.data.childId);
+    const activity = child.data.activity;
+    snapshots.set(identity, {
+      identity,
+      index: 0,
+      workflowKey: child.data.childId,
+      agent: child.data.agent ?? child.data.childId,
+      sessionName: child.data.sessionName,
+      status: child.data.state,
+      model: child.data.model,
+      thinking: child.data.thinking,
+      inputTokens: finiteCounter(activity?.inputTokens),
+      outputTokens: finiteCounter(activity?.outputTokens),
+      tokens: finiteCounter(activity?.tokens),
+      durationMs: finiteCounter(activity?.durationMs),
+      currentTool: activity?.currentTool,
+      currentToolStartedAt: finiteCounter(activity?.currentToolStartedAt),
+      toolCount: finiteCounter(activity?.toolCount),
+      turnCount: finiteCounter(activity?.turnCount),
+      lastActivityAt: finiteCounter(activity?.lastActivityAt),
+      toolCalls: [],
+      recentTools: [],
+      recentOutput: [],
+    });
+  }
+  return [...snapshots.values()];
+}
+
+function mergeWorkflowChildSnapshot(result: ChildSnapshot, workflowChild: ChildSnapshot): ChildSnapshot {
+  return {
+    ...result,
+    workflowKey: result.workflowKey ?? workflowChild.workflowKey,
+    sessionName: result.sessionName ?? workflowChild.sessionName,
+    status: terminalOrPrimaryStatus(result.status, workflowChild.status),
+    model: result.model ?? workflowChild.model,
+    thinking: result.thinking ?? workflowChild.thinking,
+    inputTokens: result.inputTokens ?? workflowChild.inputTokens,
+    outputTokens: result.outputTokens ?? workflowChild.outputTokens,
+    tokens: result.tokens ?? workflowChild.tokens,
+    durationMs: result.durationMs ?? workflowChild.durationMs,
+    currentTool: result.currentTool ?? workflowChild.currentTool,
+    currentToolStartedAt: result.currentToolStartedAt ?? workflowChild.currentToolStartedAt,
+    toolCount: result.toolCount ?? workflowChild.toolCount,
+    turnCount: result.turnCount ?? workflowChild.turnCount,
+    lastActivityAt: result.lastActivityAt ?? workflowChild.lastActivityAt,
+  };
+}
+
+function terminalOrPrimaryStatus(primary: string | undefined, secondary: string | undefined): string | undefined {
+  if (isTerminalStatus(primary)) return primary;
+  if (isTerminalStatus(secondary)) return secondary;
+  return primary ?? secondary;
 }
 
 function progressSnapshot(progress: z.infer<typeof progressSchema>): Partial<ChildSnapshot> {
@@ -522,13 +623,18 @@ function visibleTask(value: string | undefined): string | undefined {
 
 function terminalStatus(snapshot: ChildSnapshot): ChildState["status"] {
   const status = snapshot.status?.toLowerCase();
-  if (status === "aborted" || status === "canceled" || status === "cancelled") return "canceled";
-  if (status === "failed" || snapshot.error || snapshot.exitCode !== undefined && snapshot.exitCode !== 0) return "failed";
+  if (["aborted", "canceled", "cancelled", "detached", "paused", "stopped"].includes(status ?? "")) return "canceled";
+  if (["failed", "rejected"].includes(status ?? "") || snapshot.error || snapshot.exitCode !== undefined && snapshot.exitCode !== 0) return "failed";
   return "completed";
 }
 
 function hasTerminalEvidence(snapshot: ChildSnapshot): boolean {
-  return Boolean(snapshot.status && snapshot.status !== "running" || snapshot.error || snapshot.exitCode !== undefined);
+  return isTerminalStatus(snapshot.status) || snapshot.error !== undefined || snapshot.exitCode !== undefined;
+}
+
+function isTerminalStatus(value: string | undefined): boolean {
+  if (!value) return false;
+  return !["pending", "running"].includes(value.toLowerCase());
 }
 
 function mapUsage(usage: ChildUsage, contextWindowUsedTokens?: number): ProviderUsage {
@@ -655,7 +761,12 @@ function max(left: number | undefined, right: number | undefined): number | unde
   return left === undefined ? right : right === undefined ? left : Math.max(left, right);
 }
 
-function childKey(runId: string, index: number): string { return `${runId}:${index}`; }
+function snapshotIdentity(index: number, workflowKey?: string): string {
+  return workflowKey ? `workflow:${workflowKey.length}:${workflowKey}:${index}` : `index:${index}`;
+}
+function childKey(runId: string, snapshot: ChildSnapshot): string {
+  return snapshot.workflowKey ? `${runId}:workflow:${snapshot.workflowKey.length}:${snapshot.workflowKey}:${snapshot.index}` : `${runId}:${snapshot.index}`;
+}
 function hash(value: string): string { return createHash("sha256").update(value).digest("hex").slice(0, 24); }
 function activeTool(child: ChildState, name: string, args?: string, startedAt?: number): ActiveTool {
   const fingerprint = `${name}\u0000${args ?? ""}\u0000${startedAt ?? ""}`;

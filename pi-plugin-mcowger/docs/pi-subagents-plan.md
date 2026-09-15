@@ -151,7 +151,13 @@ type VirtualChild = {
 ```
 
 The identity is `details.runId + ":" + result.index`, never the parent Pi
-`toolCallId`. Several child records may share one parent tool call, and the
+`toolCallId`, for ordinary single, parallel, and chain results. Workflow
+children are different: every workflow child can return a nested result with
+`index: 0`. When a result has `workflowKey`, use
+`details.runId + ":workflow:" + workflowKey + ":" + result.index` instead.
+`details.workflowChildren.children[].childId` is the same workflow identity
+and is the fallback inventory when compact workflow results omit individual
+child rows. Several child records may share one parent tool call, and the
 same child key appears in every update and terminal result.
 
 Provider session IDs should be deterministic and namespaced so different root
@@ -300,7 +306,9 @@ Add focused unit tests beside the provider session tests.
    index do not.
 3. **Stable identity and dedupe.** Repeated snapshots produce one
    `session.opened`, one ready event, and no duplicate preview/recent-tool
-   rows. Two indices under one run create two distinct child sessions.
+   rows. Two indices under one run create two distinct child sessions. A
+   workflow with several `index: 0` results distinguished by `workflowKey`
+   also creates one child per workflow key.
 4. **Ordering.** Assert `session.opened`, `session.ready`, child `started`,
    and child timeline/usage events occur in valid order and after the root
    open.

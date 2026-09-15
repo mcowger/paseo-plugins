@@ -71,6 +71,68 @@ describe("NicoSubagentProjector", () => {
     expect(opened.every((event) => event.parentSessionId === "root")).toBe(true);
   });
 
+  test("uses workflow keys when workflow child results reuse index zero", () => {
+    const { projector, events } = createProjector();
+    projector.observeStart("parent", "subagent", {});
+    projector.observeEnd("parent", {
+      content: [{ type: "text", text: "Run fan-out: 3/64 used, 61 remaining\nWorkflow completed." }],
+      details: {
+        mode: "workflow",
+        runId: "workflow-run",
+        results: [
+          { index: 0, workflowKey: "num-agent-1", agent: "delegate", exitCode: 0, finalOutput: "My number: 51" },
+          { index: 0, workflowKey: "num-agent-2", agent: "delegate", exitCode: 0, finalOutput: "My number: 42" },
+          { index: 0, workflowKey: "num-agent-3", agent: "delegate", exitCode: 0, finalOutput: "My number: 65" },
+        ],
+        workflowChildren: {
+          children: [
+            { childId: "num-agent-1", state: "completed", agent: "delegate" },
+            { childId: "num-agent-2", state: "completed", agent: "delegate" },
+            { childId: "num-agent-3", state: "completed", agent: "delegate" },
+          ],
+        },
+      },
+    }, false);
+
+    const children = events.filter((event): event is Extract<ProviderEvent, { type: "session.opened" }> => event.type === "session.opened");
+    expect(children).toHaveLength(3);
+    expect(new Set(children.map((event) => event.sessionId)).size).toBe(3);
+    const previews = events.filter((event): event is Extract<ProviderEvent, { type: "timeline.item" }> => event.type === "timeline.item")
+      .map((event) => event.item)
+      .filter((item): item is Extract<typeof item, { type: "assistant_message" }> => item.type === "assistant_message")
+      .map((item) => item.text);
+    expect(previews).toEqual(expect.arrayContaining(["My number: 51", "My number: 42", "My number: 65"]));
+    expect(previews).not.toContain("Run fan-out: 3/64 used, 61 remaining\nWorkflow completed.");
+    expect(events.filter((event) => event.type === "session.turn" && event.state === "completed")).toHaveLength(3);
+  });
+
+  test("projects workflowChildren when terminal result records are compacted away", () => {
+    const { projector, events } = createProjector();
+    projector.observeStart("parent", "subagent", {});
+    projector.observeEnd("parent", {
+      details: {
+        mode: "workflow",
+        runId: "workflow-children-only",
+        results: [],
+        workflowChildren: {
+          children: [
+            { childId: "alpha", state: "completed", agent: "scout", sessionName: "Scout alpha", model: "openai/gpt", thinking: "high" },
+            { childId: "beta", state: "failed", agent: "reviewer", sessionName: "Review beta", model: "openai/gpt", thinking: "low" },
+          ],
+        },
+      },
+    }, false);
+
+    const opened = events.filter((event): event is Extract<ProviderEvent, { type: "session.opened" }> => event.type === "session.opened");
+    expect(opened).toHaveLength(2);
+    expect(opened).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: "scout", description: "Scout alpha" }),
+      expect.objectContaining({ title: "reviewer", description: "Review beta" }),
+    ]));
+    expect(events).toContainEqual(expect.objectContaining({ type: "session.turn", state: "completed" }));
+    expect(events).toContainEqual(expect.objectContaining({ type: "session.turn", state: "failed" }));
+  });
+
   test("maps terminal failure and emits it after the active tool closes", () => {
     const { projector, events } = createProjector();
     projector.observeStart("parent", "subagent", {});
