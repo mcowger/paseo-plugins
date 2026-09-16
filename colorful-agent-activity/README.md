@@ -51,6 +51,7 @@ File edit with colored line diff:
 - The newest tool call stays open until a newer tool call appears.
 - Shell commands and terminal output highlighted with Prism.
 - Extension-aware file icons for reads, writes, edits, and search results.
+- Image reads render inline as thumbnails (tap to expand) instead of the `Read image file [...]` placeholder.
 - Edit statistics such as `+8 / -0` with colored diff rows.
 - Detail views for shell, read, write, edit, search, fetch, worktree, sub-agent, plan, plain-text,
   and unknown tool payloads.
@@ -105,6 +106,7 @@ paseo plugin reload colorful-agent-activity
 - Paseo's native detail and syntax components are private, so this plugin renders its own details.
 - Syntax highlighting uses Prism in the plugin bundle. It is not a terminal emulator.
 - Unsupported or oversized output falls back to plain monospace text.
+- Inline images show the file as it currently exists on disk, and files over 3 MiB stay as text.
 - Unknown tool payloads render as syntax-highlighted JSON, with a plain-text fallback for oversized or unsupported output.
 - A transformer that claims the same source row in another plugin can win before this plugin runs.
 - Disable `reasoning-display` when using this plugin because both transform reasoning rows.
@@ -117,8 +119,9 @@ npm run typecheck
 npm test
 ```
 
-The plugin uses separate Paseo v0.8 client and server entries. The server entry only registers the
-host-scoped palette settings; timeline rendering runs in the client bundle.
+The plugin uses separate Paseo v0.8 client and server entries. The server entry registers the
+host-scoped palette settings and serves image files back to the client for inline read previews;
+timeline rendering runs in the client bundle.
 
 ## paseo.cafe submission
 

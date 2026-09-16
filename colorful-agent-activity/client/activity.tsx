@@ -1,9 +1,10 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
-import { useSettings } from "@getpaseo/plugin/client";
+import { useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Icon, ScrollView, useRevealedText } from "@getpaseo/plugin/client/react-native";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -11,6 +12,7 @@ import React, {
   type ReactNode,
 } from "react";
 import {
+  Image,
   Pressable,
   Text,
   View,
@@ -43,6 +45,7 @@ import {
   type DiffLine,
 } from "../shared/presentation";
 import { parseInlineMarkdown, parseReasoningMarkdown } from "../shared/markdown";
+import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
 import { exaToolKind } from "../shared/exa";
 import { githubToolKind } from "../shared/github";
 import { activitySettings, DEFAULT_PALETTE_MODE } from "../shared/settings";
@@ -261,6 +264,22 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         fontWeight: "600",
         lineHeight: 14,
       } satisfies TextStyle,
+      imageSurface: {
+        backgroundColor: theme.colors.surface0,
+        borderColor: theme.colors.border,
+        borderRadius: 2,
+        borderWidth: 1,
+        minWidth: "100%",
+        overflow: "hidden",
+      } satisfies ViewStyle,
+      imageThumbnail: {
+        height: 200,
+        width: "100%",
+      } satisfies ViewStyle,
+      imageExpanded: {
+        height: 480,
+        width: "100%",
+      } satisfies ViewStyle,
       codeSurface: {
         backgroundColor: theme.colors.surface0,
         borderColor: theme.colors.border,
@@ -753,6 +772,70 @@ function HighlightedCodeBlock({
   );
 }
 
+type ReadImageState =
+  | { status: "loading" }
+  | { status: "ok"; uri: string }
+  | { status: "fallback" };
+
+function ReadImageBlock({
+  filePath,
+  agentId,
+  fallback,
+  styles,
+}: {
+  filePath: string;
+  agentId: string;
+  fallback: ReactNode;
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  const loadImage = useRpc(readImageRpc);
+  const [image, setImage] = useState<ReadImageState>({ status: "loading" });
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setImage({ status: "loading" });
+    setExpanded(false);
+    void loadImage({ filePath, agentId }).then(
+      (result) => {
+        if (cancelled) return;
+        if (result.status === "ok" && result.data && result.mimeType) {
+          setImage({ status: "ok", uri: `data:${result.mimeType};base64,${result.data}` });
+        } else {
+          setImage({ status: "fallback" });
+        }
+      },
+      () => {
+        if (!cancelled) setImage({ status: "fallback" });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, filePath, loadImage]);
+
+  if (image.status === "fallback") return <>{fallback}</>;
+  if (image.status === "loading") return <Text style={styles.mutedText}>Loading image…</Text>;
+  return (
+    <View style={styles.section}>
+      <DetailLabel style={styles.detailLabel}>Image</DetailLabel>
+      <Pressable
+        accessibilityLabel={expanded ? "Collapse image" : "Expand image"}
+        accessibilityRole="button"
+        onPress={() => setExpanded(!expanded)}
+      >
+        <View style={styles.imageSurface}>
+          <Image
+            source={{ uri: image.uri }}
+            style={expanded ? styles.imageExpanded : styles.imageThumbnail}
+            resizeMode="contain"
+          />
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
 function DiffBlock({
   detail,
   palette,
@@ -832,11 +915,13 @@ function DiffRow({
 
 function DetailBody({
   data,
+  agentId,
   theme,
   palette,
   styles,
 }: {
   data: ToolCallData;
+  agentId: string;
   theme: Theme;
   palette: ActivityPalette;
   styles: ReturnType<typeof useActivityStyles>;
@@ -873,20 +958,45 @@ function DetailBody({
       if (readErrorMessage(detail.content) && data.errorText) {
         return <PathRow icon={data.presentation.fileIcon ?? "Eye"} path={detail.filePath} styles={styles} />;
       }
+      if (!shouldAttemptImageLoad(detail.filePath, detail.content)) {
+        return (
+          <>
+            <PathRow icon={data.presentation.fileIcon ?? "Eye"} path={detail.filePath} styles={styles} />
+            {detail.content ? (
+              <HighlightedCodeBlock
+                code={detail.content}
+                language={data.presentation.language ?? "text"}
+                label="Contents"
+                styles={styles}
+                theme={theme}
+              />
+            ) : (
+              <Text style={styles.empty}>No file contents returned.</Text>
+            )}
+          </>
+        );
+      }
       return (
         <>
           <PathRow icon={data.presentation.fileIcon ?? "Eye"} path={detail.filePath} styles={styles} />
-          {detail.content ? (
-            <HighlightedCodeBlock
-              code={detail.content}
-              language={data.presentation.language ?? "text"}
-              label="Contents"
-              styles={styles}
-              theme={theme}
-            />
-          ) : (
-            <Text style={styles.empty}>No file contents returned.</Text>
-          )}
+          <ReadImageBlock
+            filePath={detail.filePath}
+            agentId={agentId}
+            styles={styles}
+            fallback={
+              detail.content ? (
+                <HighlightedCodeBlock
+                  code={detail.content}
+                  language={data.presentation.language ?? "text"}
+                  label="Contents"
+                  styles={styles}
+                  theme={theme}
+                />
+              ) : (
+                <Text style={styles.empty}>No file contents returned.</Text>
+              )
+            }
+          />
         </>
       );
     case "write":
@@ -1412,7 +1522,7 @@ export function ColorfulToolCall({
       {expanded ? (
         <View style={styles.details}>
           <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} nestedScrollEnabled showsVerticalScrollIndicator>
-            <DetailBody data={item.data} theme={theme} palette={palette} styles={styles} />
+            <DetailBody data={item.data} agentId={agentId} theme={theme} palette={palette} styles={styles} />
             {item.data.errorText ? (
               <View style={styles.section}>
                 <DetailLabel style={styles.detailLabel}>Error</DetailLabel>
