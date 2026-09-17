@@ -1,5 +1,5 @@
-import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { describe, expect, it } from "vitest";
+import type { ToolCallDetail } from "../shared/paseo";
 import { transformReasoning, transformToolCall } from "./transform";
 
 function toolCall(detail: ToolCallDetail, status: "running" | "completed" = "completed") {

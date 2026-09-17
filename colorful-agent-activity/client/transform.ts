@@ -1,5 +1,4 @@
 import type { PluginTimelineTransformerContribution } from "@getpaseo/plugin/client";
-import type { ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
 import {
   createReasoningData,
   createToolCallData,
@@ -12,6 +11,7 @@ import { extractApplyPatchEdits, isApplyPatchTool } from "../shared/presentation
 
 type ReasoningTransformer = PluginTimelineTransformerContribution<"reasoning">["transform"];
 type ToolCallTransformer = PluginTimelineTransformerContribution<"tool_call">["transform"];
+type ToolCallTimelineItem = Parameters<ToolCallTransformer>[0]["item"];
 
 export const transformReasoning: ReasoningTransformer = ({ item, phase }) => ({
   items: [
@@ -24,7 +24,7 @@ export const transformReasoning: ReasoningTransformer = ({ item, phase }) => ({
   ],
 });
 
-function transformApplyPatch(item: Extract<ToolCallTimelineItem, { type: "tool_call" }>) {
+function transformApplyPatch(item: ToolCallTimelineItem) {
   const edits = extractApplyPatchEdits(item.detail, item.detail.type === "unknown" ? item.detail.output : undefined);
   if (edits.length === 0) return undefined;
 

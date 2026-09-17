@@ -1,7 +1,5 @@
-import type { PaseoAgent, PaseoAgentHandle } from "@getpaseo/client";
 import { usePaseo } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import React, { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import type { ActivityStyles } from "./activity";
@@ -18,9 +16,13 @@ import {
 const CHILD_TIMELINE_PAGE_SIZE = 100;
 const MAX_VISIBLE_CHILD_ACTIVITY_ENTRIES = 3;
 
+type Paseo = ReturnType<typeof usePaseo>;
+type PaseoAgentHandle = ReturnType<Paseo["agents"]["ref"]>;
+type PaseoAgent = NonNullable<ReturnType<PaseoAgentHandle["current"]>>;
 type TimelineEntry = Awaited<
   ReturnType<PaseoAgentHandle["timeline"]["refetch"]>
 >["entries"][number];
+type AgentTimelineItem = TimelineEntry["item"];
 
 interface ChildTimelineState {
   agent: PaseoAgent | null;
