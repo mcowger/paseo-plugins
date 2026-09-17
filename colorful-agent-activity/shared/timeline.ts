@@ -1,4 +1,3 @@
-import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { z } from "zod";
 import {
   formatError,
@@ -6,6 +5,7 @@ import {
   resolveToolCallPresentation,
   toJsonValue,
 } from "./presentation";
+import type { ToolCallTimelineItem } from "./paseo";
 
 export const REASONING_RENDERER_KIND = "colorful-reasoning";
 export const TOOL_CALL_RENDERER_KIND = "colorful-tool-call";
@@ -70,14 +70,14 @@ export function getReasoningExpansionState(
 }
 
 export function createReasoningData(
-  item: Extract<AgentTimelineItem, { type: "reasoning" }>,
+  item: { type: "reasoning"; text: string },
   phase: ReasoningItemData["phase"],
 ): ReasoningItemData {
   return { text: formatReasoningText(item.text), phase };
 }
 
 export function createToolCallData(
-  item: Extract<AgentTimelineItem, { type: "tool_call" }>,
+  item: ToolCallTimelineItem,
 ): ToolCallItemData {
   const presentation = resolveToolCallPresentation(item);
   const errorText = formatError(item.error);

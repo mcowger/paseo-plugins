@@ -1,5 +1,9 @@
-import type { JsonValue, ToolCallDetail, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
-import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization";
+import {
+  getPaseoToolLeafName,
+  type JsonValue,
+  type ToolCallDetail,
+  type ToolCallTimelineItem,
+} from "./paseo";
 import type { PaletteMode } from "./settings";
 import { exaToolIcon, exaToolKind, exaToolLabel, exaToolSummary } from "./exa";
 import {

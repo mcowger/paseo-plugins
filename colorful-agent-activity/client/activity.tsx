@@ -1,7 +1,6 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Icon, ScrollView, useRevealedText } from "@getpaseo/plugin/client/react-native";
-import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import React, {
   useCallback,
   useEffect,
@@ -48,6 +47,7 @@ import { parseInlineMarkdown, parseReasoningMarkdown } from "../shared/markdown"
 import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
 import { exaToolKind } from "../shared/exa";
 import { githubToolKind } from "../shared/github";
+import type { ToolCallDetail } from "../shared/paseo";
 import { activitySettings, DEFAULT_PALETTE_MODE } from "../shared/settings";
 import {
   getActivityExpansionState,

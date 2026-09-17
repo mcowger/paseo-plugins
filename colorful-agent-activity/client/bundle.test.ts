@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import * as esbuild from "esbuild";
 import { execFileSync } from "node:child_process";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const entryPath = path.resolve(__dirname, "../index.client.tsx");
+const pluginPath = path.resolve(__dirname, "..");
 
 const PLUGIN_SDK_SPECIFIERS = [
   "@getpaseo/plugin",
@@ -50,6 +51,16 @@ function wrapCommonJsBundle(code: string): string {
   return `(function(require) {\nconst module = { exports: {} };\nconst exports = module.exports;\n${code}\nreturn module.exports;\n})`;
 }
 
+function sourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const filePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return entry.name === "node_modules" ? [] : sourceFiles(filePath);
+    }
+    return /\.[cm]?[jt]sx?$/.test(entry.name) ? [filePath] : [];
+  });
+}
+
 async function compileClientBundle(): Promise<string> {
   const result = await esbuild.build({
     entryPoints: [entryPath],
@@ -78,6 +89,15 @@ async function compileClientBundle(): Promise<string> {
 }
 
 describe("client mobile bundle compatibility", () => {
+  it("uses only public Paseo plugin SDK entrypoints", () => {
+    const privateImports = sourceFiles(pluginPath).flatMap((filePath) => {
+      const source = readFileSync(filePath, "utf8");
+      return source.match(/@getpaseo\/(?:client|protocol)(?:\/[^"']*)?/g) ?? [];
+    });
+
+    expect(privateImports).toEqual([]);
+  });
+
   it("bundles index.client.tsx and stays within mobile size budget", async () => {
     const bundle = await compileClientBundle();
     const sizeKb = Math.round(bundle.length / 1024);
