@@ -1,6 +1,6 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useRpc, useSettings } from "@getpaseo/plugin/client";
-import { Icon, ScrollView, useRevealedText } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView, copyText, useRevealedText, useToast } from "@getpaseo/plugin/client/react-native";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import React, {
   useCallback,
@@ -24,12 +24,21 @@ import {
 } from "react-native";
 import type { z } from "zod";
 import { useHighlightTokens, type HighlightToken } from "./highlight";
+import {
+  cmonoTextEscape,
+  cmonoViewEscape,
+  cuiTextEscape,
+  cuiViewEscape,
+  pmonoViewEscape,
+} from "./web";
 import { GithubToolDetail } from "./github";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
 import {
   diffLinesForDetail,
+  estimateReasoningTokens,
   extractCodeInput,
   fileIconForPath,
+  formatReasoningMeta,
   formatUnknownValue,
   paseoToolLeafName,
   parsePiLsOutput,
@@ -38,13 +47,15 @@ import {
   readErrorMessage,
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
+  splitReasoningSteps,
+  toolKindWord,
   MAX_DIFF_CHARS,
   PREVIEW_LINES,
   type ActivityPalette,
   type ActivityThemeColors,
   type DiffLine,
 } from "../shared/presentation";
-import { parseInlineMarkdown, parseReasoningMarkdown } from "../shared/markdown";
+import { parseInlineMarkdown, parseReasoningMarkdown, type ReasoningMarkdownBlock } from "../shared/markdown";
 import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
 import { exaToolKind } from "../shared/exa";
 import { githubToolKind } from "../shared/github";
@@ -55,6 +66,7 @@ import {
   reasoningItemDataSchema,
   toolCallItemDataSchema,
   type ReasoningItemData,
+  type TodoItemData,
   type ToolCallItemData,
 } from "../shared/timeline";
 
@@ -64,6 +76,7 @@ const MAX_VISIBLE_SUBAGENT_ACTIONS = 5;
 type Theme = PluginTimelineItemProps["theme"];
 type ReasoningData = z.output<typeof reasoningItemDataSchema>;
 type ToolCallData = z.output<typeof toolCallItemDataSchema>;
+type TodoData = TodoItemData;
 
 const latestReasoningTimestamps = new Map<string, number>();
 const latestReasoningListeners = new Set<() => void>();
@@ -174,6 +187,13 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         lineHeight: 17,
         minWidth: 0,
       } satisfies TextStyle,
+      kindWord: {
+        color: theme.colors.foregroundMuted,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 12,
+        lineHeight: 17,
+      } satisfies TextStyle,
       status: {
         alignItems: "center",
         flexDirection: "row",
@@ -264,6 +284,54 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         fontWeight: "600",
         lineHeight: 14,
       } satisfies TextStyle,
+      codeHeader: {
+        alignItems: "center",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        minWidth: "100%",
+      } satisfies ViewStyle,
+      copyButton: {
+        alignItems: "center",
+        borderRadius: 2,
+        flexDirection: "row",
+        gap: 3,
+        paddingHorizontal: 4,
+        paddingVertical: 2,
+      } satisfies ViewStyle,
+      copyText: {
+        color: theme.colors.foregroundMuted,
+        fontFamily: "monospace",
+        fontSize: 10,
+        lineHeight: 14,
+      } satisfies TextStyle,
+      todoList: {
+        gap: 2,
+      } satisfies ViewStyle,
+      todoRow: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 5,
+        minWidth: 0,
+      } satisfies ViewStyle,
+      todoTitle: {
+        color: theme.colors.foreground,
+        flex: 1,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 16,
+        minWidth: 0,
+      } satisfies TextStyle,
+      todoDone: {
+        color: theme.colors.foregroundMuted,
+        flex: 1,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 16,
+        minWidth: 0,
+        textDecorationLine: "line-through",
+      } satisfies TextStyle,
       imageSurface: {
         backgroundColor: theme.colors.surface0,
         borderColor: theme.colors.border,
@@ -338,6 +406,20 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         gap: 3,
         paddingHorizontal: 7,
         paddingVertical: 5,
+      } satisfies ViewStyle,
+      stepList: {
+        gap: 10,
+        paddingHorizontal: 7,
+        paddingVertical: 5,
+      } satisfies ViewStyle,
+      stepHeader: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 5,
+      } satisfies ViewStyle,
+      stepBody: {
+        gap: 3,
+        marginLeft: 16,
       } satisfies ViewStyle,
       reasoningLine: {
         color: theme.colors.foreground,
@@ -740,10 +822,47 @@ function HighlightedCodeBlock({
   const preview = useMemo(() => previewText(code), [code]);
   const displayCode = showAll ? code : preview.text;
   const tokens = useHighlightTokens(displayCode, language, theme.colors);
+  const toast = useToast();
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    };
+  }, []);
+
+  const handleCopy = useCallback(() => {
+    void copyText(code).then(
+      () => {
+        setCopied(true);
+        if (copyTimer.current) clearTimeout(copyTimer.current);
+        copyTimer.current = setTimeout(() => setCopied(false), 1500);
+      },
+      () => {
+        toast.error("Copy failed");
+      },
+    );
+  }, [code, toast]);
 
   return (
-    <View style={styles.section}>
-      {label ? <DetailLabel style={styles.detailLabel}>{label}</DetailLabel> : null}
+    <View {...cmonoViewEscape} style={styles.section}>
+      <View style={styles.codeHeader}>
+        {label ? <DetailLabel style={styles.detailLabel}>{label}</DetailLabel> : <View />}
+        <Pressable
+          accessibilityLabel={copied ? "Copied" : "Copy code"}
+          accessibilityRole="button"
+          onPress={handleCopy}
+          style={styles.copyButton}
+        >
+          <Icon
+            name={copied ? "Check" : "Copy"}
+            color={copied ? theme.colors.statusSuccess : styles.copyText.color}
+            size={11}
+          />
+          <Text style={styles.copyText}>{copied ? "Copied" : "Copy"}</Text>
+        </Pressable>
+      </View>
       <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
         <View style={styles.codeSurface}>
           {tokens ? (
@@ -1266,8 +1385,9 @@ function renderInlineReasoning(text: string, styles: ReturnType<typeof useActivi
         : part.type === "italic"
           ? [styles.reasoningLine, { fontStyle: "italic" as const }]
           : styles.reasoningInlineCode;
+    const escape = part.type === "code" ? cmonoTextEscape : undefined;
     return (
-      <Text key={`inline-${index}`} style={style}>
+      <Text {...escape} key={`inline-${index}`} style={style}>
         {part.text}
       </Text>
     );
@@ -1284,20 +1404,21 @@ function InlineReasoning({
   return <Text style={styles.reasoningLine}>{renderInlineReasoning(text, styles)}</Text>;
 }
 
-function ReasoningMarkdown({
-  text,
+function ReasoningBlockList({
+  blocks,
+  keyPrefix,
   theme,
   styles,
 }: {
-  text: string;
+  blocks: ReasoningMarkdownBlock[];
+  keyPrefix: string;
   theme: Theme;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const blocks = useMemo(() => parseReasoningMarkdown(text), [text]);
   return (
-    <View style={styles.reasoningBody}>
+    <>
       {blocks.map((block, index) => {
-        const key = `${block.type}-${index}`;
+        const key = `${keyPrefix}-${block.type}-${index}`;
         switch (block.type) {
           case "code":
             return (
@@ -1341,6 +1462,61 @@ function ReasoningMarkdown({
             return <InlineReasoning key={key} text={block.text} styles={styles} />;
         }
       })}
+    </>
+  );
+}
+
+function ReasoningMarkdown({
+  text,
+  theme,
+  styles,
+}: {
+  text: string;
+  theme: Theme;
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  const blocks = useMemo(() => parseReasoningMarkdown(text), [text]);
+  return (
+    <View {...cuiViewEscape} style={styles.reasoningBody}>
+      <ReasoningBlockList blocks={blocks} keyPrefix="reasoning" theme={theme} styles={styles} />
+    </View>
+  );
+}
+
+function ReasoningStep({
+  index,
+  text,
+  active,
+  theme,
+  palette,
+  styles,
+}: {
+  index: number;
+  text: string;
+  active: boolean;
+  theme: Theme;
+  palette: ActivityPalette;
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  const blocks = useMemo(() => parseReasoningMarkdown(text), [text]);
+  return (
+    <View style={styles.section}>
+      <View style={styles.stepHeader}>
+        <Icon
+          name={active ? "LoaderCircle" : "CircleCheck"}
+          color={active ? palette.statusColors.running : palette.statusColors.completed}
+          size={11}
+        />
+        <Text style={styles.detailLabel}>Step {index + 1}</Text>
+      </View>
+      <View style={styles.stepBody}>
+        <ReasoningBlockList
+          blocks={blocks}
+          keyPrefix={`step-${index}`}
+          theme={theme}
+          styles={styles}
+        />
+      </View>
     </View>
   );
 }
@@ -1349,17 +1525,21 @@ function ReasoningText({
   text,
   phase,
   theme,
+  palette,
   styles,
 }: {
   text: string;
   phase: ReasoningData["phase"];
   theme: Theme;
+  palette: ActivityPalette;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
   const [showAll, setShowAll] = useState(false);
   const preview = useMemo(() => previewText(text), [text]);
   const targetText = showAll ? text : preview.text;
   const revealedText = useRevealedText(targetText, phase);
+  const steps = useMemo(() => splitReasoningSteps(revealedText), [revealedText]);
+  const isStreaming = phase === "streaming";
   const scrollRef = useRef<NativeScrollView | null>(null);
   const isNearBottom = useRef(true);
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -1381,7 +1561,23 @@ function ReasoningText({
         showsVerticalScrollIndicator
         style={styles.detailsScroll}
       >
-        <ReasoningMarkdown text={revealedText} theme={theme} styles={styles} />
+        {steps.length <= 1 ? (
+          <ReasoningMarkdown text={revealedText} theme={theme} styles={styles} />
+        ) : (
+          <View {...cuiViewEscape} style={styles.stepList}>
+            {steps.map((step, index) => (
+              <ReasoningStep
+                key={`step-${index}`}
+                index={index}
+                text={step}
+                active={isStreaming && index === steps.length - 1}
+                theme={theme}
+                palette={palette}
+                styles={styles}
+              />
+            ))}
+          </View>
+        )}
       </ScrollView>
       {preview.truncated ? (
         <Pressable
@@ -1403,6 +1599,7 @@ function ReasoningText({
 function ActivityHeader({
   icon,
   iconColor,
+  kindWord,
   title,
   summary,
   status,
@@ -1414,6 +1611,7 @@ function ActivityHeader({
 }: {
   icon: string;
   iconColor: string;
+  kindWord?: string;
   title: string;
   summary?: string;
   status?: ToolCallData["status"];
@@ -1433,7 +1631,8 @@ function ActivityHeader({
       <View style={styles.iconBadge}>
         <Icon name={icon} color={iconColor} size={12} />
       </View>
-      <Text numberOfLines={1} style={styles.title}>{title}</Text>
+      {kindWord ? <Text {...cuiTextEscape} numberOfLines={1} style={styles.kindWord}>{kindWord}</Text> : null}
+      <Text {...cuiTextEscape} numberOfLines={1} style={styles.title}>{title}</Text>
       {summary ? <Text numberOfLines={1} style={styles.summary}>{summary}</Text> : null}
       {stats ? (
         <View style={styles.stats}>
@@ -1463,22 +1662,31 @@ export function ColorfulReasoning({
   const isLatest = useIsLatestReasoning(agentId, timestamp, isStreaming);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const expanded = getReasoningExpansionState(isStreaming, isLatest, userExpanded);
+  const meta = useMemo(
+    () =>
+      formatReasoningMeta(
+        splitReasoningSteps(item.data.text).length,
+        estimateReasoningTokens(item.data.text),
+      ),
+    [item.data.text],
+  );
   const toggle = useCallback(() => {
     setUserExpanded(!expanded);
   }, [expanded]);
   return (
-    <View style={styles.card}>
+    <View {...pmonoViewEscape} style={styles.card}>
       <ActivityHeader
         icon="Sparkles"
         iconColor={palette.categoryColors.reasoning}
         title="Thinking"
+        summary={meta}
         expanded={expanded}
         onPress={toggle}
         styles={styles}
       />
       {expanded ? (
-        <View style={styles.details}>
-          <ReasoningText text={item.data.text} phase={item.data.phase} theme={theme} styles={styles} />
+        <View {...cmonoViewEscape} style={styles.details}>
+          <ReasoningText text={item.data.text} phase={item.data.phase} theme={theme} palette={palette} styles={styles} />
         </View>
       ) : null}
     </View>
@@ -1505,10 +1713,11 @@ export function ColorfulToolCall({
   }, [expanded, isRunning]);
   const subAgentDetail = detail?.type === "sub_agent" ? detail : null;
   return (
-    <View style={styles.card}>
+    <View {...pmonoViewEscape} style={styles.card}>
       <ActivityHeader
         icon={item.data.presentation.icon}
         iconColor={categoryColor}
+        kindWord={toolKindWord(item.data.name)}
         title={item.data.presentation.label}
         summary={item.data.presentation.summary}
         status={item.data.status}
@@ -1520,7 +1729,7 @@ export function ColorfulToolCall({
       />
       {subAgentDetail ? <SubAgentProgress detail={subAgentDetail} styles={styles} /> : null}
       {expanded ? (
-        <View style={styles.details}>
+        <View {...cmonoViewEscape} style={styles.details}>
           <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} nestedScrollEnabled showsVerticalScrollIndicator>
             <DetailBody data={item.data} agentId={agentId} theme={theme} palette={palette} styles={styles} />
             {item.data.errorText ? (
@@ -1529,6 +1738,76 @@ export function ColorfulToolCall({
                 <Text selectable style={{ ...styles.detailText, color: theme.colors.statusDanger }}>{item.data.errorText}</Text>
               </View>
             ) : null}
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function todoStatusIcon(status: TodoData["items"][number]["status"]): string {
+  switch (status) {
+    case "completed":
+      return "CircleCheck";
+    case "in_progress":
+      return "LoaderCircle";
+    case "pending":
+      return "Circle";
+  }
+}
+
+export function ColorfulTodo({ item, theme }: PluginTimelineItemProps<TodoData>) {
+  const palette = usePalette(theme);
+  const styles = useActivityStyles(theme, palette);
+  const done = item.data.items.filter((entry) => entry.status === "completed").length;
+  const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+  const expanded = userExpanded ?? true;
+  const toggle = useCallback(() => {
+    setUserExpanded(!expanded);
+  }, [expanded]);
+  return (
+    <View {...pmonoViewEscape} style={styles.card}>
+      <ActivityHeader
+        icon="ListChecks"
+        iconColor={palette.categoryColors.plan}
+        title="Tasks"
+        summary={`${done}/${item.data.items.length} done`}
+        expanded={expanded}
+        onPress={toggle}
+        styles={styles}
+      />
+      {expanded ? (
+        <View {...cmonoViewEscape} style={styles.details}>
+          <ScrollView
+            style={styles.detailsScroll}
+            contentContainerStyle={styles.detailsContent}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+          >
+            <View style={styles.todoList}>
+              {item.data.items.map((entry, index) => (
+                <View key={`${entry.id}-${index}`} style={styles.todoRow}>
+                  <Icon
+                    name={todoStatusIcon(entry.status)}
+                    color={
+                      entry.status === "completed"
+                        ? palette.statusColors.completed
+                        : entry.status === "in_progress"
+                          ? palette.statusColors.running
+                          : theme.colors.foregroundMuted
+                    }
+                    size={11}
+                  />
+                  <Text
+                    numberOfLines={1}
+                    selectable
+                    style={entry.status === "completed" ? styles.todoDone : styles.todoTitle}
+                  >
+                    {entry.title}
+                  </Text>
+                </View>
+              ))}
+            </View>
           </ScrollView>
         </View>
       ) : null}

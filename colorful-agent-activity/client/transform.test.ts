@@ -1,6 +1,6 @@
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { describe, expect, it } from "vitest";
-import { transformReasoning, transformToolCall } from "./transform";
+import { transformReasoning, transformTodo, transformToolCall } from "./transform";
 
 function toolCall(detail: ToolCallDetail, status: "running" | "completed" = "completed") {
   return {
@@ -147,5 +147,38 @@ describe("colorful activity timeline transforms", () => {
       },
     });
     expect(result).toBeUndefined();
+  });
+
+  it("projects todo checklists", () => {
+    expect(
+      transformTodo({
+        phase: "complete",
+        item: {
+          type: "todo",
+          items: [
+            { id: "a", text: "Write code", completed: true },
+            { text: "Run tests", completed: false, status: "in_progress" },
+          ],
+        },
+      }),
+    ).toEqual({
+      items: [
+        {
+          type: "plugin",
+          kind: "colorful-todo",
+          version: 1,
+          data: {
+            items: [
+              { id: "a", title: "Write code", status: "completed" },
+              { id: "todo-1", title: "Run tests", status: "in_progress" },
+            ],
+          },
+        },
+      ],
+    });
+  });
+
+  it("leaves empty todo checklists to the host", () => {
+    expect(transformTodo({ phase: "complete", item: { type: "todo", items: [] } })).toBeUndefined();
   });
 });

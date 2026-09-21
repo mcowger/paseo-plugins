@@ -1324,3 +1324,45 @@ export function formatReasoningText(text: string): string {
     })
     .join("");
 }
+
+/**
+ * Split reasoning prose into steps on blank-line runs, mirroring how a reader
+ * scans paragraphs. Single-paragraph text yields one step so short thoughts
+ * render without step chrome.
+ */
+export function splitReasoningSteps(text: string): string[] {
+  return text
+    .split(/\n\s*\n/)
+    .map((step) => step.trim())
+    .filter((step) => step.length > 0);
+}
+
+/** Rough token estimate (4 chars per token) for header counts. */
+export function estimateReasoningTokens(text: string): number {
+  if (!text) return 0;
+  return Math.round(text.length / 4);
+}
+
+/** Quiet header metadata: "2 steps · 116 tokens". Steps are omitted when zero. */
+export function formatReasoningMeta(stepCount: number, tokenCount: number): string {
+  const tokens = `${tokenCount.toLocaleString("en-US")} token${tokenCount === 1 ? "" : "s"}`;
+  if (stepCount <= 0) return tokens;
+  return `${stepCount.toLocaleString("en-US")} step${stepCount === 1 ? "" : "s"} · ${tokens}`;
+}
+
+/**
+ * Short lowercase tool-family word for activity headers ("read", "bash",
+ * "mcp"), derived from the raw tool name. Falls back to "tool".
+ */
+export function toolKindWord(toolName: string): string {
+  const normalized = toolName.trim().toLowerCase().replace(/^(?:functions|tools)\./, "");
+  if (!normalized) return "tool";
+  if (normalized === "mcp" || normalized.startsWith("mcp__") || normalized.startsWith("mcp_")) {
+    return "mcp";
+  }
+  const word = normalized
+    .split(/[\s/:]+/)[0]
+    ?.replace(/[_-]+/g, " ")
+    .trim();
+  return word ? word : "tool";
+}

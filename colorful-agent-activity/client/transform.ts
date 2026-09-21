@@ -2,15 +2,19 @@ import type { PluginTimelineTransformerContribution } from "@getpaseo/plugin/cli
 import type { ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
 import {
   createReasoningData,
+  createTodoData,
   createToolCallData,
   REASONING_RENDERER_KIND,
   REASONING_RENDERER_VERSION,
+  TODO_RENDERER_KIND,
+  TODO_RENDERER_VERSION,
   TOOL_CALL_RENDERER_KIND,
   TOOL_CALL_RENDERER_VERSION,
 } from "../shared/timeline";
 import { extractApplyPatchEdits, isApplyPatchTool } from "../shared/presentation";
 
 type ReasoningTransformer = PluginTimelineTransformerContribution<"reasoning">["transform"];
+type TodoTransformer = PluginTimelineTransformerContribution<"todo">["transform"];
 type ToolCallTransformer = PluginTimelineTransformerContribution<"tool_call">["transform"];
 
 export const transformReasoning: ReasoningTransformer = ({ item, phase }) => ({
@@ -23,6 +27,21 @@ export const transformReasoning: ReasoningTransformer = ({ item, phase }) => ({
     },
   ],
 });
+
+export const transformTodo: TodoTransformer = ({ item }) => {
+  const data = createTodoData(item);
+  if (!data) return undefined;
+  return {
+    items: [
+      {
+        type: "plugin",
+        kind: TODO_RENDERER_KIND,
+        version: TODO_RENDERER_VERSION,
+        data,
+      },
+    ],
+  };
+};
 
 function transformApplyPatch(item: Extract<ToolCallTimelineItem, { type: "tool_call" }>) {
   const edits = extractApplyPatchEdits(item.detail, item.detail.type === "unknown" ? item.detail.output : undefined);

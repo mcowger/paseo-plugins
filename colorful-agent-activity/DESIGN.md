@@ -53,13 +53,18 @@ Do not add a container just to group related content. Prefer a label, one level 
 A collapsed activity item is one compact row:
 
 ```text
-[icon] Label  muted summary                         status  chevron
+[icon] kind Label  muted summary                         status  chevron
 ```
+
+Checklists (`todo` items) render as a `Tasks` row with `n/m done` metadata, expanding to
+flat status rows. An empty checklist is left to the host.
 
 Rules:
 
 - Keep the row close to one line of text in height.
 - Use a 12 px title with 17 px line height.
+- Lead with a lowercase muted kind word derived from the raw tool name (`read`, `bash`, `mcp`).
+  It names the tool family; the label names the action.
 - Use medium or semibold weight for the action label.
 - Render the summary at the same size in muted foreground color.
 - Use 12 px icons without a badge or colored icon background.
@@ -99,6 +104,18 @@ Nested agent work should read like a tree or IDE task panel.
 Nested activity may be visually quieter than its parent, but it should remain readable at a glance.
 
 ## Typography
+
+Two stacks, each with a job:
+
+- UI sans (`system-ui`, San Francisco, Segoe UI, Roboto…) for headers, labels, and reasoning
+  prose. It reads like the host around it.
+- System mono (`ui-monospace`, SF Mono, Cascadia Code, Consolas…) for code, diffs, paths,
+  fields, and technical metadata.
+
+Stacks apply on web and desktop via an injected stylesheet (see `client/web.ts`), scoped by
+data attributes so code nested in prose keeps its mono face. Card roots carry the host's
+`data-pmono` opt-out; without it the host font rule would win. On native the attributes are
+ignored and everything renders in the system monospace.
 
 Monospace is the default for activity and tool detail UI.
 
@@ -250,6 +267,12 @@ Reasoning follows the same visual system as tool activity.
 
 - Label the row `Thinking`.
 - Use the standard compact activity header.
+- Show quiet header metadata after the label (`2 steps · 116 tokens`, steps omitted when zero).
+- Split multi-paragraph reasoning into steps. A single paragraph renders without step chrome.
+- Prefix each step with a small status dot (accent while the step streams, success check when done)
+  and a muted `Step N` label, reusing the section-label style.
+- Indent step bodies under their header. The expanded detail's existing vertical guide serves as the rail;
+  do not draw a second one.
 - Render headings at body size with medium or semibold weight.
 - Use muted bullets and quote guides.
 - Use a 1 px neutral guide for blockquotes.

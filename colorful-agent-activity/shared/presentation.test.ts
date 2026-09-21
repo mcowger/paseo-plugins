@@ -27,6 +27,10 @@ import {
   extractApplyPatchEdits,
   isApplyPatchTool,
   previewText,
+  splitReasoningSteps,
+  estimateReasoningTokens,
+  formatReasoningMeta,
+  toolKindWord,
   MAX_DIFF_CHARS,
   MAX_FORMAT_CHARS,
   PASEO_TOOL_ICONS,
@@ -464,5 +468,38 @@ describe("colorful activity presentation", () => {
     const lastChar = emojiPreview.text.charCodeAt(emojiPreview.text.length - 1);
     // Must not end on a high surrogate
     expect(lastChar >= 0xd800 && lastChar <= 0xdbff).toBe(false);
+  });
+});
+
+describe("reasoning steps and header metadata", () => {
+  it("splits steps on blank-line runs and drops empties", () => {
+    expect(splitReasoningSteps("first\n\nsecond\n   \n\nthird"))
+      .toEqual(["first", "second", "third"]);
+    expect(splitReasoningSteps("  solo  ")).toEqual(["solo"]);
+    expect(splitReasoningSteps("")).toEqual([]);
+    expect(splitReasoningSteps("\n\n   \n")).toEqual([]);
+  });
+
+  it("estimates tokens at four characters each", () => {
+    expect(estimateReasoningTokens("")).toBe(0);
+    expect(estimateReasoningTokens("x".repeat(8))).toBe(2);
+    expect(estimateReasoningTokens("x".repeat(464))).toBe(116);
+  });
+
+  it("formats step and token counts with singular handling", () => {
+    expect(formatReasoningMeta(2, 116)).toBe("2 steps · 116 tokens");
+    expect(formatReasoningMeta(1, 1)).toBe("1 step · 1 token");
+    expect(formatReasoningMeta(0, 0)).toBe("0 tokens");
+  });
+
+  it("derives a short lowercase kind word from raw tool names", () => {
+    expect(toolKindWord("read")).toBe("read");
+    expect(toolKindWord("Bash")).toBe("bash");
+    expect(toolKindWord("create_agent")).toBe("create agent");
+    expect(toolKindWord("functions.apply_patch")).toBe("apply patch");
+    expect(toolKindWord("mcp__github__get_pr")).toBe("mcp");
+    expect(toolKindWord("mcp")).toBe("mcp");
+    expect(toolKindWord("")).toBe("tool");
+    expect(toolKindWord("   ")).toBe("tool");
   });
 });

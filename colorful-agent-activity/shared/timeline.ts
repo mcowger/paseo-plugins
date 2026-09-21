@@ -9,8 +9,10 @@ import {
 
 export const REASONING_RENDERER_KIND = "colorful-reasoning";
 export const TOOL_CALL_RENDERER_KIND = "colorful-tool-call";
+export const TODO_RENDERER_KIND = "colorful-todo";
 export const REASONING_RENDERER_VERSION = 1;
 export const TOOL_CALL_RENDERER_VERSION = 1;
+export const TODO_RENDERER_VERSION = 1;
 
 export const reasoningItemDataSchema = z.object({
   text: z.string(),
@@ -49,8 +51,19 @@ export const toolCallItemDataSchema = z.object({
   presentation: toolCallPresentationSchema,
 });
 
+export const todoItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: z.enum(["pending", "in_progress", "completed"]),
+});
+
+export const todoItemDataSchema = z.object({
+  items: z.array(todoItemSchema),
+});
+
 export type ReasoningItemData = z.output<typeof reasoningItemDataSchema>;
 export type ToolCallItemData = z.output<typeof toolCallItemDataSchema>;
+export type TodoItemData = z.output<typeof todoItemDataSchema>;
 
 export function getActivityExpansionState(
   isStreaming: boolean,
@@ -74,6 +87,19 @@ export function createReasoningData(
   phase: ReasoningItemData["phase"],
 ): ReasoningItemData {
   return { text: formatReasoningText(item.text), phase };
+}
+
+export function createTodoData(
+  item: Extract<AgentTimelineItem, { type: "todo" }>,
+): TodoItemData | null {
+  if (item.items.length === 0) return null;
+  return {
+    items: item.items.map((entry, index) => ({
+      id: entry.id ?? `todo-${index}`,
+      title: entry.text,
+      status: entry.status ?? (entry.completed ? "completed" : "pending"),
+    })),
+  };
 }
 
 export function createToolCallData(
