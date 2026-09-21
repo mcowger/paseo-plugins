@@ -23,6 +23,7 @@ import {
   formatError,
   prettyJson,
   formatUnknownValue,
+  isAskTool,
   extractCodeInput,
   extractApplyPatchEdits,
   isApplyPatchTool,
@@ -517,5 +518,27 @@ describe("reasoning steps and header metadata", () => {
     expect(truncateDirFront("a/b/c")).toBe("…/b/c");
     expect(truncateDirFront("/other")).toBe("/other");
     expect(truncateDirFront("/a/b/c")).toBe("…/b/c");
+  });
+
+  it("recognizes the ask tool in any namespace", () => {
+    expect(isAskTool("ask")).toBe(true);
+    expect(isAskTool("Ask")).toBe(true);
+    expect(isAskTool("functions.ask")).toBe(true);
+    expect(isAskTool("mcp__server__ask")).toBe(true);
+    expect(isAskTool("task")).toBe(false);
+    expect(isAskTool("")).toBe(false);
+  });
+
+  it("projects ask tools as a question row", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "ask",
+        detail: { type: "unknown", input: { question: "Continue?" }, output: null },
+      }),
+    ).toEqual({
+      category: "communication",
+      icon: "MessageCircleQuestionMark",
+      label: "Ask Question",
+    });
   });
 });

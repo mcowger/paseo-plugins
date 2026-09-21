@@ -410,6 +410,17 @@ function stringField(value: unknown, key: string): string | undefined {
   return typeof field === "string" && field.trim() ? field : undefined;
 }
 
+/** Whether a tool name refers to the ask-user-question tool, in any namespace. */
+export function isAskTool(toolName: string): boolean {
+  const normalized = toolName
+    .trim()
+    .toLowerCase()
+    .replace(/^(?:functions|tools)\./, "")
+    .replace(/^mcp__.*?__/, "")
+    .replace(/^mcp_/, "");
+  return normalized === "ask";
+}
+
 export function paseoToolLeafName(toolName: string): string | null {
   const namespacedLeafName = getPaseoToolLeafName(toolName);
   if (namespacedLeafName && PASEO_TOOL_LABELS[namespacedLeafName]) {
@@ -1120,6 +1131,9 @@ export function resolveToolCallPresentation(
       }
       if (name === "task") {
         return { category: "agent", icon: "Bot", label: "Task", summary: compactText(item.name) };
+      }
+      if (isAskTool(item.name)) {
+        return { category: "communication", icon: "MessageCircleQuestionMark", label: "Ask Question" };
       }
       if (name === "speak") {
         return { category: "communication", icon: "MicVocal", label: "Speak" };

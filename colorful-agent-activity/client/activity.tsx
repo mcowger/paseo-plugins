@@ -41,6 +41,7 @@ import {
   fileIconForPath,
   formatReasoningMeta,
   formatUnknownValue,
+  isAskTool,
   paseoToolLeafName,
   parsePiLsOutput,
   parseSubAgentActionLog,
@@ -1738,7 +1739,12 @@ export function ColorfulToolCall({
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const categoryColor = palette.categoryColors[item.data.presentation.category];
   const statusColor = palette.statusColors[item.data.status];
-  const expanded = getActivityExpansionState(isRunning, isLatest, userExpanded, detail?.type !== "read");
+  const expanded = getActivityExpansionState(
+    isRunning,
+    isLatest,
+    userExpanded,
+    detail?.type !== "read" && !isAskTool(item.data.name),
+  );
   const toggle = useCallback(() => {
     if (!isRunning) setUserExpanded(!expanded);
   }, [expanded, isRunning]);
