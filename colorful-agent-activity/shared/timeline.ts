@@ -1,5 +1,6 @@
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { z } from "zod";
+import type { ExpansionMode } from "./settings";
 import {
   formatError,
   formatReasoningText,
@@ -65,21 +66,11 @@ export type ReasoningItemData = z.output<typeof reasoningItemDataSchema>;
 export type ToolCallItemData = z.output<typeof toolCallItemDataSchema>;
 export type TodoItemData = z.output<typeof todoItemDataSchema>;
 
-export function getActivityExpansionState(
-  isStreaming: boolean,
-  isLatest: boolean,
-  userExpanded: boolean | null,
-  expandLatest = true,
-): boolean {
-  return isStreaming || (userExpanded !== null ? userExpanded : expandLatest && isLatest);
-}
-
-export function getReasoningExpansionState(
-  isStreaming: boolean,
-  isLatest: boolean,
-  userExpanded: boolean | null,
-): boolean {
-  return getActivityExpansionState(isStreaming, isLatest, userExpanded);
+export function resolveExpansion(mode: ExpansionMode, isLatest: boolean, userExpanded: boolean | null): boolean {
+  if (userExpanded !== null) return userExpanded;
+  if (mode === "always") return true;
+  if (mode === "never") return false;
+  return isLatest;
 }
 
 export function createReasoningData(

@@ -41,7 +41,7 @@ import {
   fileIconForPath,
   formatReasoningMeta,
   formatUnknownValue,
-  isAskTool,
+  expansionTargetForToolCall,
   paseoToolLeafName,
   parsePiLsOutput,
   parseSubAgentActionLog,
@@ -63,10 +63,10 @@ import { parseInlineMarkdown, parseReasoningMarkdown, type ReasoningMarkdownBloc
 import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
 import { exaToolKind } from "../shared/exa";
 import { githubToolKind } from "../shared/github";
-import { activitySettings, DEFAULT_PALETTE_MODE } from "../shared/settings";
+import { activitySettings, DEFAULT_EXPANSION, DEFAULT_PALETTE_MODE } from "../shared/settings";
+import type { ExpansionMode, ExpansionTarget } from "../shared/settings";
 import {
-  getActivityExpansionState,
-  getReasoningExpansionState,
+  resolveExpansion,
   reasoningItemDataSchema,
   toolCallItemDataSchema,
   type ReasoningItemData,
@@ -137,6 +137,12 @@ function useIsLatestToolCall(agentId: string, timestamp: Date, isRunning: boolea
     () => 0,
   );
   return isRunning || (latestTime > 0 && itemTime >= latestTime);
+}
+
+function useExpansionMode(target: ExpansionTarget): ExpansionMode {
+  const settings = useSettings(activitySettings);
+  if (settings.status === "ready") return settings.values.expansion[target] ?? DEFAULT_EXPANSION[target];
+  return DEFAULT_EXPANSION[target];
 }
 
 function usePalette(theme: Theme): ActivityPalette {
@@ -1693,7 +1699,7 @@ export function ColorfulReasoning({
   const isStreaming = item.data.phase === "streaming";
   const isLatest = useIsLatestReasoning(agentId, timestamp, isStreaming);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
-  const expanded = getReasoningExpansionState(isStreaming, isLatest, userExpanded);
+  const expanded = resolveExpansion(useExpansionMode("thinking"), isLatest, userExpanded);
   const meta = useMemo(
     () =>
       formatReasoningMeta(
@@ -1739,15 +1745,11 @@ export function ColorfulToolCall({
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const categoryColor = palette.categoryColors[item.data.presentation.category];
   const statusColor = palette.statusColors[item.data.status];
-  const expanded = getActivityExpansionState(
-    isRunning,
-    isLatest,
-    userExpanded,
-    detail?.type !== "read" && !isAskTool(item.data.name),
-  );
+  const expansionMode = useExpansionMode(expansionTargetForToolCall(item.data.name, detail?.type ?? "unknown"));
+  const expanded = resolveExpansion(expansionMode, isLatest, userExpanded);
   const toggle = useCallback(() => {
-    if (!isRunning) setUserExpanded(!expanded);
-  }, [expanded, isRunning]);
+    setUserExpanded(!expanded);
+  }, [expanded]);
   const subAgentDetail = detail?.type === "sub_agent" ? detail : null;
   const cwd = useAgent(agentId, (agent) => agent.cwd);
   const headerFile = useMemo(() => {
@@ -1805,7 +1807,7 @@ export function ColorfulTodo({ item, theme }: PluginTimelineItemProps<TodoData>)
   const styles = useActivityStyles(theme, palette);
   const done = item.data.items.filter((entry) => entry.status === "completed").length;
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
-  const expanded = userExpanded ?? true;
+  const expanded = resolveExpansion(useExpansionMode("todo"), false, userExpanded);
   const toggle = useCallback(() => {
     setUserExpanded(!expanded);
   }, [expanded]);

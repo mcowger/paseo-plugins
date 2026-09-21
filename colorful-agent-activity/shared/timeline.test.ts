@@ -1,32 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { createTodoData, getActivityExpansionState, getReasoningExpansionState } from "./timeline";
+import { createTodoData, resolveExpansion } from "./timeline";
 
-describe("reasoning expansion", () => {
-  it("keeps the latest completed thinking block open", () => {
-    expect(getReasoningExpansionState(false, true, null)).toBe(true);
+describe("row expansion", () => {
+  it("always expands regardless of latest state", () => {
+    expect(resolveExpansion("always", true, null)).toBe(true);
+    expect(resolveExpansion("always", false, null)).toBe(true);
   });
 
-  it("collapses an older block when a newer block exists", () => {
-    expect(getReasoningExpansionState(false, false, null)).toBe(false);
+  it("expands latest rows only while they are the newest", () => {
+    expect(resolveExpansion("latest", true, null)).toBe(true);
+    expect(resolveExpansion("latest", false, null)).toBe(false);
   });
 
-  it("keeps streaming reasoning open regardless of tool activity", () => {
-    expect(getReasoningExpansionState(true, false, false)).toBe(true);
+  it("never expands, even for the newest row", () => {
+    expect(resolveExpansion("never", true, null)).toBe(false);
+    expect(resolveExpansion("never", false, null)).toBe(false);
   });
 
-  it("respects an explicit user toggle", () => {
-    expect(getReasoningExpansionState(false, true, false)).toBe(false);
-    expect(getReasoningExpansionState(false, false, true)).toBe(true);
-  });
-
-  it("uses the same latest-item rule for tool calls", () => {
-    expect(getActivityExpansionState(false, true, null)).toBe(true);
-    expect(getActivityExpansionState(false, false, null)).toBe(false);
-  });
-
-  it("keeps the latest read-file call collapsed by default", () => {
-    expect(getActivityExpansionState(false, true, null, false)).toBe(false);
-    expect(getActivityExpansionState(false, true, true, false)).toBe(true);
+  it("lets an explicit user toggle win over every mode", () => {
+    expect(resolveExpansion("always", true, false)).toBe(false);
+    expect(resolveExpansion("never", false, true)).toBe(true);
+    expect(resolveExpansion("latest", false, true)).toBe(true);
+    expect(resolveExpansion("latest", true, false)).toBe(false);
   });
 });
 

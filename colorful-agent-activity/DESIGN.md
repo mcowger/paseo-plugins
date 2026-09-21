@@ -77,6 +77,20 @@ Rules:
 
 Rows should scan as a continuous activity stream, not a stack of cards.
 
+## Row expansion
+
+Each collapsible row type has an Always | Latest | Never setting (Settings → Row expansion),
+keyed by renderer, with Unknown tools as the fallback:
+
+- Always rows start expanded, even when they are not the newest.
+- Latest rows expand only while they are the newest row of any kind.
+- Never rows start collapsed, even while they are still running.
+- Tapping a row always overrides its setting.
+
+Shipped defaults: reads and questions start collapsed, task lists start open, everything else
+follows Latest. Settings stay on schema version 1 with fully defaulted keys so previously
+stored values backfill without a migration.
+
 ## Expanded activity
 
 Expansion should reveal content beneath the row without outlining it.
@@ -299,7 +313,7 @@ The visual system currently lives in:
 - `client/child-agent.tsx`: child activity hierarchy
 - `client/github.tsx`: GitHub-specific detail rows
 - `shared/presentation.ts`: category and status palettes
-- `client/settings.tsx`: palette descriptions
+- `client/settings.tsx`: palette descriptions and row expansion controls
 
 Keep shared layout values in `useActivityStyles`. Specialized renderers should consume `ActivityStyles` instead of creating a competing style system.
 

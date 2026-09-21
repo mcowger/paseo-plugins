@@ -1,6 +1,6 @@
 import type { JsonValue, ToolCallDetail, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
 import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization";
-import type { PaletteMode } from "./settings";
+import type { ExpansionTarget, PaletteMode } from "./settings";
 import { exaToolIcon, exaToolKind, exaToolLabel, exaToolSummary } from "./exa";
 import {
   githubToolIcon,
@@ -408,6 +408,31 @@ function stringField(value: unknown, key: string): string | undefined {
   if (!isRecord(value)) return undefined;
   const field = value[key];
   return typeof field === "string" && field.trim() ? field : undefined;
+}
+
+/**
+ * Which expansion setting governs a tool call row. Most tools key off their
+ * body renderer (detail type); ask and speak share the unknown renderer, so
+ * they key off the tool name instead — same table, no special handling.
+ */
+export function expansionTargetForToolCall(toolName: string, detailType: string): ExpansionTarget {
+  if (isAskTool(toolName)) return "ask";
+  if (toolName.trim().toLowerCase() === "speak") return "speak";
+  switch (detailType) {
+    case "read":
+    case "edit":
+    case "write":
+    case "shell":
+    case "search":
+    case "fetch":
+    case "worktree_setup":
+    case "sub_agent":
+    case "plain_text":
+    case "plan":
+      return detailType;
+    default:
+      return "unknown";
+  }
 }
 
 /** Whether a tool name refers to the ask-user-question tool, in any namespace. */

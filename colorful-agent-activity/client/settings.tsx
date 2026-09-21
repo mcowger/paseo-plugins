@@ -12,7 +12,8 @@ import {
   SettingsSection,
   SettingsSelect,
 } from "@getpaseo/plugin/client/ui";
-import { activitySettings, paletteModeSchema } from "../shared/settings";
+import { activitySettings, DEFAULT_EXPANSION, EXPANSION_TARGETS, expansionModeSchema, paletteModeSchema } from "../shared/settings";
+import type { ExpansionMode, ExpansionTarget } from "../shared/settings";
 
 type ReadySettings = Extract<SettingsState<typeof activitySettings.schema>, { status: "ready" }>;
 
@@ -27,6 +28,61 @@ const paletteDescriptions = {
   soft: "Mostly neutral icons with color reserved for status.",
   high_contrast: "Stronger dividers and status colors for easier scanning.",
 } as const;
+
+const expansionOptions = [
+  { value: "always", label: "Always" },
+  { value: "latest", label: "Latest" },
+  { value: "never", label: "Never" },
+];
+
+const expansionDescriptions = {
+  always: "Rows start expanded, even when they are not the newest.",
+  latest: "Only the newest row of any kind starts expanded.",
+  never: "Rows start collapsed, even while they are still running.",
+} as const;
+
+function ExpansionControls({ settings, theme }: { settings: ReadySettings; theme: PluginSurfaceProps["theme"] }) {
+  const descriptionStyle = useMemo(
+    () => ({ color: theme.colors.foregroundMuted, fontSize: 13, lineHeight: 18 }),
+    [theme.colors.foregroundMuted],
+  );
+  const changeExpansion = (target: ExpansionTarget) => (value: string) => {
+    const parsed = expansionModeSchema.safeParse(value);
+    if (!parsed.success) return;
+    const mode: ExpansionMode = parsed.data;
+    void settings.save(
+      { ...settings.values, expansion: { ...DEFAULT_EXPANSION, ...settings.values.expansion, [target]: mode } },
+      settings.revision,
+    );
+  };
+  return (
+    <SettingsSection title="Row expansion">
+      <SettingsCard>
+        {EXPANSION_TARGETS.map((target) => {
+          const mode = settings.values.expansion?.[target.key] ?? target.default;
+          return (
+            <SettingsSelect
+              key={target.key}
+              label={target.label}
+              hint={expansionDescriptions[mode]}
+              value={mode}
+              options={expansionOptions}
+              disabled={settings.saving}
+              onValueChange={changeExpansion(target.key)}
+            />
+          );
+        })}
+      </SettingsCard>
+      <SettingsRow label="Behavior">
+        <Text style={descriptionStyle}>
+          Always rows start expanded, Latest rows expand only while they are the newest row of any kind, and Never rows
+          start collapsed even while running. Tapping a row always overrides its setting. Set Paseo's Tool call detail
+          setting to Detailed so each call reaches the plugin separately.
+        </Text>
+      </SettingsRow>
+    </SettingsSection>
+  );
+}
 
 function ReadyControls({ settings, theme }: { settings: ReadySettings; theme: PluginSurfaceProps["theme"] }) {
   const descriptionStyle = useMemo(
@@ -56,7 +112,8 @@ function ReadyControls({ settings, theme }: { settings: ReadySettings; theme: Pl
       </SettingsCard>
       <SettingsRow label="Behavior">
         <Text style={descriptionStyle}>
-          The newest thinking block stays open until a newer thinking block starts. Tool calls open while streaming and completed tool calls start collapsed. Set Paseo's Tool call detail setting to Detailed so each call reaches the plugin separately.
+          Rows render with category accents and monospace technical metadata. Use Row expansion below to control which
+          rows start open.
         </Text>
       </SettingsRow>
       {settings.saveError ? <Text accessibilityRole="alert" style={errorStyle}>{settings.saveError}</Text> : null}
@@ -85,5 +142,10 @@ export function ActivitySettings({ theme }: PluginSurfaceProps) {
       </SettingsSection>
     );
   }
-  return <ReadyControls settings={settings} theme={theme} />;
+  return (
+    <>
+      <ReadyControls settings={settings} theme={theme} />
+      <ExpansionControls settings={settings} theme={theme} />
+    </>
+  );
 }

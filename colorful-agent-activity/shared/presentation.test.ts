@@ -23,6 +23,7 @@ import {
   formatError,
   prettyJson,
   formatUnknownValue,
+  expansionTargetForToolCall,
   isAskTool,
   extractCodeInput,
   extractApplyPatchEdits,
@@ -540,5 +541,17 @@ describe("reasoning steps and header metadata", () => {
       icon: "MessageCircleQuestionMark",
       label: "Ask Question",
     });
+  });
+
+  it("keys expansion settings off the body renderer", () => {
+    expect(expansionTargetForToolCall("read", "read")).toBe("read");
+    expect(expansionTargetForToolCall("edit", "edit")).toBe("edit");
+    expect(expansionTargetForToolCall("bash", "shell")).toBe("shell");
+    expect(expansionTargetForToolCall("task", "sub_agent")).toBe("sub_agent");
+    expect(expansionTargetForToolCall("ask", "unknown")).toBe("ask");
+    expect(expansionTargetForToolCall("functions.ask", "unknown")).toBe("ask");
+    expect(expansionTargetForToolCall("speak", "unknown")).toBe("speak");
+    expect(expansionTargetForToolCall("some-future-tool", "unknown")).toBe("unknown");
+    expect(expansionTargetForToolCall("read", "bogus")).toBe("unknown");
   });
 });
