@@ -27,6 +27,9 @@ import {
   extractApplyPatchEdits,
   isApplyPatchTool,
   previewText,
+  relativeToRoot,
+  splitFileDisplay,
+  truncateDirFront,
   splitReasoningSteps,
   estimateReasoningTokens,
   formatReasoningMeta,
@@ -489,5 +492,30 @@ describe("reasoning steps and header metadata", () => {
     expect(formatReasoningMeta(2, 116)).toBe("2 steps · 116 tokens");
     expect(formatReasoningMeta(1, 1)).toBe("1 step · 1 token");
     expect(formatReasoningMeta(0, 0)).toBe("0 tokens");
+  });
+
+  it("relativizes workspace paths against the root", () => {
+    expect(relativeToRoot("/ws/src/index.ts", "/ws")).toBe("src/index.ts");
+    expect(relativeToRoot("/ws/src/index.ts", "/ws/")).toBe("src/index.ts");
+    expect(relativeToRoot("/ws", "/ws")).toBe("ws");
+    expect(relativeToRoot("/other/index.ts", "/ws")).toBe("/other/index.ts");
+    expect(relativeToRoot("/ws2/index.ts", "/ws")).toBe("/ws2/index.ts");
+    expect(relativeToRoot("src/index.ts", "/ws")).toBe("src/index.ts");
+    expect(relativeToRoot("/ws/src/index.ts", undefined)).toBe("/ws/src/index.ts");
+    expect(relativeToRoot("/ws/src/index.ts", "")).toBe("/ws/src/index.ts");
+  });
+
+  it("splits display paths into muted dirs and bold filenames", () => {
+    expect(splitFileDisplay("src/index.ts")).toEqual({ dir: "src", base: "index.ts" });
+    expect(splitFileDisplay("index.ts")).toEqual({ base: "index.ts" });
+    expect(splitFileDisplay("/other/index.ts")).toEqual({ dir: "/other", base: "index.ts" });
+  });
+
+  it("front-truncates long directories to their tail", () => {
+    expect(truncateDirFront("src")).toBe("src");
+    expect(truncateDirFront("a/b")).toBe("a/b");
+    expect(truncateDirFront("a/b/c")).toBe("…/b/c");
+    expect(truncateDirFront("/other")).toBe("/other");
+    expect(truncateDirFront("/a/b/c")).toBe("…/b/c");
   });
 });

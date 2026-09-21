@@ -59,6 +59,9 @@ A collapsed activity item is one compact row:
 Checklists (`todo` items) render as a `Tasks` row with `n/m done` metadata, expanding to
 flat status rows. An empty checklist is left to the host.
 
+File rows split the summary into a muted workspace-relative directory (front-truncated to
+its tail when long) and a semibold filename that never shrinks.
+
 Rules:
 
 - Keep the row close to one line of text in height.

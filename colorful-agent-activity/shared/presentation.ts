@@ -185,7 +185,7 @@ const TOOL_ICON_NAMES: Record<string, string> = {
   wrench: "Wrench",
 };
 
-function compactText(value: string, maxLength = 180): string | undefined {
+export function compactText(value: string, maxLength = 180): string | undefined {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (!normalized) return undefined;
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
@@ -215,6 +215,45 @@ export function fileIconForPath(filePath: string | undefined): string {
   if (byName) return byName;
   const extension = extensionFromPath(filePath);
   return (extension && FILE_ICON_BY_EXTENSION[extension]) || "File";
+}
+
+/**
+ * Strip a workspace root prefix for compact header display. Returns the path
+ * unchanged when it is already relative, outside the root, or no root applies.
+ */
+export function relativeToRoot(filePath: string, root: string | undefined): string {
+  if (!filePath || !root) return filePath;
+  const normalizedRoot = root.replace(/\/+$/, "");
+  if (!normalizedRoot) return filePath;
+  if (normalizedRoot === "/") return filePath.startsWith("/") ? filePath.slice(1) || filePath : filePath;
+  if (filePath === normalizedRoot) return filePath.split("/").pop() ?? filePath;
+  if (filePath.startsWith(`${normalizedRoot}/`)) return filePath.slice(normalizedRoot.length + 1);
+  return filePath;
+}
+
+export interface FileDisplay {
+  dir?: string;
+  base: string;
+}
+
+/** Split a display path into a muted directory and a bold filename. */
+export function splitFileDisplay(path: string): FileDisplay {
+  const slash = path.lastIndexOf("/");
+  if (slash < 0) return { base: path };
+  const dir = path.slice(0, slash);
+  const base = path.slice(slash + 1) || path;
+  return dir ? { dir, base } : { base };
+}
+
+/**
+ * Front-truncate a directory to its last segments so long paths keep their
+ * tail (`…/last/two`). Absolute dirs keep their leading slash when intact.
+ */
+export function truncateDirFront(dir: string, maxSegments = 2): string {
+  const absolute = dir.startsWith("/");
+  const segments = dir.split("/").filter((segment) => segment.length > 0);
+  if (segments.length <= maxSegments) return `${absolute ? "/" : ""}${segments.join("/")}`;
+  return `…/${segments.slice(-maxSegments).join("/")}`;
 }
 
 function iconNameFromProtocol(value: string | undefined): string | undefined {

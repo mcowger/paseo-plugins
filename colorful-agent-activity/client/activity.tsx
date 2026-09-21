@@ -1,5 +1,5 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
-import { useRpc, useSettings } from "@getpaseo/plugin/client";
+import { useAgent, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Icon, ScrollView, copyText, useRevealedText, useToast } from "@getpaseo/plugin/client/react-native";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import React, {
@@ -34,6 +34,7 @@ import {
 import { GithubToolDetail } from "./github";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
 import {
+  compactText,
   diffLinesForDetail,
   estimateReasoningTokens,
   extractCodeInput,
@@ -45,9 +46,12 @@ import {
   parseSubAgentActionLog,
   previewText,
   readErrorMessage,
+  relativeToRoot,
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
+  splitFileDisplay,
   splitReasoningSteps,
+  truncateDirFront,
   MAX_DIFF_CHARS,
   PREVIEW_LINES,
   type ActivityPalette,
@@ -185,6 +189,27 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         fontSize: 12,
         lineHeight: 17,
         minWidth: 0,
+      } satisfies TextStyle,
+      filePath: {
+        alignItems: "center",
+        flex: 1,
+        flexDirection: "row",
+        minWidth: 0,
+      } satisfies ViewStyle,
+      fileDir: {
+        color: theme.colors.foregroundMuted,
+        flexShrink: 1,
+        fontFamily: "monospace",
+        fontSize: 12,
+        lineHeight: 17,
+      } satisfies TextStyle,
+      fileName: {
+        color: theme.colors.foreground,
+        flexShrink: 0,
+        fontFamily: "monospace",
+        fontSize: 12,
+        fontWeight: "600",
+        lineHeight: 17,
       } satisfies TextStyle,
       status: {
         alignItems: "center",
@@ -1593,6 +1618,7 @@ function ActivityHeader({
   iconColor,
   title,
   summary,
+  fileDisplay,
   status,
   statusColor,
   stats,
@@ -1604,6 +1630,7 @@ function ActivityHeader({
   iconColor: string;
   title: string;
   summary?: string;
+  fileDisplay?: { dir?: string; base: string };
   status?: ToolCallData["status"];
   statusColor?: string;
   stats?: ToolCallData["presentation"]["diffStats"];
@@ -1622,7 +1649,22 @@ function ActivityHeader({
         <Icon name={icon} color={iconColor} size={12} />
       </View>
       <Text {...cuiTextEscape} numberOfLines={1} style={styles.title}>{title}</Text>
-      {summary ? <Text numberOfLines={1} style={styles.summary}>{summary}</Text> : null}
+      {fileDisplay ? (
+        <View style={styles.filePath}>
+          {fileDisplay.dir ? (
+            <Text numberOfLines={1} style={styles.fileDir}>
+              {truncateDirFront(fileDisplay.dir)}/
+            </Text>
+          ) : null}
+          <Text numberOfLines={1} style={styles.fileName}>
+            {fileDisplay.base}
+          </Text>
+        </View>
+      ) : summary ? (
+        <Text numberOfLines={1} style={styles.summary}>
+          {summary}
+        </Text>
+      ) : null}
       {stats ? (
         <View style={styles.stats}>
           <Text style={styles.additions}>+{stats.additions}</Text>
@@ -1701,6 +1743,13 @@ export function ColorfulToolCall({
     if (!isRunning) setUserExpanded(!expanded);
   }, [expanded, isRunning]);
   const subAgentDetail = detail?.type === "sub_agent" ? detail : null;
+  const cwd = useAgent(agentId, (agent) => agent.cwd);
+  const headerFile = useMemo(() => {
+    const filePath = item.data.presentation.filePath;
+    if (!filePath) return null;
+    const relative = cwd ? relativeToRoot(filePath, cwd) : filePath;
+    return splitFileDisplay(compactText(relative) ?? relative);
+  }, [cwd, item.data.presentation.filePath]);
   return (
     <View {...pmonoViewEscape} style={styles.card}>
       <ActivityHeader
@@ -1708,6 +1757,7 @@ export function ColorfulToolCall({
         iconColor={categoryColor}
         title={item.data.presentation.label}
         summary={item.data.presentation.summary}
+        fileDisplay={headerFile ?? undefined}
         status={item.data.status}
         statusColor={statusColor}
         stats={item.data.presentation.diffStats}
