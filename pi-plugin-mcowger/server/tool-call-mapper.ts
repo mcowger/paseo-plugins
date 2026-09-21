@@ -1,40 +1,457 @@
+// Diff-on-touch source: paseo checkout, packages/server/src/server/agent/providers/pi/tool-call-mapper.ts
+// Intentional divergences (never "fix" on diff):
+// - ProviderToolCallDetail (plugin SDK) instead of upstream ToolCallDetail (in-tree agent-sdk-types).
+// - Plugin-only tool mappings preserved: apply_patch -> edit, spawn_agent -> sub_agent,
+//   send_message/followup_task/wait_agent/list_agents/interrupt_agent -> plain_text.
+import { z } from "zod";
+
 import type { ProviderToolCallDetail } from "@getpaseo/plugin/server/provider";
 
-export type PiToolResult = string | { output?: string; stdout?: string; text?: string; content?: Array<{ type: string; text?: string }>; exitCode?: number; code?: number; details?: { diff?: string; server?: string; tool?: string; xdev?: unknown } } | null;
-export type PiTrackedToolCall = { toolName: string; args: unknown };
+interface BashToolInput {
+  command: string;
+  timeout?: number;
+}
 
-export function parseToolArgs(toolName: string, args: unknown): PiTrackedToolCall { return { toolName, args }; }
-export function parseToolResult(value: unknown): PiToolResult {
-  if (typeof value === "string" || value === null) return value;
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Exclude<PiToolResult, string | null> : null;
+interface ReadToolInput {
+  path: string;
+  offset?: number;
+  limit?: number;
 }
+
+interface EditToolInput {
+  path: string;
+  edits: Array<{
+    oldText: string;
+    newText: string;
+  }>;
+}
+
+interface WriteToolInput {
+  path: string;
+  content: string;
+}
+
+interface FindToolInput {
+  pattern: string;
+  path?: string;
+  limit?: number;
+}
+
+interface GrepToolInput {
+  pattern: string;
+  path?: string;
+  glob?: string;
+  ignoreCase?: boolean;
+  literal?: boolean;
+  context?: number;
+  limit?: number;
+}
+
+interface LsToolInput {
+  path?: string;
+  limit?: number;
+}
+
+interface PiToolResultObject {
+  output?: string;
+  stdout?: string;
+  text?: string;
+  content?: PiToolResultContent[];
+  exitCode?: number;
+  code?: number;
+  details?: PiToolResultDetails;
+}
+
+interface PiToolResultDetails {
+  diff?: string;
+  mode?: string;
+  server?: string;
+  tool?: string;
+  xdev?: unknown;
+}
+
+interface PiToolResultTextContent {
+  type: "text";
+  text: string;
+}
+
+interface PiToolResultUnknownContent {
+  type: string;
+}
+
+type PiToolResultContent = PiToolResultTextContent | PiToolResultUnknownContent;
+export type PiToolResult = string | PiToolResultObject | null;
+
+interface PiBashToolCall {
+  kind: "bash";
+  toolName: "bash";
+  args: BashToolInput;
+}
+
+interface PiReadToolCall {
+  kind: "read";
+  toolName: "read";
+  args: ReadToolInput;
+}
+
+interface PiEditToolCall {
+  kind: "edit";
+  toolName: "edit";
+  args: EditToolInput;
+}
+
+interface PiWriteToolCall {
+  kind: "write";
+  toolName: "write";
+  args: WriteToolInput;
+}
+
+interface PiFindToolCall {
+  kind: "find";
+  toolName: "find";
+  args: FindToolInput;
+}
+
+interface PiGrepToolCall {
+  kind: "grep";
+  toolName: "grep";
+  args: GrepToolInput;
+}
+
+interface PiLsToolCall {
+  kind: "ls";
+  toolName: "ls";
+  args: LsToolInput;
+}
+
+interface PiUnknownToolCall {
+  kind: "unknown";
+  toolName: string;
+  args: unknown;
+}
+
+export type PiTrackedToolCall =
+  | PiBashToolCall
+  | PiReadToolCall
+  | PiEditToolCall
+  | PiWriteToolCall
+  | PiFindToolCall
+  | PiGrepToolCall
+  | PiLsToolCall
+  | PiUnknownToolCall;
+
+interface ToolCallOutputSummary {
+  output?: string;
+  exitCode?: number | null;
+}
+
+const PiToolResultTextContentSchema = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+});
+
+const PiToolResultUnknownContentSchema = z
+  .object({
+    type: z.string(),
+  })
+  .passthrough();
+
+const PiToolResultContentSchema = z.union([
+  PiToolResultTextContentSchema,
+  PiToolResultUnknownContentSchema,
+]);
+
+const PiToolResultDetailsSchema = z
+  .object({
+    diff: z.string().optional(),
+  })
+  .passthrough();
+
+const XdevExecuteDetailsSchema = z.object({
+  tool: z.string().trim().min(1),
+  mode: z.literal("execute"),
+  args: z.unknown().optional(),
+  inner: z.unknown().optional(),
+});
+
+const PiToolResultObjectSchema = z
+  .object({
+    output: z.string().optional(),
+    stdout: z.string().optional(),
+    text: z.string().optional(),
+    content: z.array(PiToolResultContentSchema).optional(),
+    exitCode: z.number().optional(),
+    code: z.number().optional(),
+    details: PiToolResultDetailsSchema.optional(),
+  })
+  .passthrough();
+
+const PiToolResultSchema = z.union([z.string(), PiToolResultObjectSchema, z.null()]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+const BashToolInputSchema: z.ZodType<BashToolInput> = z.object({
+  command: z.string(),
+  timeout: z.number().optional(),
+});
+
+const ReadToolInputSchema: z.ZodType<ReadToolInput> = z.object({
+  path: z.string(),
+  offset: z.number().optional(),
+  limit: z.number().optional(),
+});
+
+const EditToolInputSchema: z.ZodType<EditToolInput> = z.object({
+  path: z.string(),
+  edits: z.array(
+    z.object({
+      oldText: z.string(),
+      newText: z.string(),
+    }),
+  ),
+});
+
+const LegacyEditToolInputSchema = z.object({
+  path: z.string(),
+  old_string: z.string().optional(),
+  oldString: z.string().optional(),
+  new_string: z.string().optional(),
+  newString: z.string().optional(),
+});
+
+const WriteToolInputSchema: z.ZodType<WriteToolInput> = z.object({
+  path: z.string(),
+  content: z.string(),
+});
+
+const FindToolInputSchema: z.ZodType<FindToolInput> = z.object({
+  pattern: z.string(),
+  path: z.string().optional(),
+  limit: z.number().optional(),
+});
+
+const GrepToolInputSchema: z.ZodType<GrepToolInput> = z.object({
+  pattern: z.string(),
+  path: z.string().optional(),
+  glob: z.string().optional(),
+  ignoreCase: z.boolean().optional(),
+  literal: z.boolean().optional(),
+  context: z.number().optional(),
+  limit: z.number().optional(),
+});
+
+const LsToolInputSchema: z.ZodType<LsToolInput> = z.object({
+  path: z.string().optional(),
+  limit: z.number().optional(),
+});
+
+export function parseToolResult(rawResult: unknown): PiToolResult {
+  const parsed = PiToolResultSchema.safeParse(rawResult);
+  if (parsed.success) {
+    return parsed.data;
+  }
+  return null;
+}
+
 export function extractTextFromToolResult(result: PiToolResult): string | undefined {
-  if (typeof result === "string") return result;
-  if (!result) return undefined;
-  return result.output ?? result.stdout ?? result.text ?? result.content?.filter((part) => part.type === "text" && typeof part.text === "string").map((part) => part.text!).join("\n");
+  if (typeof result === "string") {
+    return result;
+  }
+  if (!result) {
+    return undefined;
+  }
+
+  // Nullish (not truthiness) check: an explicit empty output means the tool
+  // ran and produced nothing, which must not fall through to content parsing.
+  const directText = result.output ?? result.stdout ?? result.text;
+  if (directText !== undefined) {
+    return directText;
+  }
+  if (!result.content) {
+    return undefined;
+  }
+
+  const textParts: string[] = [];
+  for (const block of result.content) {
+    if (block.type === "text" && "text" in block) {
+      textParts.push(block.text);
+    }
+  }
+
+  return textParts.length > 0 ? textParts.join("\n") : undefined;
 }
-function record(value: unknown): Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
-export function resolveToolCallName(call: PiTrackedToolCall, result?: PiToolResult): string {
-  if (call.toolName !== "mcp") return call.toolName;
-  if (result && typeof result !== "string" && result.details?.server && result.details.tool) return `${result.details.server}.${result.details.tool}`;
-  const args = record(call.args);
-  const server = typeof args.server === "string" ? args.server : undefined;
-  const tool = typeof args.tool === "string" ? args.tool : undefined;
-  return server && tool ? `${server}.${tool.replace(`${server}_`, "")}` : call.toolName;
+
+export function parseToolArgs(toolName: string, rawArgs: unknown): PiTrackedToolCall {
+  if (toolName === "edit") {
+    return parseEditToolArgs(rawArgs);
+  }
+  // Exhaustive switch (not a record lookup): a model-supplied toolName like
+  // "constructor" must fall through to unknown instead of hitting
+  // Object.prototype through an index expression.
+  switch (toolName) {
+    case "bash":
+    case "read":
+    case "write":
+    case "find":
+    case "grep":
+    case "ls":
+      return parseSimpleToolArgs(toolName, rawArgs);
+    default:
+      return { kind: "unknown", toolName, args: rawArgs ?? null };
+  }
 }
-export function mapToolDetail(call: PiTrackedToolCall, result?: PiToolResult): ProviderToolCallDetail {
-  const args = record(call.args);
-  switch (call.toolName) {
-    case "bash": return { type: "shell", command: typeof args.command === "string" ? args.command : "", output: extractTextFromToolResult(result ?? null), exitCode: result && typeof result !== "string" ? result.exitCode ?? result.code ?? null : null };
-    case "read": return { type: "read", filePath: typeof args.path === "string" ? args.path : "", content: extractTextFromToolResult(result ?? null), ...(typeof args.offset === "number" ? { offset: args.offset } : {}), ...(typeof args.limit === "number" ? { limit: args.limit } : {}) };
-    case "edit": { const edit = Array.isArray(args.edits) ? record(args.edits[0]) : args; return { type: "edit", filePath: typeof args.path === "string" ? args.path : "", ...(typeof (edit.oldText ?? edit.old_string) === "string" ? { oldString: String(edit.oldText ?? edit.old_string) } : {}), ...(typeof (edit.newText ?? edit.new_string) === "string" ? { newString: String(edit.newText ?? edit.new_string) } : {}), ...(result && typeof result !== "string" && typeof result.details?.diff === "string" ? { unifiedDiff: result.details.diff } : {}) }; }
-    case "apply_patch": return { type: "edit", filePath: patchPaths(typeof args.patch === "string" ? args.patch : "")[0] ?? "", ...(typeof args.patch === "string" ? { newString: args.patch } : {}) };
-    case "write": return { type: "write", filePath: typeof args.path === "string" ? args.path : "", ...(typeof args.content === "string" ? { content: args.content } : {}) };
-    case "find": return { type: "search", query: typeof args.pattern === "string" ? args.pattern : "", toolName: "search", content: extractTextFromToolResult(result ?? null) };
-    case "grep": return { type: "search", query: typeof args.pattern === "string" ? args.pattern : "", toolName: "grep", content: extractTextFromToolResult(result ?? null) };
-    case "spawn_agent": return { type: "sub_agent", ...(typeof args.agent_type === "string" ? { subAgentType: args.agent_type } : {}), ...(typeof args.message === "string" ? { description: args.message } : {}), log: extractTextFromToolResult(result ?? null) ?? "" };
-    case "send_message": case "followup_task": case "wait_agent": case "list_agents": case "interrupt_agent": return { type: "plain_text", label: call.toolName, text: extractTextFromToolResult(result ?? null) };
-    default: return { type: "unknown", input: call.args as never, output: result as never };
+
+function stripMcpProxyPrefix(toolName: string, serverName: string): string {
+  const prefix = `${serverName}_`;
+  return toolName.startsWith(prefix) ? toolName.slice(prefix.length) : toolName;
+}
+
+export function resolveToolCallName(toolCall: PiTrackedToolCall, result?: PiToolResult): string {
+  if (toolCall.kind === "write" && result && typeof result !== "string") {
+    const xdev = XdevExecuteDetailsSchema.safeParse(result.details?.xdev);
+    if (xdev.success) {
+      return xdev.data.tool;
+    }
+  }
+
+  if (toolCall.toolName !== "mcp") {
+    return toolCall.toolName;
+  }
+
+  if (result && typeof result !== "string") {
+    const serverName = readNonEmptyString(result.details?.server);
+    const toolName = readNonEmptyString(result.details?.tool);
+    if (serverName && toolName) {
+      return `${serverName}.${toolName}`;
+    }
+  }
+
+  if (isRecord(toolCall.args)) {
+    const requestedTool = readNonEmptyString(toolCall.args.tool);
+    const requestedServer = readNonEmptyString(toolCall.args.server);
+    if (requestedTool && requestedServer) {
+      return `${requestedServer}.${stripMcpProxyPrefix(requestedTool, requestedServer)}`;
+    }
+    if (requestedTool) {
+      const [serverName, ...toolParts] = requestedTool.split("_");
+      if (serverName && toolParts.length > 0) {
+        return `${serverName}.${toolParts.join("_")}`;
+      }
+    }
+  }
+
+  return toolCall.toolName;
+}
+
+export function mapToolDetail(
+  toolCall: PiTrackedToolCall,
+  result?: PiToolResult,
+): ProviderToolCallDetail {
+  const parsedResult = result ?? null;
+
+  if (isTaskToolCall(toolCall)) {
+    return mapTaskToolDetail(toolCall.args, parsedResult);
+  }
+
+  // Plugin-only mappings for pi-microgpt and agent-coordination tools. These
+  // tool names never validate against the upstream schemas above, so they
+  // arrive here as kind "unknown"; map them before the unknown fallback.
+  const pluginDetail = mapPluginToolDetail(toolCall, parsedResult);
+  if (pluginDetail) {
+    return pluginDetail;
+  }
+
+  switch (toolCall.kind) {
+    case "bash": {
+      const summary = resolveToolCallOutput(parsedResult);
+      return {
+        type: "shell",
+        command: toolCall.args.command,
+        output: summary.output,
+        exitCode: summary.exitCode,
+      };
+    }
+    case "read":
+      return {
+        type: "read",
+        filePath: toolCall.args.path,
+        content: extractTextFromToolResult(parsedResult),
+        offset: toolCall.args.offset,
+        limit: toolCall.args.limit,
+      };
+    case "edit": {
+      const firstEdit = toolCall.args.edits[0];
+      const unifiedDiff =
+        parsedResult && typeof parsedResult !== "string" ? parsedResult.details?.diff : undefined;
+
+      return {
+        type: "edit",
+        filePath: toolCall.args.path,
+        oldString: firstEdit?.oldText,
+        newString: firstEdit?.newText,
+        unifiedDiff,
+      };
+    }
+    case "write":
+      return mapWriteToolDetail(toolCall.args, parsedResult);
+    case "find":
+      return mapFindToolDetail(toolCall.args, parsedResult);
+    case "grep":
+      return mapGrepToolDetail(toolCall.args, parsedResult);
+    case "ls":
+      return mapLsToolDetail(toolCall.args, parsedResult);
+    default:
+      return {
+        type: "unknown",
+        input: toolCall.args as never,
+        output: parsedResult as never,
+      };
+  }
+}
+
+/** Plugin-only tool names (pi-microgpt + agent coordination). Returns null when not applicable. */
+function mapPluginToolDetail(
+  toolCall: PiTrackedToolCall,
+  result: PiToolResult,
+): ProviderToolCallDetail | null {
+  if (toolCall.kind !== "unknown") {
+    return null;
+  }
+  const args = isRecord(toolCall.args) ? toolCall.args : {};
+  switch (toolCall.toolName) {
+    case "apply_patch": {
+      const patch = typeof args.patch === "string" ? args.patch : "";
+      return {
+        type: "edit",
+        filePath: patchPaths(patch)[0] ?? "",
+        ...(patch ? { newString: patch } : {}),
+      };
+    }
+    case "spawn_agent":
+      return {
+        type: "sub_agent",
+        ...(typeof args.agent_type === "string" ? { subAgentType: args.agent_type } : {}),
+        ...(typeof args.message === "string" ? { description: args.message } : {}),
+        log: extractTextFromToolResult(result) ?? "",
+      };
+    case "send_message":
+    case "followup_task":
+    case "wait_agent":
+    case "list_agents":
+    case "interrupt_agent":
+      return {
+        type: "plain_text",
+        label: toolCall.toolName,
+        text: extractTextFromToolResult(result),
+      };
+    default:
+      return null;
   }
 }
 
@@ -47,4 +464,187 @@ function patchPaths(patch: string): string[] {
     if (move) paths.add(move);
   }
   return [...paths];
+}
+
+function isTaskToolCall(toolCall: PiTrackedToolCall): boolean {
+  if (toolCall.toolName === "task") {
+    return true;
+  }
+  if (toolCall.toolName !== "subagent" || !isRecord(toolCall.args)) {
+    return false;
+  }
+  return (
+    toolCall.args.action === undefined &&
+    (readNonEmptyString(toolCall.args.agent) !== undefined ||
+      readNonEmptyString(toolCall.args.task) !== undefined)
+  );
+}
+
+function mapTaskToolDetail(args: unknown, result: PiToolResult): ProviderToolCallDetail {
+  const argRecord = isRecord(args) ? args : {};
+  return {
+    type: "sub_agent",
+    subAgentType: readNonEmptyString(argRecord.agent),
+    description: readNonEmptyString(argRecord.task),
+    log: extractTextFromToolResult(result)?.trim() ?? "",
+  };
+}
+
+function mapWriteToolDetail(args: WriteToolInput, result: PiToolResult): ProviderToolCallDetail {
+  if (result && typeof result !== "string" && result.details && "xdev" in result.details) {
+    const xdev = XdevExecuteDetailsSchema.safeParse(result.details.xdev);
+    if (xdev.success) {
+      return {
+        type: "unknown",
+        input: (xdev.data.args ?? null) as never,
+        output: {
+          ...result,
+          details: (xdev.data.inner ?? null) as never,
+        } as never,
+      };
+    }
+
+    return {
+      type: "unknown",
+      input: args as never,
+      output: result as never,
+    };
+  }
+
+  return {
+    type: "write",
+    filePath: args.path,
+    content: args.content,
+  };
+}
+
+export function resolveToolCallOutput(result: PiToolResult): ToolCallOutputSummary {
+  if (typeof result === "string") {
+    return { output: result };
+  }
+  if (!result) {
+    return {};
+  }
+
+  const summary: ToolCallOutputSummary = {
+    output: extractTextFromToolResult(result),
+  };
+  if (typeof result.exitCode === "number") {
+    summary.exitCode = result.exitCode;
+    return summary;
+  }
+  if (typeof result.code === "number") {
+    summary.exitCode = result.code;
+    return summary;
+  }
+  summary.exitCode = null;
+  return summary;
+}
+
+export function normalizeLegacyEditArgs(rawArgs: unknown): EditToolInput | null {
+  const parsed = LegacyEditToolInputSchema.safeParse(rawArgs);
+  if (!parsed.success) {
+    return null;
+  }
+
+  const oldText = parsed.data.old_string ?? parsed.data.oldString;
+  const newText = parsed.data.new_string ?? parsed.data.newString;
+  // Nullish checks: pi uses an empty old_string for prepend/create-style
+  // edits, so only a missing value rejects the legacy shape.
+  if (oldText === undefined || newText === undefined) {
+    return null;
+  }
+
+  return {
+    path: parsed.data.path,
+    edits: [{ oldText, newText }],
+  };
+}
+
+export function parseEditToolArgs(rawArgs: unknown): PiTrackedToolCall {
+  const parsed = EditToolInputSchema.safeParse(rawArgs);
+  if (parsed.success) {
+    return { kind: "edit", toolName: "edit", args: parsed.data };
+  }
+  const legacyArgs = normalizeLegacyEditArgs(rawArgs);
+  if (legacyArgs) {
+    return { kind: "edit", toolName: "edit", args: legacyArgs };
+  }
+  return { kind: "unknown", toolName: "edit", args: rawArgs ?? null };
+}
+
+type SimpleToolKind = "bash" | "read" | "write" | "find" | "grep" | "ls";
+
+interface SimpleToolArgsByKind {
+  bash: BashToolInput;
+  read: ReadToolInput;
+  write: WriteToolInput;
+  find: FindToolInput;
+  grep: GrepToolInput;
+  ls: LsToolInput;
+}
+
+// Typed per-kind so a mis-wired entry (e.g. ls: GrepToolInputSchema) is a
+// compile error rather than a silent wrong-variant assignment.
+const SIMPLE_TOOL_SCHEMAS: { [K in SimpleToolKind]: z.ZodType<SimpleToolArgsByKind[K]> } = {
+  bash: BashToolInputSchema,
+  read: ReadToolInputSchema,
+  write: WriteToolInputSchema,
+  find: FindToolInputSchema,
+  grep: GrepToolInputSchema,
+  ls: LsToolInputSchema,
+};
+
+const SIMPLE_TOOL_CALLS: {
+  [K in SimpleToolKind]: (args: SimpleToolArgsByKind[K]) => PiTrackedToolCall;
+} = {
+  bash: (args) => ({ kind: "bash", toolName: "bash", args }),
+  read: (args) => ({ kind: "read", toolName: "read", args }),
+  write: (args) => ({ kind: "write", toolName: "write", args }),
+  find: (args) => ({ kind: "find", toolName: "find", args }),
+  grep: (args) => ({ kind: "grep", toolName: "grep", args }),
+  ls: (args) => ({ kind: "ls", toolName: "ls", args }),
+};
+
+function parseSimpleToolArgs<K extends SimpleToolKind>(
+  kind: K,
+  rawArgs: unknown,
+): PiTrackedToolCall {
+  const parsed = SIMPLE_TOOL_SCHEMAS[kind].safeParse(rawArgs);
+  if (!parsed.success) {
+    return { kind: "unknown", toolName: kind, args: rawArgs ?? null };
+  }
+  return SIMPLE_TOOL_CALLS[kind](parsed.data);
+}
+
+export function mapFindToolDetail(
+  args: FindToolInput,
+  result: PiToolResult,
+): ProviderToolCallDetail {
+  return {
+    type: "search",
+    query: args.pattern,
+    toolName: "search",
+    content: extractTextFromToolResult(result),
+  };
+}
+
+export function mapGrepToolDetail(
+  args: GrepToolInput,
+  result: PiToolResult,
+): ProviderToolCallDetail {
+  return {
+    type: "search",
+    query: args.pattern,
+    toolName: "grep",
+    content: extractTextFromToolResult(result),
+  };
+}
+
+export function mapLsToolDetail(args: LsToolInput, result: PiToolResult): ProviderToolCallDetail {
+  return {
+    type: "search",
+    query: args.path ?? "ls",
+    content: extractTextFromToolResult(result),
+  };
 }

@@ -1,14 +1,25 @@
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 
 import type { PaseoApi } from "@getpaseo/client";
 import { negotiateProviderCapabilities, type ProviderConnection, type ProviderEvent, type ProviderInput, type ProviderRegistration } from "@getpaseo/plugin/server/provider";
 
+import {
+  assertBoundedJson,
+  assertBoundedProviderInput,
+  assertPiIdentifier,
+  assertPiPath,
+  MAX_PI_NESTED_VALUE_BYTES,
+  PiPublicError,
+  toPublicPromptMessage,
+  toPublicRequestMessage,
+} from "./bounds.js";
 import { createPiMcpConfig } from "./mcp-config.js";
 import { PI_COMPATIBILITY_MODES } from "./modes.js";
 import { startPiSession } from "./runtime.js";
 import { createPaseoExtension, PiProviderSession } from "./session.js";
 import type { PiRuntimeSetting, PiRuntimeSettingId } from "../shared/runtime-settings.js";
-import { thinkingConfigForModel } from "./thinking.js";
+import { mapPiCatalogModel } from "./thinking.js";
 
 export const PI_PROVIDER_ID = "pi-plugin-mcowger";
 const CAPABILITIES = ["prompt.message", "prompt.command", "prompt.image", "prompt.steer", "session.persistence", "session.configure", "session.revert.conversation", "session.subsession", "permission"] as const;
@@ -30,7 +41,7 @@ export function createPiProvider(): ManagedPiProvider {
     description: "Pi coding agent over an isolated JSON-RPC subprocess per Paseo session.",
     icon: "icon.svg",
     async connect(request) {
-      if (!request.versions.includes(1)) throw new Error("Provider protocol version 1 is required");
+      if (!request.versions.includes(1)) throw new PiPublicError("Provider protocol version 1 is required");
       const connection = createConnection(
         negotiateProviderCapabilities(request.capabilities, CAPABILITIES),
         () => connections.delete(connection),
@@ -65,12 +76,16 @@ function createConnection(
     version: 1,
     capabilities,
     async send(input) {
-      if (closed) throw new Error("Pi provider connection is closed");
-      try { await dispatch(input, sessions, allSessions, emit, capabilities); }
+      if (closed) throw new PiPublicError("Pi provider connection is closed");
+      try {
+        // NG item 10 ingress envelope: reject over-budget/non-JSON/cyclic
+        // inputs before dispatch, without serializing them.
+        assertBoundedProviderInput(input, "Provider request");
+        await dispatch(input, sessions, allSessions, emit, capabilities);
+      }
       catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if ("requestId" in input) { emit({ type: "request.failed", requestId: input.requestId, error: { message } }); return; }
-        if (input.type === "session.prompt") { emit({ type: "session.prompt_result", sessionId: input.sessionId, clientMessageId: input.prompt.clientMessageId, result: { type: "failed", error: { message } } }); return; }
+        if ("requestId" in input) { emit({ type: "request.failed", requestId: input.requestId, error: { message: toPublicRequestMessage(error) } }); return; }
+        if (input.type === "session.prompt") { emit({ type: "session.prompt_result", sessionId: input.sessionId, clientMessageId: input.prompt.clientMessageId, result: { type: "failed", error: { message: toPublicPromptMessage(error) } } }); return; }
         throw error;
       }
     },
@@ -97,15 +112,7 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
           type: "catalog",
           requestId: input.requestId,
           catalog: {
-            models: models.map((model) => {
-              const thinking = thinkingConfigForModel(model);
-              return {
-                id: `${model.provider}/${model.id}`,
-                label: model.name ?? `${model.provider}/${model.id}`,
-                ...(model.contextWindow ? { contextWindowMaxTokens: model.contextWindow } : {}),
-                ...(model.reasoning ? thinking : {}),
-              };
-            }),
+            models: models.map((model) => mapPiCatalogModel(model)),
             modes: PI_COMPATIBILITY_MODES,
           },
         });
@@ -114,9 +121,19 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
     }
     case "sessions": emit({ type: "sessions", requestId: input.requestId, sessions: [] }); return;
     case "session.open": {
-      if (sessions.has(input.sessionId)) throw new Error(`Session already exists: ${input.sessionId}`);
+      assertPiIdentifier(input.sessionId, "session id");
+      assertPiPath(input.config.cwd, "cwd");
+      if (input.persistence?.data !== undefined) assertBoundedJson(input.persistence.data, MAX_PI_NESTED_VALUE_BYTES, "Session persistence input");
+      assertBoundedJson(input.config.env, MAX_PI_NESTED_VALUE_BYTES, "Session environment");
+      assertBoundedJson(input.config.settings, MAX_PI_NESTED_VALUE_BYTES, "Session settings");
+      assertBoundedJson(input.config.mcpServers, MAX_PI_NESTED_VALUE_BYTES, "Session MCP servers");
+      if (sessions.has(input.sessionId)) throw new PiPublicError(`Session already exists: ${input.sessionId}`);
       const persisted = sessionFile(input.persistence?.data);
-      const extension = createPaseoExtension(input.config.systemPrompt);
+      if (persisted !== undefined) assertPiPath(persisted, "Session persistence file");
+      // Per-session extension nonce: baked into the bridge extension
+      // source and validated on every marker (see `isLiveExtensionMarker`).
+      const extensionNonce = randomUUID();
+      const extension = createPaseoExtension(input.config.systemPrompt, { nonce: extensionNonce });
       const mcpConfig = createPiMcpConfig(input.config.mcpServers, input.config.env);
       let runtime: Awaited<ReturnType<typeof startPiSession>> | undefined;
       let session: PiProviderSession | undefined;
@@ -130,6 +147,7 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
           state,
           models,
           subagentSessions: capabilities.includes("session.subsession"),
+          extensionNonce,
           emit,
           cleanup: () => { mcpConfig?.cleanup(); extension.cleanup(); },
         });
@@ -153,17 +171,17 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
       }
       return;
     }
-    case "session.prompt": await requireSession(sessions, input.sessionId).prompt(input.prompt); return;
-    case "session.interrupt": await requireSession(sessions, input.sessionId).interrupt(); emit({ type: "request.completed", requestId: input.requestId }); return;
-    case "session.permission": requireSession(sessions, input.sessionId).respondToPermission(input.permissionId, input.response); return;
-    case "session.configure": await requireSession(sessions, input.sessionId).configure(input.changes); emit({ type: "request.completed", requestId: input.requestId }); return;
-    case "session.revert": if (input.scope !== "conversation") throw new Error(`Pi does not support ${input.scope} rewind`); await requireSession(sessions, input.sessionId).revert(input.token); emit({ type: "request.completed", requestId: input.requestId }); return;
+    case "session.prompt": assertPiIdentifier(input.sessionId, "session id"); await requireSession(sessions, input.sessionId).prompt(input.prompt); return;
+    case "session.interrupt": assertPiIdentifier(input.sessionId, "session id"); await requireSession(sessions, input.sessionId).interrupt(); emit({ type: "request.completed", requestId: input.requestId }); return;
+    case "session.permission": assertPiIdentifier(input.sessionId, "session id"); assertPiIdentifier(input.permissionId, "permission id"); assertBoundedJson(input.response, MAX_PI_NESTED_VALUE_BYTES, "Permission response"); requireSession(sessions, input.sessionId).respondToPermission(input.permissionId, input.response); return;
+    case "session.configure": assertPiIdentifier(input.sessionId, "session id"); assertBoundedJson(input.changes, MAX_PI_NESTED_VALUE_BYTES, "Session configure changes"); await requireSession(sessions, input.sessionId).configure(input.changes); emit({ type: "request.completed", requestId: input.requestId }); return;
+    case "session.revert": assertPiIdentifier(input.sessionId, "session id"); if (input.scope !== "conversation") throw new PiPublicError(`Pi does not support ${input.scope} rewind`); await requireSession(sessions, input.sessionId).revert(input.token); emit({ type: "request.completed", requestId: input.requestId }); return;
     case "session.archive": case "session.unarchive": emit({ type: "request.completed", requestId: input.requestId }); return;
-    case "session.close": { const session = sessions.get(input.sessionId); sessions.delete(input.sessionId); allSessions.delete(input.sessionId); await session?.close(); emit({ type: "session.closed", sessionId: input.sessionId }); emit({ type: "request.completed", requestId: input.requestId }); return; }
+    case "session.close": { assertPiIdentifier(input.sessionId, "session id"); const session = sessions.get(input.sessionId); sessions.delete(input.sessionId); allSessions.delete(input.sessionId); await session?.close(); emit({ type: "session.closed", sessionId: input.sessionId }); emit({ type: "request.completed", requestId: input.requestId }); return; }
   }
 }
 
-function requireSession(sessions: Map<string, PiProviderSession>, id: string): PiProviderSession { const session = sessions.get(id); if (!session) throw new Error(`Unknown session: ${id}`); return session; }
+function requireSession(sessions: Map<string, PiProviderSession>, id: string): PiProviderSession { const session = sessions.get(id); if (!session) throw new PiPublicError(`Unknown session: ${id}`); return session; }
 function sessionFile(data: unknown): string | undefined { return data && typeof data === "object" && !Array.isArray(data) && typeof (data as Record<string, unknown>).sessionFile === "string" ? (data as Record<string, string>).sessionFile : undefined; }
 
 async function requireSessionForAgent(
@@ -172,7 +190,7 @@ async function requireSessionForAgent(
   paseo: PaseoApi,
 ): Promise<PiProviderSession> {
   const agent = (await paseo.agents.ref(agentId).refresh())?.agent;
-  if (agent?.provider !== PI_PROVIDER_ID) throw new Error("Pi settings are only available for Pi sessions");
+  if (agent?.provider !== PI_PROVIDER_ID) throw new PiPublicError("Pi settings are only available for Pi sessions");
   for (const runtimeSessionId of [agent.runtimeInfo?.sessionId, agent.persistence?.sessionId]) {
     const bridgeSessionId = bridgeSessionIdFromRuntimeSessionId(runtimeSessionId);
     if (bridgeSessionId) {
@@ -180,7 +198,7 @@ async function requireSessionForAgent(
       if (session) return session;
     }
   }
-  throw new Error("Pi session is not active");
+  throw new PiPublicError("Pi session is not active");
 }
 
 function bridgeSessionIdFromRuntimeSessionId(value: unknown): string | undefined {

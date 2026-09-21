@@ -1,8 +1,59 @@
-import type { ProviderThinkingOption } from "@getpaseo/plugin/server/provider";
+import type { ProviderModel, ProviderThinkingOption } from "@getpaseo/plugin/server/provider";
 
 import type { PiModel, PiThinkingLevel } from "./rpc-types.js";
 
 const DEFAULT_THINKING_LEVEL: PiThinkingLevel = "medium";
+
+export function normalizePiModelLabel(label: string): string {
+  const normalizedLabel = label.trim().replace(/[_\s]+/g, " ");
+  const vendorSeparatorIndex = normalizedLabel.indexOf(": ");
+  if (vendorSeparatorIndex === -1) {
+    return normalizedLabel;
+  }
+
+  return normalizedLabel.slice(vendorSeparatorIndex + 2).trim();
+}
+
+function isPiThinkingLevel(value: string | null | undefined): value is PiThinkingLevel {
+  return (
+    value === "off" ||
+    value === "minimal" ||
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "xhigh" ||
+    value === "max"
+  );
+}
+
+export function normalizePiThinkingOption(value: string | null | undefined): PiThinkingLevel | null {
+  if (!value) {
+    return null;
+  }
+  return isPiThinkingLevel(value) ? value : null;
+}
+
+/**
+ * Central catalog mapping shared by the `catalog` RPC and live
+ * `session.config` emission so the two cannot diverge. Mirrors upstream
+ * `mapPiModel` + `transformPiModels` (`agent.ts` ~313, ~1198), adapted to
+ * the plugin `ProviderModel` shape: the full native `provider/id` stays in
+ * `description`, the display `label` is normalized, and thinking options
+ * honor `thinkingLevelMap` (upstream advertises all levels; the plugin
+ * deliberately filters null mappings — see `thinkingConfigForModel`).
+ */
+export function mapPiCatalogModel(model: PiModel): ProviderModel {
+  const rawLabel = `${model.provider}/${model.name ?? model.id}`;
+  const segments = rawLabel.split("/").filter((segment) => segment.length > 0);
+  const lastSegment = segments.at(-1);
+  return {
+    id: `${model.provider}/${model.id}`,
+    label: lastSegment ? normalizePiModelLabel(lastSegment) : rawLabel,
+    description: `${model.provider}/${model.id}`,
+    ...(model.contextWindow ? { contextWindowMaxTokens: model.contextWindow } : {}),
+    ...(model.reasoning ? thinkingConfigForModel(model) : {}),
+  };
+}
 
 const THINKING_OPTIONS: ReadonlyArray<{
   id: PiThinkingLevel;
