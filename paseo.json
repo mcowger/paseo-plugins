@@ -1,0 +1,9 @@
+{
+  "worktree": {
+    "setup": [
+      "npm ci",
+      "for plugin in colorful-agent-activity opencode-session-overview pi-plugin-mcowger pi-tasks-timeline reasoning-display scratch-chat session-summary subagent-activity theme-studio; do (cd \"$plugin\" && npm ci) || exit 1; done",
+      "npm run sdk:install"
+    ]
+  }
+}
