@@ -428,3 +428,15 @@ describe("NicoSubagentProjector", () => {
     expect(active.events.filter((event) => event.type === "session.turn" && event.state === "canceled")).toHaveLength(1);
   });
 });
+
+test("retires stale delegations at turn end", () => {
+  const { projector } = createProjector();
+  // A `subagent` tool call that never produces an end event (interrupt,
+  // process exit, dropped envelope) must not suppress legacy terminal
+  // detection on every later turn.
+  projector.observeStart("parent", "subagent", { task: "stale" });
+  expect(projector.hasActiveWork()).toBe(true);
+
+  projector.finishActive("completed");
+  expect(projector.hasActiveWork()).toBe(false);
+});

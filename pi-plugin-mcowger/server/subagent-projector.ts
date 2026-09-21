@@ -210,6 +210,19 @@ export class NicoSubagentProjector {
     return this.parentLinks.get(parentToolCallId);
   }
 
+  // Conflicting-work evidence for the turn-completion state machine
+  // (docs/NG.md item 7): any child or delegation that has not reached a
+  // terminal state yet.
+  hasActiveWork(): boolean {
+    for (const child of this.children.values()) {
+      if (!child.terminal) return true;
+    }
+    for (const delegation of this.pending.values()) {
+      if (!delegation.terminal) return true;
+    }
+    return false;
+  }
+
   observeStart(toolCallId: string, toolName: string, args: unknown): void {
     if (!this.options.enabled || toolName !== "subagent" || !isObject(args)) return;
     const task = typeof args.task === "string" ? truncate(args.task) : undefined;
@@ -249,9 +262,17 @@ export class NicoSubagentProjector {
     this.clear();
   }
 
-  finishActive(status: "completed" | "failed"): void {
+  finishActive(status: "completed" | "failed" | "canceled"): void {
     for (const child of this.children.values()) {
       if (!child.terminal) this.finishChild(child, status);
+    }
+    // A `subagent` tool call that never produces an end event (interrupt,
+    // process exit, dropped envelope) would otherwise keep its
+    // `PendingDelegation` non-terminal forever, and `hasActiveWork()` would
+    // then suppress legacy terminal detection on every later turn. Turn end
+    // retires stale delegations; new turns create fresh ones via observe*.
+    for (const delegation of this.pending.values()) {
+      delegation.terminal = true;
     }
   }
 
