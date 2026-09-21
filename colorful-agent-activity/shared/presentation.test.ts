@@ -30,7 +30,6 @@ import {
   splitReasoningSteps,
   estimateReasoningTokens,
   formatReasoningMeta,
-  toolKindWord,
   MAX_DIFF_CHARS,
   MAX_FORMAT_CHARS,
   PASEO_TOOL_ICONS,
@@ -128,7 +127,7 @@ describe("colorful activity presentation", () => {
     ).toEqual({
       category: "shell",
       icon: "SquareTerminal",
-      label: "Shell Command",
+      label: "Shell",
       summary: "bun run typecheck && bun test",
     });
   });
@@ -194,7 +193,7 @@ describe("colorful activity presentation", () => {
     });
     expect(resolveSubAgentActionPresentation("shell", "git status")).toEqual({
       icon: "SquareTerminal",
-      label: "Shell Command",
+      label: "Shell",
     });
   });
 
@@ -490,16 +489,5 @@ describe("reasoning steps and header metadata", () => {
     expect(formatReasoningMeta(2, 116)).toBe("2 steps · 116 tokens");
     expect(formatReasoningMeta(1, 1)).toBe("1 step · 1 token");
     expect(formatReasoningMeta(0, 0)).toBe("0 tokens");
-  });
-
-  it("derives a short lowercase kind word from raw tool names", () => {
-    expect(toolKindWord("read")).toBe("read");
-    expect(toolKindWord("Bash")).toBe("bash");
-    expect(toolKindWord("create_agent")).toBe("create agent");
-    expect(toolKindWord("functions.apply_patch")).toBe("apply patch");
-    expect(toolKindWord("mcp__github__get_pr")).toBe("mcp");
-    expect(toolKindWord("mcp")).toBe("mcp");
-    expect(toolKindWord("")).toBe("tool");
-    expect(toolKindWord("   ")).toBe("tool");
   });
 });

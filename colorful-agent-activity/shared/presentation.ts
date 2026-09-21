@@ -997,7 +997,7 @@ export function resolveToolCallPresentation(
       return {
         category: "shell",
         icon: "SquareTerminal",
-        label: "Shell Command",
+        label: "Shell",
         summary: shellSummary(detail),
       };
     case "worktree_setup":
@@ -1150,7 +1150,7 @@ export function resolveSubAgentActionPresentation(
     normalized.includes("shell") ||
     normalized.includes("command")
   ) {
-    return { icon: "SquareTerminal", label: "Shell Command" };
+    return { icon: "SquareTerminal", label: "Shell" };
   }
   if (normalized === "edit" || normalized.includes("edit_file") || normalized.includes("patch")) {
     return { icon: "Pencil", label: "Edit File", summaryIcon: fileIconForPath(summary) };
@@ -1348,21 +1348,4 @@ export function formatReasoningMeta(stepCount: number, tokenCount: number): stri
   const tokens = `${tokenCount.toLocaleString("en-US")} token${tokenCount === 1 ? "" : "s"}`;
   if (stepCount <= 0) return tokens;
   return `${stepCount.toLocaleString("en-US")} step${stepCount === 1 ? "" : "s"} · ${tokens}`;
-}
-
-/**
- * Short lowercase tool-family word for activity headers ("read", "bash",
- * "mcp"), derived from the raw tool name. Falls back to "tool".
- */
-export function toolKindWord(toolName: string): string {
-  const normalized = toolName.trim().toLowerCase().replace(/^(?:functions|tools)\./, "");
-  if (!normalized) return "tool";
-  if (normalized === "mcp" || normalized.startsWith("mcp__") || normalized.startsWith("mcp_")) {
-    return "mcp";
-  }
-  const word = normalized
-    .split(/[\s/:]+/)[0]
-    ?.replace(/[_-]+/g, " ")
-    .trim();
-  return word ? word : "tool";
 }

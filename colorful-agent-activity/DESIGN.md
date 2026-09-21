@@ -53,7 +53,7 @@ Do not add a container just to group related content. Prefer a label, one level 
 A collapsed activity item is one compact row:
 
 ```text
-[icon] kind Label  muted summary                         status  chevron
+[icon] Label  muted summary                         status  chevron
 ```
 
 Checklists (`todo` items) render as a `Tasks` row with `n/m done` metadata, expanding to
@@ -63,8 +63,6 @@ Rules:
 
 - Keep the row close to one line of text in height.
 - Use a 12 px title with 17 px line height.
-- Lead with a lowercase muted kind word derived from the raw tool name (`read`, `bash`, `mcp`).
-  It names the tool family; the label names the action.
 - Use medium or semibold weight for the action label.
 - Render the summary at the same size in muted foreground color.
 - Use 12 px icons without a badge or colored icon background.

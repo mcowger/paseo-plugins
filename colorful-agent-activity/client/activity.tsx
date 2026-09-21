@@ -48,7 +48,6 @@ import {
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
   splitReasoningSteps,
-  toolKindWord,
   MAX_DIFF_CHARS,
   PREVIEW_LINES,
   type ActivityPalette,
@@ -186,13 +185,6 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         fontSize: 12,
         lineHeight: 17,
         minWidth: 0,
-      } satisfies TextStyle,
-      kindWord: {
-        color: theme.colors.foregroundMuted,
-        flexShrink: 1,
-        fontFamily: "monospace",
-        fontSize: 12,
-        lineHeight: 17,
       } satisfies TextStyle,
       status: {
         alignItems: "center",
@@ -1599,7 +1591,6 @@ function ReasoningText({
 function ActivityHeader({
   icon,
   iconColor,
-  kindWord,
   title,
   summary,
   status,
@@ -1611,7 +1602,6 @@ function ActivityHeader({
 }: {
   icon: string;
   iconColor: string;
-  kindWord?: string;
   title: string;
   summary?: string;
   status?: ToolCallData["status"];
@@ -1631,7 +1621,6 @@ function ActivityHeader({
       <View style={styles.iconBadge}>
         <Icon name={icon} color={iconColor} size={12} />
       </View>
-      {kindWord ? <Text {...cuiTextEscape} numberOfLines={1} style={styles.kindWord}>{kindWord}</Text> : null}
       <Text {...cuiTextEscape} numberOfLines={1} style={styles.title}>{title}</Text>
       {summary ? <Text numberOfLines={1} style={styles.summary}>{summary}</Text> : null}
       {stats ? (
@@ -1717,7 +1706,6 @@ export function ColorfulToolCall({
       <ActivityHeader
         icon={item.data.presentation.icon}
         iconColor={categoryColor}
-        kindWord={toolKindWord(item.data.name)}
         title={item.data.presentation.label}
         summary={item.data.presentation.summary}
         status={item.data.status}

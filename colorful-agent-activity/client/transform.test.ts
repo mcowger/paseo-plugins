@@ -90,7 +90,7 @@ describe("colorful activity timeline transforms", () => {
       presentation: {
         category: "shell",
         icon: "SquareTerminal",
-        label: "Shell Command",
+        label: "Shell",
         summary: "bun test",
       },
     });
