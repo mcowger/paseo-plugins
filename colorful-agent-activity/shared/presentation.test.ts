@@ -14,6 +14,18 @@ import {
   paseoToolSummary,
   paseoToolResult,
   parsePiLsOutput,
+  parseBgWaitInput,
+  parseBgWaitOutput,
+  parseSubagentSupervisorInput,
+  bgWaitLabel,
+  bgWaitSummary,
+  extractPiToolText,
+  formatWaitTimeout,
+  isBgWaitTool,
+  isSubagentSupervisorTool,
+  shortRunId,
+  subagentSupervisorLabel,
+  subagentSupervisorSummary,
   readErrorMessage,
   unwrapPaseoToolOutput,
   resolveActivityPalette,
@@ -555,3 +567,120 @@ describe("reasoning steps and header metadata", () => {
     expect(expansionTargetForToolCall("read", "bogus")).toBe("unknown");
   });
 });
+
+describe("pi-subagents tool presentation", () => {
+  const supervisorInput = {
+    action: "reply",
+    message: "Decision: ship the worker change.",
+    replyTo: "415abc66-55cb-4c91-a5c8-4d82813bde16",
+  };
+  const supervisorOutput = {
+    content: [
+      { type: "text", text: "Replied to supervisor request 415abc66-55cb-4c91-a5c8-4d82813bde16." },
+    ],
+    details: {
+      replyTo: "415abc66-55cb-4c91-a5c8-4d82813bde16",
+      runId: "09ca5995-b579-46ea-aba6-48e455105a61",
+      agent: "planner",
+    },
+  };
+  const bgWaitInput = { id: "09ca5995-b579-46ea-aba6-48e455105a61", timeoutMs: 300000 };
+  const bgWaitOutput = {
+    content: [
+      {
+        type: "text",
+        text: "Waiting 30.2s for 1 async run(s) and 0 provider item(s). · planner: thinking...\nActive async runs: 1\n",
+      },
+    ],
+    details: { mode: "management", results: [] },
+  };
+
+  it("recognizes pi-subagents tool names with prefixes", () => {
+    expect(isSubagentSupervisorTool("subagent_supervisor")).toBe(true);
+    expect(isSubagentSupervisorTool("mcp__plugin__subagent_supervisor")).toBe(true);
+    expect(isSubagentSupervisorTool("bg_wait")).toBe(false);
+    expect(isBgWaitTool("bg_wait")).toBe(true);
+    expect(isBgWaitTool("Bg_Wait")).toBe(true);
+    expect(isBgWaitTool("subagent_supervisor")).toBe(false);
+  });
+
+  it("parses supervisor reply input and output", () => {
+    expect(parseSubagentSupervisorInput(supervisorInput)).toEqual({
+      action: "reply",
+      replyTo: "415abc66-55cb-4c91-a5c8-4d82813bde16",
+      message: "Decision: ship the worker change.",
+    });
+    expect(parseSubagentSupervisorInput(JSON.stringify(supervisorInput)).action).toBe("reply");
+    expect(subagentSupervisorLabel(supervisorInput)).toBe("Supervisor Reply");
+    expect(subagentSupervisorLabel({ action: "pending" })).toBe("Supervisor Queue");
+    expect(subagentSupervisorSummary(supervisorInput, supervisorOutput)).toBe(
+      "planner · Decision: ship the worker change.",
+    );
+    expect(extractPiToolText(supervisorOutput)?.text).toContain("Replied to supervisor request");
+  });
+
+  it("parses bg_wait input and output", () => {
+    expect(parseBgWaitInput(bgWaitInput)).toEqual(bgWaitInput);
+    expect(bgWaitLabel(bgWaitInput)).toBe("Wait for Run");
+    expect(bgWaitLabel({ all: true })).toBe("Wait for All");
+    expect(bgWaitLabel({ id: "abc", nonBlocking: true })).toBe("Wait Subscription");
+    expect(bgWaitLabel({})).toBe("Bg Wait");
+    expect(formatWaitTimeout(300000)).toBe("5m");
+    expect(formatWaitTimeout(30000)).toBe("30s");
+    expect(shortRunId("09ca5995-b579-46ea-aba6-48e455105a61")).toBe("09ca5995");
+    const parsed = parseBgWaitOutput(bgWaitOutput);
+    expect(parsed?.headline).toContain("Waiting 30.2s");
+    expect(parsed?.body).toContain("Active async runs");
+    expect(bgWaitSummary(bgWaitInput, bgWaitOutput)).toBe("09ca5995 · 5m timeout · waited 30.2s");
+  });
+
+  it("maps pi-subagents tools to agent presentation", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "subagent_supervisor",
+        detail: { type: "unknown", input: supervisorInput, output: supervisorOutput },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Reply",
+      label: "Supervisor Reply",
+      summary: "planner · Decision: ship the worker change.",
+    });
+    expect(
+      resolveToolCallPresentation({
+        name: "bg_wait",
+        detail: { type: "unknown", input: bgWaitInput, output: bgWaitOutput },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Hourglass",
+      label: "Wait for Run",
+    });
+  });
+
+  it("labels bg_wait rows in sub-agent progress", () => {
+    expect(resolveSubAgentActionPresentation("bg_wait", "planner")).toEqual({
+      icon: "Hourglass",
+      label: "Wait for Background Work",
+    });
+    expect(resolveSubAgentActionPresentation("subagent_supervisor", "reply")).toEqual({
+      icon: "Reply",
+      label: "Supervisor Reply",
+    });
+  });
+
+  it("reports timed-out bg_wait windows from details", () => {
+    const timedOut = parseBgWaitOutput({
+      content: [{ type: "text", text: "Waiting 5m for 1 async run(s) and 0 provider item(s)." }],
+      details: {
+        mode: "management",
+        results: [],
+        wait: { reason: "window_elapsed", timedOut: true, activeRunIds: ["run-1"], activeProviderItems: [] },
+      },
+    });
+    expect(timedOut?.waitReason).toBe("window_elapsed");
+    expect(timedOut?.activeRunIds).toEqual(["run-1"]);
+    expect(bgWaitSummary({ timeoutMs: 300000 }, { content: [{ type: "text", text: "Waiting." }], details: { wait: { reason: "window_elapsed", timedOut: true, activeRunIds: [], activeProviderItems: [] } } })).toContain("timed out");
+  });
+});
+

@@ -507,6 +507,231 @@ export function paseoToolSummary(toolName: string, input: unknown): string | und
   return undefined;
 }
 
+export function normalizePiToolName(toolName: string): string {
+  return toolName
+    .trim()
+    .toLowerCase()
+    .replace(/^(?:functions|tools)\./, "")
+    .replace(/^mcp__.*?__/, "")
+    .replace(/^mcp_/, "");
+}
+
+export function isSubagentSupervisorTool(toolName: string): boolean {
+  return normalizePiToolName(toolName) === "subagent_supervisor";
+}
+
+export function isBgWaitTool(toolName: string): boolean {
+  return normalizePiToolName(toolName) === "bg_wait";
+}
+
+export type SubagentSupervisorAction = "reply" | "pending" | "list" | "status" | string;
+
+export interface SubagentSupervisorInput {
+  action: SubagentSupervisorAction;
+  replyTo?: string;
+  message?: string;
+  to?: string;
+}
+
+export interface BgWaitInput {
+  id?: string;
+  all?: boolean;
+  nonBlocking?: boolean;
+  timeoutMs?: number;
+  stopOnAttention?: boolean;
+}
+
+export interface PiToolTextEnvelope {
+  text: string;
+  details?: Record<string, unknown>;
+}
+
+function decodeToolInput(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value === "string") {
+    const parsed = parseJsonString(value);
+    return isRecord(parsed) ? parsed : undefined;
+  }
+  return isRecord(value) ? value : undefined;
+}
+
+export function parseSubagentSupervisorInput(input: unknown): SubagentSupervisorInput {
+  const record = decodeToolInput(input) ?? {};
+  const action = typeof record.action === "string" && record.action.trim() ? record.action.trim().toLowerCase() : "";
+  const replyTo = typeof record.replyTo === "string" && record.replyTo.trim() ? record.replyTo : undefined;
+  const message = typeof record.message === "string" && record.message.trim() ? record.message : undefined;
+  const to = typeof record.to === "string" && record.to.trim() ? record.to : undefined;
+  return { action, ...(replyTo ? { replyTo } : {}), ...(message ? { message } : {}), ...(to ? { to } : {}) };
+}
+
+export function parseBgWaitInput(input: unknown): BgWaitInput {
+  const record = decodeToolInput(input) ?? {};
+  const id = typeof record.id === "string" && record.id.trim() ? record.id : undefined;
+  const all = typeof record.all === "boolean" ? record.all : undefined;
+  const nonBlocking = typeof record.nonBlocking === "boolean" ? record.nonBlocking : undefined;
+  const timeoutMs = typeof record.timeoutMs === "number" && Number.isFinite(record.timeoutMs) && record.timeoutMs > 0 ? record.timeoutMs : undefined;
+  const stopOnAttention = typeof record.stopOnAttention === "boolean" ? record.stopOnAttention : undefined;
+  return { ...(id ? { id } : {}), ...(all !== undefined ? { all } : {}), ...(nonBlocking !== undefined ? { nonBlocking } : {}), ...(timeoutMs !== undefined ? { timeoutMs } : {}), ...(stopOnAttention !== undefined ? { stopOnAttention } : {}) };
+}
+
+/** Extract the first text block and details record from a pi tool result envelope. */
+export function extractPiToolText(output: unknown): PiToolTextEnvelope | undefined {
+  if (typeof output === "string") {
+    return output.trim() ? { text: output } : undefined;
+  }
+  if (!isRecord(output)) return undefined;
+  const content = output.content;
+  if (typeof content === "string" && content.trim()) {
+    return { text: content, ...(isRecord(output.details) ? { details: output.details } : {}) };
+  }
+  if (Array.isArray(content)) {
+    const texts = content.flatMap((item) => isRecord(item) && item.type === "text" && typeof item.text === "string" && item.text.trim() ? [item.text] : []);
+    if (texts.length > 0) {
+      return { text: texts.join("\n"), ...(isRecord(output.details) ? { details: output.details } : {}) };
+    }
+  }
+  if (isRecord(output.details)) return { text: "", details: output.details };
+  return undefined;
+}
+
+export function shortRunId(value: string | undefined, length = 8): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > length ? trimmed.slice(0, length) : trimmed;
+}
+
+export function formatWaitTimeout(timeoutMs: number | undefined): string | undefined {
+  if (timeoutMs === undefined) return undefined;
+  const seconds = Math.round(timeoutMs / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  if (minutes < 60) return remainder === 0 ? `${minutes}m` : `${minutes}m ${remainder}s`;
+  const hours = Math.floor(minutes / 60);
+  const minuteRemainder = minutes % 60;
+  return minuteRemainder === 0 ? `${hours}h` : `${hours}h ${minuteRemainder}m`;
+}
+
+export function subagentSupervisorLabel(input: unknown): string {
+  const parsed = parseSubagentSupervisorInput(input);
+  switch (parsed.action) {
+    case "reply":
+      return "Supervisor Reply";
+    case "pending":
+      return "Supervisor Queue";
+    case "list":
+      return "Supervisor Requests";
+    case "status":
+      return "Supervisor Status";
+    default:
+      return "Subagent Supervisor";
+  }
+}
+
+export function subagentSupervisorSummary(input: unknown, output: unknown): string | undefined {
+  const parsed = parseSubagentSupervisorInput(input);
+  if (parsed.action === "reply") {
+    const envelope = extractPiToolText(output);
+    const details = envelope?.details;
+    const agent = typeof details?.agent === "string" && details.agent.trim() ? details.agent : undefined;
+    const messageSummary = parsed.message ? compactText(parsed.message, 120) : undefined;
+    const replyTarget = shortRunId(parsed.replyTo ?? (typeof details?.replyTo === "string" ? details.replyTo : undefined));
+    const parts = [agent, messageSummary ?? (replyTarget ? `→ ${replyTarget}` : undefined)].filter(Boolean);
+    return parts.length > 0 ? parts.join(" · ") : replyTarget ? `→ ${replyTarget}` : undefined;
+  }
+  if (parsed.action === "pending" || parsed.action === "list" || parsed.action === "status") {
+    const envelope = extractPiToolText(output);
+    if (envelope?.text) return compactText(envelope.text.split("\n")[0] ?? "", 120);
+    return parsed.to ? `→ ${parsed.to}` : undefined;
+  }
+  return parsed.message ? compactText(parsed.message, 120) : undefined;
+}
+
+export interface BgWaitCompletionSummary {
+  runId: string;
+  agent?: string;
+  success?: boolean;
+}
+
+export interface BgWaitOutputSummary {
+  text: string;
+  headline?: string;
+  body?: string;
+  waitReason?: string;
+  timedOut?: boolean;
+  activeRunIds: string[];
+  activeProviderItems: Array<{ provider: string; id: string }>;
+  completions: BgWaitCompletionSummary[];
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
+}
+
+export function parseBgWaitOutput(output: unknown): BgWaitOutputSummary | undefined {
+  const envelope = extractPiToolText(output);
+  if (!envelope) return undefined;
+  const details = envelope.details ?? {};
+  const wait = isRecord(details.wait) ? details.wait : undefined;
+  const waitReason = typeof wait?.reason === "string" ? wait.reason : undefined;
+  const timedOut = typeof wait?.timedOut === "boolean" ? wait.timedOut : undefined;
+  const activeRunIds = wait ? stringList(wait.activeRunIds) : [];
+  const activeProviderItems = Array.isArray(wait?.activeProviderItems)
+    ? (wait.activeProviderItems as unknown[]).flatMap((item) => isRecord(item) && typeof item.provider === "string" && typeof item.id === "string" ? [{ provider: item.provider, id: item.id }] : [])
+    : [];
+  const rawCompletions = Array.isArray(details.completions) ? (details.completions as unknown[]) : [];
+  const completions: BgWaitCompletionSummary[] = rawCompletions.flatMap((completion) => {
+    if (!isRecord(completion) || typeof completion.runId !== "string") return [];
+    const runId = completion.runId;
+    const results = Array.isArray(completion.results) ? (completion.results as unknown[]) : [];
+    if (results.length === 0) return [{ runId }];
+    return results.map((result) => {
+      if (!isRecord(result)) return { runId };
+      const agent = typeof result.agent === "string" ? result.agent : undefined;
+      const success = typeof result.success === "boolean" ? result.success : undefined;
+      return { runId, ...(agent ? { agent } : {}), ...(success !== undefined ? { success } : {}) };
+    });
+  });
+  const lines = envelope.text.split("\n");
+  const headline = lines[0]?.trim() ? lines[0].trim() : undefined;
+  const body = lines.length > 1 && lines.slice(1).join("\n").trim() ? lines.slice(1).join("\n").trim() : undefined;
+  return { text: envelope.text, ...(headline ? { headline } : {}), ...(body ? { body } : {}), ...(waitReason ? { waitReason } : {}), ...(timedOut !== undefined ? { timedOut } : {}), activeRunIds, activeProviderItems, completions };
+}
+
+export function bgWaitLabel(input: unknown): string {
+  const parsed = parseBgWaitInput(input);
+  if (parsed.nonBlocking === true) return "Wait Subscription";
+  if (parsed.all === true) return "Wait for All";
+  if (parsed.id) return "Wait for Run";
+  return "Bg Wait";
+}
+
+export function bgWaitSummary(input: unknown, output: unknown): string | undefined {
+  const parsed = parseBgWaitInput(input);
+  const summary = parseBgWaitOutput(output);
+  const target = parsed.id ? shortRunId(parsed.id) : parsed.all === true ? "all runs" : "next run";
+  const timeout = formatWaitTimeout(parsed.timeoutMs);
+  const header = [target, timeout ? `${timeout} timeout` : undefined].filter(Boolean).join(" · ");
+  if (summary && summary.completions.length > 0) {
+    const first = summary.completions[0];
+    const completionLabel = first?.agent ?? shortRunId(first?.runId) ?? "run";
+    const extra = summary.completions.length > 1 ? ` +${summary.completions.length - 1} more` : "";
+    return `${completionLabel}${extra} done${header ? ` · ${header}` : ""}`;
+  }
+  if (summary?.waitReason === "window_elapsed") {
+    return header ? `${header} · timed out` : "timed out";
+  }
+  if (summary?.waitReason === "supervisor_request") {
+    return header ? `${header} · supervisor request` : "supervisor request";
+  }
+  if (summary?.headline) {
+    const waiting = summary.headline.match(/waiting\s+([\d.]+s)/i)?.[1];
+    if (waiting && header) return `${header} · waited ${waiting}`;
+    if (waiting) return `waited ${waiting}`;
+  }
+  return header || undefined;
+}
+
 function parseEmbeddedJson(value: string): unknown {
   try {
     return JSON.parse(value) as unknown;
@@ -1163,6 +1388,22 @@ export function resolveToolCallPresentation(
       if (name === "speak") {
         return { category: "communication", icon: "MicVocal", label: "Speak" };
       }
+      if (isSubagentSupervisorTool(item.name)) {
+        return {
+          category: "agent",
+          icon: "Reply",
+          label: subagentSupervisorLabel(detail.input),
+          summary: subagentSupervisorSummary(detail.input, detail.output),
+        };
+      }
+      if (isBgWaitTool(item.name)) {
+        return {
+          category: "agent",
+          icon: "Hourglass",
+          label: bgWaitLabel(detail.input),
+          summary: bgWaitSummary(detail.input, detail.output),
+        };
+      }
       const githubKind = githubToolKind(item.name);
       if (githubKind) {
         return {
@@ -1237,7 +1478,13 @@ export function resolveSubAgentActionPresentation(
     return { icon: "Pencil", label: "Write File", summaryIcon: fileIconForPath(summary) };
   }
   if (normalized === "task" || normalized.includes("sub_agent") || normalized.includes("subagent")) {
+    if (normalized === "subagent_supervisor") {
+      return { icon: "Reply", label: "Supervisor Reply" };
+    }
     return { icon: "Bot", label: "Agent Task" };
+  }
+  if (normalized === "bg_wait" || normalized.includes("bg_wait")) {
+    return { icon: "Hourglass", label: "Wait for Background Work" };
   }
   return { icon: "Wrench", label: toolName.trim() || "Tool" };
 }

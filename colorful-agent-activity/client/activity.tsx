@@ -33,6 +33,7 @@ import {
 } from "./web";
 import { GithubToolDetail } from "./github";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
+import { BgWaitToolDetail, SupervisorToolDetail } from "./pi-subagents";
 import {
   compactText,
   diffLinesForDetail,
@@ -42,6 +43,8 @@ import {
   formatReasoningMeta,
   formatUnknownValue,
   expansionTargetForToolCall,
+  isBgWaitTool,
+  isSubagentSupervisorTool,
   paseoToolLeafName,
   parsePiLsOutput,
   parseSubAgentActionLog,
@@ -1265,6 +1268,30 @@ function DetailBody({
             </View>
           );
         }
+      }
+      if (isSubagentSupervisorTool(data.name)) {
+        return (
+          <SupervisorToolDetail
+            toolName={data.name}
+            input={detail.input}
+            output={detail.output}
+            theme={theme}
+            palette={palette}
+            styles={styles}
+          />
+        );
+      }
+      if (isBgWaitTool(data.name)) {
+        return (
+          <BgWaitToolDetail
+            toolName={data.name}
+            input={detail.input}
+            output={detail.output}
+            theme={theme}
+            palette={palette}
+            styles={styles}
+          />
+        );
       }
       if (githubToolKind(data.name)) {
         return (
