@@ -27,6 +27,7 @@ import {
   subagentSupervisorLabel,
   subagentSupervisorSummary,
   readErrorMessage,
+  stripLeadingCwdCd,
   unwrapPaseoToolOutput,
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
@@ -160,6 +161,23 @@ describe("colorful activity presentation", () => {
       icon: "List",
       label: "List Files",
     });
+  });
+
+  it("strips a leading cd to the session cwd from shell titles", () => {
+    const cwd = "/home/matt.cowger/workspace/pi-stuff/pi-control";
+    expect(stripLeadingCwdCd(`cd ${cwd} && grep -rn foo src`, cwd)).toBe("grep -rn foo src");
+    expect(stripLeadingCwdCd(`cd "${cwd}" && ls`, cwd)).toBe("ls");
+    expect(stripLeadingCwdCd(`cd '${cwd}'; ls`, cwd)).toBe("ls");
+    expect(stripLeadingCwdCd(`cd ${cwd}/ && ls`, cwd)).toBe("ls");
+  });
+
+  it("keeps shell titles when the leading cd targets another directory", () => {
+    const cwd = "/home/matt.cowger/workspace/pi-stuff/pi-control";
+    const command = "cd /tmp/other && grep -rn foo src";
+    expect(stripLeadingCwdCd(command, cwd)).toBe(command);
+    expect(stripLeadingCwdCd(`cd ${cwd}`, cwd)).toBe(`cd ${cwd}`);
+    expect(stripLeadingCwdCd("grep -rn foo src", cwd)).toBe("grep -rn foo src");
+    expect(stripLeadingCwdCd(`cd ${cwd} && grep`, undefined)).toBe(`cd ${cwd} && grep`);
   });
 
   it("parses Pi ls text envelopes into file entries", () => {

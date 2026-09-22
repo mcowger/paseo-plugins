@@ -1271,6 +1271,30 @@ function shellSummary(detail: Extract<ToolCallDetail, { type: "shell" }>): strin
   return compactText(detail.command);
 }
 
+/**
+ * Remove a leading `cd <cwd> &&` (or `;`) hop from a shell command title.
+ * Agents often prefix commands with `cd <session-cwd> && ...`; the directory
+ * hop adds noise to one-line titles, so drop it when it targets `cwd`.
+ * Returns the input unchanged when there is nothing to strip.
+ */
+export function stripLeadingCwdCd(command: string, cwd?: string | null): string {
+  if (!cwd || !command) {
+    return command;
+  }
+  const match = command.match(/^\s*cd\s+(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(\S+))\s*(?:&&|;)\s*([\s\S]*)$/);
+  if (!match) {
+    return command;
+  }
+  const rawTarget = match[1] ?? match[2] ?? match[3] ?? "";
+  const normalizedTarget = rawTarget.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normalizedCwd = cwd.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!normalizedTarget || normalizedTarget !== normalizedCwd) {
+    return command;
+  }
+  const rest = (match[4] ?? "").trim();
+  return rest ? rest : command;
+}
+
 function detailFilePath(detail: ToolCallDetail): string | undefined {
   if (detail.type === "read" || detail.type === "edit" || detail.type === "write") {
     return detail.filePath || undefined;

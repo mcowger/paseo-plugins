@@ -55,6 +55,7 @@ import {
   resolveSubAgentActionPresentation,
   splitFileDisplay,
   splitReasoningSteps,
+  stripLeadingCwdCd,
   truncateDirFront,
   MAX_DIFF_CHARS,
   PREVIEW_LINES,
@@ -1785,13 +1786,17 @@ export function ColorfulToolCall({
     const relative = cwd ? relativeToRoot(filePath, cwd) : filePath;
     return splitFileDisplay(compactText(relative) ?? relative);
   }, [cwd, item.data.presentation.filePath]);
+  const headerSummary =
+    detail?.type === "shell" && item.data.presentation.summary
+      ? stripLeadingCwdCd(item.data.presentation.summary, cwd)
+      : item.data.presentation.summary;
   return (
     <View {...pmonoViewEscape} style={styles.card}>
       <ActivityHeader
         icon={item.data.presentation.icon}
         iconColor={categoryColor}
         title={item.data.presentation.label}
-        summary={item.data.presentation.summary}
+        summary={headerSummary}
         fileDisplay={headerFile ?? undefined}
         status={item.data.status}
         statusColor={statusColor}
