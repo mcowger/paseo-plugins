@@ -150,7 +150,7 @@ describe("Pi tool call mapper", () => {
     });
   });
 
-  test("maps completed subagent calls with task input to sub-agent detail", () => {
+  test("degrades retired subagent calls to unknown without throwing", () => {
     const toolCall = parseToolArgs("subagent", {
       agent: "reviewer",
       task: "Review the Pi mapper change",
@@ -160,10 +160,11 @@ describe("Pi tool call mapper", () => {
     });
 
     expect(mapToolDetail(toolCall, result)).toEqual({
-      type: "sub_agent",
-      subAgentType: "reviewer",
-      description: "Review the Pi mapper change",
-      log: "The mapper change preserves provider status.",
+      type: "unknown",
+      input: { agent: "reviewer", task: "Review the Pi mapper change" },
+      output: {
+        content: [{ type: "text", text: "The mapper change preserves provider status." }],
+      },
     });
   });
 
@@ -266,7 +267,7 @@ describe("Pi tool call mapper", () => {
     });
   });
 
-  // Plugin-only mappings (pi-microgpt + agent coordination).
+  // Plugin-only mapping (pi-microgpt apply_patch).
   test("maps pi-microgpt apply_patch calls as edits", () => {
     const patch = "*** Begin Patch\n*** Update File: src/index.ts\n@@\n-old\n+new\n*** End Patch";
     expect(mapToolDetail(parseToolArgs("apply_patch", { patch }))).toEqual({
@@ -276,22 +277,14 @@ describe("Pi tool call mapper", () => {
     });
   });
 
-  test("maps pi-microgpt subagent calls", () => {
-    const call = parseToolArgs("spawn_agent", { agent_type: "researcher", message: "Review the API" });
-    expect(mapToolDetail(call, parseToolResult({ text: "{\n  \"task_name\": \"research\"\n}" }))).toEqual({
-      type: "sub_agent",
-      subAgentType: "researcher",
-      description: "Review the API",
-      log: "{\n  \"task_name\": \"research\"\n}",
-    });
-  });
-
-  test("maps agent coordination calls as plain text", () => {
-    const call = parseToolArgs("send_message", { text: "hi" });
-    expect(mapToolDetail(call, parseToolResult({ text: "ok" }))).toEqual({
-      type: "plain_text",
-      label: "send_message",
-      text: "ok",
-    });
+  test("degrades retired pi-microgpt agent calls to unknown without throwing", () => {
+    for (const toolName of ["spawn_agent", "send_message", "followup_task", "wait_agent", "list_agents", "interrupt_agent"]) {
+      const call = parseToolArgs(toolName, { agent_type: "researcher", message: "Review the API" });
+      expect(mapToolDetail(call, parseToolResult({ text: "ok" }))).toEqual({
+        type: "unknown",
+        input: { agent_type: "researcher", message: "Review the API" },
+        output: { text: "ok" },
+      });
+    }
   });
 });

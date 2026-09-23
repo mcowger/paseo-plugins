@@ -30,9 +30,7 @@ provider for personal daily-driver use. Not literal full parity.
 
 ## Already ahead — no action
 
-Subagent projector (live fold), tool-policy system, microgpt fast/long-context,
-runtime-settings pill. The projector's missing half (replay-derivation) is a
-deferred item, not a gap.
+Tool-policy system, microgpt fast/long-context, runtime-settings pill.
 
 ## Item 0 — Discipline enabler (do first, trivial)
 
@@ -108,7 +106,7 @@ deliberate divergences in the same file so future diffs don't "fix" them:
     turn state changes.
   - Ordered-evidence legacy fallback for binaries that omit the field: fresh
     branch-correlated user entry, later current-turn assistant activity, idle
-    non-compacting runtime, no conflicting permission/tool/steer/child work.
+    non-compacting runtime, no conflicting permission/tool/steer work.
   - Exactly-one terminal guarantee; ambiguous-active terminals ignored;
     confirmed-idle ambiguity fails only the Paseo turn without killing the process.
   - `prompt_result.agentInvoked: false` stays local-only.
@@ -151,8 +149,6 @@ deliberate divergences in the same file so future diffs don't "fix" them:
   refresh-deadline wiring, `cancelExtensionUiRequest`.
 - 0.9 capability additions: `session.list`, `timeline.plugin`; real modes
   (`full`/`write`/`ask` shape with gating) replacing the `modes.ts` stub.
-- Subsession replay-derivation path for `NicoSubagentProjector` (paseo-omp
-  budget constants reusable verbatim).
 - Docker canary with mock LLM (aspirational E2E).
 
 ## Acceptance standard (every item)

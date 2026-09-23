@@ -64,7 +64,6 @@ function createSession(
   runtime: PiRuntimeSession,
   events: ProviderEvent[],
   settings: ProviderSessionConfig["settings"] = {},
-  subagentSessions = false,
   usagePollScheduler?: PiUsagePollScheduler,
   streamScheduler?: PiScheduler,
   extra: { extensionTimeoutMs?: number; extensionNonce?: string } = {},
@@ -75,7 +74,6 @@ function createSession(
     runtime,
     state: { ...state },
     models: [],
-    subagentSessions,
     ...(usagePollScheduler ? { usagePollScheduler } : {}),
     ...(streamScheduler ? { streamScheduler } : {}),
     ...(extra.extensionTimeoutMs !== undefined ? { extensionTimeoutMs: extra.extensionTimeoutMs } : {}),
@@ -616,11 +614,10 @@ test("waits for agent_settled after a retriable agent_end", async () => {
   await session.close();
 });
 
-test("projects a qualifying foreground subagent beneath the root session", async () => {
+test("retired subagent tool calls degrade to unknown without child sessions", async () => {
   const { runtime, emit } = createRuntime();
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, true);
-  session.markRootReady();
+  const session = createSession(runtime, events, {});
 
   emit({ type: "tool_execution_start", toolCallId: "parent", toolName: "subagent", args: { agent: "scout", task: "Inspect package.json" } });
   emit({
@@ -629,40 +626,16 @@ test("projects a qualifying foreground subagent beneath the root session", async
     toolName: "subagent",
     partialResult: {
       content: [{ type: "text", text: "Looking now." }],
-      details: {
-        runId: "foreground-run",
-        results: [{
-          index: 0,
-          agent: "scout",
-          toolCalls: [{ expandedText: 'read {"path":"package.json"}' }],
-          usage: { input: 10, output: 2, cacheRead: 1, cacheWrite: 0, cost: 0.01, turns: 1 },
-          progress: {
-            index: 0,
-            agent: "scout",
-            status: "running",
-            currentTool: "read",
-            currentToolArgs: "package.json",
-            inputTokens: 10,
-            outputTokens: 2,
-            window: 11,
-          },
-        }],
-      },
+      details: { runId: "foreground-run", results: [{ index: 0, agent: "scout" }] },
     },
   });
 
-  const child = events.find((event): event is Extract<ProviderEvent, { type: "session.opened" }> => event.type === "session.opened" && event.parentSessionId === "paseo-session");
-  expect(child).toMatchObject({ restoration: "parent", title: "scout", capabilities: [] });
+  expect(events.some((event) => event.type === "session.opened" && "parentSessionId" in event)).toBe(false);
   const parentTool = events.filter((event): event is Extract<ProviderEvent, { type: "timeline.item" }> => event.type === "timeline.item")
     .map((event) => event.item)
     .filter((item): item is Extract<typeof item, { type: "tool_call" }> => item.type === "tool_call" && item.callId === "parent")
     .at(-1);
-  expect(parentTool).toMatchObject({ detail: { type: "sub_agent", childSessionId: child?.sessionId } });
-  expect(events).toContainEqual(expect.objectContaining({
-    type: "session.usage",
-    sessionId: child?.sessionId,
-    usage: { inputTokens: 10, outputTokens: 2, cachedInputTokens: 1, totalCostUsd: 0.01, contextWindowUsedTokens: 11 },
-  }));
+  expect(parentTool).toMatchObject({ detail: { type: "unknown" } });
 
   await session.close();
 });
@@ -1174,7 +1147,7 @@ test("fails replay visibly with nothing emitted when history exceeds budgets", a
   await session.close();
 });
 
-test("replays subagent tool results through the projector with child linkage", async () => {
+test("replays retired subagent tool results as unknown without child linkage", async () => {
   const harness = createCaptureRuntime(
     [{ id: "entry-1", parentId: null, text: "delegate" }],
     [
@@ -1197,7 +1170,7 @@ test("replays subagent tool results through the projector with child linkage", a
     ],
   );
   const events: ProviderEvent[] = [];
-  const session = createSession(harness.runtime, events, {}, true);
+  const session = createSession(harness.runtime, events, {});
 
   await session.replayHistory();
 
@@ -1207,12 +1180,7 @@ test("replays subagent tool results through the projector with child linkage", a
   );
   expect(tools).toHaveLength(2);
   const [completed] = tools.slice(-1);
-  // The running row precedes projector knowledge (same ordering as the live
-  // path); linkage resolves once the result is observed.
-  expect(completed?.detail).toMatchObject({
-    type: "sub_agent",
-    childSessionId: expect.stringMatching(/^pi:subsession:/),
-  });
+  expect(completed?.detail).toMatchObject({ type: "unknown" });
   await session.close();
 });
 
@@ -1253,7 +1221,7 @@ test("emits periodic usage polls during a turn", async () => {
   const polls = createManualPollScheduler();
   const { runtime } = createRuntime({ stats: USAGE_STATS });
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, polls.scheduler);
+  const session = createSession(runtime, events, {}, polls.scheduler);
 
   await startTurn(session, events, "usage-poll-1");
   expect(polls.activeCount()).toBe(1);
@@ -1273,7 +1241,7 @@ test("flushes a final usage sample with the turn id on completion", async () => 
   const polls = createManualPollScheduler();
   const { runtime, emit } = createRuntime({ stats: USAGE_STATS });
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, polls.scheduler);
+  const session = createSession(runtime, events, {}, polls.scheduler);
 
   const turnId = await startTurn(session, events, "usage-flush-1");
   emit({ type: "agent_end", willRetry: false, messages: [] });
@@ -1293,7 +1261,7 @@ test("stops polling without a final sample on failed turns", async () => {
   const polls = createManualPollScheduler();
   const { runtime, emit } = createRuntime({ stats: USAGE_STATS });
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, polls.scheduler);
+  const session = createSession(runtime, events, {}, polls.scheduler);
 
   await startTurn(session, events, "usage-fail-1");
   emit({
@@ -1317,7 +1285,7 @@ test("stops polling without a final sample on interrupt", async () => {
   const polls = createManualPollScheduler();
   const { runtime } = createRuntime({ stats: USAGE_STATS });
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, polls.scheduler);
+  const session = createSession(runtime, events, {}, polls.scheduler);
 
   await startTurn(session, events, "usage-cancel-1");
   await session.interrupt();
@@ -1336,7 +1304,7 @@ test("drops a scheduled poll after close", async () => {
   const polls = createManualPollScheduler();
   const { runtime } = createRuntime({ stats: USAGE_STATS });
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, polls.scheduler);
+  const session = createSession(runtime, events, {}, polls.scheduler);
 
   await startTurn(session, events, "usage-close-1");
   await session.close();
@@ -1351,7 +1319,7 @@ test("refreshes usage when a tool call ends without disturbing the poll loop", a
   const polls = createManualPollScheduler();
   const { runtime, emit } = createRuntime({ stats: USAGE_STATS });
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, polls.scheduler);
+  const session = createSession(runtime, events, {}, polls.scheduler);
 
   await startTurn(session, events, "usage-tool-1");
   emit({ type: "tool_execution_start", toolCallId: "t1", toolName: "read", args: { path: "a.ts" } });
@@ -1525,34 +1493,21 @@ test("ignores a legacy terminal while a permission question is pending", async (
   await session.close();
 });
 
-test("ignores a legacy terminal while a foreground child is active", async () => {
+test("ignores a legacy terminal while a tool call is active", async () => {
   const { runtime, emit } = createRuntime();
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, true);
-  session.markRootReady();
+  const session = createSession(runtime, events, {});
 
   await startTurn(session, events, "legacy-child-1");
   emitSubmittedEntry(emit, "entry-child", "delegate");
   emit({ type: "turn_start" });
-  emit({ type: "tool_execution_start", toolCallId: "parent", toolName: "subagent", args: { agent: "scout", task: "look" } });
-  emit({
-    type: "tool_execution_update",
-    toolCallId: "parent",
-    toolName: "subagent",
-    partialResult: {
-      content: [{ type: "text", text: "Looking now." }],
-      details: {
-        runId: "foreground-run",
-        results: [{ index: 0, agent: "scout", progress: { index: 0, agent: "scout", status: "running" } }],
-      },
-    },
-  });
+  emit({ type: "tool_execution_start", toolCallId: "parent", toolName: "bash", args: { command: "sleep 10" } });
   emit({ type: "agent_end", messages: [] });
   await waitForImmediate();
   await waitForImmediate();
   expect(terminalTurnEvents(events).filter((event) => event.sessionId === "paseo-session")).toEqual([]);
 
-  emit({ type: "tool_execution_end", toolCallId: "parent", toolName: "subagent", result: "done", isError: false });
+  emit({ type: "tool_execution_end", toolCallId: "parent", toolName: "bash", result: "done", isError: false });
   emit({ type: "agent_end", messages: [] });
   await waitForImmediate();
   await waitForImmediate();
@@ -1725,7 +1680,7 @@ test("coalesces a burst of live text deltas into one scheduled snapshot", async 
   const stream = createManualStreamScheduler();
   const { runtime, emit } = createRuntime();
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, undefined, stream);
+  const session = createSession(runtime, events, {}, undefined, stream);
 
   await startTurn(session, events, "stream-burst-1");
   emit({
@@ -1754,7 +1709,7 @@ test("coalesces interleaved text and reasoning and flushes on message end", asyn
   const stream = createManualStreamScheduler();
   const { runtime, emit } = createRuntime();
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, undefined, stream);
+  const session = createSession(runtime, events, {}, undefined, stream);
 
   await startTurn(session, events, "stream-mixed-1");
   emit({
@@ -1781,7 +1736,7 @@ test("flushes pending stream frames on interrupt without losing final chars", as
   const stream = createManualStreamScheduler();
   const { runtime, emit } = createRuntime();
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, undefined, stream);
+  const session = createSession(runtime, events, {}, undefined, stream);
 
   await startTurn(session, events, "stream-interrupt-1");
   emit({
@@ -1806,7 +1761,7 @@ test("flushes pending stream frames on close", async () => {
   const stream = createManualStreamScheduler();
   const { runtime, emit } = createRuntime();
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, undefined, stream);
+  const session = createSession(runtime, events, {}, undefined, stream);
 
   await startTurn(session, events, "stream-close-1");
   emit({
@@ -1827,7 +1782,7 @@ test("flushes live frames before synchronous replay history", async () => {
   const stream = createManualStreamScheduler();
   const harness = createCaptureRuntime([], []);
   const events: ProviderEvent[] = [];
-  const session = createSession(harness.runtime, events, {}, false, undefined, stream);
+  const session = createSession(harness.runtime, events, {}, undefined, stream);
 
   await startTurn(session, events, "stream-replay-1");
   harness.emit({
@@ -1852,7 +1807,7 @@ test("flushes buffered stream text before a tool call emission", async () => {
   const stream = createManualStreamScheduler();
   const { runtime, emit } = createRuntime();
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, undefined, stream);
+  const session = createSession(runtime, events, {}, undefined, stream);
 
   await startTurn(session, events, "stream-order-tool-1");
   emit({
@@ -1878,7 +1833,7 @@ test("flushes buffered stream text before a notification emission", async () => 
   const stream = createManualStreamScheduler();
   const { runtime, emit } = createRuntime();
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, undefined, stream);
+  const session = createSession(runtime, events, {}, undefined, stream);
 
   await startTurn(session, events, "stream-order-notify-1");
   emit({
@@ -2055,7 +2010,7 @@ test("skips revert tokens when capture and message counts diverge", async () => 
 test("swallows extension markers with a wrong or missing nonce", async () => {
   const { runtime, emit } = createRuntime();
   const events: ProviderEvent[] = [];
-  const session = createSession(runtime, events, {}, false, undefined, undefined, {
+  const session = createSession(runtime, events, {}, undefined, undefined, {
     extensionNonce: "live-nonce",
   });
 

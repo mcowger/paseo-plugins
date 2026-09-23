@@ -1,8 +1,7 @@
 // Diff-on-touch source: paseo checkout, packages/server/src/server/agent/providers/pi/tool-call-mapper.ts
 // Intentional divergences (never "fix" on diff):
 // - ProviderToolCallDetail (plugin SDK) instead of upstream ToolCallDetail (in-tree agent-sdk-types).
-// - Plugin-only tool mappings preserved: apply_patch -> edit, spawn_agent -> sub_agent,
-//   send_message/followup_task/wait_agent/list_agents/interrupt_agent -> plain_text.
+// - Plugin-only tool mapping preserved: apply_patch -> edit.
 import { z } from "zod";
 
 import type { ProviderToolCallDetail } from "@getpaseo/plugin/server/provider";
@@ -359,10 +358,10 @@ export function mapToolDetail(
     return mapTaskToolDetail(toolCall.args, parsedResult);
   }
 
-  // Plugin-only mappings for pi-microgpt and agent-coordination tools. These
-  // tool names never validate against the upstream schemas above, so they
-  // arrive here as kind "unknown"; map them before the unknown fallback.
-  const pluginDetail = mapPluginToolDetail(toolCall, parsedResult);
+  // Plugin-only mapping for pi-microgpt apply_patch. This tool name never
+  // validates against the upstream schemas above, so it arrives here as
+  // kind "unknown"; map it before the unknown fallback.
+  const pluginDetail = mapPluginToolDetail(toolCall);
   if (pluginDetail) {
     return pluginDetail;
   }
@@ -415,10 +414,9 @@ export function mapToolDetail(
   }
 }
 
-/** Plugin-only tool names (pi-microgpt + agent coordination). Returns null when not applicable. */
+/** Plugin-only apply_patch mapping (pi-microgpt). Returns null when not applicable. */
 function mapPluginToolDetail(
   toolCall: PiTrackedToolCall,
-  result: PiToolResult,
 ): ProviderToolCallDetail | null {
   if (toolCall.kind !== "unknown") {
     return null;
@@ -433,23 +431,6 @@ function mapPluginToolDetail(
         ...(patch ? { newString: patch } : {}),
       };
     }
-    case "spawn_agent":
-      return {
-        type: "sub_agent",
-        ...(typeof args.agent_type === "string" ? { subAgentType: args.agent_type } : {}),
-        ...(typeof args.message === "string" ? { description: args.message } : {}),
-        log: extractTextFromToolResult(result) ?? "",
-      };
-    case "send_message":
-    case "followup_task":
-    case "wait_agent":
-    case "list_agents":
-    case "interrupt_agent":
-      return {
-        type: "plain_text",
-        label: toolCall.toolName,
-        text: extractTextFromToolResult(result),
-      };
     default:
       return null;
   }
@@ -467,17 +448,7 @@ function patchPaths(patch: string): string[] {
 }
 
 function isTaskToolCall(toolCall: PiTrackedToolCall): boolean {
-  if (toolCall.toolName === "task") {
-    return true;
-  }
-  if (toolCall.toolName !== "subagent" || !isRecord(toolCall.args)) {
-    return false;
-  }
-  return (
-    toolCall.args.action === undefined &&
-    (readNonEmptyString(toolCall.args.agent) !== undefined ||
-      readNonEmptyString(toolCall.args.task) !== undefined)
-  );
+  return toolCall.toolName === "task";
 }
 
 function mapTaskToolDetail(args: unknown, result: PiToolResult): ProviderToolCallDetail {

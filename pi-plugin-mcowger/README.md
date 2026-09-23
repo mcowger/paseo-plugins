@@ -12,7 +12,7 @@ Run [Pi](https://github.com/earendil-works/pi) in Paseo through one isolated `pi
 - Bridges Pi extension questions to Paseo permissions.
 - Applies session system prompts, environment overrides, and injected MCP servers.
 - Exposes `/compact` plus a Pi composer pill for automatic compaction, retry, Fast mode, Long context, and future runtime controls.
-- Probes only [`@mcowger/pi-microgpt`](https://github.com/mcowger/pi-plugins/tree/main/packages/pi-microgpt). It adds Fast mode, Long context, multi-agent tools, and native Codex `apply_patch` for supported models.
+- Probes only [`@mcowger/pi-microgpt`](https://github.com/mcowger/pi-plugins/tree/main/packages/pi-microgpt). It adds Fast mode, Long context, and native Codex `apply_patch` for supported models.
 - Stops each Pi process and removes its temporary files when Paseo closes or reloads the provider.
 
 ## Installation
@@ -38,7 +38,7 @@ paseo plugin add "$PWD"
 
 Install `@mcowger/pi-microgpt` in the same Pi profile used by the Paseo daemon using any supported Pi package source, including a local path, npm, or git.
 
-The provider verifies pi-microgpt's JSON response before showing Fast or Long context in the Pi settings pill. Unsupported models keep both controls hidden. Its `spawn_agent`, `send_message`, `followup_task`, `wait_agent`, `list_agents`, and `interrupt_agent` tools stream into the Paseo timeline. Native `apply_patch` calls appear as edits.
+The provider verifies pi-microgpt's JSON response before showing Fast or Long context in the Pi settings pill. Unsupported models keep both controls hidden. Native `apply_patch` calls appear as edits.
 
 ## Limitations
 

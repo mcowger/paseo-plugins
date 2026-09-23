@@ -18,7 +18,6 @@ import { PiStreamCoalescer } from "./stream-coalescer.js";
 import type { PiScheduler } from "./scheduler.js";
 import { PiSessionCompaction } from "./session-compaction.js";
 import { PiPublicError } from "./bounds.js";
-import { NicoSubagentProjector } from "./subagent-projector.js";
 import { PiRevertTokens, isRevertToken, parseCapturedEntries, parseExtensionMarkerPayload, revertPiConversation, type PiCapturedEntry } from "./rewind.js";
 import { checkTerminalKey, decideLegacyTerminal, shouldHonorNoTurnAck, type LegacyTerminalEvidence, type TurnTerminalSignal } from "./turn-terminal.js";
 
@@ -66,7 +65,6 @@ export interface PiProviderSessionOptions {
   runtime: PiRuntimeSession;
   state: PiSessionState;
   models: PiModel[];
-  subagentSessions?: boolean;
   extensionTimeoutMs?: number;
   usagePollScheduler?: PiUsagePollScheduler;
   streamScheduler?: PiScheduler;
@@ -131,7 +129,6 @@ export class PiProviderSession {
   private closed = false;
   private readonly images = new PiImageMaterializer();
   private turnImagePaths: string[] = [];
-  private readonly subagents: NicoSubagentProjector;
   private readonly capturedUserEntries: PiCapturedEntry[] = [];
   private readonly capturedUserEntriesById = new Map<string, PiCapturedEntry>();
   private readonly pendingExtensionResults = new Map<string, PendingExtensionResult>();
@@ -146,12 +143,6 @@ export class PiProviderSession {
 
   constructor(private readonly options: PiProviderSessionOptions) {
     this.autoRetryEnabled = settingBoolean(options.config.settings, AUTO_RETRY_SETTING) ?? false;
-    this.subagents = new NicoSubagentProjector({
-      rootSessionId: options.sessionId,
-      cwd: options.config.cwd,
-      enabled: options.subagentSessions ?? false,
-      emit: (event) => this.options.emit(event),
-    });
     this.extensionTimeoutMs = options.extensionTimeoutMs ?? DEFAULT_EXTENSION_RESULT_TIMEOUT_MS;
     this.usagePoller = new PiUsagePoller({
       scheduler: options.usagePollScheduler,
@@ -182,8 +173,6 @@ export class PiProviderSession {
     });
     this.unsubscribe = options.runtime.onEvent((event) => this.onEvent(event));
   }
-
-  markRootReady(): void { this.subagents.markRootReady(); }
 
   get persistence(): ProviderPersistence {
     return {
@@ -258,16 +247,7 @@ export class PiProviderSession {
     // budget breach throws with nothing emitted: all-or-nothing history.
     const mapper = new PiHistoryMapper("pi", captured, {
       mintRevertToken: (entryId) => this.revertTokens.mint(entryId),
-      mapToolDetail: (tracked, result, { toolCallId }) => {
-        const childSessionId = this.subagents.parentChildSessionId(toolCallId);
-        if (childSessionId) {
-          return { type: "sub_agent", subAgentType: "subagent", childSessionId, log: "Foreground subagent delegation" };
-        }
-        return mapToolDetail(tracked, result);
-      },
-      onToolResult: (toolCallId, toolName, value, isError) => {
-        this.subagents.observeHistory(toolCallId, toolName, value, isError);
-      },
+      mapToolDetail: (tracked, result) => mapToolDetail(tracked, result),
     });
     const items = mapper.mapMessages(messages);
     for (const item of items) this.timeline(item);
@@ -475,7 +455,6 @@ export class PiProviderSession {
 
   async close(): Promise<void> {
     if (this.closed) return;
-    this.subagents.cancelActive();
     this.rejectAllExtensionResults(new Error("Pi session closed"));
     // NG item 9 close boundary: flush pending frames while emit still works.
     this.streamer.flushSync();
@@ -494,7 +473,6 @@ export class PiProviderSession {
   private onEvent(event: PiRuntimeEvent): void {
     if (this.closed) return;
     if (event.type === "process_exit") {
-      this.subagents.cancelActive();
       this.rejectAllExtensionResults(new Error(event.error));
       if (this.turnId) this.finish(this.turnId, [], event.error);
       return;
@@ -536,9 +514,9 @@ export class PiProviderSession {
     if (event.type === "message_start" && event.message.role === "assistant") { if (this.turnId) this.turnNativeActivity = true; this.assistantMessageId = event.message.responseId ?? randomUUID(); return; }
     if (event.type === "message_update") { this.handleUpdate(event); return; }
     if (event.type === "message_end") { this.handleMessageEnd(event); return; }
-    if (event.type === "tool_execution_start") { if (this.turnId) this.turnNativeActivity = true; this.subagents.observeStart(event.toolCallId, event.toolName, event.args); const tracked = parseToolArgs(event.toolName, event.args); this.toolCalls.set(event.toolCallId, tracked); this.emitTool(event.toolCallId, tracked, "running", null, null); return; }
-    if (event.type === "tool_execution_update") { if (this.turnId) this.turnNativeActivity = true; this.subagents.observeUpdate(event.toolCallId, event.partialResult); const tracked = this.toolCalls.get(event.toolCallId); if (tracked) this.emitTool(event.toolCallId, tracked, "running", parseToolResult(event.partialResult), null); return; }
-    if (event.type === "tool_execution_end") { if (this.turnId) this.turnNativeActivity = true; this.subagents.observeEnd(event.toolCallId, event.result, Boolean(event.isError)); const tracked = this.toolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null); this.toolCalls.delete(event.toolCallId); this.emitTool(event.toolCallId, tracked, event.isError ? "failed" : "completed", parseToolResult(event.result), event.isError ? event.result : null); void this.usagePoller.refreshNow(); return; }
+    if (event.type === "tool_execution_start") { if (this.turnId) this.turnNativeActivity = true; const tracked = parseToolArgs(event.toolName, event.args); this.toolCalls.set(event.toolCallId, tracked); this.emitTool(event.toolCallId, tracked, "running", null, null); return; }
+    if (event.type === "tool_execution_update") { if (this.turnId) this.turnNativeActivity = true; const tracked = this.toolCalls.get(event.toolCallId); if (tracked) this.emitTool(event.toolCallId, tracked, "running", parseToolResult(event.partialResult), null); return; }
+    if (event.type === "tool_execution_end") { if (this.turnId) this.turnNativeActivity = true; const tracked = this.toolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null); this.toolCalls.delete(event.toolCallId); this.emitTool(event.toolCallId, tracked, event.isError ? "failed" : "completed", parseToolResult(event.result), event.isError ? event.result : null); void this.usagePoller.refreshNow(); return; }
     if (event.type === "compaction_start") { this.handleCompactionEvent("loading", event.reason === "manual" ? "manual" : "auto"); return; }
     if (event.type === "compaction_end") { this.handleCompactionEvent("completed", event.reason === "manual" ? "manual" : "auto"); return; }
     if (event.type === "auto_retry_start") { this.timeline({ type: "error", id: randomUUID(), message: `Provider retry (attempt ${event.attempt}): ${event.errorMessage}` }); return; }
@@ -625,12 +603,10 @@ export class PiProviderSession {
     }
     if (willRetry !== undefined) {
       this.pendingTerminalMessages = messages;
-      this.subagents.finishActive(latestAssistantError(messages) ? "failed" : "completed");
       return;
     }
     if (signal.requestId !== undefined) {
       // Keyed match: authoritative terminal.
-      this.subagents.finishActive(latestAssistantError(messages) ? "failed" : "completed");
       this.finish(turnId, messages);
       return;
     }
@@ -666,7 +642,6 @@ export class PiProviderSession {
     }
     if (requestId !== undefined) {
       // Keyed settled with no buffered retry payload: authoritative terminal.
-      this.subagents.finishActive("completed");
       this.finish(turnId, []);
       return;
     }
@@ -681,11 +656,9 @@ export class PiProviderSession {
     if (decision.kind === "failTurn") {
       // Confirmed-idle ambiguity: fail only the Paseo turn; the process
       // stays alive for the next prompt.
-      this.subagents.finishActive("failed");
       this.finish(turnId, messages, "Pi turn ended without a correlated terminal event");
       return;
     }
-    this.subagents.finishActive(latestAssistantError(messages) ? "failed" : "completed");
     this.finish(turnId, messages);
   }
 
@@ -715,8 +688,7 @@ export class PiProviderSession {
       || this.steerInFlight
       || this.pendingExtensionResults.size > 0
       || this.compaction.isManualActive()
-      || this.compaction.activeCompaction !== null
-      || this.subagents.hasActiveWork();
+      || this.compaction.activeCompaction !== null;
   }
 
   private drainEarlyTerminal(turnId: string): void {
@@ -922,13 +894,11 @@ export class PiProviderSession {
     // Clearing here keeps stale state from suppressing legacy terminal
     // detection on subsequent turns.
     this.toolCalls.clear();
-    this.subagents.finishActive(canceled ? "canceled" : error ? "failed" : "completed");
     this.emit({ type: "session.turn", sessionId: this.options.sessionId, turnId, state: canceled ? "canceled" : error ? "failed" : "completed", ...(error && !canceled ? { error: { message: error } } : {}) });
   }
 
   private emitTool(id: string, tracked: PiTrackedToolCall, status: "running" | "completed" | "failed", result: ReturnType<typeof parseToolResult>, error: unknown): void {
-    const childSessionId = this.subagents.parentChildSessionId(id);
-    this.timeline({ type: "tool_call", id, callId: id, name: resolveToolCallName(tracked, result), detail: childSessionId ? { type: "sub_agent", subAgentType: "subagent", childSessionId, log: "Foreground subagent delegation" } : mapToolDetail(tracked, result), status, error: status === "failed" ? (error ?? "Tool failed") as never : null });
+    this.timeline({ type: "tool_call", id, callId: id, name: resolveToolCallName(tracked, result), detail: mapToolDetail(tracked, result), status, error: status === "failed" ? (error ?? "Tool failed") as never : null });
   }
   private emitConfig(): void {
     const model = this.options.state.model;

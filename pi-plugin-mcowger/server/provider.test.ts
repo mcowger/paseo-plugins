@@ -56,17 +56,6 @@ test("contribution cleanup closes active provider connections", async () => {
   })).rejects.toThrow("Pi provider connection is closed");
 });
 
-test("negotiates virtual child sessions only when offered", async () => {
-  const provider = createPiProvider();
-  const offered = await provider.connect({ versions: [1], capabilities: ["prompt.message", "session.subsession"] });
-  expect(offered.capabilities).toContain("session.subsession");
-  await offered.close();
-
-  const notOffered = await provider.connect({ versions: [1], capabilities: ["prompt.message"] });
-  expect(notOffered.capabilities).not.toContain("session.subsession");
-  await notOffered.close();
-});
-
 test("resolves runtime settings from the agent's persisted bridge session", async () => {
   vi.mocked(startPiSession).mockResolvedValue(createRuntime());
   const provider = createPiProvider();

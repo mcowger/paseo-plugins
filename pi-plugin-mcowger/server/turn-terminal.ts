@@ -18,7 +18,7 @@ export interface TurnTerminalSignal {
 
 export type KeyedOwnership = "match" | "mismatch" | "ack-pending" | "unkeyed";
 
-// Authoritative key check. Runs before any state, usage, subagent, or
+// Authoritative key check. Runs before any state, usage, or
 // compaction transition. A mismatch is discarded; an `ack-pending` signal
 // must be buffered until the prompt ack resolves the active request id.
 export function checkTerminalKey(
@@ -42,7 +42,7 @@ export interface LegacyTerminalEvidence {
   // `getState()` reports the runtime is compacting.
   runtimeCompacting: boolean;
   // Any conflicting work is in flight: permission question, tool call, steer
-  // submission, child subagent, pending extension result, or active
+  // submission, pending extension result, or active
   // compaction.
   hasConflictingWork: boolean;
 }

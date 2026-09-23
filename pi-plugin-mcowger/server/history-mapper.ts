@@ -5,15 +5,12 @@
 // - Every emitted item carries a stable `id`. User rows backed by a captured
 //   tree entry use the entry id; user rows without capture use an opaque
 //   generated id and omit `messageId` (no false linkage, no history-user-N).
-// - `mintRevertToken` / `onToolResult` hooks: revert-token minting and
-//   NicoSubagentProjector.observeHistory stay owned by session.ts so this
+// - `mintRevertToken` hook: revert-token minting stays owned by session.ts so this
 //   module remains pure and unit-testable without session state.
 // - Replay budgets (message/byte/node caps, NG item 4): mapping throws
 //   PiHistoryBudgetError before the caller emits anything, so replay is
 //   all-or-nothing and never partial-and-unmarked. Revert-token mints are
-//   deferred until mapping succeeds so a failed replay mints nothing;
-//   onToolResult stays inline because the session-owned mapToolDetail hook
-//   reads projector parent-links populated by it during the same replay.
+//   deferred until mapping succeeds so a failed replay mints nothing.
 // - Multi-block assistant messages: timeline items upsert by id, so the
 //   first text block keeps the bare messageId for linkage and later blocks
 //   (and repeated thinking blocks) are suffixed to unique ids.
