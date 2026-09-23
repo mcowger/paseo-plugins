@@ -15,7 +15,6 @@ import {
   toPublicRequestMessage,
 } from "./bounds.js";
 import { createPiMcpConfig } from "./mcp-config.js";
-import { PI_COMPATIBILITY_MODES } from "./modes.js";
 import { startPiSession } from "./runtime.js";
 import { createPaseoExtension, PiProviderSession } from "./session.js";
 import type { PiRuntimeSetting, PiRuntimeSettingId } from "../shared/runtime-settings.js";
@@ -113,7 +112,7 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
           requestId: input.requestId,
           catalog: {
             models: models.map((model) => mapPiCatalogModel(model)),
-            modes: PI_COMPATIBILITY_MODES,
+            modes: [],
           },
         });
       } finally { await runtime.close(); }

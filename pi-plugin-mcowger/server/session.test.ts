@@ -391,7 +391,7 @@ test("keeps composer settings empty while exposing runtime settings for the Pi p
 
   expect(events.find((event) => event.type === "session.config")).toMatchObject({
     config: {
-      modes: [{ id: "build", label: "Build" }],
+      modes: [],
       settings: [],
     },
   });

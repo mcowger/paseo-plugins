@@ -9,7 +9,6 @@ import type { PiAgentMessage, PiAgentSessionEvent, PiModel, PiRuntimeEvent, PiSe
 import type { PiRuntimeSession } from "./runtime.js";
 import { PiImageMaterializer, PiImageValidationError, convertPromptImages } from "./image.js";
 import { mapPiCatalogModel, normalizePiThinkingOption, thinkingConfigForModel } from "./thinking.js";
-import { PI_COMPATIBILITY_MODES } from "./modes.js";
 import { mapToolDetail, parseToolArgs, parseToolResult, resolveToolCallName, type PiTrackedToolCall } from "./tool-call-mapper.js";
 import type { PiRuntimeSetting, PiRuntimeSettingId } from "../shared/runtime-settings.js";
 import { PiHistoryMapper } from "./history-mapper.js";
@@ -906,7 +905,7 @@ export class PiProviderSession {
     const config: ProviderConfigState = {
       ...(model ? { model: `${model.provider}/${model.id}` } : {}),
       models: this.options.models.map((item) => mapPiCatalogModel(item)),
-      modes: PI_COMPATIBILITY_MODES,
+      modes: [],
       thinkingOption: this.options.state.thinkingLevel,
       thinkingOptions: currentThinking.thinkingOptions,
       settings: [],
