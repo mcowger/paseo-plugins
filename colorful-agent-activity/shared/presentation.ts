@@ -1676,14 +1676,38 @@ export function formatReasoningText(text: string): string {
 
 /**
  * Split reasoning prose into steps on blank-line runs, mirroring how a reader
- * scans paragraphs. Single-paragraph text yields one step so short thoughts
+ * scans paragraphs. Bold-only summary paragraphs stay grouped with the next
+ * detail paragraph. Single-paragraph text yields one step so short thoughts
  * render without step chrome.
  */
+function isBoldSummaryParagraph(paragraph: string | undefined): boolean {
+  return paragraph !== undefined && /^\*\*[^*\n]+(?:\*[^*\n]+)*\*\*$/.test(paragraph);
+}
+
 export function splitReasoningSteps(text: string): string[] {
-  return text
+  const paragraphs = text
     .split(/\n\s*\n/)
     .map((step) => step.trim())
     .filter((step) => step.length > 0);
+  const steps: string[] = [];
+
+  for (let index = 0; index < paragraphs.length; index += 1) {
+    const paragraph = paragraphs[index];
+    const nextParagraph = paragraphs[index + 1];
+
+    if (
+      isBoldSummaryParagraph(paragraph) &&
+      nextParagraph &&
+      !isBoldSummaryParagraph(nextParagraph)
+    ) {
+      steps.push(`${paragraph}\n\n${nextParagraph}`);
+      index += 1;
+    } else {
+      steps.push(paragraph);
+    }
+  }
+
+  return steps;
 }
 
 /** Rough token estimate (4 chars per token) for header counts. */

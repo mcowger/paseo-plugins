@@ -514,6 +514,35 @@ describe("reasoning steps and header metadata", () => {
     expect(splitReasoningSteps("\n\n   \n")).toEqual([]);
   });
 
+  it("groups bold summary lines with their following detail", () => {
+    expect(
+      splitReasoningSteps(
+        "**Understanding user feedback**\n\nThe user clarified what they need.\n\n**Clarifying the check process**\n\nNo additional checks are required.",
+      ),
+    ).toEqual([
+      "**Understanding user feedback**\n\nThe user clarified what they need.",
+      "**Clarifying the check process**\n\nNo additional checks are required.",
+    ]);
+  });
+
+  it("keeps adjacent bold summary lines as separate steps", () => {
+    expect(splitReasoningSteps("**Summary Line**\n\n**Summary Line 2**")).toEqual([
+      "**Summary Line**",
+      "**Summary Line 2**",
+    ]);
+    expect(splitReasoningSteps(formatReasoningText("**Summary Line****Summary Line 2**"))).toEqual([
+      "**Summary Line**",
+      "**Summary Line 2**",
+    ]);
+  });
+
+  it("does not treat prose containing bold spans as a summary line", () => {
+    expect(splitReasoningSteps("**Important** text with **emphasis**\n\nDetail")).toEqual([
+      "**Important** text with **emphasis**",
+      "Detail",
+    ]);
+  });
+
   it("estimates tokens at four characters each", () => {
     expect(estimateReasoningTokens("")).toBe(0);
     expect(estimateReasoningTokens("x".repeat(8))).toBe(2);
