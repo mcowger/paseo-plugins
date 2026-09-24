@@ -8,9 +8,7 @@
     "sdk:check": "node scripts/check-paseo-sdk.mjs",
     "sdk:install": "node scripts/install-paseo-sdk.mjs",
     "sdk:install:local": "node scripts/install-paseo-sdk.mjs --source local",
-    "sdk:install:tarballs": "node scripts/install-paseo-sdk.mjs --source tarball",
-    "sdk:snapshot": "node scripts/paseo-sdk-snapshot.mjs --update",
-    "sdk:snapshot:check": "node scripts/paseo-sdk-snapshot.mjs --check"
+    "sdk:install:tarballs": "node scripts/install-paseo-sdk.mjs --source tarball"
   },
   "dependencies": {
     "@shikijs/core": "^4.4.3",

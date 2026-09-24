@@ -18,6 +18,5 @@
     "scratch-chat",
     "subagent-activity",
     "theme-studio"
-  ],
-  "snapshot": "sdk/paseo-sdk-api.json"
+  ]
 }
