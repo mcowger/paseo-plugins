@@ -52,7 +52,7 @@ Counterpart inventory (plugin file → upstream file):
 Deliberate divergences (do not "fix" on diff):
 
 - `server/mcp-config.ts`: always-write, no adapter probe — intentional (NG settled decision).
-- Paseo SDK pinned to exactly 0.9.1 for provider subagent child sessions (`package.json` + `paseo-plugin.json` `>=0.9.1`); do not downgrade.
+- Paseo SDK pinned to exactly 0.9.1 for provider subagent child sessions (`package.json`); the minimum host version in `paseo-plugin.json` is `>=0.9.0`. Do not downgrade the SDK.
 - Pi binary floor: minimum >=0.84.4 (covers `clear_queue`, added in pi 0.84.4;
   subsumes cumulative-update floor >=0.84 and `agent_settled` v0.5.0). Latest-tested: 0.86.1.
   Update this line when a newer pi binary is verified.
