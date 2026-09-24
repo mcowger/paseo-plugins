@@ -112,6 +112,9 @@ async function dispatch(input: ProviderInput, sessions: Map<string, PiProviderSe
           requestId: input.requestId,
           catalog: {
             models: models.map((model) => mapPiCatalogModel(model)),
+            // Pi exposes no selectable modes (matches upstream builtin Pi),
+            // so advertise none. A stale `config.mode` on session.open is
+            // ignored rather than applied.
             modes: [],
           },
         });

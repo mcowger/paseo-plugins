@@ -969,6 +969,8 @@ export class PiProviderSession {
     const config: ProviderConfigState = {
       ...(model ? { model: `${model.provider}/${model.id}` } : {}),
       models: this.options.models.map((item) => mapPiCatalogModel(item)),
+      // Pi is modeless: never advertise modes, and ignore any stale
+      // `config.mode` the host forwards on session.open.
       modes: [],
       thinkingOption: this.options.state.thinkingLevel,
       thinkingOptions: currentThinking.thinkingOptions,

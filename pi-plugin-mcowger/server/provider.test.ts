@@ -407,3 +407,62 @@ test("keeps actionable settings errors readable", async () => {
 
   await provider.close();
 });
+
+test("advertises no modes because Pi is modeless", async () => {
+  vi.mocked(startPiSession).mockResolvedValue(createRuntime());
+  const provider = createPiProvider();
+  const connection = await provider.connect({
+    versions: [1],
+    capabilities: ["prompt.message", "session.persistence"],
+  });
+  const events: ProviderEvent[] = [];
+  connection.onEvent((event) => events.push(event));
+
+  await connection.send({ type: "catalog", requestId: "catalog-modes" });
+
+  expect(events).toContainEqual({
+    type: "catalog",
+    requestId: "catalog-modes",
+    catalog: { models: [], modes: [] },
+  });
+
+  await provider.close();
+});
+
+test("ignores a stale mode on session.open instead of failing", async () => {
+  vi.mocked(startPiSession).mockResolvedValue(createRuntime());
+  const provider = createPiProvider();
+  const connection = await provider.connect({
+    versions: [1],
+    capabilities: ["prompt.message", "session.persistence"],
+  });
+  const events: ProviderEvent[] = [];
+  connection.onEvent((event) => events.push(event));
+
+  await connection.send({
+    type: "session.open",
+    requestId: "open-stale-mode",
+    sessionId: "bridge-stale-mode",
+    config: {
+      cwd: "/workspace",
+      env: {},
+      mcpServers: {},
+      settings: {},
+      persist: true,
+      // Stale client mode preference (e.g. "build" remembered from another
+      // provider): Pi has no modes, so the provider ignores it.
+      mode: "build",
+    },
+    history: "skip",
+  });
+
+  expect(events).toContainEqual(
+    expect.objectContaining({ type: "session.opened", requestId: "open-stale-mode", sessionId: "bridge-stale-mode" }),
+  );
+  expect(events).toContainEqual(
+    expect.objectContaining({ type: "session.ready", requestId: "open-stale-mode", sessionId: "bridge-stale-mode" }),
+  );
+  expect(events.filter((event) => event.type === "request.failed")).toEqual([]);
+
+  await provider.close();
+});

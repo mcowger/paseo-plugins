@@ -148,7 +148,10 @@ deliberate divergences in the same file so future diffs don't "fix" them:
   `providerOptionsSchema`, `rpc-ui`/`extraArgs`/`noSession` launch flags,
   refresh-deadline wiring, `cancelExtensionUiRequest`.
 - 0.9 capability additions: `session.list`, `timeline.plugin`; real modes
-  (`full`/`write`/`ask` shape with gating) replacing the `modes.ts` stub.
+  (`full`/`write`/`ask` shape with gating) if Pi ever gains selectable modes
+  (no compatibility stub: the provider advertises `modes: []` like upstream).
+- Subsession replay-derivation path for `NicoSubagentProjector` (paseo-omp
+  budget constants reusable verbatim).
 - Docker canary with mock LLM (aspirational E2E).
 
 ## Acceptance standard (every item)
