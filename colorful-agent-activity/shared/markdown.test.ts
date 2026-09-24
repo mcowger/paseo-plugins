@@ -14,7 +14,7 @@ describe("reasoning markdown", () => {
     ]);
   });
 
-  it("preserves all reasoning-display block types", () => {
+  it("preserves all reasoning block types", () => {
     expect(
       parseReasoningMarkdown(
         "# Heading\n\n- **one**\n2) `two`\n> quoted\n\n```ts\nconst value = 1;\n```",

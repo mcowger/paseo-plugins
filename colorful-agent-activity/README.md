@@ -5,7 +5,7 @@ IDE-style activity rows across desktop, web, and native mobile (iOS and Android)
 thinking block and latest tool call open, shows useful details on demand, and uses Prism for shell and
 code output.
 
-Requires Paseo `>=0.8.0`.
+Requires Paseo `>=0.9.0`.
 
 ## Screenshots
 
@@ -81,9 +81,6 @@ paseo plugin install "$PWD"
 
 ## Setup
 
-Disable `reasoning-display` while this plugin is enabled. Paseo gives the first matching timeline
-transformer ownership of a source row.
-
 Set Paseo's **Tool call detail** setting to **Detailed**. In Overview mode, Paseo groups consecutive
 tool calls before plugin transforms run, so the plugin cannot recover each individual call.
 
@@ -109,7 +106,6 @@ paseo plugin reload colorful-agent-activity
 - Inline images show the file as it currently exists on disk, and files over 3 MiB stay as text.
 - Unknown tool payloads render as syntax-highlighted JSON, with a plain-text fallback for oversized or unsupported output.
 - A transformer that claims the same source row in another plugin can win before this plugin runs.
-- Disable `reasoning-display` when using this plugin because both transform reasoning rows.
 
 ## Development
 
@@ -119,7 +115,7 @@ npm run typecheck
 npm test
 ```
 
-The plugin uses separate Paseo v0.8 client and server entries. The server entry registers the
+The plugin uses separate Paseo v0.9 client and server entries. The server entry registers the
 host-scoped palette settings and serves image files back to the client for inline read previews;
 timeline rendering runs in the client bundle.
 
@@ -134,8 +130,7 @@ would be `registry/colorful-agent-activity.json`:
   "path": "colorful-agent-activity",
   "categories": ["developer-tools", "productivity"],
   "caveats": [
-    "Requires Paseo Tool call detail to be set to Detailed",
-    "Disable reasoning-display while this plugin is enabled"
+    "Requires Paseo Tool call detail to be set to Detailed"
   ],
   "submittedBy": "mcowger"
 }

@@ -1,5 +1,5 @@
 {
-  "version": "0.8.0",
+  "version": "0.9.0",
   "localRepository": "~/workspace/paseo",
   "packages": {
     "@getpaseo/protocol": "packages/protocol",
@@ -13,13 +13,10 @@
     "@getpaseo/protocol"
   ],
   "plugins": [
-    "session-summary",
-    "pi-tasks-timeline",
-    "subagent-activity",
-    "reasoning-display",
-    "opencode-session-overview",
+    "colorful-agent-activity",
     "pi-plugin-mcowger",
+    "scratch-chat",
+    "subagent-activity",
     "theme-studio"
-  ],
-  "snapshot": "sdk/paseo-sdk-api.json"
+  ]
 }

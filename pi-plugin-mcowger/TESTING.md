@@ -29,7 +29,7 @@ Evidence. Allowed classifications: **Equivalent**, **Unsupported**,
 | Divergence | Upstream behavior | Plugin behavior | Rationale |
 |---|---|---|---|
 | MCP config | Adapter probe before write | `server/mcp-config.ts` always-write | NG settled decision |
-| Paseo SDK | 0.8.0 baseline | Pinned to exactly 0.9.0-beta.2 (item 3 carried the bump) | NG settled decision; do not downgrade |
+| Paseo SDK | 0.9.0 baseline | Pinned to exactly 0.9.0 | NG settled decision |
 | Pi binary floor | Assorted COMPAT floors | Minimum >=0.84.4, latest-tested 0.86.1 | Highest upstream floor (`clear_queue` in pi 0.84.4) |
 | Image budgets | No built-in caps (OMP uses 16MB) | 2 MiB per image, 8 MiB aggregate per turn | pi-scale cap picked at port time |
 | Final usage deadline | `completeTurn` awaits stats unbounded | Final stats read bounded by `FINAL_USAGE_WAIT_MS` (250ms, `finalWaitMs` override); deadline win drops the sample | paseo-omp final-deadline behavior; turn teardown never hangs on usage |
