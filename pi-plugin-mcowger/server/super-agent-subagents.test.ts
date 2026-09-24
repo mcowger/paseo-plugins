@@ -171,16 +171,80 @@ test("rejects malformed and unrelated persisted entries", () => {
   expect(events).toEqual([]);
 });
 
-test("marks truncated activity once even when the first truncated event arrives later", () => {
+test("only message prose raises the truncation notice, once per child", () => {
   const events: ProviderEvent[] = [];
   const adapter = new SuperAgentSubagents("root", "/workspace", (event) => events.push(event));
-  adapter.activityEntry(activity(CHILD, 0, "lifecycle", { phase: "queued" }));
+  const notifications = () => events.filter((event) => event.type === "timeline.item" && event.item.type === "notification");
+  adapter.activityEntry(activity(CHILD, 0, "lifecycle", { phase: "queued", truncated: true }));
   adapter.activityEntry(activity(CHILD, 1, "session", {
     truncated: true, event: { type: "turn_start" },
   }));
   adapter.activityEntry(activity(CHILD, 2, "session", {
-    truncated: true, event: { type: "turn_end" },
+    truncated: true,
+    event: { type: "tool_execution_end", toolCallId: "child-call", toolName: "fetch", result: { content: "x".repeat(70000) } },
   }));
-  expect(events.filter((event) => event.type === "timeline.item" && event.item.type === "notification"))
-    .toHaveLength(1);
+  // Tool I/O, lifecycle, and progress shrinkage stays silent: the full
+  // content recovers via later events and the terminal report.
+  expect(notifications()).toHaveLength(0);
+  adapter.activityEntry(activity(CHILD, 3, "session", {
+    truncated: true,
+    event: { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Final answer" }] } },
+  }));
+  adapter.activityEntry(activity(CHILD, 4, "session", {
+    truncated: true,
+    event: { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Follow-up" }] } },
+  }));
+  expect(notifications()).toHaveLength(1);
+  expect(notifications()[0]).toMatchObject({
+    type: "timeline.item",
+    item: { type: "notification", level: "info", message: "Some subagent activity was truncated" },
+  });
+});
+
+test("flags message prose dropped entirely for size", () => {
+  const events: ProviderEvent[] = [];
+  const adapter = new SuperAgentSubagents("root", "/workspace", (event) => events.push(event));
+  adapter.activityEntry(activity(CHILD, 0, "lifecycle", { phase: "queued" }));
+  adapter.activityEntry(activity(CHILD, 1, "session", {
+    event: { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "y".repeat(40000) }] } },
+  }));
+  const items = events.filter((event) => event.type === "timeline.item").map((event) => event.item);
+  expect(items.filter((item) => item.type === "assistant_message")).toHaveLength(0);
+  expect(items.filter((item) => item.type === "notification"))
+    .toEqual([expect.objectContaining({ message: "Some subagent activity was truncated" })]);
+});
+
+test("shows the final response once when live prose matches the terminal report", () => {
+  const events: ProviderEvent[] = [];
+  const adapter = new SuperAgentSubagents("root", "/workspace", (event) => events.push(event));
+  const body = "Answer: do not add / backfill account.issuer.";
+  adapter.activityEntry(activity(CHILD, 0, "lifecycle", { phase: "queued" }));
+  adapter.activityEntry(activity(CHILD, 1, "lifecycle", { phase: "started" }));
+  adapter.activityEntry(activity(CHILD, 2, "session", {
+    event: { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: body }] } },
+  }));
+  adapter.activityEntry(activity(CHILD, 3, "lifecycle", { phase: "finished", data: { status: "completed" } }));
+  adapter.rootToolEnd("call-1", "agent", result(CHILD, "completed", body));
+  const assistants = events.filter((event) => event.type === "timeline.item")
+    .map((event) => event.item)
+    .filter((item) => item.type === "assistant_message");
+  expect(assistants).toHaveLength(1);
+  expect(assistants[0]).toMatchObject({ id: `${CHILD}:event:2`, text: body });
+  expect(events).toContainEqual({ type: "session.turn", sessionId: `super-agents:${CHILD}`, turnId: CHILD, state: "completed" });
+  adapter.close();
+});
+
+test("keeps a differing terminal report alongside live progress", () => {
+  const events: ProviderEvent[] = [];
+  const adapter = new SuperAgentSubagents("root", "/workspace", (event) => events.push(event));
+  adapter.activityEntry(activity(CHILD, 0, "session", {
+    event: { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Working" }] } },
+  }));
+  adapter.rootToolEnd("call-1", "agent", result(CHILD, "completed", "Done"));
+  const texts = events.filter((event) => event.type === "timeline.item")
+    .map((event) => event.item)
+    .filter((item) => item.type === "assistant_message")
+    .map((item) => item.text);
+  expect(texts).toEqual(["Working", "Done"]);
+  adapter.close();
 });

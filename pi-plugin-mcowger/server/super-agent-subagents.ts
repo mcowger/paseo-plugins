@@ -94,6 +94,7 @@ export class SuperAgentSubagents {
   private readonly projector: ProviderSubagentProjector;
   private readonly sequences = new Map<string, number>();
   private readonly reported = new Map<string, string>();
+  private readonly liveBodies = new Map<string, Set<string>>();
   private readonly truncated = new Set<string>();
   private readonly pendingToolCalls = new Map<string, PiTrackedToolCall>();
   private pendingResults: Array<{ result: unknown; toolCallId: string | undefined }> | null = null;
@@ -175,13 +176,6 @@ export class SuperAgentSubagents {
       description: text(data.slug),
       toolCallId: text(data.parentToolCallId),
     });
-    if (data.truncated === true && !this.truncated.has(id)) {
-      this.truncated.add(id);
-      this.projector.timeline(id, {
-        type: "notification", id: `${id}:truncated`, level: "info",
-        message: "Some subagent activity was truncated",
-      }, false);
-    }
     if (data.kind === "lifecycle") {
       if (data.phase === "finished") this.finish(id, record(data.data)?.status);
       return;
@@ -190,13 +184,23 @@ export class SuperAgentSubagents {
     if (event?.type === "message_end") {
       const message = record(event.message);
       const body = text(resultText(message?.content));
-      if (!body) return;
+      // Prose that never fits the bounds is dropped entirely: surface the
+      // loss here (tool I/O, lifecycle, and progress shrinkage stays silent).
+      if (!body) {
+        this.markTruncated(id);
+        return;
+      }
       const role = message?.role;
       if (role !== "assistant" && role !== "user") return;
+      // The terminal report carries the same final prose: skip live text
+      // already delivered via a report, regardless of arrival order.
+      if (role === "assistant" && this.reported.get(id) === body.trim()) return;
       this.projector.timeline(id, {
         type: role === "assistant" ? "assistant_message" : "user_message",
         id: `${id}:event:${seq}`, text: body,
       }, false);
+      if (role === "assistant") this.trackLiveBody(id, body);
+      if (data.truncated === true) this.markTruncated(id);
     } else if (event?.type === "tool_execution_start" || event?.type === "tool_execution_end") {
       const callId = text(event.toolCallId);
       const toolName = text(event.toolName);
@@ -232,6 +236,7 @@ export class SuperAgentSubagents {
     this.projector.close();
     this.sequences.clear();
     this.reported.clear();
+    this.liveBodies.clear();
     this.truncated.clear();
     this.pendingToolCalls.clear();
     this.pendingResults = null;
@@ -253,7 +258,10 @@ export class SuperAgentSubagents {
         description: text(summary.slug) ?? section?.slug,
         ...(toolCallId ? { toolCallId } : {}),
       });
-      if (section?.body && this.reported.get(id) !== section.body) {
+      // The terminal report duplicates the final live assistant message, so
+      // skip report text already shown live. Children with no live events
+      // (telemetry disabled) still get their result from the report.
+      if (section?.body && !this.liveBodies.get(id)?.has(section.body) && this.reported.get(id) !== section.body) {
         this.reported.set(id, section.body);
         this.projector.timeline(id, { type: "assistant_message", id: `${id}:result`, text: section.body }, false);
       }
@@ -276,6 +284,27 @@ export class SuperAgentSubagents {
       }
       this.finish(id, summary.status, text(summary.error));
     }
+  }
+
+  private trackLiveBody(id: string, body: string): void {
+    let bodies = this.liveBodies.get(id);
+    if (!bodies) {
+      bodies = new Set();
+      this.liveBodies.set(id, bodies);
+    }
+    bodies.add(body.trim());
+  }
+
+  // Truncation banners are scoped to message prose: tool I/O, lifecycle, and
+  // progress events shrink routinely (and recover via terminal reports), so
+  // flagging those would warn on nearly every run with large tool output.
+  private markTruncated(id: string): void {
+    if (this.truncated.has(id)) return;
+    this.truncated.add(id);
+    this.projector.timeline(id, {
+      type: "notification", id: `${id}:truncated`, level: "info",
+      message: "Some subagent activity was truncated",
+    }, false);
   }
 
   private finish(id: string, raw: unknown, error?: string): void {
