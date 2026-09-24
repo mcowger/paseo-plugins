@@ -4,7 +4,7 @@ Theme Studio is an interactive, live theme designer and palette playground for [
 
 Enter Tailwind color objects, CSS custom variables, or raw hex palettes, map colors to Paseo semantic tokens, inspect changes in real time via an inline mini-preview, and instantly re-skin the host Paseo app live.
 
-Requires Paseo `>=0.8.0`.
+Requires Paseo `>=0.9.0`.
 
 ## Screenshots
 
@@ -105,7 +105,7 @@ npm run typecheck
 npm test
 ```
 
-The plugin uses separate Paseo v0.8 client and server entries. The server entry only registers the host-scoped settings; the live theme controller, parsing, and UI all run in the client bundle.
+The plugin uses separate Paseo v0.9 client and server entries. The server entry only registers the host-scoped settings; the live theme controller, parsing, and UI all run in the client bundle.
 
 ## paseo.cafe submission
 

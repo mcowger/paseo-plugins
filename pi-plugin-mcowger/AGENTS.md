@@ -10,9 +10,9 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
 
 ## Provider resources
 
-- [Provider plugin guide](https://paseo.sh/docs/plugins/v0.8/providers.md): direct and ACP coding agent
+- [Provider plugin guide](https://paseo.sh/docs/plugins/v0.9/providers.md): direct and ACP coding agent
   providers, session lifecycle, composer settings, and provider timeline renderers.
-- [Official provider examples](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples):
+- [Official provider examples](https://github.com/getpaseo/paseo/tree/v0.9.0/plugin-examples):
   direct providers (`provider-direct`) and ACP adapter providers (`provider-acp-transformer`).
 - [Community reference index](../examples/README.md): section 5 ("Agent providers and ACP adapters")
   reviews public provider plugins with direct GitHub and paseo.cafe links.
@@ -52,14 +52,14 @@ Counterpart inventory (plugin file → upstream file):
 Deliberate divergences (do not "fix" on diff):
 
 - `server/mcp-config.ts`: always-write, no adapter probe — intentional (NG settled decision).
-- Paseo SDK pinned to exactly 0.9.1 for provider subagent child sessions (`package.json`); the minimum host version in `paseo-plugin.json` is `>=0.9.0`. Do not downgrade the SDK.
+- Paseo SDK pinned to exactly 0.9.0 (`package.json` + `paseo-plugin.json` `>=0.9.0`) for provider subagent child sessions. Do not downgrade the SDK.
 - Pi binary floor: minimum >=0.84.4 (covers `clear_queue`, added in pi 0.84.4;
   subsumes cumulative-update floor >=0.84 and `agent_settled` v0.5.0). Latest-tested: 0.86.1.
   Update this line when a newer pi binary is verified.
 - Image budgets (NG item 2): 2 MiB per image, 8 MiB aggregate per-turn budget (pi-scale; not OMP's 16MB).
 - Terminal `requestId` (NG item 7): upstream `agent_end`/`agent_settled` carry no `requestId` yet; the plugin's `server/rpc-types.ts` adds it as an optional forward-compatible field. Do not remove on diff.
 
-## Coding agent providers (Paseo v0.8)
+## Coding agent providers (Paseo v0.9)
 
 - Provider SVG icons (`ProviderRegistration.icon`) must be a relative file path to a local SVG file
   (<= 64 KiB), sanitized and self-contained (no scripts, styles, foreignObject, event handlers, or external hrefs).

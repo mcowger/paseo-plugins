@@ -3,9 +3,9 @@
 This repository contains Paseo plugins. Use the following Paseo resources as the source of truth
 when creating or changing a plugin:
 
-The current target host and SDK baseline is **Paseo v0.8.0**. Pin `@getpaseo/client`,
-`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.8.0. Declare compatibility in
-`paseo-plugin.json` via `requirements: { "paseo": ">=0.8.0" }` to enforce version checks at startup.
+The current target host and SDK baseline is **Paseo v0.9.0**. Pin `@getpaseo/client`,
+`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.9.0. Declare compatibility in
+`paseo-plugin.json` via `requirements: { "paseo": ">=0.9.0" }` to enforce version checks at startup.
 
 When researching Paseo contracts (plugin SDK types, protocol, examples), use the local
 Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
@@ -13,11 +13,11 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
 
 - [Plugin guide](https://paseo.sh/docs/plugins.md): setup, installation, development workflow,
   lifecycle, and debugging.
-- [Plugin API reference](https://paseo.sh/docs/plugins/v0.8/reference.md): contribution surfaces,
+- [Plugin API reference](https://paseo.sh/docs/plugins/v0.9/reference.md): contribution surfaces,
   components, SDK usage, RPC, themes, hosts, and troubleshooting.
-- [Runtime entry migration guide](https://paseo.sh/docs/plugins/v0.8/migration.md): migrating from
+- [Runtime entry migration guide](https://paseo.sh/docs/plugins/migration.md): migrating from
   mixed root entries to explicit client and server runtime entries.
-- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.8.0/plugin-examples):
+- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.9.0/plugin-examples):
   working examples for panels and commands (`local-plugin`), RPC, attachment sources (`linear`),
   themes (`catppuccin`), and timeline items (`timeline-items`, `inline-thinking`).
   Provider examples (`provider-direct`, `provider-acp-transformer`) are covered in
@@ -37,7 +37,7 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
 
 ## Development reminders
 
-- The Paseo 0.8 plugin API is stable.
+- The Paseo 0.9 plugin API is stable.
 - Fix every lint, typecheck, and test warning or failure before completing the task. Never dismiss one as pre-existing.
 - Modifying Paseo itself is never a viable path; solve plugin work within the supported plugin API.
 - Plugins are trusted, unsandboxed code. Keep daemon-only work and credentials in server modules;
@@ -132,8 +132,8 @@ Patterns observed across Paseo plugins:
   accessible roles, labels, values, and disabled/busy states.
 - Key list rows and nested rendered items from stable domain IDs, never index, timestamp, or
   serialized data.
-- Timeline transformation and rendering (Paseo v0.8):
-  - Paseo v0.8 supports full live streaming transformation and rendering without remounting.
+- Timeline transformation and rendering (Paseo v0.9):
+  - Paseo v0.9 supports full live streaming transformation and rendering without remounting.
   - Transformers registered via `client.addTimelineTransformer` run synchronously during render model
     construction for both fetched history and live streaming events.
   - The transformer callback receives `{ item, phase }`, where `phase` is `"streaming"` for active/running
