@@ -2,6 +2,15 @@ import type { ProviderEvent, ProviderToolCallDetail } from "@getpaseo/plugin/ser
 
 import type { PiSessionEntry } from "./rpc-types.js";
 import { ProviderSubagentProjector } from "./subagent-projector.js";
+import {
+  extractTextFromToolResult,
+  mapToolDetail,
+  parseToolArgs,
+  parseToolResult,
+  resolveToolCallName,
+  type PiToolResult,
+  type PiTrackedToolCall,
+} from "./tool-call-mapper.js";
 
 const TOOLS = new Set(["agent", "agent_wait", "agent_stop", "agent_status"]);
 const EVENT_TYPE = "super-agents-event";
@@ -44,6 +53,22 @@ function resultText(value: unknown): string | undefined {
   return joined.length <= MAX_RESULT_TEXT ? joined : undefined;
 }
 
+function toolResult(value: unknown): PiToolResult {
+  const raw = record(value);
+  if (raw && typeof raw.content === "string") {
+    return parseToolResult({
+      ...raw,
+      content: [{ type: "text", text: raw.content }],
+    });
+  }
+  return parseToolResult(value);
+}
+
+function toolError(result: PiToolResult): string {
+  const output = extractTextFromToolResult(result);
+  return output !== undefined && output.length <= MAX_RESULT_TEXT ? output : "Tool failed";
+}
+
 function runs(value: unknown): Value[] {
   const details = record(record(value)?.details);
   return Array.isArray(details?.runs) ? details.runs.map(record).filter((run): run is Value => run !== null) : [];
@@ -70,6 +95,7 @@ export class SuperAgentSubagents {
   private readonly sequences = new Map<string, number>();
   private readonly reported = new Map<string, string>();
   private readonly truncated = new Set<string>();
+  private readonly pendingToolCalls = new Map<string, PiTrackedToolCall>();
   private pendingResults: Array<{ result: unknown; toolCallId: string | undefined }> | null = null;
   private readonly emit: (event: ProviderEvent) => void;
 
@@ -175,16 +201,26 @@ export class SuperAgentSubagents {
       const callId = text(event.toolCallId);
       const toolName = text(event.toolName);
       if (!callId || !toolName) return;
-      const failed = event.isError === true;
+      const key = `${id}:${callId}`;
+      const isStart = event.type === "tool_execution_start";
+      const tracked = isStart
+        ? parseToolArgs(toolName, event.args)
+        : this.pendingToolCalls.get(key) ?? parseToolArgs(toolName, event.args);
+      const result = isStart ? null : toolResult(event.result);
+      if (isStart) this.pendingToolCalls.set(key, tracked);
+      else this.pendingToolCalls.delete(key);
       const base = {
-        type: "tool_call", id: `${id}:${callId}`, callId: `${id}:${callId}`, name: toolName,
-        detail: { type: "unknown", input: null, output: null },
-      } as const;
-      if (event.type === "tool_execution_start") {
+        type: "tool_call" as const,
+        id: `${id}:${callId}`,
+        callId: `${id}:${callId}`,
+        name: resolveToolCallName(tracked, result),
+        detail: mapToolDetail(tracked, result),
+      };
+      if (isStart) {
         this.projector.timeline(id, { ...base, status: "running", error: null }, false);
-      } else if (failed) {
+      } else if (event.isError === true) {
         this.projector.timeline(id, {
-          ...base, status: "failed", error: resultText(event.result) ?? "Tool failed",
+          ...base, status: "failed", error: toolError(result),
         }, false);
       } else {
         this.projector.timeline(id, { ...base, status: "completed", error: null }, false);
@@ -197,6 +233,7 @@ export class SuperAgentSubagents {
     this.sequences.clear();
     this.reported.clear();
     this.truncated.clear();
+    this.pendingToolCalls.clear();
     this.pendingResults = null;
   }
 

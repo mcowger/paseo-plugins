@@ -58,13 +58,47 @@ test("projects queued child, session messages and tools, and finished status in 
     type: "timeline.item", sessionId: `super-agents:${CHILD}`,
     item: expect.objectContaining({ type: "assistant_message", text: "Found it" }),
   }));
-  expect(events.filter((event) => event.type === "timeline.item")
+  const toolCalls = events.filter((event) => event.type === "timeline.item")
     .map((event) => event.item)
     .filter((item) => item.type === "tool_call")
-    .map((item) => item.status)).toEqual(["running", "completed"]);
+  expect(toolCalls.map((item) => item.status)).toEqual(["running", "completed"]);
+  expect(toolCalls[0]).toMatchObject({
+    name: "grep", status: "running",
+    detail: { type: "search", query: "x", toolName: "grep" },
+  });
+  expect(toolCalls[1]).toMatchObject({
+    name: "grep", status: "completed",
+    detail: { type: "search", query: "x", toolName: "grep", content: "found" },
+  });
   expect(events).toContainEqual({ type: "session.turn", sessionId: `super-agents:${CHILD}`, turnId: CHILD, state: "completed" });
   adapter.close();
   expect(events.at(-1)).toMatchObject({ type: "session.closed", sessionId: `super-agents:${CHILD}` });
+});
+
+test("projects child tool results and errors with their start arguments", () => {
+  const events: ProviderEvent[] = [];
+  const adapter = new SuperAgentSubagents("root", "/workspace", (event) => events.push(event));
+  adapter.activityEntry(activity(CHILD, 0, "session", {
+    event: { type: "tool_execution_start", toolCallId: "child-read", toolName: "read", args: { path: "src/file.ts" } },
+  }));
+  adapter.activityEntry(activity(CHILD, 1, "session", {
+    event: {
+      type: "tool_execution_end", toolCallId: "child-read", toolName: "read",
+      result: { content: [{ type: "text", text: "File not found" }] }, isError: true,
+    },
+  }));
+
+  const toolCalls = events.filter((event) => event.type === "timeline.item")
+    .map((event) => event.item)
+    .filter((item) => item.type === "tool_call");
+  expect(toolCalls[0]).toMatchObject({
+    status: "running", detail: { type: "read", filePath: "src/file.ts" },
+  });
+  expect(toolCalls[1]).toMatchObject({
+    status: "failed", error: "File not found",
+    detail: { type: "read", filePath: "src/file.ts", content: "File not found" },
+  });
+  adapter.close();
 });
 
 test("uses result details without events, links single run and keeps late reports on the finished turn", () => {
