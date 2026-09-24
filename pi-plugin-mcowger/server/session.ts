@@ -74,6 +74,7 @@ export interface PiProviderSessionOptions {
   // carrying any other nonce are swallowed instead of minting revert
   // tokens, recording captures, or resolving command results.
   extensionNonce?: string;
+  subsessionsEnabled?: boolean;
   emit(event: ProviderEvent): void;
   cleanup(): void;
 }
@@ -199,7 +200,7 @@ export class PiProviderSession {
       this.autoRetryEnabled = autoRetry;
     }
     const commands = await this.options.runtime.getCommands().catch(() => []);
-    if (commands.some((command) => command.name === "agents" && command.source === "extension")) {
+    if (this.options.subsessionsEnabled && commands.some((command) => command.name === "agents" && command.source === "extension")) {
       try {
         const result = await this.runWjProbe();
         if (WjSubagents.isAvailable(result)) {

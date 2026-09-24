@@ -67,7 +67,7 @@ function createSession(
   settings: ProviderSessionConfig["settings"] = {},
   usagePollScheduler?: PiUsagePollScheduler,
   streamScheduler?: PiScheduler,
-  extra: { extensionTimeoutMs?: number; extensionNonce?: string } = {},
+  extra: { extensionTimeoutMs?: number; extensionNonce?: string; subsessionsEnabled?: boolean } = {},
 ) {
   return new PiProviderSession({
     sessionId: "paseo-session",
@@ -79,6 +79,7 @@ function createSession(
     ...(streamScheduler ? { streamScheduler } : {}),
     ...(extra.extensionTimeoutMs !== undefined ? { extensionTimeoutMs: extra.extensionTimeoutMs } : {}),
     ...(extra.extensionNonce !== undefined ? { extensionNonce: extra.extensionNonce } : {}),
+    subsessionsEnabled: extra.subsessionsEnabled ?? false,
     emit: (event) => events.push(event),
     cleanup() {},
   });
@@ -2070,7 +2071,7 @@ test("probes the wj tools before projecting child activity into provider session
     },
   });
   const events: ProviderEvent[] = [];
-  const session = createSession(harness.runtime, events);
+  const session = createSession(harness.runtime, events, {}, undefined, undefined, { subsessionsEnabled: true });
   await session.initialize();
   harness.emit({
     type: "tool_execution_start", toolCallId: "spawn-1",
@@ -2105,6 +2106,22 @@ test("probes the wj tools before projecting child activity into provider session
 
 test("does not project subagents when the wj extension was not probed", async () => {
   const harness = createRuntime();
+  const events: ProviderEvent[] = [];
+  const session = createSession(harness.runtime, events);
+  await session.initialize();
+  harness.emit({
+    type: "tool_execution_start", toolCallId: "spawn-1",
+    toolName: "spawn_agent", args: { name: "Research", template_id: "explore" },
+  });
+  expect(events.some((event) => event.type === "session.opened")).toBe(false);
+  await session.close();
+});
+
+test("does not open child sessions when the host did not negotiate subsessions", async () => {
+  const harness = createRuntime({
+    commands: [{ name: "agents", source: "extension" }],
+    prompt() { throw new Error("Probe must not run without session.subsession"); },
+  });
   const events: ProviderEvent[] = [];
   const session = createSession(harness.runtime, events);
   await session.initialize();
@@ -2167,7 +2184,7 @@ test("restores saved wj activity from custom entries, not context messages", asy
     ],
   });
   const events: ProviderEvent[] = [];
-  const session = createSession(harness.runtime, events);
+  const session = createSession(harness.runtime, events, {}, undefined, undefined, { subsessionsEnabled: true });
   await session.initialize();
   await session.replayHistory();
   expect(events).toContainEqual(expect.objectContaining({
