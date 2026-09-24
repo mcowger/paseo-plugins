@@ -2057,10 +2057,9 @@ test("swallows extension markers with a wrong or missing nonce", async () => {
 test("probes the wj tools before projecting child activity into provider sessions", async () => {
   const childId = "3d1f726e-df7d-49f8-b2d5-792af4edc58c";
   const harness = createRuntime({
-    commands: [{ name: "agents", source: "extension" }],
     prompt(message, emit) {
-      if (!message.startsWith("/paseo_wj_probe ")) return;
-      const requestId = message.slice("/paseo_wj_probe ".length);
+      if (!message.startsWith("/paseo_subagent_probe ")) return;
+      const requestId = message.slice("/paseo_subagent_probe ".length);
       emit({
         type: "extension_ui_request", id: "probe", method: "notify",
         message: `PASEO_COMMAND_RESULT ${JSON.stringify({
@@ -2139,10 +2138,10 @@ test("restores saved wj activity from custom entries, not context messages", asy
     commands: [{ name: "agents", source: "extension" }],
     prompt(message, emit) {
       if (message.startsWith("/paseo_capture_entries ")) throw new Error("Capture unavailable");
-      if (message.startsWith("/paseo_wj_probe ")) emit({
+      if (message.startsWith("/paseo_subagent_probe ")) emit({
         type: "extension_ui_request", id: "probe", method: "notify",
         message: `PASEO_COMMAND_RESULT ${JSON.stringify({
-          requestId: message.slice("/paseo_wj_probe ".length), ok: true,
+          requestId: message.slice("/paseo_subagent_probe ".length), ok: true,
           result: WJ_TOOLS,
         })}`,
       });
@@ -2197,5 +2196,87 @@ test("restores saved wj activity from custom entries, not context messages", asy
     item: expect.objectContaining({ text: "Recovered" }),
   }));
   expect(events.some((event) => event.type === "timeline.item" && event.sessionId === "wj:aa9e3a02-5712-4703-a19c-45342e73c67d")).toBe(false);
+  await session.close();
+});
+
+test("detects super-agents and restores child events and results on the active branch", async () => {
+  const childId = "a7k2m9qz";
+  const harness = createRuntime({
+    prompt(message, emit) {
+      if (message.startsWith("/paseo_capture_entries ")) throw new Error("Capture unavailable");
+      if (message.startsWith("/paseo_subagent_probe ")) emit({
+        type: "extension_ui_request", id: "probe", method: "notify",
+        message: `PASEO_COMMAND_RESULT ${JSON.stringify({
+          requestId: message.slice("/paseo_subagent_probe ".length),
+          ok: true, result: ["agent", "agent_wait", "agent_stop", "agent_status"],
+        })}`,
+      });
+    },
+  });
+  harness.runtime.getMessages = async () => [
+    {
+      role: "assistant", content: [{
+        type: "toolCall", id: "call-1", name: "agent",
+        arguments: { tasks: [{ agent: "scout", name: "Research", prompt: "Inspect code" }] },
+      }],
+    },
+    {
+      role: "toolResult", toolCallId: "call-1", toolName: "agent",
+      content: [{ type: "text", text: `### Research (scout) — completed [id: ${childId}]\nDone` }],
+      details: { runs: [{ id: childId, name: "Research", slug: "scout", status: "completed" }] },
+    },
+  ];
+  harness.runtime.getEntries = async () => ({
+    leafId: "child-finish",
+    entries: [
+      {
+        type: "custom", customType: "super-agents-event", id: "abandoned",
+        parentId: null, timestamp: "2026-09-24T00:00:00Z",
+        data: {
+          v: 1, seq: 0, ts: 1758700000123, agentId: "b8q3n1xy", name: "Old", slug: "scout",
+          parentToolCallId: "old-call", background: false, kind: "lifecycle", phase: "queued", truncated: false,
+        },
+      },
+      {
+        type: "custom", customType: "super-agents-event", id: "child-message",
+        parentId: null, timestamp: "2026-09-24T00:00:01Z",
+        data: {
+          v: 1, seq: 0, ts: 1758700000124, agentId: childId, name: "Research", slug: "scout",
+          parentToolCallId: "call-1", background: false, kind: "session", truncated: false,
+          event: { type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "Working" }] } },
+        },
+      },
+      {
+        type: "custom", customType: "super-agents-event", id: "child-finish",
+        parentId: "child-message", timestamp: "2026-09-24T00:00:02Z",
+        data: {
+          v: 1, seq: 1, ts: 1758700000125, agentId: childId, name: "Research", slug: "scout",
+          parentToolCallId: "call-1", background: false, kind: "lifecycle", phase: "finished",
+          data: { status: "completed" }, truncated: false,
+        },
+      },
+    ],
+  });
+  const events: ProviderEvent[] = [];
+  const session = createSession(harness.runtime, events, {}, undefined, undefined, { subsessionsEnabled: true });
+  await session.initialize();
+  await session.replayHistory();
+  expect(events).toContainEqual(expect.objectContaining({
+    type: "session.opened", sessionId: `super-agents:${childId}`,
+    parentSessionId: "paseo-session", toolCallId: "call-1",
+  }));
+  expect(events).toContainEqual(expect.objectContaining({
+    type: "timeline.item", sessionId: `super-agents:${childId}`,
+    item: expect.objectContaining({ type: "assistant_message", text: "Working" }),
+  }));
+  expect(events.some((event) => event.type === "session.opened" && event.sessionId === "super-agents:b8q3n1xy")).toBe(false);
+  expect(events.filter((event) => event.type === "session.turn" && event.sessionId === `super-agents:${childId}` && event.state === "started")).toHaveLength(1);
+  const childItems = events
+    .filter((event) => event.type === "timeline.item")
+    .filter((event) => event.sessionId === `super-agents:${childId}`)
+    .map((event) => event.item)
+    .filter((item) => item.type === "assistant_message")
+    .map((item) => item.text);
+  expect(childItems).toEqual(["Working", "Done"]);
   await session.close();
 });

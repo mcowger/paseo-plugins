@@ -19,7 +19,7 @@ import { PiSessionCompaction } from "./session-compaction.js";
 import { PiPublicError } from "./bounds.js";
 import { PiRevertTokens, isRevertToken, parseCapturedEntries, parseExtensionMarkerPayload, revertPiConversation, type PiCapturedEntry } from "./rewind.js";
 import { checkTerminalKey, decideLegacyTerminal, shouldHonorNoTurnAck, type LegacyTerminalEvidence, type TurnTerminalSignal } from "./turn-terminal.js";
-import { WjSubagents, isWjTool, wjToolDetail } from "./wj-subagents.js";
+import { PiSubagentSources } from "./subagent-sources.js";
 
 const DEFAULT_THINKING_LEVEL = "medium";
 const RESPONSE_HEADER = "Response";
@@ -39,7 +39,7 @@ const PASEO_PI_CAPTURE_EXTENSION_COMMAND = "paseo_capture_entries";
 const PASEO_PI_ENTRY_CAPTURE_MARKER = "PASEO_ENTRY_CAPTURE";
 const PASEO_PI_SUBMITTED_USER_ENTRY_MARKER = "PASEO_SUBMITTED_USER_ENTRY";
 const PASEO_PI_COMMAND_RESULT_MARKER = "PASEO_COMMAND_RESULT";
-const PASEO_PI_WJ_PROBE_COMMAND = "paseo_wj_probe";
+const PASEO_PI_SUBAGENT_PROBE_COMMAND = "paseo_subagent_probe";
 const DEFAULT_EXTENSION_RESULT_TIMEOUT_MS = 30_000;
 const MICROGPT_COMMANDS = [
   FAST_MODE_COMMAND,
@@ -142,7 +142,7 @@ export class PiProviderSession {
   private turnCapturedEntryFresh = false;
   private turnNativeActivity = false;
   private steerInFlight = false;
-  private wjSubagents: WjSubagents | null = null;
+  private subagentSources: PiSubagentSources | null = null;
 
   constructor(private readonly options: PiProviderSessionOptions) {
     this.autoRetryEnabled = settingBoolean(options.config.settings, AUTO_RETRY_SETTING) ?? false;
@@ -200,14 +200,16 @@ export class PiProviderSession {
       this.autoRetryEnabled = autoRetry;
     }
     const commands = await this.options.runtime.getCommands().catch(() => []);
-    if (this.options.subsessionsEnabled && commands.some((command) => command.name === "agents" && command.source === "extension")) {
+    if (this.options.subsessionsEnabled) {
       try {
-        const result = await this.runWjProbe();
-        if (WjSubagents.isAvailable(result)) {
-          this.wjSubagents = new WjSubagents(this.options.sessionId, this.options.config.cwd, (event) => this.emit(event));
-        }
+        const tools = await this.probeSubagentSources();
+        this.subagentSources = PiSubagentSources.fromProbe(tools, {
+          sessionId: this.options.sessionId,
+          cwd: this.options.config.cwd,
+          emit: (event) => this.emit(event),
+        });
       } catch {
-        // A missing or incompatible extension never changes regular Pi sessions.
+        // Missing or incompatible subagent sources do not affect regular Pi sessions.
       }
     }
     this.microgptExtension = hasMicroGptCommands(commands);
@@ -261,16 +263,17 @@ export class PiProviderSession {
     const mapper = new PiHistoryMapper("pi", captured, {
       mintRevertToken: (entryId) => this.revertTokens.mint(entryId),
       mapToolDetail: (tracked, result) => this.mapTrackedTool(tracked, result),
-      mapCustomMessage: (_text, customType) => this.wjSubagents && customType?.startsWith("wj-pi-subagents-") && customType !== "wj-pi-subagents-activity" ? false : null,
+      mapCustomMessage: (_text, customType) => this.subagentSources?.handlesCustomMessage(customType) ? false : null,
     });
     const items = mapper.mapMessages(messages);
-    if (this.wjSubagents) {
+    if (this.subagentSources) {
+      this.subagentSources.beginReplay();
       for (const message of messages) {
-        if (message.role === "custom" && message.customType !== "wj-pi-subagents-activity") this.wjSubagents.custom(message.customType, message.content);
+        if (message.role === "custom") this.subagentSources.custom(message.customType, message.content);
         if (message.role === "assistant") for (const block of message.content) {
-          if (block.type === "toolCall") this.wjSubagents.rootToolStart(block.id, block.name, block.arguments);
+          if (block.type === "toolCall") this.subagentSources.rootToolStart(block.id, block.name, block.arguments);
         }
-        if (message.role === "toolResult") this.wjSubagents.rootToolEnd(message.toolCallId, message.toolName, { content: message.content, details: message.details });
+        if (message.role === "toolResult") this.subagentSources.rootToolEnd(message.toolCallId, message.toolName, { content: message.content, details: message.details });
       }
       const history = await this.options.runtime.getEntries().catch(() => ({ entries: [] as PiSessionEntry[], leafId: null }));
       const byId = new Map(history.entries.map((entry) => [entry.id, entry]));
@@ -281,8 +284,9 @@ export class PiProviderSession {
         cursor = byId.get(cursor)?.parentId ?? null;
       }
       for (const entry of history.entries) {
-        if (activeIds.has(entry.id)) this.wjSubagents.activityEntry(entry);
+        if (activeIds.has(entry.id)) this.subagentSources.activityEntry(entry);
       }
+      this.subagentSources.endReplay();
     }
     for (const item of items) this.timeline(item);
   }
@@ -492,7 +496,7 @@ export class PiProviderSession {
     this.rejectAllExtensionResults(new Error("Pi session closed"));
     // NG item 9 close boundary: flush pending frames while emit still works.
     this.streamer.flushSync();
-    this.wjSubagents?.close();
+    this.subagentSources?.close();
     this.closed = true;
     this.streamer.close();
     this.usagePoller.close();
@@ -540,7 +544,7 @@ export class PiProviderSession {
       return;
     }
     if (event.type === "entry_appended") {
-      this.wjSubagents?.activityEntry(event.entry);
+      this.subagentSources?.activityEntry(event.entry);
       return;
     }
     if (event.type === "agent_start" || event.type === "turn_start") {
@@ -553,9 +557,9 @@ export class PiProviderSession {
     if (event.type === "message_start" && event.message.role === "assistant") { if (this.turnId) this.turnNativeActivity = true; this.assistantMessageId = event.message.responseId ?? randomUUID(); return; }
     if (event.type === "message_update") { this.handleUpdate(event); return; }
     if (event.type === "message_end") { this.handleMessageEnd(event); return; }
-    if (event.type === "tool_execution_start") { if (this.turnId) this.turnNativeActivity = true; const tracked = parseToolArgs(event.toolName, event.args); this.toolCalls.set(event.toolCallId, tracked); this.wjSubagents?.rootToolStart(event.toolCallId, event.toolName, event.args); this.emitTool(event.toolCallId, tracked, "running", null, null); return; }
+    if (event.type === "tool_execution_start") { if (this.turnId) this.turnNativeActivity = true; const tracked = parseToolArgs(event.toolName, event.args); this.toolCalls.set(event.toolCallId, tracked); this.subagentSources?.rootToolStart(event.toolCallId, event.toolName, event.args); this.emitTool(event.toolCallId, tracked, "running", null, null); return; }
     if (event.type === "tool_execution_update") { if (this.turnId) this.turnNativeActivity = true; const tracked = this.toolCalls.get(event.toolCallId); if (tracked) this.emitTool(event.toolCallId, tracked, "running", parseToolResult(event.partialResult), null); return; }
-    if (event.type === "tool_execution_end") { if (this.turnId) this.turnNativeActivity = true; const tracked = this.toolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null); this.toolCalls.delete(event.toolCallId); this.wjSubagents?.rootToolEnd(event.toolCallId, event.toolName, event.result); this.emitTool(event.toolCallId, tracked, event.isError ? "failed" : "completed", parseToolResult(event.result), event.isError ? event.result : null); void this.usagePoller.refreshNow(); return; }
+    if (event.type === "tool_execution_end") { if (this.turnId) this.turnNativeActivity = true; const tracked = this.toolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null); this.toolCalls.delete(event.toolCallId); this.subagentSources?.rootToolEnd(event.toolCallId, event.toolName, event.result); this.emitTool(event.toolCallId, tracked, event.isError ? "failed" : "completed", parseToolResult(event.result), event.isError ? event.result : null); void this.usagePoller.refreshNow(); return; }
     if (event.type === "compaction_start") { this.handleCompactionEvent("loading", event.reason === "manual" ? "manual" : "auto"); return; }
     if (event.type === "compaction_end") { this.handleCompactionEvent("completed", event.reason === "manual" ? "manual" : "auto"); return; }
     if (event.type === "auto_retry_start") { this.timeline({ type: "error", id: randomUUID(), message: `Provider retry (attempt ${event.attempt}): ${event.errorMessage}` }); return; }
@@ -756,7 +760,7 @@ export class PiProviderSession {
     this.streamer.flushSync();
     if (event.message.role === "assistant") { this.assistantMessageId = null; void this.usagePoller.refreshNow(); return; }
     if (event.message.role === "custom") {
-      if (this.wjSubagents?.custom(event.message.customType, event.message.content)) return;
+      if (this.subagentSources?.custom(event.message.customType, event.message.content)) return;
       const text = messageText(event.message.content);
       if (text) this.timeline({ type: "assistant_message", id: randomUUID(), text });
     }
@@ -779,11 +783,11 @@ export class PiProviderSession {
     await resultPromise;
   }
 
-  private async runWjProbe(): Promise<unknown> {
+  private async probeSubagentSources(): Promise<unknown> {
     const requestId = randomUUID();
     const resultPromise = this.waitForExtensionResult(requestId);
     try {
-      await this.options.runtime.prompt(`/${PASEO_PI_WJ_PROBE_COMMAND} ${requestId}`);
+      await this.options.runtime.prompt(`/${PASEO_PI_SUBAGENT_PROBE_COMMAND} ${requestId}`);
       return await resultPromise;
     } catch (error) {
       resultPromise.catch(() => undefined);
@@ -957,10 +961,7 @@ export class PiProviderSession {
     this.timeline({ type: "tool_call", id, callId: id, name: resolveToolCallName(tracked, result), detail: this.mapTrackedTool(tracked, result), status, error: status === "failed" ? (error ?? "Tool failed") as never : null });
   }
   private mapTrackedTool(tracked: PiTrackedToolCall, result: ReturnType<typeof parseToolResult>): ReturnType<typeof mapToolDetail> {
-    if (this.wjSubagents && isWjTool(tracked.toolName)) {
-      return wjToolDetail(tracked.toolName, tracked.args, result) ?? mapToolDetail(tracked, result);
-    }
-    return mapToolDetail(tracked, result);
+    return this.subagentSources?.toolDetail(tracked.toolName, tracked.args, result) ?? mapToolDetail(tracked, result);
   }
   private emitConfig(): void {
     const model = this.options.state.model;
@@ -1181,8 +1182,8 @@ export function createPaseoExtension(systemPrompt?: string, options?: { nonce?: 
 \t    },
 \t  });
 
-\t  pi.registerCommand("${PASEO_PI_WJ_PROBE_COMMAND}", {
-\t    description: "Internal Paseo subagent capability probe",
+\t  pi.registerCommand("${PASEO_PI_SUBAGENT_PROBE_COMMAND}", {
+\t    description: "Internal Paseo subagent source probe",
 \t    handler: async (args, ctx) => {
 \t      const requestId = args.trim();
 \t      try {

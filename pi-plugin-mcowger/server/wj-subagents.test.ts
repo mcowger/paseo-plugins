@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { ProviderEvent } from "@getpaseo/plugin/server/provider";
 
-import { WjSubagents, wjToolDetail } from "./wj-subagents.js";
+import { WjSubagents } from "./wj-subagents.js";
 
 const CHILD = "3d1f726e-df7d-49f8-b2d5-792af4edc58c";
 const GRANDCHILD = "aa9e3a02-5712-4703-a19c-45342e73c67d";
@@ -106,8 +106,10 @@ test("terminated child emits canceled rather than completed", () => {
 });
 
 test("subagent detail links only child-specific calls with a known child id", () => {
-  expect(wjToolDetail("get_agent_tree", {}, null)).toBeNull();
-  expect(wjToolDetail("spawn_agent", { name: "Research", template_id: "explore" }, response(CHILD))).toMatchObject({
+  const bridge = new WjSubagents("root", "/workspace", () => undefined);
+  expect(bridge.toolDetail("get_agent_tree", {}, null)).toBeNull();
+  expect(bridge.toolDetail("spawn_agent", { name: "Research", template_id: "explore" }, response(CHILD))).toMatchObject({
     type: "sub_agent", childSessionId: `wj:${CHILD}`, subAgentType: "explore",
   });
+  bridge.close();
 });
