@@ -84,8 +84,10 @@ function createSession(
   });
 }
 
-const WJ_TOOLS = ["spawn_agent", "send_message", "wait_agent", "get_agent_tree"]
-  .map((name) => ({ name, sourceInfo: { source: "package", path: "/extensions/wj-pi-subagents/index.ts" } }));
+const WJ_TOOLS = [
+  "get_agent_templates", "spawn_agent", "send_message", "wait_agent",
+  "interrupt_agent", "terminate_agent", "get_agent_status", "get_agent_tree",
+];
 
 function createManualPollScheduler(): {
   scheduler: PiUsagePollScheduler;

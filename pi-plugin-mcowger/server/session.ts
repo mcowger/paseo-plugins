@@ -1187,7 +1187,7 @@ export function createPaseoExtension(systemPrompt?: string, options?: { nonce?: 
 \t      try {
 \t        const tools = pi.getAllTools()
 \t          .filter((tool) => tool && typeof tool.name === "string")
-\t          .map((tool) => ({ name: tool.name, sourceInfo: tool.sourceInfo }));
+\t          .map((tool) => tool.name);
 \t        emitCommandResult(ctx, requestId, { ok: true, result: tools });
 \t      } catch (error) {
 \t        emitCommandResult(ctx, requestId, { ok: false, error: String(error) });

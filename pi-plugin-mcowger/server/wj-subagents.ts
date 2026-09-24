@@ -11,7 +11,6 @@ const ACTIVITY_SCHEMA = "wj-pi-subagents.activity/1";
 const TERMINAL_SCHEMA = "wj-pi-subagents/terminal";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const MAX_TEXT = 32_768;
-const WJ_EXTENSION_PATH = /(?:^|[/\\])wj-pi-subagents(?:[/\\]|$)/iu;
 
 type RecordValue = Record<string, unknown>;
 
@@ -103,16 +102,8 @@ export class WjSubagents {
 
   static isAvailable(value: unknown): boolean {
     if (!Array.isArray(value)) return false;
-    const tools = value.map(record).filter((tool): tool is RecordValue => tool !== null);
-    const required = ["spawn_agent", "send_message", "wait_agent", "get_agent_tree"];
-    const sources = tools
-      .filter((tool) => required.includes(String(tool.name)))
-      .map((tool) => record(tool.sourceInfo))
-      .filter((source): source is RecordValue => source?.source === "package" && typeof source.path === "string");
-    return sources.length === required.length
-      && new Set(sources.map((source) => source.path)).size === 1
-      && WJ_EXTENSION_PATH.test(String(sources[0]?.path))
-      && required.every((name) => tools.some((tool) => tool.name === name));
+    const names = new Set(value.map((tool) => typeof tool === "string" ? tool : record(tool)?.name));
+    return [...TOOL_NAMES].every((name) => names.has(name));
   }
 
   rootToolStart(callId: string, name: string, args: unknown): void {

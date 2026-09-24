@@ -5,8 +5,10 @@ import { WjSubagents, wjToolDetail } from "./wj-subagents.js";
 
 const CHILD = "3d1f726e-df7d-49f8-b2d5-792af4edc58c";
 const GRANDCHILD = "aa9e3a02-5712-4703-a19c-45342e73c67d";
-const WJ_TOOLS = ["spawn_agent", "send_message", "wait_agent", "get_agent_tree"]
-  .map((name) => ({ name, sourceInfo: { source: "package", path: "/extensions/wj-pi-subagents/index.ts" } }));
+const WJ_TOOLS = [
+  "get_agent_templates", "spawn_agent", "send_message", "wait_agent",
+  "interrupt_agent", "terminate_agent", "get_agent_status", "get_agent_tree",
+];
 
 function activity(agent_id: string, revision: number, body: Record<string, unknown>) {
   return {
@@ -27,7 +29,11 @@ function response(agent_id: string) {
 test("does not consider incomplete tool catalogs a wj installation", () => {
   expect(WjSubagents.isAvailable(WJ_TOOLS.slice(0, 2))).toBe(false);
   expect(WjSubagents.isAvailable(WJ_TOOLS)).toBe(true);
-  expect(WjSubagents.isAvailable(WJ_TOOLS.map((tool) => ({ ...tool, sourceInfo: { source: "mcp", path: tool.sourceInfo.path } })))).toBe(false);
+  expect(WjSubagents.isAvailable(WJ_TOOLS.map((name) => ({ name })))).toBe(true);
+  expect(WjSubagents.isAvailable(WJ_TOOLS.map((name) => ({
+    name, sourceInfo: { source: "local", origin: "top-level", path: "/custom/extensions/agents.ts" },
+  })))).toBe(true);
+  expect(WjSubagents.isAvailable(WJ_TOOLS.filter((name) => name !== "terminate_agent"))).toBe(false);
 });
 
 test("links a spawned child and routes activity, final report and lifecycle to its own session", () => {
