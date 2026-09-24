@@ -1,6 +1,6 @@
 {
   "id": "pi-plugin-mcowger",
   "requirements": {
-    "paseo": ">=0.9.0-beta.2"
+    "paseo": ">=0.9.1"
   }
 }

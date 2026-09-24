@@ -31,6 +31,7 @@ function createRuntime(): PiRuntimeSession {
     async abort() {},
     async getState() { return { ...state }; },
     async getMessages() { return []; },
+    async getEntries() { return { entries: [], leafId: null }; },
     async getAvailableModels() { return []; },
     async setModel() { throw new Error("unused"); },
     async setThinkingLevel() {},

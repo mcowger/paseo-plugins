@@ -32,6 +32,7 @@ function createRuntime(options: {
     async abort() { if (options.abortError) throw options.abortError; },
     async getState() { return state; },
     async getMessages() { return []; },
+    async getEntries() { return { entries: [], leafId: null }; },
     async getAvailableModels() { return []; },
     async setModel() { throw new Error("unused"); },
     async setThinkingLevel() {},
@@ -82,6 +83,9 @@ function createSession(
     cleanup() {},
   });
 }
+
+const WJ_TOOLS = ["spawn_agent", "send_message", "wait_agent", "get_agent_tree"]
+  .map((name) => ({ name, sourceInfo: { source: "package", path: "/extensions/wj-pi-subagents/index.ts" } }));
 
 function createManualPollScheduler(): {
   scheduler: PiUsagePollScheduler;
@@ -656,6 +660,7 @@ function createImageRuntime(capture: { message?: string; images?: unknown[]; ste
     async abort() {},
     async getState() { return state; },
     async getMessages() { return []; },
+    async getEntries() { return { entries: [], leafId: null }; },
     async getAvailableModels() { return []; },
     async setModel() { throw new Error("unused"); },
     async setThinkingLevel() {},
@@ -732,6 +737,7 @@ test("capable invalid image fails visibly before Pi RPC", async () => {
     async abort() {},
     async getState() { return state; },
     async getMessages() { return []; },
+    async getEntries() { return { entries: [], leafId: null }; },
     async getAvailableModels() { return []; },
     async setModel() { throw new Error("unused"); },
     async setThinkingLevel() {},
@@ -2042,5 +2048,135 @@ test("swallows extension markers with a wrong or missing nonce", async () => {
   expect(items).toHaveLength(1);
   expect(items[0]).toMatchObject({ type: "user_message", messageId: "real", text: "hello" });
   expect((items[0] as { revertToken?: unknown }).revertToken).toMatch(/^pi-revert:[A-Za-z0-9_-]{43}$/);
+  await session.close();
+});
+
+test("probes the wj tools before projecting child activity into provider sessions", async () => {
+  const childId = "3d1f726e-df7d-49f8-b2d5-792af4edc58c";
+  const harness = createRuntime({
+    commands: [{ name: "agents", source: "extension" }],
+    prompt(message, emit) {
+      if (!message.startsWith("/paseo_wj_probe ")) return;
+      const requestId = message.slice("/paseo_wj_probe ".length);
+      emit({
+        type: "extension_ui_request", id: "probe", method: "notify",
+        message: `PASEO_COMMAND_RESULT ${JSON.stringify({
+          requestId, ok: true,
+          result: WJ_TOOLS,
+        })}`,
+      });
+    },
+  });
+  const events: ProviderEvent[] = [];
+  const session = createSession(harness.runtime, events);
+  await session.initialize();
+  harness.emit({
+    type: "tool_execution_start", toolCallId: "spawn-1",
+    toolName: "spawn_agent", args: { name: "Research", template_id: "explore" },
+  });
+  harness.emit({
+    type: "tool_execution_end", toolCallId: "spawn-1", toolName: "spawn_agent",
+    result: { content: [{ type: "text", text: JSON.stringify({ ok: true, data: { agent_id: childId } }) }] },
+  });
+  harness.emit({
+    type: "entry_appended",
+    entry: {
+      type: "custom", customType: "wj-pi-subagents-activity",
+      id: "activity-1", parentId: null, timestamp: "2026-09-24T00:00:00Z",
+      data: {
+        schema: "wj-pi-subagents.activity/1", version: 1, kind: "activity",
+        agent_id: childId, revision: 1, olderActivityOmitted: false,
+        entry: { entry_id: "entry-1", body: { type: "message", content: [{ type: "text", text: "Hello" }] } },
+      },
+    },
+  });
+  expect(events).toContainEqual(expect.objectContaining({
+    type: "session.opened", sessionId: `wj:${childId}`,
+    parentSessionId: "paseo-session", toolCallId: "spawn-1",
+  }));
+  expect(events).toContainEqual(expect.objectContaining({
+    type: "timeline.item", sessionId: `wj:${childId}`,
+    item: expect.objectContaining({ type: "assistant_message", text: "Hello" }),
+  }));
+  await session.close();
+});
+
+test("does not project subagents when the wj extension was not probed", async () => {
+  const harness = createRuntime();
+  const events: ProviderEvent[] = [];
+  const session = createSession(harness.runtime, events);
+  await session.initialize();
+  harness.emit({
+    type: "tool_execution_start", toolCallId: "spawn-1",
+    toolName: "spawn_agent", args: { name: "Research", template_id: "explore" },
+  });
+  expect(events.some((event) => event.type === "session.opened")).toBe(false);
+  await session.close();
+});
+
+test("restores saved wj activity from custom entries, not context messages", async () => {
+  const childId = "3d1f726e-df7d-49f8-b2d5-792af4edc58c";
+  const harness = createRuntime({
+    commands: [{ name: "agents", source: "extension" }],
+    prompt(message, emit) {
+      if (message.startsWith("/paseo_capture_entries ")) throw new Error("Capture unavailable");
+      if (message.startsWith("/paseo_wj_probe ")) emit({
+        type: "extension_ui_request", id: "probe", method: "notify",
+        message: `PASEO_COMMAND_RESULT ${JSON.stringify({
+          requestId: message.slice("/paseo_wj_probe ".length), ok: true,
+          result: WJ_TOOLS,
+        })}`,
+      });
+    },
+  });
+  harness.runtime.getMessages = async () => [
+    {
+      role: "assistant", content: [{
+        type: "toolCall", id: "spawn-1", name: "spawn_agent",
+        arguments: { name: "Research", template_id: "explore" },
+      }],
+    },
+    {
+      role: "toolResult", toolCallId: "spawn-1", toolName: "spawn_agent",
+      content: [{ type: "text", text: JSON.stringify({ ok: true, data: { agent_id: childId } }) }],
+    },
+  ];
+  harness.runtime.getEntries = async () => ({
+    leafId: "activity-1",
+    entries: [
+      {
+        type: "custom", customType: "wj-pi-subagents-activity", id: "abandoned",
+        parentId: null, timestamp: "2026-09-23T00:00:00Z",
+        data: {
+          schema: "wj-pi-subagents.activity/1", version: 1, kind: "activity",
+          agent_id: "aa9e3a02-5712-4703-a19c-45342e73c67d", revision: 1, olderActivityOmitted: false,
+          entry: { entry_id: "old-message", body: { type: "message", content: [{ type: "text", text: "Abandoned" }] } },
+        },
+      },
+      {
+        type: "custom", customType: "wj-pi-subagents-activity", id: "activity-1",
+        parentId: null, timestamp: "2026-09-24T00:00:00Z",
+        data: {
+          schema: "wj-pi-subagents.activity/1", version: 1, kind: "activity",
+          agent_id: childId, revision: 1, olderActivityOmitted: false,
+          entry: { entry_id: "child-message", body: { type: "message", content: [{ type: "text", text: "Recovered" }] } },
+        },
+      },
+    ],
+  });
+  const events: ProviderEvent[] = [];
+  const session = createSession(harness.runtime, events);
+  await session.initialize();
+  await session.replayHistory();
+  expect(events).toContainEqual(expect.objectContaining({
+    type: "session.opened", sessionId: `wj:${childId}`, parentSessionId: "paseo-session",
+    toolCallId: "spawn-1",
+  }));
+  expect(events.filter((event) => event.type === "timeline.item" && event.sessionId === "paseo-session")).toHaveLength(2);
+  expect(events).toContainEqual(expect.objectContaining({
+    type: "timeline.item", sessionId: `wj:${childId}`,
+    item: expect.objectContaining({ text: "Recovered" }),
+  }));
+  expect(events.some((event) => event.type === "timeline.item" && event.sessionId === "wj:aa9e3a02-5712-4703-a19c-45342e73c67d")).toBe(false);
   await session.close();
 });

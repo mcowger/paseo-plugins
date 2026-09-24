@@ -1,5 +1,5 @@
 import { JSONL_RPC_NO_TIMEOUT, JsonlRpcProcess } from "./jsonl-rpc-process.js";
-import type { PiAgentMessage, PiImageContent, PiModel, PiPromptAck, PiRpcSlashCommand, PiRuntimeEvent, PiSessionState, PiSessionStats } from "./rpc-types.js";
+import type { PiAgentMessage, PiImageContent, PiModel, PiPromptAck, PiRpcSlashCommand, PiRuntimeEvent, PiSessionEntry, PiSessionState, PiSessionStats } from "./rpc-types.js";
 
 export interface PiRuntimeSession {
   onEvent(callback: (event: PiRuntimeEvent) => void): () => void;
@@ -12,6 +12,7 @@ export interface PiRuntimeSession {
   abort(): Promise<void>;
   getState(): Promise<PiSessionState>;
   getMessages(): Promise<PiAgentMessage[]>;
+  getEntries(since?: string): Promise<{ entries: PiSessionEntry[]; leafId: string | null }>;
   getAvailableModels(): Promise<PiModel[]>;
   setModel(provider: string, modelId: string): Promise<PiModel>;
   setThinkingLevel(level: string): Promise<void>;
@@ -80,6 +81,13 @@ class RpcSession implements PiRuntimeSession {
   async abort(): Promise<void> { await this.process.request({ type: "abort" }); }
   async getState(): Promise<PiSessionState> { return await this.process.request({ type: "get_state" }) as PiSessionState; }
   async getMessages(): Promise<PiAgentMessage[]> { return ((await this.process.request({ type: "get_messages" })) as { messages?: PiAgentMessage[] }).messages ?? []; }
+  async getEntries(since?: string): Promise<{ entries: PiSessionEntry[]; leafId: string | null }> {
+    const data = await this.process.request({ type: "get_entries", ...(since ? { since } : {}) }) as { entries?: PiSessionEntry[]; leafId?: string | null };
+    return {
+      entries: Array.isArray(data.entries) ? data.entries : [],
+      leafId: typeof data.leafId === "string" ? data.leafId : null,
+    };
+  }
   async getAvailableModels(): Promise<PiModel[]> { return ((await this.process.request({ type: "get_available_models" })) as { models?: PiModel[] }).models ?? []; }
   async setModel(provider: string, modelId: string): Promise<PiModel> { return await this.process.request({ type: "set_model", provider, modelId }) as PiModel; }
   async setThinkingLevel(level: string): Promise<void> { await this.process.request({ type: "set_thinking_level", level }); }

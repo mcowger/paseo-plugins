@@ -5,9 +5,10 @@ export interface PiPromptAck { requestId?: string; agentInvoked?: boolean; }
 export interface PiTextContent { type: "text"; text: string; }
 export interface PiThinkingContent { type: "thinking"; thinking: string; }
 export interface PiToolCallContent { type: "toolCall"; id: string; name: string; arguments: unknown; }
+export interface PiSessionEntry { type: string; id: string; parentId: string | null; timestamp: string; customType?: string; data?: unknown; }
 export type PiAgentMessage =
   | { role: "user"; content: string | Array<PiTextContent | PiImageContent> }
-  | { role: "custom"; content: string | Array<PiTextContent | PiImageContent> }
+  | { role: "custom"; customType?: string; content: string | Array<PiTextContent | PiImageContent> }
   | { role: "assistant"; content: Array<PiTextContent | PiThinkingContent | PiToolCallContent>; provider?: string; model?: string; responseId?: string; errorMessage?: string | null; stopReason?: string }
   | { role: "toolResult"; toolCallId: string; toolName: string; content: unknown; isError?: boolean; details?: unknown }
   | { role: "bashExecution"; command: string; output?: string; exitCode?: number | null; cancelled?: boolean; timestamp: number };
@@ -17,6 +18,7 @@ export interface PiSessionStats { tokens?: { input?: number; output?: number; ca
 export interface PiRpcSlashCommand { name: string; description?: string; source: "extension" | "prompt" | "skill"; sourceInfo?: Record<string, unknown>; }
 export type PiAgentSessionEvent =
   | { type: "agent_start" | "turn_start" }
+  | { type: "entry_appended"; entry: PiSessionEntry }
   | { type: "message_start"; message: PiAgentMessage }
   | { type: "message_end"; message: PiAgentMessage }
   | { type: "message_update"; message?: PiAgentMessage; assistantMessageEvent: { type: "text_delta" | "thinking_delta" | string; delta?: string } }

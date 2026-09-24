@@ -48,7 +48,7 @@ export interface PiCapturedUserMessageEntry {
 }
 
 export interface PiHistoryMapperHooks {
-  mapCustomMessage?: (text: string) => ProviderTimelineItem | null;
+  mapCustomMessage?: (text: string, customType?: string) => ProviderTimelineItem | null | false;
   resolveToolCallId?: (toolCallId: string, toolCall: PiTrackedToolCall) => string;
   mapToolDetail?: (
     toolCall: PiTrackedToolCall,
@@ -177,7 +177,12 @@ export class PiHistoryMapper {
     message: Extract<PiAgentMessage, { role: "custom" }>,
   ): ProviderTimelineItem[] {
     const text = getUserMessageText(message.content);
-    const mappedItem = text ? this.hooks.mapCustomMessage?.(text) : null;
+    const mappedItem = text ? this.hooks.mapCustomMessage?.(text, message.customType) : null;
+    if (mappedItem === false) {
+      this.addBytes(utf8Bytes(text));
+      this.addNodes(2);
+      return [];
+    }
     if (mappedItem) {
       // Hook-mapped content still counts toward the replay budgets.
       this.addBytes(utf8Bytes(text));
