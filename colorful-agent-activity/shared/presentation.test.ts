@@ -19,8 +19,12 @@ import {
   parseSubagentSupervisorInput,
   bgWaitLabel,
   bgWaitSummary,
+  ompWaitLabel,
+  ompWaitSummary,
+  parseOmpWaitOutput,
   extractPiToolText,
   formatWaitTimeout,
+  isOmpWaitTool,
   isBgWaitTool,
   isSubagentSupervisorTool,
   shortRunId,
@@ -728,6 +732,101 @@ describe("pi-subagents tool presentation", () => {
     expect(timedOut?.waitReason).toBe("window_elapsed");
     expect(timedOut?.activeRunIds).toEqual(["run-1"]);
     expect(bgWaitSummary({ timeoutMs: 300000 }, { content: [{ type: "text", text: "Waiting." }], details: { wait: { reason: "window_elapsed", timedOut: true, activeRunIds: [], activeProviderItems: [] } } })).toContain("timed out");
+  });
+});
+describe("omp wait tool presentation", () => {
+  const ompWaitOutput = {
+    content: [{ type: "text", text: "" }],
+    details: {
+      op: "wait",
+      jobs: [
+        {
+          id: "OAuthCoreReview",
+          type: "task",
+          status: "running",
+          label: "OAuthCoreReview",
+          durationMs: 76963,
+          resolvedModel: "meta/muse-spark-1.3:high",
+          resolvedModelIdentity: "meta/muse-spark-1.3",
+          resolvedThinkingLevel: "high",
+          agentUrlId: "OAuthCoreReview",
+        },
+        {
+          id: "PersistenceReview",
+          type: "task",
+          status: "running",
+          label: "PersistenceReview",
+          durationMs: 76962,
+          resolvedModel: "meta/muse-spark-1.3:high",
+          resolvedModelIdentity: "meta/muse-spark-1.3",
+          resolvedThinkingLevel: "high",
+          agentUrlId: "PersistenceReview",
+        },
+      ],
+    },
+  };
+
+  it("recognizes the omp wait tool without colliding with other wait tools", () => {
+    expect(isOmpWaitTool("wait")).toBe(true);
+    expect(isOmpWaitTool("Wait")).toBe(true);
+    expect(isOmpWaitTool("mcp__plugin__wait")).toBe(true);
+    expect(isOmpWaitTool("bg_wait")).toBe(false);
+    expect(isOmpWaitTool("browser_wait")).toBe(false);
+    expect(isOmpWaitTool("task")).toBe(false);
+  });
+
+  it("parses omp wait jobs with durations and models", () => {
+    const parsed = parseOmpWaitOutput(ompWaitOutput);
+    expect(parsed?.op).toBe("wait");
+    expect(parsed?.jobs).toHaveLength(2);
+    expect(parsed?.jobs[0]).toMatchObject({
+      id: "OAuthCoreReview",
+      status: "running",
+      label: "OAuthCoreReview",
+      durationMs: 76963,
+      model: "meta/muse-spark-1.3:high",
+    });
+    expect(ompWaitLabel(ompWaitOutput)).toBe("Wait for 2 Agents");
+    expect(ompWaitSummary({}, ompWaitOutput)).toBe("2 running · 1m 17s · OAuthCoreReview, PersistenceReview");
+  });
+
+  it("labels a single waited agent and falls back without job output", () => {
+    const single = {
+      content: [{ type: "text", text: "" }],
+      details: { op: "wait", jobs: [{ id: "solo", status: "running" }] },
+    };
+    expect(ompWaitLabel(single)).toBe("Wait for Agent");
+    expect(ompWaitSummary({}, single)).toBe("1 running · solo");
+    expect(ompWaitLabel(null)).toBe("Wait");
+    expect(ompWaitSummary({}, null)).toBeUndefined();
+  });
+
+  it("rejects non-wait envelopes", () => {
+    expect(
+      parseOmpWaitOutput({ content: [{ type: "text", text: "hi" }], details: { op: "read" } }),
+    ).toBeUndefined();
+    expect(parseOmpWaitOutput(null)).toBeUndefined();
+  });
+
+  it("maps omp wait to agent presentation", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "wait",
+        detail: { type: "unknown", input: {}, output: ompWaitOutput },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Hourglass",
+      label: "Wait for 2 Agents",
+      summary: "2 running · 1m 17s · OAuthCoreReview, PersistenceReview",
+    });
+  });
+
+  it("labels wait rows in sub-agent progress", () => {
+    expect(resolveSubAgentActionPresentation("wait", undefined)).toEqual({
+      icon: "Hourglass",
+      label: "Wait",
+    });
   });
 });
 
