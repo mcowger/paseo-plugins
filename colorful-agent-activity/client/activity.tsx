@@ -34,6 +34,7 @@ import {
 import { GithubToolDetail } from "./github";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
 import { BgWaitToolDetail, SupervisorToolDetail } from "./pi-subagents";
+import { OmpWaitToolDetail } from "./omp-wait";
 import {
   compactText,
   diffLinesForDetail,
@@ -44,6 +45,7 @@ import {
   formatUnknownValue,
   expansionTargetForToolCall,
   isBgWaitTool,
+  isOmpWaitTool,
   isSubagentSupervisorTool,
   paseoToolLeafName,
   parsePiLsOutput,
@@ -1285,6 +1287,18 @@ function DetailBody({
       if (isBgWaitTool(data.name)) {
         return (
           <BgWaitToolDetail
+            toolName={data.name}
+            input={detail.input}
+            output={detail.output}
+            theme={theme}
+            palette={palette}
+            styles={styles}
+          />
+        );
+      }
+      if (isOmpWaitTool(data.name)) {
+        return (
+          <OmpWaitToolDetail
             toolName={data.name}
             input={detail.input}
             output={detail.output}

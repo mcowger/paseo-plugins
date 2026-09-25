@@ -523,6 +523,9 @@ export function isSubagentSupervisorTool(toolName: string): boolean {
 export function isBgWaitTool(toolName: string): boolean {
   return normalizePiToolName(toolName) === "bg_wait";
 }
+export function isOmpWaitTool(toolName: string): boolean {
+  return normalizePiToolName(toolName) === "wait";
+}
 
 export type SubagentSupervisorAction = "reply" | "pending" | "list" | "status" | string;
 
@@ -730,6 +733,84 @@ export function bgWaitSummary(input: unknown, output: unknown): string | undefin
     if (waiting) return `waited ${waiting}`;
   }
   return header || undefined;
+}
+export interface OmpWaitJob {
+  id: string;
+  status?: string;
+  label?: string;
+  durationMs?: number;
+  model?: string;
+}
+
+export interface OmpWaitOutputSummary {
+  text: string;
+  op: string;
+  jobs: OmpWaitJob[];
+}
+
+/** Parse the OMP `wait` tool result envelope (`details: { op: "wait", jobs: [...] }`). */
+export function parseOmpWaitOutput(output: unknown): OmpWaitOutputSummary | undefined {
+  const envelope = extractPiToolText(output);
+  if (!envelope || !envelope.details) return undefined;
+  const details = envelope.details;
+  if (details.op !== "wait") return undefined;
+  const rawJobs = Array.isArray(details.jobs) ? details.jobs : [];
+  const jobs: OmpWaitJob[] = rawJobs.flatMap((job) => {
+    if (!isRecord(job) || typeof job.id !== "string" || job.id.trim().length === 0) return [];
+    const label = typeof job.label === "string" && job.label.trim() ? job.label.trim() : undefined;
+    const status =
+      typeof job.status === "string" && job.status.trim() ? job.status.trim().toLowerCase() : undefined;
+    const durationMs =
+      typeof job.durationMs === "number" && Number.isFinite(job.durationMs) && job.durationMs >= 0
+        ? job.durationMs
+        : undefined;
+    const model =
+      typeof job.resolvedModel === "string" && job.resolvedModel.trim()
+        ? job.resolvedModel.trim()
+        : typeof job.resolvedModelIdentity === "string" && job.resolvedModelIdentity.trim()
+          ? job.resolvedModelIdentity.trim()
+          : undefined;
+    return [
+      {
+        id: job.id,
+        ...(status ? { status } : {}),
+        ...(label ? { label } : {}),
+        ...(durationMs !== undefined ? { durationMs } : {}),
+        ...(model ? { model } : {}),
+      },
+    ];
+  });
+  return { text: envelope.text, op: "wait", jobs };
+}
+
+export function ompWaitLabel(output: unknown): string {
+  const summary = parseOmpWaitOutput(output);
+  if (summary && summary.jobs.length === 1) return "Wait for Agent";
+  if (summary && summary.jobs.length > 1) return `Wait for ${summary.jobs.length} Agents`;
+  return "Wait";
+}
+
+export function ompWaitSummary(input: unknown, output: unknown): string | undefined {
+  const summary = parseOmpWaitOutput(output);
+  if (!summary || summary.jobs.length === 0) {
+    const envelope = extractPiToolText(output);
+    return envelope?.text ? compactText(envelope.text, 120) : undefined;
+  }
+  const running = summary.jobs.filter((job) => job.status === "running").length;
+  const done = summary.jobs.filter((job) => job.status === "completed" || job.status === "done").length;
+  const failed = summary.jobs.filter((job) => job.status === "failed" || job.status === "error").length;
+  const state = [
+    running > 0 ? `${running} running` : undefined,
+    done > 0 ? `${done} done` : undefined,
+    failed > 0 ? `${failed} failed` : undefined,
+  ].filter(Boolean);
+  // Pending/unknown statuses fall back to a plain count so the header never goes blank.
+  if (state.length === 0) state.push(`${summary.jobs.length} waiting`);
+  const durations = summary.jobs.flatMap((job) => (job.durationMs !== undefined ? [job.durationMs] : []));
+  if (durations.length > 0) state.push(formatWaitTimeout(Math.max(...durations)) ?? "");
+  const names = summary.jobs.map((job) => job.label ?? job.id);
+  const shown = names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3} more` : "");
+  return [...state, shown].filter(Boolean).join(" · ");
 }
 
 function parseEmbeddedJson(value: string): unknown {
@@ -1428,6 +1509,14 @@ export function resolveToolCallPresentation(
           summary: bgWaitSummary(detail.input, detail.output),
         };
       }
+      if (isOmpWaitTool(item.name)) {
+        return {
+          category: "agent",
+          icon: "Hourglass",
+          label: ompWaitLabel(detail.output),
+          summary: ompWaitSummary(detail.input, detail.output),
+        };
+      }
       const githubKind = githubToolKind(item.name);
       if (githubKind) {
         return {
@@ -1509,6 +1598,9 @@ export function resolveSubAgentActionPresentation(
   }
   if (normalized === "bg_wait" || normalized.includes("bg_wait")) {
     return { icon: "Hourglass", label: "Wait for Background Work" };
+  }
+  if (normalized === "wait") {
+    return { icon: "Hourglass", label: "Wait" };
   }
   return { icon: "Wrench", label: toolName.trim() || "Tool" };
 }
