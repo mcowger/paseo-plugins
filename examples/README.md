@@ -106,7 +106,6 @@ or adapting external agents via `runAcpProvider()`.
 
 | Plugin & links | Study for | Useful locations / implementation | Caveats & platforms |
 | --- | --- | --- | --- |
-| [pi-plugin-mcowger](https://github.com/mcowger/paseo-plugins/tree/main/pi-plugin-mcowger) &bull; [cafe](https://paseo.cafe/plugins/pi-plugin-mcowger) | Direct in-process provider embedding `@earendil-works/pi-coding-agent`, session lifecycle, tool policy, vendor SDK bundling. | `server/provider.ts`, `server/session.ts`, `docs/packaging.md` | In-process daemon embedding; CJS eval bundling. |
 | [commandcode-provider](https://github.com/alhassanaraouf/paseo-commandcode-provider) &bull; [cafe](https://paseo.cafe/plugins/commandcode-provider) | Stdio CLI wrapper provider for Command Code, streaming output mapping, effort level negotiation. | `server/provider.ts`, `server/session.ts` | Requires `commandcode` CLI on daemon PATH. |
 | [agy-provider](https://github.com/3ae3ae/paseo-plugin-agy-provider) &bull; [cafe](https://paseo.cafe/plugins/agy-provider) | Provider adapter for Google Antigravity ACP server, Command Center login flow, capability negotiation. | `server/` | macOS ARM64 verified; Node 22.18+ on daemon. |
 | [deepseek-harness](https://github.com/geoqiao/paseo-stuff/tree/main/plugins/deepseek-harness) &bull; [cafe](https://paseo.cafe/plugins/deepseek-harness) | ACP profile adapter for DeepSeek Harness, native context resumption without transcript replay. | `plugins/deepseek-harness/server/` | Requires DSH 0.1.5-rc.1/2 and credentials. |
@@ -178,7 +177,5 @@ Official example plugins from the [getpaseo/paseo v0.8.0 repository](https://git
 
 Reference implementations maintained within this repository:
 
-- [pi-plugin-mcowger](../pi-plugin-mcowger/README.md): Embedded coding agent provider for pi via `@earendil-works/pi-coding-agent`. See [Packaging Guide](../pi-plugin-mcowger/docs/packaging.md) for bundling large SDKs under Paseo's daemon boundary checker.
 - [colorful-agent-activity](../colorful-agent-activity/README.md): Timeline transformer replacing reasoning and tool-call rows with dense IDE cards, Prism syntax highlighting, and automated Hermes mobile bundle tests.
 - [subagent-activity](../subagent-activity/README.md): Hierarchical subagent activity pane tracking managed descendants and provider-native child agents.
-- [scratch-chat](../scratch-chat/README.md): Disposable temporary chat surface with composer pill integration.

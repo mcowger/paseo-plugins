@@ -20,8 +20,7 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
 - [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.9.0/plugin-examples):
   working examples for panels and commands (`local-plugin`), RPC, attachment sources (`linear`),
   themes (`catppuccin`), and timeline items (`timeline-items`, `inline-thinking`).
-  Provider examples (`provider-direct`, `provider-acp-transformer`) are covered in
-  `pi-plugin-mcowger/AGENTS.md`.
+  Provider examples (`provider-direct`, `provider-acp-transformer`) are included as well.
 - [Community plugin registry (paseo.cafe)](https://paseo.cafe/): community-run directory indexing
   Paseo plugins from GitHub. Machine-readable endpoints:
   - Catalog JSON: [`https://paseo.cafe/api/plugins`](https://paseo.cafe/api/plugins)
@@ -33,7 +32,6 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
 - [Community reference index](examples/README.md): reviewed public plugins from the paseo.cafe registry
   grouped by the techniques they demonstrate (surfaces, panels, timeline transformers, pills,
   lifecycle hooks, telemetry) with direct GitHub and paseo.cafe links.
-  Provider and ACP adapter entries are covered in `pi-plugin-mcowger/AGENTS.md`.
 
 ## Development reminders
 
@@ -62,7 +60,7 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
   - `@getpaseo/plugin/client/react-native`: Paseo React Native UI components (`Icon`, `Modal`, `useToast`, `useRevealedText`).
   - `@getpaseo/plugin/server`: server contexts and handler-only types such as `PluginHandlerContext`.
   - Provider-only imports (`@getpaseo/plugin/server/provider`, `@getpaseo/plugin/server/acp`)
-    are covered in `pi-plugin-mcowger/AGENTS.md`.
+    are documented in the local Paseo checkout at `~/workspace/paseo/packages/plugin`.
 - Cross-platform and mobile guardrails:
   - Omit `"DOM"` from `tsconfig.json` `lib` and never add `/// <reference lib="dom" />`. Browser globals
     (`window`, `document`, `localStorage`) are type errors by default.
@@ -92,7 +90,7 @@ Patterns observed across Paseo plugins:
   - Custom themes (`client.addTheme`) with semantic palette tokens.
   - Timeline transformers and renderers (`client.addTimelineTransformer`, `client.addTimelineRenderer`).
   - RPC handlers (`server.handle(contract, handler)`).
-  - Coding agent providers (`server.registerProvider(provider)`); see `pi-plugin-mcowger/AGENTS.md`.
+  - Coding agent providers (`server.registerProvider(provider)`).
 - Put `defineRpc` contracts, their Zod schemas, and serializable view models in `shared/`. Pass stable IDs
   through RPC, then re-resolve and authorize resources on the server rather than trusting client-provided paths.
 - Scope query keys to every relevant identity, such as host, workspace, agent, and resource ID.

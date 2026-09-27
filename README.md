@@ -9,11 +9,8 @@ when contributing changes.
 
 ## Plugins in this repository
 
-- [Scratch Chat](./scratch-chat/README.md)
-- [Pi provider (mcowger)](./pi-plugin-mcowger/README.md)
 - [Subagent activity](./subagent-activity/README.md)
 - [Colorful agent activity](./colorful-agent-activity/README.md)
-- [Theme Studio](./theme-studio/README.md)
 
 ## Reference index and community registry
 
