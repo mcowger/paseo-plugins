@@ -35,6 +35,7 @@ import { GithubToolDetail } from "./github";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
 import { BgWaitToolDetail, SupervisorToolDetail } from "./pi-subagents";
 import { OmpWaitToolDetail } from "./omp-wait";
+import { OmpFindToolDetail } from "./omp-find";
 import {
   compactText,
   diffLinesForDetail,
@@ -65,6 +66,7 @@ import {
   type ActivityThemeColors,
   type DiffLine,
 } from "../shared/presentation";
+import { isOmpFindTool } from "../shared/omp-find";
 import { parseInlineMarkdown, parseReasoningMarkdown, type ReasoningMarkdownBlock } from "../shared/markdown";
 import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
 import { exaToolKind } from "../shared/exa";
@@ -1304,6 +1306,15 @@ function DetailBody({
             output={detail.output}
             theme={theme}
             palette={palette}
+            styles={styles}
+          />
+        );
+      }
+      if (isOmpFindTool(data.name)) {
+        return (
+          <OmpFindToolDetail
+            input={detail.input}
+            output={detail.output}
             styles={styles}
           />
         );

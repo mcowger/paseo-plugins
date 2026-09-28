@@ -61,6 +61,7 @@ File edit with colored line diff:
 - Dedicated Exa views show search queries, result metadata, URLs, and highlights instead of the raw MCP envelope.
 - Dedicated GitHub views show repository and code search results, files, pull requests, Actions runs, and job logs instead of raw MCP payloads.
 - Dedicated OMP wait view lists waited agents with status, elapsed time, and model instead of the raw jobs envelope.
+- Dedicated OMP find view shows the query, searched scope, keywords, matched files, snippets, and search summary.
 
 ## Install
 
