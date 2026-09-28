@@ -36,6 +36,7 @@ import { ExaToolDetail, PaseoToolDetail } from "./paseo";
 import { BgWaitToolDetail, SupervisorToolDetail } from "./pi-subagents";
 import { OmpWaitToolDetail } from "./omp-wait";
 import { OmpFindToolDetail } from "./omp-find";
+import { TodoToolDetail } from "./todo";
 import {
   compactText,
   diffLinesForDetail,
@@ -48,6 +49,7 @@ import {
   isBgWaitTool,
   isOmpWaitTool,
   isSubagentSupervisorTool,
+  isTodoTool,
   paseoToolLeafName,
   parsePiLsOutput,
   parseSubAgentActionLog,
@@ -1315,6 +1317,18 @@ function DetailBody({
           <OmpFindToolDetail
             input={detail.input}
             output={detail.output}
+            styles={styles}
+          />
+        );
+      }
+      if (isTodoTool(data.name)) {
+        return (
+          <TodoToolDetail
+            toolName={data.name}
+            input={detail.input}
+            output={detail.output}
+            theme={theme}
+            palette={palette}
             styles={styles}
           />
         );

@@ -418,6 +418,7 @@ function stringField(value: unknown, key: string): string | undefined {
 export function expansionTargetForToolCall(toolName: string, detailType: string): ExpansionTarget {
   if (isAskTool(toolName)) return "ask";
   if (toolName.trim().toLowerCase() === "speak") return "speak";
+  if (isTodoTool(toolName)) return "todo";
   switch (detailType) {
     case "read":
     case "edit":
@@ -525,6 +526,9 @@ export function isBgWaitTool(toolName: string): boolean {
 }
 export function isOmpWaitTool(toolName: string): boolean {
   return normalizePiToolName(toolName) === "wait";
+}
+export function isTodoTool(toolName: string): boolean {
+  return normalizePiToolName(toolName) === "todo";
 }
 
 export type SubagentSupervisorAction = "reply" | "pending" | "list" | "status" | string;
@@ -811,6 +815,163 @@ export function ompWaitSummary(input: unknown, output: unknown): string | undefi
   const names = summary.jobs.map((job) => job.label ?? job.id);
   const shown = names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3} more` : "");
   return [...state, shown].filter(Boolean).join(" · ");
+}
+
+export type TodoToolStatus = "pending" | "in_progress" | "completed";
+
+export interface TodoToolInput {
+  action: string;
+  id?: number;
+  status?: TodoToolStatus;
+  subject?: string;
+  description?: string;
+  activeForm?: string;
+  blockedBy?: number[];
+  addBlockedBy?: number[];
+  removeBlockedBy?: number[];
+  owner?: string;
+}
+
+export interface TodoToolTask {
+  id: number;
+  subject: string;
+  status: TodoToolStatus;
+  description?: string;
+  activeForm?: string;
+  blockedBy: number[];
+}
+
+export interface TodoToolOutputSummary {
+  text: string;
+  action?: string;
+  tasks: TodoToolTask[];
+  task?: TodoToolTask;
+  params?: TodoToolInput;
+  nextId?: number;
+}
+
+function numberField(value: unknown, key: string): number | undefined {
+  if (!isRecord(value)) return undefined;
+  const field = value[key];
+  return typeof field === "number" && Number.isFinite(field) ? field : undefined;
+}
+
+function numberListField(value: unknown, key: string): number[] | undefined {
+  if (!isRecord(value)) return undefined;
+  const field = value[key];
+  if (!Array.isArray(field)) return undefined;
+  const numbers = field.filter((entry): entry is number => typeof entry === "number" && Number.isFinite(entry));
+  return numbers.length > 0 ? numbers : undefined;
+}
+
+function todoStatus(value: unknown): TodoToolStatus | undefined {
+  return value === "pending" || value === "in_progress" || value === "completed" ? value : undefined;
+}
+
+/** Parse the arguments of the pi task-list tool (`action`/`id`/`status`/`activeForm`). */
+export function parseTodoToolInput(input: unknown): TodoToolInput {
+  const record = decodeToolInput(input) ?? {};
+  const action = stringField(record, "action")?.trim().toLowerCase() ?? "";
+  const id = numberField(record, "id");
+  const status = todoStatus(record.status);
+  const subject = stringField(record, "subject");
+  const description = stringField(record, "description");
+  const activeForm = stringField(record, "activeForm");
+  const blockedBy = numberListField(record, "blockedBy");
+  const addBlockedBy = numberListField(record, "addBlockedBy");
+  const removeBlockedBy = numberListField(record, "removeBlockedBy");
+  const owner = stringField(record, "owner");
+  return {
+    action,
+    ...(id !== undefined ? { id } : {}),
+    ...(status ? { status } : {}),
+    ...(subject ? { subject } : {}),
+    ...(description ? { description } : {}),
+    ...(activeForm ? { activeForm } : {}),
+    ...(blockedBy ? { blockedBy } : {}),
+    ...(addBlockedBy ? { addBlockedBy } : {}),
+    ...(removeBlockedBy ? { removeBlockedBy } : {}),
+    ...(owner ? { owner } : {}),
+  };
+}
+
+function parseTodoToolTask(value: unknown): TodoToolTask | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = numberField(value, "id");
+  if (id === undefined) return undefined;
+  const subject = stringField(value, "subject") ?? stringField(value, "text") ?? stringField(value, "title");
+  if (!subject) return undefined;
+  const description = stringField(value, "description");
+  const activeForm = stringField(value, "activeForm");
+  return {
+    id,
+    subject,
+    status: todoStatus(value.status) ?? "pending",
+    ...(description ? { description } : {}),
+    ...(activeForm ? { activeForm } : {}),
+    blockedBy: numberListField(value, "blockedBy") ?? [],
+  };
+}
+
+/**
+ * Parse the pi task-list tool result envelope. Mutations carry the full task
+ * list under `details.tasks`; single-task actions may also expose `details.task`.
+ */
+export function parseTodoToolOutput(output: unknown): TodoToolOutputSummary | undefined {
+  const envelope = extractPiToolText(output);
+  if (!envelope || !envelope.details) return undefined;
+  const details = envelope.details;
+  const tasks = Array.isArray(details.tasks)
+    ? details.tasks.flatMap((entry) => {
+        const task = parseTodoToolTask(entry);
+        return task ? [task] : [];
+      })
+    : [];
+  const task = parseTodoToolTask(details.task);
+  if (tasks.length === 0 && !task && !envelope.text) return undefined;
+  const action = stringField(details, "action");
+  const paramsRecord = isRecord(details.params) ? details.params : undefined;
+  const nextId = numberField(details, "nextId");
+  return {
+    text: envelope.text,
+    ...(action ? { action } : {}),
+    tasks,
+    ...(task ? { task } : {}),
+    ...(paramsRecord ? { params: parseTodoToolInput(paramsRecord) } : {}),
+    ...(nextId !== undefined ? { nextId } : {}),
+  };
+}
+
+/** A single-line header summary: the tool's own text when short, else done counts. */
+export function todoToolSummary(output: unknown): string | undefined {
+  const summary = parseTodoToolOutput(output);
+  if (!summary) return undefined;
+  const firstLine = summary.text.split("\n").find((line) => line.trim())?.trim();
+  const headline = summary.text.includes("\n") ? undefined : compactText(firstLine ?? "", 90);
+  if (headline) return headline;
+  if (summary.tasks.length === 0) return undefined;
+  const done = summary.tasks.filter((entry) => entry.status === "completed").length;
+  return `${done}/${summary.tasks.length} done`;
+}
+
+/** Title for the task-list card body, keyed off the action being performed. */
+export function todoToolActionLabel(action: string | undefined): string {
+  switch (action?.trim().toLowerCase()) {
+    case "create":
+      return "Create Task";
+    case "update":
+      return "Update Task";
+    case "list":
+      return "List Tasks";
+    case "get":
+      return "Task Detail";
+    case "delete":
+      return "Delete Task";
+    case "clear":
+      return "Clear Tasks";
+    default:
+      return "Tasks";
+  }
 }
 
 function parseEmbeddedJson(value: string): unknown {
@@ -1517,6 +1678,14 @@ export function resolveToolCallPresentation(
           summary: ompWaitSummary(detail.input, detail.output),
         };
       }
+      if (isTodoTool(item.name)) {
+        return {
+          category: "plan",
+          icon: "ListChecks",
+          label: "Tasks",
+          summary: todoToolSummary(detail.output),
+        };
+      }
       const githubKind = githubToolKind(item.name);
       if (githubKind) {
         return {
@@ -1601,6 +1770,9 @@ export function resolveSubAgentActionPresentation(
   }
   if (normalized === "wait") {
     return { icon: "Hourglass", label: "Wait" };
+  }
+  if (normalized === "todo") {
+    return { icon: "ListChecks", label: "Tasks" };
   }
   return { icon: "Wrench", label: toolName.trim() || "Tool" };
 }

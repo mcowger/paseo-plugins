@@ -25,6 +25,11 @@ import {
   extractPiToolText,
   formatWaitTimeout,
   isOmpWaitTool,
+  isTodoTool,
+  parseTodoToolInput,
+  parseTodoToolOutput,
+  todoToolActionLabel,
+  todoToolSummary,
   isBgWaitTool,
   isSubagentSupervisorTool,
   shortRunId,
@@ -614,6 +619,7 @@ describe("reasoning steps and header metadata", () => {
     expect(expansionTargetForToolCall("ask", "unknown")).toBe("ask");
     expect(expansionTargetForToolCall("functions.ask", "unknown")).toBe("ask");
     expect(expansionTargetForToolCall("speak", "unknown")).toBe("speak");
+    expect(expansionTargetForToolCall("todo", "unknown")).toBe("todo");
     expect(expansionTargetForToolCall("some-future-tool", "unknown")).toBe("unknown");
     expect(expansionTargetForToolCall("read", "bogus")).toBe("unknown");
   });
@@ -830,3 +836,111 @@ describe("omp wait tool presentation", () => {
   });
 });
 
+describe("pi todo tool presentation", () => {
+  const tasks = [
+    {
+      id: 1,
+      subject: "Tail reader + follower modules",
+      status: "completed",
+      activeForm: "writing tail reader and follower",
+    },
+    {
+      id: 8,
+      subject: "Inspect branch and PR state",
+      status: "in_progress",
+      description: "Check worktree changes, tracking branch, upstream/main, and PR ownership.",
+      activeForm: "inspecting branch and PR state",
+    },
+    { id: 9, subject: "Rebase branch onto upstream main", status: "pending", blockedBy: [8] },
+  ];
+  const todoOutput = {
+    content: [{ type: "text", text: "Updated #8 (pending → in_progress)" }],
+    details: {
+      action: "update",
+      params: {
+        action: "update",
+        id: 8,
+        status: "in_progress",
+        activeForm: "inspecting branch and PR state",
+      },
+      tasks,
+      nextId: 11,
+    },
+  };
+
+  it("recognizes the todo tool exactly", () => {
+    expect(isTodoTool("todo")).toBe(true);
+    expect(isTodoTool("Todo")).toBe(true);
+    expect(isTodoTool("functions.todo")).toBe(true);
+    expect(isTodoTool("todowrite")).toBe(false);
+    expect(isTodoTool("task")).toBe(false);
+  });
+
+  it("parses tasks, params, and next id from the result envelope", () => {
+    const parsed = parseTodoToolOutput(todoOutput);
+    expect(parsed?.action).toBe("update");
+    expect(parsed?.nextId).toBe(11);
+    expect(parsed?.text).toBe("Updated #8 (pending → in_progress)");
+    expect(parsed?.params).toMatchObject({
+      action: "update",
+      id: 8,
+      status: "in_progress",
+      activeForm: "inspecting branch and PR state",
+    });
+    expect(parsed?.tasks).toHaveLength(3);
+    expect(parsed?.tasks[1]).toMatchObject({
+      id: 8,
+      subject: "Inspect branch and PR state",
+      status: "in_progress",
+      activeForm: "inspecting branch and PR state",
+    });
+    expect(parsed?.tasks[2]?.blockedBy).toEqual([8]);
+    expect(parseTodoToolOutput(null)).toBeUndefined();
+  });
+
+  it("parses update arguments including dependency edits", () => {
+    expect(parseTodoToolInput({ action: "update", id: 9, addBlockedBy: [8], removeBlockedBy: [3] })).toEqual({
+      action: "update",
+      id: 9,
+      addBlockedBy: [8],
+      removeBlockedBy: [3],
+    });
+  });
+
+  it("summarizes with the tool's text and falls back to done counts", () => {
+    expect(todoToolSummary(todoOutput)).toBe("Updated #8 (pending → in_progress)");
+    const listOutput = {
+      content: [{ type: "text", text: "Tasks:\n#1 pending foo" }],
+      details: { action: "list", tasks, nextId: 11 },
+    };
+    expect(todoToolSummary(listOutput)).toBe("1/3 done");
+    expect(todoToolSummary(null)).toBeUndefined();
+  });
+
+  it("labels task actions", () => {
+    expect(todoToolActionLabel("create")).toBe("Create Task");
+    expect(todoToolActionLabel("update")).toBe("Update Task");
+    expect(todoToolActionLabel(undefined)).toBe("Tasks");
+  });
+
+  it("maps the todo tool to a plan presentation", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "todo",
+        detail: { type: "unknown", input: todoOutput.details.params, output: todoOutput },
+      }),
+    ).toMatchObject({
+      category: "plan",
+      icon: "ListChecks",
+      label: "Tasks",
+      summary: "Updated #8 (pending → in_progress)",
+    });
+  });
+
+  it("labels todo rows in sub-agent progress", () => {
+    expect(resolveSubAgentActionPresentation("todo", undefined)).toEqual({
+      icon: "ListChecks",
+      label: "Tasks",
+    });
+  });
+});
