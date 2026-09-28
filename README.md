@@ -9,7 +9,6 @@ when contributing changes.
 
 ## Plugins in this repository
 
-- [Subagent activity](./subagent-activity/README.md)
 - [Colorful agent activity](./colorful-agent-activity/README.md)
 
 ## Reference index and community registry

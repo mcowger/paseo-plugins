@@ -2,7 +2,7 @@
   "worktree": {
     "setup": [
       "npm ci",
-      "for plugin in colorful-agent-activity subagent-activity; do (cd \"$plugin\" && npm ci) || exit 1; done",
+      "for plugin in colorful-agent-activity; do (cd \"$plugin\" && npm ci) || exit 1; done",
       "npm run sdk:install"
     ]
   }

@@ -1,4 +1,0 @@
-{
-  "id": "subagent-activity",
-  "requirements": { "paseo": ">=0.9.0" }
-}

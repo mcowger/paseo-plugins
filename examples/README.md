@@ -55,7 +55,6 @@ Plugins contributing inspector and contextual tool panels (`client.addWorkspaceP
 
 | Plugin & links | Study for | Useful locations / implementation | Caveats & platforms |
 | --- | --- | --- | --- |
-| [subagent-activity](https://github.com/mcowger/paseo-plugins/tree/main/subagent-activity) &bull; [cafe](https://paseo.cafe/plugins/subagent-activity) | Agent-scoped activity pane tracking managed descendants and provider-native subagent tasks. | `client/subagent-activity.tsx`, `shared/subagent-activity.ts` | Best effort for provider-native subagents. |
 | [skills](https://github.com/gpambrozio/paseo-plugins/tree/main/skills) &bull; [cafe](https://paseo.cafe/plugins/skills) | Lists available agent skills, parses and renders `SKILL.md` documents, invokes skills into conversation. | `skills/panel.client.tsx`, `skills/skills.server.ts` | Reads skill locations on daemon host. |
 | [agent-crew](https://github.com/omercnet/paseo-plugins/tree/main/agent-crew) &bull; [cafe](https://paseo.cafe/plugins/agent-crew) | Explorer panel for visualizing and orchestrating multi-agent crews within a workspace. | `client/`, `server/` | Requires Paseo 0.8.x. |
 | [setup-monitor](https://github.com/stevecastaneda/paseo-plugins/tree/main/setup-monitor) &bull; [cafe](https://paseo.cafe/plugins/setup-monitor) | Live view of `worktree.setup` execution subscribing to `workspace_setup_status` stream during setup. | `client/`, `server/` | Tracks setup commands declared in `paseo.json`. |
@@ -178,4 +177,3 @@ Official example plugins from the [getpaseo/paseo v0.8.0 repository](https://git
 Reference implementations maintained within this repository:
 
 - [colorful-agent-activity](../colorful-agent-activity/README.md): Timeline transformer replacing reasoning and tool-call rows with dense IDE cards, Prism syntax highlighting, and automated Hermes mobile bundle tests.
-- [subagent-activity](../subagent-activity/README.md): Hierarchical subagent activity pane tracking managed descendants and provider-native child agents.
