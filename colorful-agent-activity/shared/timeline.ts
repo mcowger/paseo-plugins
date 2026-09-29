@@ -6,6 +6,7 @@ import {
   formatReasoningText,
   resolveToolCallPresentation,
   toJsonValue,
+  withMetadataEditDiff,
 } from "./presentation";
 
 export const REASONING_RENDERER_KIND = "colorful-reasoning";
@@ -94,8 +95,9 @@ export function createTodoData(
 }
 
 export function createToolCallData(
-  item: Extract<AgentTimelineItem, { type: "tool_call" }>,
+  source: Extract<AgentTimelineItem, { type: "tool_call" }>,
 ): ToolCallItemData {
+  const item = withMetadataEditDiff(source);
   const presentation = resolveToolCallPresentation(item);
   const errorText = formatError(item.error);
   return {

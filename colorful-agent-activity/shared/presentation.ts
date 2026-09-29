@@ -1538,21 +1538,64 @@ export function effectiveUnifiedDiff(detail: Extract<ToolCallDetail, { type: "ed
 }
 
 /**
- * Whether an edit detail carries any diff payload.
- *
- * Upstream context (Paseo v2 opencode path): opencode itself keeps the full
- * edit record — `state.input` holds `{filePath, oldString, newString}` and
- * `state.metadata` holds `{diff, filediff}` with the unified patch plus exact
- * addition/deletion counts (see `toolFromV2` input vs what survives). But
- * Paseo's v2 translator (`opencode/v2/timeline.ts` → `deriveOpencodeToolDetail`
- * in `tool-call-detail-parser.ts`) flattens output to text-only and never
- * reads `metadata.diff`/`filediff` for edits, and the input strings don't
- * survive either — completed opencode edits arrive here with only a filePath
- * (repro'd 16/16 filePath-only against daemon 0.10.0). The real fix belongs
- * upstream (~10 lines: prefer `metadata.filediff.patch`, fall back to
- * `metadata.diff`, then input strings). Until then, presentation must omit
- * stats and diff claims for payload-less edits instead of reporting
- * misleading +0/-0 counts.
+ * Drop everything before the first hunk header. opencode patches start with
+ * `Index:` / `=====` / `---` / `+++` preamble lines that would otherwise render
+ * as context; `\ No newline at end of file` markers are dropped too.
+ */
+function opencodePatchBody(patch: string): string | undefined {
+  const lines = patch.replace(/\r\n?/g, "\n").split("\n");
+  const firstHunk = lines.findIndex((line) => line.startsWith("@@"));
+  if (firstHunk === -1) return undefined;
+  const body = lines.slice(firstHunk).filter((line) => !line.startsWith("\\"));
+  if (body.at(-1) === "") body.pop();
+  return body.join("\n");
+}
+
+function nonBlankString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+/**
+ * The unified patch for an opencode edit, read from tool-call `metadata`.
+ * opencode v2 (2.0.x) reports `metadata.files[{file, patch, additions,
+ * deletions}]`; older shapes used `metadata.filediff.patch` and `metadata.diff`.
+ */
+function opencodeMetadataPatch(metadata: unknown, filePath: string): string | undefined {
+  if (!isRecord(metadata)) return undefined;
+  if (Array.isArray(metadata.files)) {
+    const files = metadata.files.filter(isRecord);
+    const match = files.find((file) => file.file === filePath) ?? (files.length === 1 ? files[0] : undefined);
+    const patch = nonBlankString(match?.patch);
+    if (patch) return patch;
+  }
+  if (isRecord(metadata.filediff)) {
+    const patch = nonBlankString(metadata.filediff.patch);
+    if (patch) return patch;
+  }
+  return nonBlankString(metadata.diff);
+}
+
+/**
+ * Fill `detail.unifiedDiff` from opencode tool-call metadata when the daemon
+ * did not put a diff on the detail (Paseo's v2 translator only reads
+ * `metadata.filediff`/`diff`, and opencode 2.0.x emits `metadata.files[]`).
+ * A diff already on the detail always wins; anything else is returned as-is so
+ * the old/new string fallback and the payload-less handling below still apply.
+ */
+export function withMetadataEditDiff<T extends { detail: ToolCallDetail; metadata?: unknown }>(item: T): T {
+  const detail = item.detail;
+  if (detail.type !== "edit" || effectiveUnifiedDiff(detail) !== undefined) return item;
+  const patch = opencodeMetadataPatch(item.metadata, detail.filePath);
+  const unifiedDiff = patch ? opencodePatchBody(patch) : undefined;
+  if (!unifiedDiff) return item;
+  return { ...item, detail: { ...detail, unifiedDiff } };
+}
+
+/**
+ * Whether an edit detail carries any diff payload. Completed opencode edits
+ * can still arrive with only a filePath (no diff on the detail, no usable
+ * metadata); presentation must omit stats and diff claims for those instead of
+ * reporting misleading +0/-0 counts.
  */
 export function hasEditDiffContent(detail: Extract<ToolCallDetail, { type: "edit" }>): boolean {
   return (
@@ -1586,10 +1629,13 @@ export function diffLinesForDetail(detail: Extract<ToolCallDetail, { type: "edit
   }
 
   if (unifiedDiff !== undefined) {
-    const lines: DiffLine[] = unifiedDiff
-      .replace(/\r/g, "")
-      .split("\n")
-      .filter((line, index, lines) => !(index === lines.length - 1 && line === ""))
+    const rawLines = unifiedDiff.replace(/\r/g, "").split("\n");
+    // The file path is already in the row title, so drop `---`/`+++` file
+    // headers that precede the first hunk. Later `---`/`+++` lines are content.
+    const firstHunk = rawLines.findIndex((line) => line.startsWith("@@"));
+    const lines: DiffLine[] = rawLines
+      .filter((line, index) => !(index === rawLines.length - 1 && line === ""))
+      .filter((line, index) => !(index < firstHunk && (line.startsWith("---") || line.startsWith("+++"))))
       .map((line): DiffLine => {
         if (line.startsWith("@@") || line.startsWith("+++") || line.startsWith("---")) {
           return { kind: "meta", text: line };

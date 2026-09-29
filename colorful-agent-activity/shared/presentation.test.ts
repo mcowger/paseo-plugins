@@ -549,6 +549,36 @@ describe("colorful activity presentation", () => {
     ).toBeUndefined();
   });
 
+  it("hides file headers before the first hunk but keeps header-like content lines", () => {
+    const header = "--- /tmp/a.txt\n+++ /tmp/a.txt\n";
+    // Change at the top of the file: previously showed the headers as meta rows.
+    expect(
+      diffLinesForDetail({
+        type: "edit",
+        filePath: "/tmp/a.txt",
+        unifiedDiff: `${header}@@ -1,2 +1,2 @@\n-old\n+new\n same`,
+      }),
+    ).toEqual([
+      { kind: "meta", text: "@@ -1,2 +1,2 @@" },
+      { kind: "remove", text: "old" },
+      { kind: "add", text: "new" },
+      { kind: "context", text: "same" },
+    ]);
+    // Header-like lines after the first hunk are content and must not be dropped.
+    expect(
+      diffLinesForDetail({
+        type: "edit",
+        filePath: "/tmp/a.md",
+        unifiedDiff: `${header}@@ -1 +1 @@\n--- x\n+++ y`,
+      }).map((line) => line.text),
+    ).toEqual(["@@ -1 +1 @@", "--- x", "+++ y"]);
+    // Diffs without a hunk header are untouched.
+    expect(diffLinesForDetail({ type: "edit", filePath: "a", unifiedDiff: "-old\n+new" })).toEqual([
+      { kind: "remove", text: "old" },
+      { kind: "add", text: "new" },
+    ]);
+  });
+
   it("protects against oversized diff calculations", () => {
     const largeOld = "a\n".repeat(60_000);
     const largeNew = "b\n".repeat(60_000);
