@@ -44,7 +44,11 @@ export const transformTodo: TodoTransformer = ({ item }) => {
 };
 
 function transformApplyPatch(item: Extract<ToolCallTimelineItem, { type: "tool_call" }>) {
-  const edits = extractApplyPatchEdits(item.detail, item.detail.type === "unknown" ? item.detail.output : undefined);
+  const edits = extractApplyPatchEdits(
+    item.detail,
+    item.detail.type === "unknown" ? item.detail.output : undefined,
+    item.metadata,
+  );
   if (edits.length === 0) return undefined;
 
   return {

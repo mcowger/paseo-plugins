@@ -459,7 +459,93 @@ describe("colorful activity presentation", () => {
     ]);
     expect(isApplyPatchTool("apply_patch")).toBe(true);
     expect(isApplyPatchTool("mcp__codex__apply_patch")).toBe(true);
+    expect(isApplyPatchTool("patch")).toBe(true);
     expect(isApplyPatchTool("edit")).toBe(false);
+  });
+
+  it("parses OpenCode patch grammar including environment and move directives", () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Environment ID: env-123",
+      "*** Update File: src/old-name.ts",
+      "*** Move to: src/new-name.ts",
+      "@@",
+      "-old()",
+      "+new()",
+      "*** Delete File: src/obsolete.ts",
+      "*** End Patch",
+    ].join("\n");
+
+    expect(extractApplyPatchEdits({ input: { patchText: patch } }, undefined)).toEqual([
+      { filePath: "src/new-name.ts", operation: "update", unifiedDiff: "@@\n-old()\n+new()" },
+      { filePath: "src/obsolete.ts", operation: "delete", unifiedDiff: "" },
+    ]);
+  });
+
+  it("extracts per-file edits from OpenCode patch metadata", () => {
+    const metadata = {
+      files: [
+        {
+          file: "src/index.ts",
+          patch: "@@ -1 +1 @@\n-old()\n+new()",
+          additions: 1,
+          deletions: 1,
+          status: "modified",
+        },
+        {
+          file: "docs/notes.md",
+          patch: "@@ -0,0 +1 @@\n+Notes",
+          additions: 1,
+          deletions: 0,
+          status: "added",
+        },
+        {
+          file: "src/obsolete.ts",
+          patch: "@@ -1,1 +0,0 @@\n-obsolete()",
+          additions: 0,
+          deletions: 1,
+          status: "deleted",
+        },
+      ],
+    };
+
+    expect(extractApplyPatchEdits({ type: "unknown", input: { patchText: "..." }, output: null }, null, metadata)).toEqual([
+      { filePath: "src/index.ts", operation: "update", unifiedDiff: "@@ -1 +1 @@\n-old()\n+new()" },
+      { filePath: "docs/notes.md", operation: "add", unifiedDiff: "@@ -0,0 +1 @@\n+Notes" },
+      { filePath: "src/obsolete.ts", operation: "delete", unifiedDiff: "@@ -1,1 +0,0 @@\n-obsolete()" },
+    ]);
+  });
+
+  it("prefers OpenCode patch metadata over patchText parsing", () => {
+    const patchText = [
+      "*** Begin Patch",
+      "*** Update File: stale.ts",
+      "@@",
+      "-old()",
+      "+new()",
+      "*** End Patch",
+    ].join("\n");
+
+    expect(
+      extractApplyPatchEdits({ type: "unknown", input: { patchText } }, null, {
+        files: [{ file: "fresh.ts", patch: "@@\n-a\n+b", status: "modified" }],
+      }),
+    ).toEqual([{ filePath: "fresh.ts", operation: "update", unifiedDiff: "@@\n-a\n+b" }]);
+  });
+
+  it("ignores malformed OpenCode patch metadata and falls back", () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Add File: docs/notes.md",
+      "+Notes",
+      "*** End Patch",
+    ].join("\n");
+
+    expect(
+      extractApplyPatchEdits({ type: "unknown", input: { patchText: patch } }, null, {
+        files: [{ file: "docs/notes.md", status: "added" }],
+      }),
+    ).toEqual([{ filePath: "docs/notes.md", operation: "add", unifiedDiff: "+Notes" }]);
   });
 
   it("extracts file operations from canonical multi-file unified diffs", () => {

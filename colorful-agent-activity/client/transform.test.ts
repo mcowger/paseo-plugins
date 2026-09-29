@@ -155,6 +155,89 @@ describe("colorful activity timeline transforms", () => {
     ]);
   });
 
+  it("splits OpenCode patch tool calls into one row per file", () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Add File: ocr/docs/plan.md",
+      "+# Plan",
+      "+Body",
+      "*** Update File: src/index.ts",
+      "@@",
+      "-old()",
+      "+new()",
+      "*** Delete File: src/obsolete.ts",
+      "*** End Patch",
+    ].join("\n");
+    const result = transformToolCall({
+      phase: "complete",
+      item: {
+        ...toolCall(
+          {
+            type: "unknown",
+            input: { patchText: patch },
+            output: "Success. Updated the following files:\nA ocr/docs/plan.md\nM src/index.ts\nD src/obsolete.ts",
+          },
+        ),
+        name: "patch",
+      },
+    });
+
+    expect(result?.items.map((item) => item.id)).toEqual([
+      "call-1:apply-patch:0",
+      "call-1:apply-patch:1",
+      "call-1:apply-patch:2",
+    ]);
+    expect(result?.items.map((item) => item.data)).toEqual([
+      expect.objectContaining({ presentation: expect.objectContaining({ label: "Add", summary: "ocr/docs/plan.md" }) }),
+      expect.objectContaining({ presentation: expect.objectContaining({ label: "Edit", summary: "src/index.ts" }) }),
+      expect.objectContaining({ presentation: expect.objectContaining({ label: "Delete", summary: "src/obsolete.ts" }) }),
+    ]);
+  });
+
+  it("prefers OpenCode patch metadata diffs over the raw patch text", () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: src/index.ts",
+      "@@",
+      "-stale()",
+      "+stale()",
+      "*** End Patch",
+    ].join("\n");
+    const result = transformToolCall({
+      phase: "complete",
+      item: {
+        ...toolCall({ type: "unknown", input: { patchText: patch }, output: null }),
+        name: "patch",
+        metadata: {
+          files: [{ file: "src/index.ts", patch: "@@\n-old()\n+new()", additions: 1, deletions: 1, status: "modified" }],
+        },
+      },
+    });
+
+    expect(result?.items).toHaveLength(1);
+    expect(result?.items[0]?.data).toEqual(
+      expect.objectContaining({
+        detail: { type: "edit", filePath: "src/index.ts", unifiedDiff: "@@\n-old()\n+new()" },
+        presentation: expect.objectContaining({ label: "Edit", diffStats: { additions: 1, deletions: 1 } }),
+      }),
+    );
+  });
+
+  it("keeps generic rendering for a patch tool without a parseable payload", () => {
+    const result = transformToolCall({
+      phase: "complete",
+      item: {
+        ...toolCall({ type: "unknown", input: { patchText: "not a patch" }, output: null }),
+        name: "patch",
+      },
+    });
+
+    expect(result?.items).toHaveLength(1);
+    expect(result?.items[0]?.data).toEqual(
+      expect.objectContaining({ presentation: expect.objectContaining({ label: "Patch" }) }),
+    );
+  });
+
   it("preserves native speak tool calls with text input", () => {
     const result = transformToolCall({
       phase: "complete",

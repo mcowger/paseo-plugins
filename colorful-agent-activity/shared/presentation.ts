@@ -1411,7 +1411,10 @@ function applyPatchToolName(name: string): boolean {
     .replace(/^(?:functions|tools)\./, "")
     .replace(/^mcp__.*?__/, "")
     .replace(/^mcp_/, "");
-  return normalized === "apply_patch" || normalized === "apply-patch";
+  // OpenCode names its apply-patch tool "patch"; Codex and other harnesses use
+  // "apply_patch"/"apply-patch". Any tool that does not carry a recognizable
+  // patch payload falls back to the generic renderer downstream.
+  return normalized === "apply_patch" || normalized === "apply-patch" || normalized === "patch";
 }
 
 function patchInputEdits(input: string): ApplyPatchEdit[] {
@@ -1429,9 +1432,15 @@ function patchInputEdits(input: string): ApplyPatchEdit[] {
     const filePath = header[2];
     index++;
     const diffLines: string[] = [];
+    let moveTo: string | undefined;
     while (index < lines.length && !lines[index]?.match(/^\*\*\* (?:Add|Delete|Update) File: /)) {
       const line = lines[index] ?? "";
-      if (operation === "add" && line.startsWith("+")) {
+      const move = line.match(/^\*\*\* Move to: (.+)$/);
+      if (move?.[1]) {
+        // OpenCode renames via `*** Update File: <from>` followed by `*** Move to: <to>`.
+        // Render the change against the destination, matching the structured metadata.
+        moveTo = move[1].trim();
+      } else if (operation === "add" && line.startsWith("+")) {
         diffLines.push(`+${line.slice(1)}`);
       } else if (operation === "update") {
         if (line.startsWith("@@")) diffLines.push(line);
@@ -1439,7 +1448,7 @@ function patchInputEdits(input: string): ApplyPatchEdit[] {
       }
       index++;
     }
-    edits.push({ filePath, operation, unifiedDiff: diffLines.join("\n") });
+    edits.push({ filePath: moveTo ?? filePath, operation, unifiedDiff: diffLines.join("\n") });
   }
   return edits;
 }
@@ -1454,6 +1463,20 @@ function isDiffFileHeader(line: string, index: number, firstHunk: number): boole
   return (line.startsWith("---") || line.startsWith("+++")) && (firstHunk === -1 || index < firstHunk);
 }
 
+/**
+ * Reduce a unified diff (or a single `diff --git` section) to the lines worth
+ * rendering: hunk headers plus addition, deletion, and context lines, with
+ * file headers removed.
+ */
+function unifiedDiffBody(diff: string): string {
+  const lines = diff.replace(/\r\n?/g, "\n").split("\n");
+  const firstHunk = lines.findIndex((line) => line.startsWith("@@"));
+  return lines
+    .filter((line, index) => !isDiffFileHeader(line, index, firstHunk))
+    .filter((line) => line.startsWith("@@") || line.startsWith("+") || line.startsWith("-") || line.startsWith(" "))
+    .join("\n");
+}
+
 function unifiedDiffEdits(unifiedDiff: string, firstFilePath?: string): ApplyPatchEdit[] {
   const sections = unifiedDiff
     .replace(/\r\n?/g, "\n")
@@ -1466,15 +1489,58 @@ function unifiedDiffEdits(unifiedDiff: string, firstFilePath?: string): ApplyPat
     const operation: ApplyPatchOperation = plusHeader === "/dev/null" ? "delete" : minusHeader === "/dev/null" ? "add" : "update";
     const filePath = index === 0 && firstFilePath ? firstFilePath : operation === "delete" ? minusHeader : plusHeader ?? minusHeader;
     if (!filePath || filePath === "/dev/null") continue;
-    const sectionLines = section.split("\n");
-    const firstHunk = sectionLines.findIndex((line) => line.startsWith("@@"));
-    const body = sectionLines
-      .filter((line, lineIndex) => !isDiffFileHeader(line, lineIndex, firstHunk))
-      .filter((line) => line.startsWith("@@") || line.startsWith("+") || line.startsWith("-") || line.startsWith(" "))
-      .join("\n");
-    edits.push({ filePath, operation, unifiedDiff: body });
+    edits.push({ filePath, operation, unifiedDiff: unifiedDiffBody(section) });
   }
   return edits;
+}
+
+function normalizePatchOperation(value: unknown): ApplyPatchOperation | undefined {
+  switch (value) {
+    case "add":
+    case "added":
+      return "add";
+    case "delete":
+    case "deleted":
+      return "delete";
+    case "update":
+    case "updated":
+    case "modify":
+    case "modified":
+      return "update";
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * OpenCode's built-in `patch` tool reports one structured entry per affected
+ * file in `metadata.files` (`{ file, patch, additions, deletions, status }`).
+ * Prefer it over re-parsing `patchText`: it carries an accurate per-file
+ * unified diff and is not affected by raw-text truncation.
+ */
+function patchMetadataEdits(value: unknown): ApplyPatchEdit[] {
+  if (!isRecord(value)) return [];
+  for (const candidate of [value, value.metadata, value.details, value.result]) {
+    if (!isRecord(candidate) || !Array.isArray(candidate.files)) continue;
+    const edits = candidate.files.flatMap((file): ApplyPatchEdit[] => {
+      if (!isRecord(file)) return [];
+      const filePath =
+        typeof file.file === "string"
+          ? file.file
+          : typeof file.relativePath === "string"
+            ? file.relativePath
+            : typeof file.filePath === "string"
+              ? file.filePath
+              : undefined;
+      const operation = normalizePatchOperation(file.status) ?? normalizePatchOperation(file.type);
+      if (!filePath || !operation) return [];
+      const diff = typeof file.patch === "string" ? file.patch : typeof file.diff === "string" ? file.diff : undefined;
+      if (diff === undefined) return [];
+      return [{ filePath, operation, unifiedDiff: unifiedDiffBody(diff) }];
+    });
+    if (edits.length > 0) return edits;
+  }
+  return [];
 }
 
 function previewDiffToUnifiedDiff(diff: string): string {
@@ -1513,7 +1579,13 @@ function patchPreviewEdits(value: unknown): ApplyPatchEdit[] {
   });
 }
 
-export function extractApplyPatchEdits(input: unknown, output: unknown): ApplyPatchEdit[] {
+export function extractApplyPatchEdits(
+  input: unknown,
+  output: unknown,
+  metadata?: unknown,
+): ApplyPatchEdit[] {
+  const metadataEdits = patchMetadataEdits(metadata);
+  if (metadataEdits.length > 0) return metadataEdits;
   const outputEdits = patchPreviewEdits(output);
   if (outputEdits.length > 0) return outputEdits;
   if (isRecord(input) && input.type === "edit" && typeof input.unifiedDiff === "string") {
