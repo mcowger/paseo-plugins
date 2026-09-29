@@ -85,7 +85,7 @@ describe("colorful activity timeline transforms", () => {
       presentation: {
         category: "file",
         icon: "FileCode2",
-        label: "Edit File",
+        label: "Edit",
         summary: "src/web/main.tsx",
         filePath: "src/web/main.tsx",
         fileIcon: "FileCode2",

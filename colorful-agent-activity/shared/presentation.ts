@@ -1,6 +1,12 @@
 import type { JsonValue, ToolCallDetail, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
 import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization";
 import type { ExpansionTarget, PaletteMode } from "./settings";
+import {
+  extractCodeModeCode,
+  isCodeModeTool,
+  parseCodeModeCalls,
+  parseCodeModeCatalog,
+} from "./codemode";
 import { exaToolIcon, exaToolKind, exaToolLabel, exaToolSummary } from "./exa";
 import {
   githubToolIcon,
@@ -1648,6 +1654,88 @@ export function isDirectoryRead(filePath: string | undefined, content: string | 
   return false;
 }
 
+function firstCodeLine(code: string): string | undefined {
+  const line = code.split("\n").find((entry) => entry.trim());
+  return line ? compactText(line.trim(), 120) : undefined;
+}
+
+/** Header for Opencode v2 Code Mode `execute`: discovery vs inner tool calls. */
+export function resolveCodeModePresentation(input: unknown, output: unknown): ToolCallPresentation {
+  const code = extractCodeModeCode(input);
+  const parsed = code ? parseCodeModeCalls(code) : { calls: [] };
+  const catalog = parseCodeModeCatalog(output);
+  const searchQuery = parsed.searchQuery;
+
+  if ((searchQuery || parsed.calls.length === 0) && catalog) {
+    return {
+      category: "search",
+      icon: "Search",
+      label: "Search Tools",
+      summary: searchQuery ? compactText(searchQuery, 120) : `${catalog.items.length} tools`,
+    };
+  }
+
+  if (parsed.calls.length === 1) {
+    const call = parsed.calls[0];
+    if (!call) {
+      return { category: "agent", icon: "SquareTerminal", label: "Code Mode" };
+    }
+    const exaKind = exaToolKind(call.path);
+    if (exaKind) {
+      return {
+        category: exaKind === "agent" ? "agent" : "search",
+        icon: exaToolIcon(exaKind),
+        label: exaToolLabel(exaKind),
+        summary: call.query ? compactText(call.query, 120) : exaToolSummary(exaKind, { query: call.query }),
+      };
+    }
+    const githubKind = githubToolKind(call.path);
+    if (githubKind) {
+      return {
+        category: "search",
+        icon: githubToolIcon(githubKind),
+        label: githubToolLabel(githubKind),
+        summary: call.query ? compactText(call.query, 120) : undefined,
+      };
+    }
+    return {
+      category: "agent",
+      icon: "SquareTerminal",
+      label: prettyToolName(call.tool),
+      summary: call.query ? compactText(call.query, 120) : compactText(call.path, 120),
+    };
+  }
+
+  if (parsed.calls.length > 1) {
+    const shown = parsed.calls
+      .slice(0, 2)
+      .map((call) => call.tool)
+      .join(", ");
+    const extra = parsed.calls.length > 2 ? ` +${parsed.calls.length - 2} more` : "";
+    return {
+      category: "agent",
+      icon: "SquareTerminal",
+      label: "Code Mode",
+      summary: compactText(`${parsed.calls.length} calls · ${shown}${extra}`, 180),
+    };
+  }
+
+  if (searchQuery) {
+    return {
+      category: "search",
+      icon: "Search",
+      label: "Search Tools",
+      summary: compactText(searchQuery, 120),
+    };
+  }
+  return {
+    category: "agent",
+    icon: "SquareTerminal",
+    label: "Code Mode",
+    summary: code ? firstCodeLine(code) : undefined,
+  };
+}
+
 export function resolveToolCallPresentation(
   item: Pick<ToolCallTimelineItem, "name" | "detail">,
 ): ToolCallPresentation {
@@ -1760,6 +1848,9 @@ export function resolveToolCallPresentation(
         label: "Plan",
       };
     case "unknown": {
+      if (isCodeModeTool(item.name)) {
+        return resolveCodeModePresentation(detail.input, detail.output);
+      }
       if (name === "thinking") {
         return { category: "plan", icon: "Brain", label: "Thinking" };
       }

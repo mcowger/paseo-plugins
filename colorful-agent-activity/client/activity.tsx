@@ -34,6 +34,7 @@ import {
 } from "./web";
 import { GithubToolDetail } from "./github";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
+import { CodeModeToolDetail } from "./codemode";
 import { BgWaitToolDetail, SupervisorToolDetail } from "./pi-subagents";
 import { OmpWaitToolDetail } from "./omp-wait";
 import { OmpFindToolDetail } from "./omp-find";
@@ -77,6 +78,7 @@ import {
   type DiffLine,
 } from "../shared/presentation";
 import { isOmpFindTool } from "../shared/omp-find";
+import { extractCodeModeCode, isCodeModeTool } from "../shared/codemode";
 import { parseInlineMarkdown, parseReasoningMarkdown, type ReasoningMarkdownBlock } from "../shared/markdown";
 import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
 import { exaToolKind } from "../shared/exa";
@@ -1351,6 +1353,12 @@ function DetailBody({
     case "plan":
       return <Text selectable style={styles.detailText}>{detail.text}</Text>;
     case "unknown": {
+      if (isCodeModeTool(data.name)) {
+        const code = extractCodeModeCode(detail.input);
+        if (code) {
+          return <CodeModeToolDetail code={code} output={detail.output} theme={theme} styles={styles} />;
+        }
+      }
       if (data.name.trim().toLowerCase() === "ls") {
         const entries = parsePiLsOutput(detail.output);
         if (entries !== null) {

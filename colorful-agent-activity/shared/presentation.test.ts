@@ -509,7 +509,7 @@ describe("colorful activity presentation", () => {
     expect(resolveToolCallPresentation({ name: "edit", detail: fileOnly })).toEqual({
       category: "file",
       icon: "FileCode2",
-      label: "Edit File",
+      label: "Edit",
       summary: "src/web/main.tsx",
       filePath: "src/web/main.tsx",
       fileIcon: "FileCode2",
@@ -1209,5 +1209,45 @@ describe("opencode search content parsing", () => {
     expect(parseOpencodeSearchContent("just some output")).toBeUndefined();
     expect(parseOpencodeSearchContent("")).toBeUndefined();
     expect(parseOpencodeSearchContent(undefined)).toBeUndefined();
+  });
+});
+
+describe("opencode codemode execute presentation", () => {
+  it("labels catalog discovery searches", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "execute",
+        detail: {
+          type: "unknown",
+          input: { code: 'const s = search({query: "exa web search"});\nreturn s;' },
+          output: {
+            items: [{ path: "tools.exa.web_search_exa", description: "Search" }],
+            remaining: 51,
+          },
+        },
+      }),
+    ).toMatchObject({
+      category: "search",
+      icon: "Search",
+      label: "Search Tools",
+      summary: "exa web search",
+    });
+  });
+
+  it("labels single inner exa calls", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "execute",
+        detail: {
+          type: "unknown",
+          input: { code: 'const r = await exa.web_search_exa({query: "hi"});\nreturn r;' },
+          output: { results: [] },
+        },
+      }),
+    ).toMatchObject({
+      category: "search",
+      label: "Exa Web Search",
+      summary: "hi",
+    });
   });
 });
