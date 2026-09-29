@@ -60,7 +60,7 @@ describe("colorful activity timeline transforms", () => {
             presentation: {
               category: "file",
               icon: "FileCode2",
-              label: "Edit File",
+              label: "Edit",
               summary: "src/web/main.tsx",
               filePath: "src/web/main.tsx",
               fileIcon: "FileCode2",
@@ -124,12 +124,12 @@ describe("colorful activity timeline transforms", () => {
       expect.objectContaining({
         name: "apply_patch",
         detail: { type: "edit", filePath: "src/index.ts", unifiedDiff: "@@\n-old()\n+new()" },
-        presentation: expect.objectContaining({ label: "Edit File", diffStats: { additions: 1, deletions: 1 } }),
+        presentation: expect.objectContaining({ label: "Edit", diffStats: { additions: 1, deletions: 1 } }),
       }),
       expect.objectContaining({
         name: "apply_patch",
         detail: { type: "edit", filePath: "docs/notes.md", unifiedDiff: "+Notes" },
-        presentation: expect.objectContaining({ label: "Add File", diffStats: { additions: 1, deletions: 0 } }),
+        presentation: expect.objectContaining({ label: "Add", diffStats: { additions: 1, deletions: 0 } }),
       }),
     ]);
   });

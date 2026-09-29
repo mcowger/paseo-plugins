@@ -148,7 +148,7 @@ describe("colorful activity presentation", () => {
     ).toMatchObject({
       category: "file",
       icon: "FileCode2",
-      label: "Edit File",
+      label: "Edit",
       summary: "src/web/main.tsx",
       language: "typescript",
       diffStats: { additions: 1, deletions: 0 },
@@ -166,7 +166,7 @@ describe("colorful activity presentation", () => {
     });
   });
 
-  it("labels top-level Ls tool calls as List Files", () => {
+  it("labels top-level Ls tool calls as List", () => {
     expect(
       resolveToolCallPresentation({
         name: "Ls",
@@ -175,11 +175,11 @@ describe("colorful activity presentation", () => {
     ).toMatchObject({
       category: "file",
       icon: "List",
-      label: "List Files",
+      label: "List",
     });
   });
 
-  it("labels directory reads as List Directory instead of Read File", () => {
+  it("labels directory reads as List instead of Read", () => {
     expect(
       isDirectoryRead(
         "/home/matt.cowger/workspace/paseo-worktrees/0e5bdwyx/filthy-robin/colorful-agent-activity",
@@ -202,14 +202,14 @@ describe("colorful activity presentation", () => {
     ).toMatchObject({
       category: "file",
       icon: "Folder",
-      label: "List Directory",
+      label: "List",
     });
     expect(
       resolveToolCallPresentation({
         name: "read",
         detail: { type: "read", filePath: "src/index.ts", content: "const x = 1;" },
       }),
-    ).toMatchObject({ label: "Read File" });
+    ).toMatchObject({ label: "Read" });
   });
 
   it("strips a leading cd to the session cwd from shell titles", () => {
@@ -264,16 +264,21 @@ describe("colorful activity presentation", () => {
   it("maps sub-agent actions to readable inline progress rows", () => {
     expect(resolveSubAgentActionPresentation("read", "README.md")).toEqual({
       icon: "FileText",
-      label: "Read File",
+      label: "Read",
       summaryIcon: "FileText",
+    });
+    expect(resolveSubAgentActionPresentation("read", "src/")).toEqual({
+      icon: "Folder",
+      label: "List",
+      summaryIcon: "Folder",
     });
     expect(resolveSubAgentActionPresentation("find_files")).toEqual({
       icon: "Search",
-      label: "Find Files",
+      label: "Find",
     });
     expect(resolveSubAgentActionPresentation("Ls")).toEqual({
       icon: "List",
-      label: "List Files",
+      label: "List",
     });
     expect(resolveSubAgentActionPresentation("shell", "git status")).toEqual({
       icon: "SquareTerminal",

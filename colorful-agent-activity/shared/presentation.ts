@@ -1646,7 +1646,7 @@ export function resolveToolCallPresentation(
         return {
           category: "file",
           icon: "Folder",
-          label: "List Directory",
+          label: "List",
           summary: compactText(detail.filePath),
           ...(filePath ? { filePath, fileIcon: "Folder" } : {}),
         };
@@ -1654,7 +1654,7 @@ export function resolveToolCallPresentation(
       return {
         category: "file",
         icon: commonFileFields.fileIcon ?? "Eye",
-        label: "Read File",
+        label: "Read",
         summary: compactText(detail.filePath),
         ...commonFileFields,
       };
@@ -1666,7 +1666,7 @@ export function resolveToolCallPresentation(
       return {
         category: "file",
         icon: commonFileFields.fileIcon ?? "Pencil",
-        label: "Edit File",
+        label: "Edit",
         summary: compactText(detail.filePath),
         ...(editSize <= MAX_DIFF_CHARS ? { diffStats: diffStatsForDetail(detail) } : {}),
         ...commonFileFields,
@@ -1676,7 +1676,7 @@ export function resolveToolCallPresentation(
       return {
         category: "file",
         icon: commonFileFields.fileIcon ?? "Pencil",
-        label: "Write File",
+        label: "Write",
         summary: compactText(detail.filePath),
         ...commonFileFields,
       };
@@ -1721,7 +1721,7 @@ export function resolveToolCallPresentation(
         return { category: "plan", icon: "Brain", label: "Thinking" };
       }
       if (name === "ls") {
-        return { category: "file", icon: "List", label: "List Files" };
+        return { category: "file", icon: "List", label: "List" };
       }
       if (name === "task") {
         return { category: "agent", icon: "Bot", label: "Task", summary: compactText(item.name) };
@@ -1806,13 +1806,13 @@ export function resolveSubAgentActionPresentation(
 ): SubAgentActionPresentation {
   const normalized = toolName.trim().toLowerCase().replace(/[\s.-]+/g, "_");
   if (normalized === "ls") {
-    return { icon: "List", label: "List Files" };
+    return { icon: "List", label: "List" };
   }
   if (normalized === "read" || normalized.includes("read_file") || normalized.includes("readfile")) {
     if (summary && /[/\\]$/.test(summary.trim())) {
-      return { icon: "Folder", label: "List Directory", summaryIcon: "Folder" };
+      return { icon: "Folder", label: "List", summaryIcon: "Folder" };
     }
-    return { icon: "FileText", label: "Read File", summaryIcon: fileIconForPath(summary) };
+    return { icon: "FileText", label: "Read", summaryIcon: fileIconForPath(summary) };
   }
   if (
     normalized === "glob" ||
@@ -1820,7 +1820,7 @@ export function resolveSubAgentActionPresentation(
     normalized.includes("find_file") ||
     normalized.includes("list_file")
   ) {
-    return { icon: "Search", label: "Find Files" };
+    return { icon: "Search", label: "Find" };
   }
   if (normalized === "grep" || normalized === "search" || normalized.includes("search")) {
     return { icon: "Search", label: "Search" };
@@ -1835,10 +1835,10 @@ export function resolveSubAgentActionPresentation(
     return { icon: "SquareTerminal", label: "Shell" };
   }
   if (normalized === "edit" || normalized.includes("edit_file") || normalized.includes("patch")) {
-    return { icon: "Pencil", label: "Edit File", summaryIcon: fileIconForPath(summary) };
+    return { icon: "Pencil", label: "Edit", summaryIcon: fileIconForPath(summary) };
   }
   if (normalized === "write" || normalized.includes("write_file") || normalized.includes("writefile")) {
-    return { icon: "Pencil", label: "Write File", summaryIcon: fileIconForPath(summary) };
+    return { icon: "Pencil", label: "Write", summaryIcon: fileIconForPath(summary) };
   }
   if (normalized === "task" || normalized.includes("sub_agent") || normalized.includes("subagent")) {
     if (normalized === "subagent_supervisor") {

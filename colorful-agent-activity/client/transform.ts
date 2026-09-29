@@ -58,7 +58,7 @@ function transformApplyPatch(item: Extract<ToolCallTimelineItem, { type: "tool_c
           unifiedDiff: edit.unifiedDiff,
         },
       });
-      const label = edit.operation === "add" ? "Add File" : edit.operation === "delete" ? "Delete File" : "Edit File";
+      const label = edit.operation === "add" ? "Add" : edit.operation === "delete" ? "Delete" : "Edit";
       return {
         type: "plugin" as const,
         id: `${item.callId}:apply-patch:${index}`,
