@@ -1,6 +1,6 @@
 # OpenCodeReview panel for Paseo: implementation plan
 
-Status: agreed design; implementation not started. This document is the handoff for building a **new, standalone** plugin in `ocr/`. Do not modify Paseo or the existing `colorful-agent-activity` plugin to make this work.
+Status: implemented in `ocr/` (see `ocr/README.md` for setup/use). This document is the preserved design handoff. Do not modify Paseo or the existing `colorful-agent-activity` plugin to make this work.
 
 ## Product contract
 
