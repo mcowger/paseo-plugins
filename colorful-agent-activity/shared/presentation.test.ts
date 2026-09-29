@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   diffLinesForDetail,
+  diffStatsForDetail,
   diffStatsFromStrings,
   diffStatsFromUnifiedDiff,
+  editDiffContentSize,
+  effectiveUnifiedDiff,
   fileIconForPath,
   formatReasoningText,
+  hasEditDiffContent,
   languageForFilePath,
   parseSubAgentActionLog,
   paseoToolCategory,
@@ -492,6 +496,56 @@ describe("colorful activity presentation", () => {
       { filePath: "src/index.ts", operation: "update", unifiedDiff: "-old\n+new" },
       { filePath: "README.md", operation: "add", unifiedDiff: "+Notes" },
     ]);
+  });
+
+  it("omits diff stats for file-only edits without a diff payload", () => {
+    // Completed opencode edit tool calls arrive with only a filePath
+    // (old/new strings stripped upstream). They must not report +0/-0.
+    const fileOnly = { type: "edit" as const, filePath: "src/web/main.tsx" };
+    expect(hasEditDiffContent(fileOnly)).toBe(false);
+    expect(editDiffContentSize(fileOnly)).toBe(0);
+    expect(effectiveUnifiedDiff(fileOnly)).toBeUndefined();
+    expect(diffLinesForDetail(fileOnly)).toEqual([]);
+    expect(resolveToolCallPresentation({ name: "edit", detail: fileOnly })).toEqual({
+      category: "file",
+      icon: "FileCode2",
+      label: "Edit File",
+      summary: "src/web/main.tsx",
+      filePath: "src/web/main.tsx",
+      fileIcon: "FileCode2",
+      language: "typescript",
+    });
+  });
+
+  it("ignores blank unified diffs instead of shadowing old and new strings", () => {
+    const withBlankDiff = {
+      type: "edit" as const,
+      filePath: "main.ts",
+      oldString: "const oldValue = 1;\n",
+      newString: "const newValue = 2;\n",
+      unifiedDiff: "",
+    };
+    expect(hasEditDiffContent(withBlankDiff)).toBe(true);
+    expect(diffStatsForDetail(withBlankDiff)).toEqual({ additions: 1, deletions: 1 });
+    expect(diffLinesForDetail(withBlankDiff)).toEqual([
+      { kind: "remove", text: "const oldValue = 1;" },
+      { kind: "add", text: "const newValue = 2;" },
+    ]);
+    expect(
+      resolveToolCallPresentation({ name: "edit", detail: withBlankDiff }).diffStats,
+    ).toEqual({ additions: 1, deletions: 1 });
+
+    const whitespaceDiff = {
+      type: "edit" as const,
+      filePath: "main.ts",
+      unifiedDiff: "  \n",
+    };
+    expect(hasEditDiffContent(whitespaceDiff)).toBe(false);
+    expect(effectiveUnifiedDiff(whitespaceDiff)).toBeUndefined();
+    expect(diffLinesForDetail(whitespaceDiff)).toEqual([]);
+    expect(
+      resolveToolCallPresentation({ name: "edit", detail: whitespaceDiff }).diffStats,
+    ).toBeUndefined();
   });
 
   it("protects against oversized diff calculations", () => {
