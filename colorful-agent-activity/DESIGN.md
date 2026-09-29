@@ -174,6 +174,12 @@ Do not make every value uniformly smaller. Preserve grouping by varying spacing:
 
 Avoid vertical margins on individual activity cards. The host timeline should provide the broader rhythm.
 
+The one exception is the live tail — the newest row still being produced on the native
+inverted timeline. Paseo applies its inter-row gap to the row that has a newer neighbor,
+and the inverted stream leaves the newest live row without one, so it would sit flush
+against the row above it. A tail row carries its own top spacing to restore the same gap
+the host gives every other row. The web timeline is not inverted and needs no adjustment.
+
 ## Color
 
 Use Paseo theme tokens. Do not hardcode background or foreground colors.
