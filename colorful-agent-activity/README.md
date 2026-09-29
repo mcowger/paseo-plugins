@@ -5,7 +5,7 @@ IDE-style activity rows across desktop, web, and native mobile (iOS and Android)
 thinking block and latest tool call open, shows useful details on demand, and uses Prism for shell and
 code output.
 
-Requires Paseo `>=0.9.0`.
+Requires Paseo `>=0.10.1`.
 
 ## Screenshots
 
@@ -118,7 +118,7 @@ npm run typecheck
 npm test
 ```
 
-The plugin uses separate Paseo v0.9 client and server entries. The server entry registers the
+The plugin uses separate Paseo v0.10 client and server entries. The server entry registers the
 host-scoped palette settings and serves image files back to the client for inline read previews;
 timeline rendering runs in the client bundle.
 
