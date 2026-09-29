@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { usePaseo, type PluginButtonContentProps } from "@getpaseo/plugin/client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, Text, TextInput, View } from "react-native";
+import type { NativeSyntheticEvent, TextInputKeyPressEventData } from "react-native";
+import {
+  usePaseo,
+  useSettings,
+  type PluginButtonContentProps,
+} from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/react-native";
 import { filterSkills, toSkillInvocation, type SkillCommand } from "../shared/skills";
+import { recordSkillUsage, skillUsageSettings, sortSkillsByUsage } from "../shared/usage";
 
 export function SkillPickerContent(props: PluginButtonContentProps) {
   const { theme, layout, close } = props;
@@ -15,6 +21,19 @@ export function SkillPickerContent(props: PluginButtonContentProps) {
   const [query, setQuery] = useState("");
   const [sending, setSending] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  const [highlighted, setHighlighted] = useState(0);
+  const searchRef = useRef<TextInput>(null);
+  const usage = useSettings(skillUsageSettings);
+  const usageRef = useRef(usage);
+  usageRef.current = usage;
+
+  useEffect(() => {
+    searchRef.current?.focus();
+    const timer = setTimeout(() => {
+      searchRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!agentId) {
@@ -50,13 +69,22 @@ export function SkillPickerContent(props: PluginButtonContentProps) {
     };
   }, [paseo, agentId, nonce]);
 
-  const skills = useMemo(() => filterSkills(commands, query), [commands, query]);
+  const skills = useMemo(() => {
+    const filtered = filterSkills(commands, query);
+    if (usage.status !== "ready") return filtered;
+    return sortSkillsByUsage(filtered, usage.values);
+  }, [commands, query, usage]);
+
+  useEffect(() => {
+    setHighlighted(0);
+  }, [query, commands]);
+
+  const activeIndex = skills.length === 0 ? 0 : Math.min(highlighted, skills.length - 1);
 
   const styles = useMemo(
     () => ({
       body: { gap: 12, minWidth: 280, maxWidth: 420 },
       title: { color: theme.colors.foreground, fontSize: 16, fontWeight: "600" as const },
-      hint: { color: theme.colors.foregroundMuted, fontSize: 12 },
       search: {
         color: theme.colors.foreground,
         backgroundColor: theme.colors.surface1,
@@ -65,7 +93,7 @@ export function SkillPickerContent(props: PluginButtonContentProps) {
         paddingVertical: layout.compact ? 6 : 8,
         fontSize: 14,
       },
-      list: { maxHeight: 320 },
+      list: { gap: 6 },
       row: {
         paddingHorizontal: 10,
         paddingVertical: 9,
@@ -73,6 +101,7 @@ export function SkillPickerContent(props: PluginButtonContentProps) {
         backgroundColor: theme.colors.surface1,
       },
       rowBusy: { opacity: 0.6 },
+      rowHighlighted: { backgroundColor: theme.colors.surface2 },
       rowName: { color: theme.colors.foreground, fontSize: 14, fontWeight: "600" as const },
       rowDetail: { color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 2 },
       status: { color: theme.colors.foregroundMuted, fontSize: 13 },
@@ -88,11 +117,25 @@ export function SkillPickerContent(props: PluginButtonContentProps) {
     [theme, layout.compact],
   );
 
+  async function persistUsage(name: string): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const current = usageRef.current;
+      if (current.status !== "ready") return;
+      const saved = await current.save(recordSkillUsage(current.values, name), current.revision);
+      if (saved) return;
+      if (attempt < 2) {
+        await current.reload();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+  }
+
   async function handleSelect(name: string) {
     if (sending !== null || !agentId) return;
     setSending(name);
     try {
       await paseo.agents.ref(agentId).send(toSkillInvocation(name));
+      void persistUsage(name);
       close();
     } catch (sendError: unknown) {
       toast.error(sendError instanceof Error ? sendError.message : String(sendError));
@@ -123,49 +166,64 @@ export function SkillPickerContent(props: PluginButtonContentProps) {
         </Text>
       );
     return (
-      <ScrollView style={styles.list}>
-        <View style={{ gap: 6 }}>
-          {skills.map((skill) => {
-            const busy = sending !== null;
-            const active = sending === skill.name;
-            return (
-              <Pressable
-                key={skill.name}
-                accessibilityRole="button"
-                accessibilityLabel={`Invoke skill ${skill.name}`}
-                accessibilityState={{ disabled: busy, busy: active }}
-                disabled={busy}
-                onPress={() => void handleSelect(skill.name)}
-                style={[styles.row, busy ? styles.rowBusy : null]}
-              >
-                <Text style={styles.rowName}>{active ? `Sending /${skill.name}…` : `/${skill.name}`}</Text>
-                {skill.description ? (
-                  <Text style={styles.rowDetail} numberOfLines={2}>
-                    {skill.description}
-                  </Text>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </View>
-      </ScrollView>
+      <View style={styles.list}>
+        {skills.map((skill, index) => {
+          const busy = sending !== null;
+          const active = sending === skill.name;
+          const isHighlighted = index === activeIndex;
+          return (
+            <Pressable
+              key={skill.name}
+              accessibilityRole="button"
+              accessibilityLabel={`Invoke skill ${skill.name}`}
+              accessibilityState={{ disabled: busy, busy: active, selected: isHighlighted }}
+              disabled={busy}
+              onPress={() => void handleSelect(skill.name)}
+              style={[styles.row, isHighlighted ? styles.rowHighlighted : null, busy ? styles.rowBusy : null]}
+            >
+              <Text style={styles.rowName}>{active ? `Sending /${skill.name}…` : `/${skill.name}`}</Text>
+              {skill.description ? (
+                <Text style={styles.rowDetail} numberOfLines={2}>
+                  {skill.description}
+                </Text>
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </View>
     );
+  }
+
+  function handleKeyPress(event: NativeSyntheticEvent<TextInputKeyPressEventData>) {
+    const key = event.nativeEvent.key;
+    if (key === "ArrowDown") {
+      setHighlighted((prev) => (skills.length === 0 ? 0 : (prev + 1) % skills.length));
+    } else if (key === "ArrowUp") {
+      setHighlighted((prev) =>
+        skills.length === 0 ? 0 : (prev - 1 + skills.length) % skills.length,
+      );
+    } else if (key === "Enter") {
+      const skill = skills[activeIndex];
+      if (skill && sending === null) void handleSelect(skill.name);
+    }
   }
 
   return (
     <View style={styles.body}>
       <Text style={styles.title}>Skills</Text>
       <TextInput
+        ref={searchRef}
         value={query}
         onChangeText={setQuery}
+        onKeyPress={handleKeyPress}
         placeholder="Filter skills…"
         placeholderTextColor={theme.colors.foregroundMuted}
         autoCapitalize="none"
         autoCorrect={false}
+        autoFocus
         style={styles.search}
       />
       {renderList()}
-      <Text style={styles.hint}>Sends /name immediately — it does not fill the composer draft.</Text>
     </View>
   );
 }
