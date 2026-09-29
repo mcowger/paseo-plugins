@@ -7,6 +7,9 @@ import {
   formatAttachmentText,
   matchesBatchQuery,
   normalizeSeverity,
+  severityIconName,
+  severityThemeKey,
+  severityTintOpacity,
   sortFindings,
   summarizeSeverities,
 } from "./presentation.js";
@@ -166,5 +169,21 @@ describe("prompt and attachment text", () => {
     expect(matchesBatchQuery("demo special", batch)).toBe(true);
     expect(matchesBatchQuery("other-workspace", batch)).toBe(false);
     expect(matchesBatchQuery("", batch)).toBe(true);
+  });
+});
+
+describe("severity theming", () => {
+  it("maps each severity to a theme key, icon, and tint", () => {
+    expect(severityThemeKey("critical")).toBe("statusDanger");
+    expect(severityThemeKey("high")).toBe("statusWarning");
+    expect(severityThemeKey("medium")).toBe("accent");
+    expect(severityThemeKey("low")).toBe("foregroundMuted");
+    expect(severityThemeKey("unspecified")).toBe("foregroundMuted");
+    expect(severityIconName("critical")).toBe("OctagonAlert");
+    expect(severityIconName("unspecified")).toBe("CircleHelp");
+    expect(severityTintOpacity("critical")).toBeGreaterThan(severityTintOpacity("high"));
+    expect(severityTintOpacity("high")).toBeGreaterThan(severityTintOpacity("medium"));
+    expect(severityTintOpacity("low")).toBe(0);
+    expect(severityTintOpacity("unspecified")).toBe(0);
   });
 });

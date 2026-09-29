@@ -45,10 +45,14 @@ import {
   SEVERITY_LABELS,
   applySeverityPreset,
   buildAgentPrompt,
+  severityIconName,
+  severityThemeKey,
+  severityTintOpacity,
   sortFindings,
   summarizeSeverities,
   type SeverityPreset,
 } from "../shared/presentation.js";
+import { FindingCodeBlock, FindingMarkdown, SeverityBadgeIcon } from "./finding-markdown";
 
 interface Capabilities {
   gitAvailable: boolean;
@@ -130,19 +134,31 @@ function FindingRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const toggleExpanded = useCallback(() => setExpanded((value) => !value), []);
+  const severityColor = theme.colors[severityThemeKey(finding.severity)];
+  const tintOpacity = severityTintOpacity(finding.severity);
   const styles = useMemo(
     () => ({
       row: {
         borderWidth: 1,
         borderColor: theme.colors.border,
+        borderLeftWidth: 3,
+        borderLeftColor: severityColor,
         borderRadius: 8,
         padding: compact ? 8 : 12,
-        gap: 4,
+        gap: 6,
         backgroundColor: theme.colors.surface1,
+        overflow: "hidden" as const,
       },
-      title: { color: theme.colors.foreground, fontSize: compact ? 13 : 14, flex: 1 },
+      tint: {
+        position: "absolute" as const,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: severityColor,
+        opacity: tintOpacity,
+      },
       detail: { color: theme.colors.foregroundMuted, fontSize: compact ? 12 : 13 },
-      code: { color: theme.colors.foregroundMuted, fontSize: compact ? 11 : 12 },
       toggle: { color: theme.colors.accent, fontSize: compact ? 12 : 13 },
       findingHeader: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
       checkbox: {
@@ -164,11 +180,25 @@ function FindingRow({
         fontSize: 14,
         lineHeight: 16,
       },
+      badge: {
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+        gap: 4,
+        borderWidth: 1,
+        borderColor: severityColor,
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+      },
+      badgeText: { color: severityColor, fontSize: compact ? 11 : 12 },
+      pathText: { color: theme.colors.foregroundMuted, fontSize: compact ? 11 : 12, flex: 1 },
     }),
-    [theme, compact],
+    [theme, compact, severityColor, tintOpacity],
   );
+  const hasCode = Boolean(finding.existingCode || finding.suggestionCode);
   return (
     <View style={styles.row}>
+      {tintOpacity > 0 ? <View pointerEvents="none" style={styles.tint} /> : null}
       <Pressable
         accessibilityRole="checkbox"
         accessibilityState={{ checked }}
@@ -179,27 +209,44 @@ function FindingRow({
         <View style={[styles.checkbox, checked ? styles.checkboxChecked : null]}>
           {checked ? <Text style={styles.checkMark}>{"\u2713"}</Text> : null}
         </View>
-        <Text style={styles.title}>
-          [{SEVERITY_LABELS[finding.severity]}] {finding.path}:{finding.startLine}-
-          {finding.endLine}
+        <View style={styles.badge}>
+          <SeverityBadgeIcon name={severityIconName(finding.severity)} color={severityColor} />
+          <Text style={styles.badgeText}>{SEVERITY_LABELS[finding.severity]}</Text>
+        </View>
+        <Text style={styles.pathText}>
+          {finding.path}:{finding.startLine}-{finding.endLine}
         </Text>
       </Pressable>
       {finding.category ? <Text style={styles.detail}>Category: {finding.category}</Text> : null}
-      <Text style={styles.detail}>{finding.content}</Text>
+      <FindingMarkdown
+        text={finding.content}
+        theme={theme}
+        compact={compact}
+        accent={severityColor}
+        idPrefix={finding.id}
+      />
       {expanded ? (
-        <View>
+        <View style={{ gap: 6 }}>
           {finding.existingCode ? (
-            <Text style={styles.code}>Existing:{`\n${finding.existingCode}`}</Text>
+            <FindingCodeBlock
+              code={finding.existingCode}
+              theme={theme}
+              compact={compact}
+              accent={severityColor}
+            />
           ) : null}
           {finding.suggestionCode ? (
-            <Text style={styles.code}>Suggested:{`\n${finding.suggestionCode}`}</Text>
+            <FindingCodeBlock
+              code={finding.suggestionCode}
+              theme={theme}
+              compact={compact}
+              accent={severityColor}
+            />
           ) : null}
-          {!finding.existingCode && !finding.suggestionCode ? (
-            <Text style={styles.detail}>No code snippet attached.</Text>
-          ) : null}
+          {!hasCode ? <Text style={styles.detail}>No code snippet attached.</Text> : null}
         </View>
       ) : null}
-      {finding.existingCode || finding.suggestionCode ? (
+      {hasCode ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={expanded ? "Hide code suggestion" : "Show code suggestion"}

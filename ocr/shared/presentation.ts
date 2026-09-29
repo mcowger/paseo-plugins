@@ -35,6 +35,30 @@ export function sortFindings(findings: Finding[]): Finding[] {
 
 export type SeverityPreset = "critical" | "high-plus" | "medium-plus" | "all";
 
+export type SeverityThemeKey = "statusDanger" | "statusWarning" | "accent" | "foregroundMuted";
+
+export function severityThemeKey(severity: Severity): SeverityThemeKey {
+  if (severity === "critical") return "statusDanger";
+  if (severity === "high") return "statusWarning";
+  if (severity === "medium") return "accent";
+  return "foregroundMuted";
+}
+
+export function severityIconName(severity: Severity): string {
+  if (severity === "critical") return "OctagonAlert";
+  if (severity === "high") return "TriangleAlert";
+  if (severity === "medium") return "Info";
+  if (severity === "low") return "Minus";
+  return "CircleHelp";
+}
+
+export function severityTintOpacity(severity: Severity): number {
+  if (severity === "critical") return 0.14;
+  if (severity === "high") return 0.1;
+  if (severity === "medium") return 0.07;
+  return 0;
+}
+
 export function applySeverityPreset(findings: Finding[], preset: SeverityPreset): string[] {
   const keep = (severity: Severity): boolean => {
     if (preset === "critical") return severity === "critical";
