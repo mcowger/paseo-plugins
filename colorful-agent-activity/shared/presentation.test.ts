@@ -63,6 +63,7 @@ import {
   previewText,
   parseOpencodeSearchContent,
   relativeToRoot,
+  resolveSearchCounts,
   splitFileDisplay,
   truncateDirFront,
   splitReasoningSteps,
@@ -1209,6 +1210,37 @@ describe("opencode search content parsing", () => {
     expect(parseOpencodeSearchContent("just some output")).toBeUndefined();
     expect(parseOpencodeSearchContent("")).toBeUndefined();
     expect(parseOpencodeSearchContent(undefined)).toBeUndefined();
+  });
+
+  it("prefers parsed file counts over stale detail counts", () => {
+    const parsed = parseOpencodeSearchContent(
+      "Found 4 matches\ncolorful-agent-activity/shared/presentation.ts\n Line 6: isCodeModeTool,\n Line 541: export function isSkillTool(",
+    );
+    expect(parsed?.files).toHaveLength(1);
+    expect(resolveSearchCounts({ numMatches: 4, numFiles: 0 }, parsed)).toEqual({
+      matchCount: 4,
+      fileCount: 1,
+    });
+  });
+
+  it("counts parsed match rows when the content has no Found header", () => {
+    const parsed = parseOpencodeSearchContent("src/file.ts:\n  Line 1: todowrite\n  Line 2: todowrite again");
+    expect(resolveSearchCounts({}, parsed)).toEqual({ matchCount: 2, fileCount: 1 });
+  });
+
+  it("falls back to detail counts when content does not parse", () => {
+    expect(resolveSearchCounts({ numMatches: 4, numFiles: 0 }, undefined)).toEqual({
+      matchCount: 4,
+      fileCount: 0,
+    });
+    expect(resolveSearchCounts({}, undefined)).toEqual({});
+  });
+
+  it("reports zero files for explicit no-match content", () => {
+    expect(resolveSearchCounts({}, parseOpencodeSearchContent("No matches found"))).toEqual({
+      matchCount: 0,
+      fileCount: 0,
+    });
   });
 });
 

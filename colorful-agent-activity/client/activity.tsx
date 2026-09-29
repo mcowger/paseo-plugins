@@ -60,6 +60,7 @@ import {
   paseoToolLeafName,
   parseOpencodeSearchContent,
   parsePiLsOutput,
+  resolveSearchCounts,
   parseSubAgentActionLog,
   previewText,
   readErrorMessage,
@@ -294,6 +295,12 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       } satisfies TextStyle,
       mutedText: {
         color: theme.colors.foregroundMuted,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 16,
+      } satisfies TextStyle,
+      searchLineNumber: {
+        color: theme.colors.accent,
         fontFamily: "monospace",
         fontSize: 11,
         lineHeight: 16,
@@ -1108,9 +1115,7 @@ function SearchDetail({
     (filePath: string) => (cwd ? relativeToRoot(filePath, cwd) : filePath),
     [cwd],
   );
-  const matchCount = parsed?.numMatches ?? detail.numMatches;
-  const parsedFileCount = parsed ? parsed.files.filter((file) => file.filePath).length : 0;
-  const fileCount = detail.numFiles ?? (parsed ? parsedFileCount : undefined);
+  const { matchCount, fileCount } = resolveSearchCounts(detail, parsed);
   const meta = [
     matchCount !== undefined ? `${matchCount} match${matchCount === 1 ? "" : "es"}` : undefined,
     fileCount !== undefined ? `${fileCount} file${fileCount === 1 ? "" : "s"}` : undefined,
@@ -1136,7 +1141,7 @@ function SearchDetail({
                   style={{ flexDirection: "row", gap: 6, minWidth: 0 }}
                 >
                   {match.lineNumber !== undefined ? (
-                    <Text style={styles.mutedText}>{match.lineNumber}</Text>
+                    <Text style={styles.searchLineNumber}>{match.lineNumber}:</Text>
                   ) : null}
                   <Text selectable style={[styles.detailText, { flex: 1 }]}>
                     {match.text || " "}
@@ -1156,7 +1161,7 @@ function SearchDetail({
               styles={styles}
             />
           ))}
-          {detail.content ? (
+          {detail.content && matchCount !== 0 ? (
             <HighlightedCodeBlock code={detail.content} language="text" styles={styles} theme={theme} />
           ) : null}
         </>

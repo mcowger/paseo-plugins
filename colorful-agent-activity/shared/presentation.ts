@@ -2215,6 +2215,35 @@ export function parseOpencodeSearchContent(content: string | undefined | null): 
   return { ...(numMatches !== undefined ? { numMatches } : {}), files: grouped };
 }
 
+export interface ResolvedSearchCounts {
+  matchCount?: number;
+  fileCount?: number;
+}
+
+/**
+ * Counts for the search summary row. Parsed content is ground truth for what
+ * is rendered: daemon `numFiles`/`numMatches` can lag the text (e.g. `0`
+ * files alongside per-file matches), so prefer parsed evidence whenever the
+ * content parsed successfully and fall back to the detail fields otherwise.
+ */
+export function resolveSearchCounts(
+  detail: { numMatches?: number; numFiles?: number },
+  parsed: OpencodeSearchContent | undefined,
+): ResolvedSearchCounts {
+  if (!parsed) {
+    return {
+      ...(detail.numMatches !== undefined ? { matchCount: detail.numMatches } : {}),
+      ...(detail.numFiles !== undefined ? { fileCount: detail.numFiles } : {}),
+    };
+  }
+  const parsedMatches = parsed.files.reduce((total, file) => total + file.matches.length, 0);
+  const parsedFiles = parsed.files.filter((file) => file.filePath).length;
+  return {
+    matchCount: parsed.numMatches ?? parsedMatches,
+    fileCount: parsedFiles,
+  };
+}
+
 export function readErrorMessage(content: string | undefined): string | undefined {
   const text = content?.trim();
   return text && /^(?:E[A-Z0-9_]+|Error):\s/.test(text) ? text : undefined;
