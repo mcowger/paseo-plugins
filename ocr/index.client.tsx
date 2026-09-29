@@ -8,7 +8,7 @@ export default function contribute(client: PluginClientContext) {
     id: "open-code-review",
     title: "OpenCodeReview",
     icon: "SearchCheck",
-    locations: ["workspace", "explorer"],
+    locations: ["explorer"],
     context: "workspace",
     Component: ReviewPanel,
   });
