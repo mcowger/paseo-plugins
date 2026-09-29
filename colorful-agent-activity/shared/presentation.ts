@@ -210,6 +210,7 @@ export function languageForFilePath(filePath: string | undefined): string | unde
 
 export function fileIconForPath(filePath: string | undefined): string {
   if (!filePath) return "File";
+  if (/[/\\]$/.test(filePath.trim())) return "Folder";
   const name = fileName(filePath);
   const byName = FILE_ICON_BY_NAME[name];
   if (byName) return byName;
@@ -1588,6 +1589,20 @@ function detailFilePath(detail: ToolCallDetail): string | undefined {
   return undefined;
 }
 
+/**
+ * Whether a `read` tool call targeted a directory rather than a file.
+ * The opencode `read` tool returns directory listings with content prefixed
+ * by "Read directory ..."; a trailing slash on the path is also a signal.
+ */
+export function isDirectoryRead(filePath: string | undefined, content: string | undefined): boolean {
+  if (filePath && /[/\\]$/.test(filePath.trim())) return true;
+  if (content) {
+    const normalized = content.trimStart().toLowerCase();
+    if (normalized.startsWith("read directory")) return true;
+  }
+  return false;
+}
+
 export function resolveToolCallPresentation(
   item: Pick<ToolCallTimelineItem, "name" | "detail">,
 ): ToolCallPresentation {
@@ -1626,7 +1641,16 @@ export function resolveToolCallPresentation(
         label: "Worktree Setup",
         summary: compactText(detail.branchName || detail.worktreePath),
       };
-    case "read":
+    case "read": {
+      if (isDirectoryRead(detail.filePath, detail.content)) {
+        return {
+          category: "file",
+          icon: "Folder",
+          label: "List Directory",
+          summary: compactText(detail.filePath),
+          ...(filePath ? { filePath, fileIcon: "Folder" } : {}),
+        };
+      }
       return {
         category: "file",
         icon: commonFileFields.fileIcon ?? "Eye",
@@ -1634,6 +1658,7 @@ export function resolveToolCallPresentation(
         summary: compactText(detail.filePath),
         ...commonFileFields,
       };
+    }
     case "edit": {
       const editSize =
         detail.unifiedDiff?.length ??
@@ -1784,6 +1809,9 @@ export function resolveSubAgentActionPresentation(
     return { icon: "List", label: "List Files" };
   }
   if (normalized === "read" || normalized.includes("read_file") || normalized.includes("readfile")) {
+    if (summary && /[/\\]$/.test(summary.trim())) {
+      return { icon: "Folder", label: "List Directory", summaryIcon: "Folder" };
+    }
     return { icon: "FileText", label: "Read File", summaryIcon: fileIconForPath(summary) };
   }
   if (
