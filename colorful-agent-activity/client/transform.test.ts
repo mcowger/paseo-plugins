@@ -73,6 +73,27 @@ describe("colorful activity timeline transforms", () => {
     });
   });
 
+  it("omits diff stats for file-only edits without a diff payload", () => {
+    const result = transformToolCall({
+      phase: "complete",
+      item: toolCall({ type: "edit", filePath: "src/web/main.tsx" }),
+    });
+    expect(result?.items[0]?.data).toEqual({
+      name: "edit",
+      status: "completed",
+      detail: { type: "edit", filePath: "src/web/main.tsx" },
+      presentation: {
+        category: "file",
+        icon: "FileCode2",
+        label: "Edit File",
+        summary: "src/web/main.tsx",
+        filePath: "src/web/main.tsx",
+        fileIcon: "FileCode2",
+        language: "typescript",
+      },
+    });
+  });
+
   it("projects running shell calls with a stable generic fallback", () => {
     const result = transformToolCall({
       phase: "streaming",

@@ -40,6 +40,8 @@ import { TodoToolDetail } from "./todo";
 import {
   compactText,
   diffLinesForDetail,
+  editDiffContentSize,
+  effectiveUnifiedDiff,
   estimateReasoningTokens,
   extractCodeInput,
   fileIconForPath,
@@ -1009,7 +1011,7 @@ function DiffBlock({
       <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
         <View style={styles.diffSurface}>
           {displayLines.length === 0 ? (
-            <Text style={styles.empty}>No changed lines.</Text>
+            <Text style={styles.empty}>Diff unavailable.</Text>
           ) : (
             displayLines.map((line, index) => <DiffRow key={`${line.kind}-${index}`} line={line} palette={palette} styles={styles} />)
           )}
@@ -1168,11 +1170,9 @@ function DetailBody({
         </>
       );
     case "edit": {
-      const isOversized =
-        (detail.unifiedDiff?.length ??
-          ((detail.oldString?.length ?? 0) + (detail.newString?.length ?? 0))) > MAX_DIFF_CHARS;
+      const isOversized = editDiffContentSize(detail) > MAX_DIFF_CHARS;
 
-      if (isOversized && detail.unifiedDiff === undefined) {
+      if (isOversized && effectiveUnifiedDiff(detail) === undefined) {
         return (
           <>
             <PathRow icon={data.presentation.fileIcon ?? "Pencil"} path={detail.filePath} styles={styles} />

@@ -1475,13 +1475,58 @@ function focusDiffChanges(lines: DiffLine[], contextLines = DIFF_CONTEXT_LINES):
   return focused;
 }
 
+/**
+ * The unified diff text when it carries content. Blank diffs (empty or
+ * whitespace-only) count as absent so valid old/new strings are used instead.
+ * An empty unifiedDiff must never shadow real string content into +0/-0.
+ */
+export function effectiveUnifiedDiff(detail: Extract<ToolCallDetail, { type: "edit" }>): string | undefined {
+  const diff = detail.unifiedDiff;
+  if (diff === undefined || diff.trim() === "") return undefined;
+  return diff;
+}
+
+/**
+ * Whether an edit detail carries any diff payload.
+ *
+ * Upstream context (Paseo v2 opencode path): opencode itself keeps the full
+ * edit record — `state.input` holds `{filePath, oldString, newString}` and
+ * `state.metadata` holds `{diff, filediff}` with the unified patch plus exact
+ * addition/deletion counts (see `toolFromV2` input vs what survives). But
+ * Paseo's v2 translator (`opencode/v2/timeline.ts` → `deriveOpencodeToolDetail`
+ * in `tool-call-detail-parser.ts`) flattens output to text-only and never
+ * reads `metadata.diff`/`filediff` for edits, and the input strings don't
+ * survive either — completed opencode edits arrive here with only a filePath
+ * (repro'd 16/16 filePath-only against daemon 0.10.0). The real fix belongs
+ * upstream (~10 lines: prefer `metadata.filediff.patch`, fall back to
+ * `metadata.diff`, then input strings). Until then, presentation must omit
+ * stats and diff claims for payload-less edits instead of reporting
+ * misleading +0/-0 counts.
+ */
+export function hasEditDiffContent(detail: Extract<ToolCallDetail, { type: "edit" }>): boolean {
+  return (
+    effectiveUnifiedDiff(detail) !== undefined ||
+    detail.oldString !== undefined ||
+    detail.newString !== undefined
+  );
+}
+
+/** Comparable diff size for budget checks; blank diffs fall back to old/new. */
+export function editDiffContentSize(detail: Extract<ToolCallDetail, { type: "edit" }>): number {
+  const unifiedDiff = effectiveUnifiedDiff(detail);
+  if (unifiedDiff !== undefined) return unifiedDiff.length;
+  return (detail.oldString?.length ?? 0) + (detail.newString?.length ?? 0);
+}
+
 export function diffStatsForDetail(detail: Extract<ToolCallDetail, { type: "edit" }>): DiffStats {
-  if (detail.unifiedDiff !== undefined) return diffStatsFromUnifiedDiff(detail.unifiedDiff);
+  const unifiedDiff = effectiveUnifiedDiff(detail);
+  if (unifiedDiff !== undefined) return diffStatsFromUnifiedDiff(unifiedDiff);
   return diffStatsFromStrings(detail.oldString ?? "", detail.newString ?? "");
 }
 
 export function diffLinesForDetail(detail: Extract<ToolCallDetail, { type: "edit" }>): DiffLine[] {
-  const size = (detail.unifiedDiff?.length ?? ((detail.oldString?.length ?? 0) + (detail.newString?.length ?? 0)));
+  const unifiedDiff = effectiveUnifiedDiff(detail);
+  const size = unifiedDiff?.length ?? ((detail.oldString?.length ?? 0) + (detail.newString?.length ?? 0));
   if (size > MAX_DIFF_CHARS) {
     return [
       ...(detail.oldString ? [{ kind: "remove" as const, text: `[Previous content: ${detail.oldString.length.toLocaleString()} characters]` }] : []),
@@ -1489,8 +1534,8 @@ export function diffLinesForDetail(detail: Extract<ToolCallDetail, { type: "edit
     ];
   }
 
-  if (detail.unifiedDiff !== undefined) {
-    const lines: DiffLine[] = detail.unifiedDiff
+  if (unifiedDiff !== undefined) {
+    const lines: DiffLine[] = unifiedDiff
       .replace(/\r/g, "")
       .split("\n")
       .filter((line, index, lines) => !(index === lines.length - 1 && line === ""))
@@ -1582,15 +1627,13 @@ export function resolveToolCallPresentation(
         ...commonFileFields,
       };
     case "edit": {
-      const editSize =
-        detail.unifiedDiff?.length ??
-        ((detail.oldString?.length ?? 0) + (detail.newString?.length ?? 0));
+      const editSize = editDiffContentSize(detail);
       return {
         category: "file",
         icon: commonFileFields.fileIcon ?? "Pencil",
         label: "Edit File",
         summary: compactText(detail.filePath),
-        ...(editSize <= MAX_DIFF_CHARS ? { diffStats: diffStatsForDetail(detail) } : {}),
+        ...(hasEditDiffContent(detail) && editSize <= MAX_DIFF_CHARS ? { diffStats: diffStatsForDetail(detail) } : {}),
         ...commonFileFields,
       };
     }
