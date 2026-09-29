@@ -1,0 +1,4 @@
+{
+  "id": "skill-picker",
+  "requirements": { "paseo": ">=0.10.0" }
+}

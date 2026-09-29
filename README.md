@@ -1,7 +1,7 @@
 # Paseo plugins
 
 Published plugins for [Paseo](https://paseo.sh/), targeting the Paseo 0.10 plugin API and
-`@getpaseo/*` SDK `0.10.1`.
+`@getpaseo/*` SDK `0.10.0`.
 
 Plugins use separate `index.client.tsx` and `index.server.ts` entries with strict `client/`,
 `server/`, and `shared/` boundaries. See Paseo's [plugin guide](https://paseo.sh/docs/plugins.md)
@@ -10,6 +10,7 @@ when contributing changes.
 ## Plugins in this repository
 
 - [Colorful agent activity](./colorful-agent-activity/README.md)
+- [Skill picker](./skill-picker/README.md)
 
 ## Reference index and community registry
 

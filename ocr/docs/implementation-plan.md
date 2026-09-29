@@ -11,7 +11,7 @@ The plugin lets a user run OpenCodeReview (OCR) against the current Paseo worksp
 
 There is no one-click panel-to-existing-composer insertion. Paseo's built-in editor can do that through an internal draft store, but Paseo 0.10.x does not expose that operation to plugins. Do not import app internals, manipulate the DOM, or simulate composer input. The supported picker and agent-creation SDK APIs cover the two flows above.
 
-The target is **Paseo 0.10.0 and newer**. Pin `@getpaseo/client`, `@getpaseo/plugin`, and `@getpaseo/protocol` to `0.10.0` in this plugin; put `"requirements": { "paseo": ">=0.10.0" }` in `ocr/paseo-plugin.json`. The local Paseo checkout is currently at 0.10.1; check the 0.10.0 tag for any implementation detail before using it. This plugin is a deliberate exception to the older 0.9.0 baseline in the root `AGENTS.md`, as explicitly requested for OCR. Follow the other repository guardrails.
+The target is **Paseo 0.10.0 and newer**. Pin `@getpaseo/client`, `@getpaseo/plugin`, and `@getpaseo/protocol` to `0.10.0` in this plugin; put `"requirements": { "paseo": ">=0.10.0" }` in `ocr/paseo-plugin.json`. The local Paseo checkout is currently at 0.10.0; check the 0.10.0 tag for any implementation detail before using it. This matches the 0.10.0 baseline in the root `AGENTS.md`. Follow the other repository guardrails.
 
 ## User experience
 
