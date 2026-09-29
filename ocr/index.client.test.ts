@@ -60,24 +60,22 @@ describe("client entry registrations", () => {
     }
   });
 
-  it("registers workspace and agent /ocr slash commands", () => {
+  it("registers a single workspace /ocr slash command", () => {
     const { client, calls } = createRecordingClient();
     contribute(client);
     const commands = callsOf(calls, "addSlashCommand");
-    expect(commands.map((command) => command.context).sort()).toEqual(["agent", "workspace"]);
-    for (const command of commands) {
-      expect(command.name).toBe("ocr");
-      const openPanel = vi.fn();
-      const onSubmit = command.onSubmit as (context: unknown) => void;
-      onSubmit({ openPanel });
-      expect(openPanel).toHaveBeenCalledWith(REVIEW_PANEL_ID);
-    }
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({ name: "ocr", context: "workspace" });
+    const openPanel = vi.fn();
+    const onSubmit = commands[0].onSubmit as (context: unknown) => void;
+    onSubmit({ openPanel });
+    expect(openPanel).toHaveBeenCalledWith(REVIEW_PANEL_ID);
   });
 
   it("cleanup removes every registration", () => {
     const { client, remover } = createRecordingClient();
     const cleanup = contribute(client);
     cleanup();
-    expect(remover).toHaveBeenCalledTimes(7);
+    expect(remover).toHaveBeenCalledTimes(6);
   });
 });

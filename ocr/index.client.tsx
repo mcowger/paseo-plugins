@@ -51,22 +51,16 @@ export default function contribute(client: PluginClientContext) {
     },
   });
   // Composer slash command: second opener route via the agent composer.
+  // Slash command names are host-unique regardless of context, so only one
+  // registration is allowed. Workspace context works in both workspace and
+  // agent composers (the host only needs the workspace to resolve).
   // Note: slash commands do not run while the composer has attachments;
   // the command palette entries above cover that case.
-  const removeWorkspaceSlash = client.addSlashCommand({
+  const removeSlash = client.addSlashCommand({
     name: "ocr",
     description: "Open the OpenCodeReview panel",
     argumentHint: "",
     context: "workspace",
-    onSubmit: (context) => {
-      context.openPanel(REVIEW_PANEL_ID);
-    },
-  });
-  const removeAgentSlash = client.addSlashCommand({
-    name: "ocr",
-    description: "Open the OpenCodeReview panel",
-    argumentHint: "",
-    context: "agent",
     onSubmit: (context) => {
       context.openPanel(REVIEW_PANEL_ID);
     },
@@ -77,7 +71,6 @@ export default function contribute(client: PluginClientContext) {
     removeSettings();
     removeWorkspaceCommand();
     removeAgentCommand();
-    removeWorkspaceSlash();
-    removeAgentSlash();
+    removeSlash();
   };
 }
