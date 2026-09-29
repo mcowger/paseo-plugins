@@ -48,6 +48,7 @@ import {
   expansionTargetForToolCall,
   isBgWaitTool,
   isOmpWaitTool,
+  isSkillTool,
   isSubagentSupervisorTool,
   isTodoTool,
   paseoToolLeafName,
@@ -58,6 +59,7 @@ import {
   relativeToRoot,
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
+  skillNameForDetail,
   splitFileDisplay,
   splitReasoningSteps,
   stripLeadingCwdCd,
@@ -1081,6 +1083,16 @@ function DetailBody({
 }) {
   const detail = asToolCallDetail(data.detail);
   if (!detail) return <Text style={styles.empty}>Tool details unavailable.</Text>;
+
+  if (isSkillTool(data.name)) {
+    const skillName = skillNameForDetail(detail);
+    if (!skillName) return <Text style={styles.empty}>Skill details unavailable.</Text>;
+    return (
+      <Text selectable style={styles.detailText}>
+        {skillName}
+      </Text>
+    );
+  }
 
   switch (detail.type) {
     case "shell":

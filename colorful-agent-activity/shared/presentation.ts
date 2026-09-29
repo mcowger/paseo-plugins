@@ -531,6 +531,50 @@ export function isTodoTool(toolName: string): boolean {
   return normalizePiToolName(toolName) === "todo";
 }
 
+export function isSkillTool(toolName: string): boolean {
+  return normalizePiToolName(toolName) === "skill";
+}
+
+function skillNameFromRecord(record: Record<string, unknown>): string | undefined {
+  for (const key of ["name", "id", "skill", "skillName", "skillId"]) {
+    const field = record[key];
+    if (typeof field === "string" && field.trim()) return field.trim();
+  }
+  return undefined;
+}
+
+function skillNameFromOutput(output: unknown): string | undefined {
+  if (typeof output !== "string") return undefined;
+  const match = output.match(/<skill_content\s+name=["']([^"']+)["']/i);
+  return match?.[1]?.trim() || undefined;
+}
+
+/** Extract the loaded skill name from tool input. Handles `{ name }` and `{ id }` shapes. */
+export function parseSkillName(input: unknown): string | undefined {
+  const record = decodeToolInput(input);
+  if (!record) return undefined;
+  return skillNameFromRecord(record);
+}
+
+/** Resolve the skill name from either a plain_text label or an unknown input envelope. */
+export function skillNameForDetail(detail: ToolCallDetail): string | undefined {
+  if (detail.type === "plain_text") {
+    const label = detail.label?.trim();
+    if (label) return label;
+    return undefined;
+  }
+  if (detail.type === "unknown") {
+    return (
+      parseSkillName(detail.input) ??
+      skillNameFromOutput(detail.output) ??
+      (isRecord(detail.output) && typeof detail.output.output === "string"
+        ? skillNameFromOutput(detail.output.output)
+        : undefined)
+    );
+  }
+  return undefined;
+}
+
 export type SubagentSupervisorAction = "reply" | "pending" | "list" | "status" | string;
 
 export interface SubagentSupervisorInput {
@@ -1549,6 +1593,15 @@ export function resolveToolCallPresentation(
 ): ToolCallPresentation {
   const name = item.name.trim().toLowerCase();
   const detail = item.detail;
+  if (isSkillTool(item.name)) {
+    const skillName = skillNameForDetail(detail);
+    return {
+      category: "agent",
+      icon: "Sparkles",
+      label: "Skill",
+      ...(skillName ? { summary: skillName } : {}),
+    };
+  }
   const filePath = detailFilePath(detail);
   const commonFileFields = filePath
     ? {
@@ -1773,6 +1826,9 @@ export function resolveSubAgentActionPresentation(
   }
   if (normalized === "todo") {
     return { icon: "ListChecks", label: "Tasks" };
+  }
+  if (normalized === "skill") {
+    return { icon: "Sparkles", label: "Skill" };
   }
   return { icon: "Wrench", label: toolName.trim() || "Tool" };
 }

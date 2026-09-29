@@ -25,13 +25,16 @@ import {
   extractPiToolText,
   formatWaitTimeout,
   isOmpWaitTool,
+  isSkillTool,
   isTodoTool,
+  parseSkillName,
   parseTodoToolInput,
   parseTodoToolOutput,
   todoToolActionLabel,
   todoToolSummary,
   isBgWaitTool,
   isSubagentSupervisorTool,
+  skillNameForDetail,
   shortRunId,
   subagentSupervisorLabel,
   subagentSupervisorSummary,
@@ -941,6 +944,80 @@ describe("pi todo tool presentation", () => {
     expect(resolveSubAgentActionPresentation("todo", undefined)).toEqual({
       icon: "ListChecks",
       label: "Tasks",
+    });
+  });
+});
+
+describe("skill tool presentation", () => {
+  it("recognizes the skill tool in any namespace", () => {
+    expect(isSkillTool("skill")).toBe(true);
+    expect(isSkillTool("Skill")).toBe(true);
+    expect(isSkillTool("functions.skill")).toBe(true);
+    expect(isSkillTool("mcp__plugin__skill")).toBe(true);
+    expect(isSkillTool("tasks")).toBe(false);
+  });
+
+  it("parses skill names from id and name input shapes", () => {
+    expect(parseSkillName({ id: "git-commit" })).toBe("git-commit");
+    expect(parseSkillName({ name: "diagnose" })).toBe("diagnose");
+    expect(parseSkillName(JSON.stringify({ id: "git-commit" }))).toBe("git-commit");
+    expect(parseSkillName({})).toBeUndefined();
+    expect(parseSkillName(null)).toBeUndefined();
+  });
+
+  it("resolves skill names from plain_text labels and unknown envelopes", () => {
+    expect(skillNameForDetail({ type: "plain_text", label: "diagnose", text: "body" })).toBe(
+      "diagnose",
+    );
+    expect(
+      skillNameForDetail({
+        type: "unknown",
+        input: { id: "git-commit" },
+        output: '<skill_content name="git-commit"># Skill</skill_content>',
+      }),
+    ).toBe("git-commit");
+    expect(
+      skillNameForDetail({
+        type: "unknown",
+        input: {},
+        output: '<skill_content name="diagnose"># Skill</skill_content>',
+      }),
+    ).toBe("diagnose");
+  });
+
+  it("maps skill calls to a name-only header without contents", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "skill",
+        detail: {
+          type: "unknown",
+          input: { id: "git-commit" },
+          output: '<skill_content name="git-commit"># Skill: git-commit</skill_content>',
+        },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Sparkles",
+      label: "Skill",
+      summary: "git-commit",
+    });
+    expect(
+      resolveToolCallPresentation({
+        name: "skill",
+        detail: { type: "plain_text", label: "diagnose", text: '<skill_content name="diagnose">' },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Sparkles",
+      label: "Skill",
+      summary: "diagnose",
+    });
+  });
+
+  it("labels skill rows in sub-agent progress", () => {
+    expect(resolveSubAgentActionPresentation("skill", undefined)).toEqual({
+      icon: "Sparkles",
+      label: "Skill",
     });
   });
 });
