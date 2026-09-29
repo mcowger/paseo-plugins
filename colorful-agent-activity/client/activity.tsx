@@ -55,6 +55,7 @@ import {
   isSubagentSupervisorTool,
   isTodoTool,
   paseoToolLeafName,
+  parseOpencodeSearchContent,
   parsePiLsOutput,
   parseSubAgentActionLog,
   previewText,
@@ -1086,6 +1087,89 @@ function PendingOutput({ styles }: { styles: ReturnType<typeof useActivityStyles
   );
 }
 
+function SearchDetail({
+  detail,
+  agentId,
+  theme,
+  styles,
+}: {
+  detail: Extract<ToolCallDetail, { type: "search" }>;
+  agentId: string;
+  theme: Theme;
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  const cwd = useAgent(agentId, (agent) => agent.cwd);
+  const parsed = useMemo(() => parseOpencodeSearchContent(detail.content), [detail.content]);
+  const displayPath = useCallback(
+    (filePath: string) => (cwd ? relativeToRoot(filePath, cwd) : filePath),
+    [cwd],
+  );
+  const matchCount = parsed?.numMatches ?? detail.numMatches;
+  const parsedFileCount = parsed ? parsed.files.filter((file) => file.filePath).length : 0;
+  const fileCount = detail.numFiles ?? (parsed ? parsedFileCount : undefined);
+  const meta = [
+    matchCount !== undefined ? `${matchCount} match${matchCount === 1 ? "" : "es"}` : undefined,
+    fileCount !== undefined ? `${fileCount} file${fileCount === 1 ? "" : "s"}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <>
+      <Text style={styles.detailText}>Query: {detail.query}</Text>
+      {meta ? <Text style={styles.mutedText}>{meta}</Text> : null}
+      {parsed && parsed.files.length > 0 ? (
+        parsed.files.map((file, fileIndex) => {
+          const display = file.filePath ? displayPath(file.filePath) : "";
+          return (
+            <View key={file.filePath || `matches-${fileIndex}`} style={styles.section}>
+              {file.filePath ? (
+                <PathRow icon={fileIconForPath(file.filePath)} path={display} styles={styles} />
+              ) : null}
+              {file.matches.map((match, matchIndex) => (
+                <View
+                  key={`${file.filePath}-${match.lineNumber ?? "line"}-${matchIndex}`}
+                  style={{ flexDirection: "row", gap: 6, minWidth: 0 }}
+                >
+                  {match.lineNumber !== undefined ? (
+                    <Text style={styles.mutedText}>{match.lineNumber}</Text>
+                  ) : null}
+                  <Text selectable style={[styles.detailText, { flex: 1 }]}>
+                    {match.text || " "}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          );
+        })
+      ) : (
+        <>
+          {detail.filePaths?.map((filePath) => (
+            <PathRow
+              key={filePath}
+              icon={fileIconForPath(filePath)}
+              path={displayPath(filePath)}
+              styles={styles}
+            />
+          ))}
+          {detail.content ? (
+            <HighlightedCodeBlock code={detail.content} language="text" styles={styles} theme={theme} />
+          ) : null}
+        </>
+      )}
+      {detail.webResults?.map((result) => (
+        <View key={result.url} style={styles.section}>
+          <Text selectable style={styles.detailText}>{result.title}</Text>
+          <Text selectable style={styles.mutedText}>{result.url}</Text>
+        </View>
+      ))}
+      {detail.annotations?.map((annotation, index) => (
+        <Text key={`${annotation}-${index}`} selectable style={styles.mutedText}>{annotation}</Text>
+      ))}
+    </>
+  );
+}
+
 function DetailBody({
   data,
   agentId,
@@ -1236,24 +1320,7 @@ function DetailBody({
       );
     }
     case "search":
-      return (
-        <>
-          <Text style={styles.detailText}>Query: {detail.query}</Text>
-          {detail.filePaths?.map((filePath) => (
-            <PathRow key={filePath} icon={fileIconForPath(filePath)} path={filePath} styles={styles} />
-          ))}
-          {detail.content ? <HighlightedCodeBlock code={detail.content} language="text" styles={styles} theme={theme} /> : null}
-          {detail.webResults?.map((result) => (
-            <View key={result.url} style={styles.section}>
-              <Text selectable style={styles.detailText}>{result.title}</Text>
-              <Text selectable style={styles.mutedText}>{result.url}</Text>
-            </View>
-          ))}
-          {detail.annotations?.map((annotation, index) => (
-            <Text key={`${annotation}-${index}`} selectable style={styles.mutedText}>{annotation}</Text>
-          ))}
-        </>
-      );
+      return <SearchDetail detail={detail} agentId={agentId} theme={theme} styles={styles} />;
     case "fetch":
       return (
         <>

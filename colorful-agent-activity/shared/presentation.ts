@@ -1969,6 +1969,118 @@ export function parsePiLsOutput(value: unknown): string[] | null {
   return textBlocks.flatMap((text) => text.split("\n").filter((entry) => entry.length > 0));
 }
 
+export interface OpencodeSearchMatch {
+  lineNumber?: number;
+  text: string;
+}
+
+export interface OpencodeSearchFile {
+  filePath: string;
+  matches: OpencodeSearchMatch[];
+}
+
+export interface OpencodeSearchContent {
+  numMatches?: number;
+  files: OpencodeSearchFile[];
+}
+
+function cleanSearchFileHeader(line: string): string | undefined {
+  const trimmed = line.trim();
+  if (!trimmed) return undefined;
+  const withoutColon = trimmed.endsWith(":") ? trimmed.slice(0, -1).trim() : trimmed;
+  if (!withoutColon) return undefined;
+  const unquoted =
+    withoutColon.length >= 2 &&
+    ((withoutColon.startsWith('"') && withoutColon.endsWith('"')) ||
+      (withoutColon.startsWith("'") && withoutColon.endsWith("'")))
+      ? withoutColon.slice(1, -1).trim()
+      : withoutColon;
+  if (!unquoted || unquoted.length > 500) return undefined;
+  return unquoted;
+}
+
+function looksLikeSearchFilePath(value: string): boolean {
+  if (/[\\/]/.test(value)) return true;
+  if (/\.[A-Za-z0-9]{1,10}$/.test(value)) return true;
+  if (/^[^\s]+\.[^\s]+$/.test(value)) return true;
+  return false;
+}
+
+/**
+ * Parse opencode `grep`/`search` text output (`Found N matches`, file headers,
+ * `Line <n>: <snippet>` rows) into per-file matches. Returns undefined when the
+ * content does not follow that shape so callers can fall back to raw text.
+ */
+export function parseOpencodeSearchContent(content: string | undefined | null): OpencodeSearchContent | undefined {
+  if (typeof content !== "string") return undefined;
+  const normalized = content.replace(/\r\n?/g, "\n");
+  if (!normalized.trim()) return undefined;
+  const lines = normalized.split("\n");
+
+  let numMatches: number | undefined;
+  const files: OpencodeSearchFile[] = [];
+  let current: OpencodeSearchFile | null = null;
+
+  function nextNonEmptyMatchesLine(from: number): boolean {
+    for (let index = from + 1; index < lines.length; index += 1) {
+      const candidate = (lines[index] ?? "").trim();
+      if (!candidate) continue;
+      return /^line\s+\d+\s*:/i.test(candidate);
+    }
+    return false;
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index] ?? "";
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+
+    if (numMatches === undefined && files.length === 0 && !current) {
+      const header = trimmed.match(/^found\s+(\d+)\s+matches?\b/i);
+      if (header?.[1]) {
+        const parsed = Number.parseInt(header[1], 10);
+        if (Number.isFinite(parsed)) numMatches = parsed;
+        continue;
+      }
+      if (/^no\s+matches?\s+found\b/i.test(trimmed)) {
+        return { files: [] };
+      }
+    }
+
+    const lineMatch = trimmed.match(/^line\s+(\d+)\s*:\s?([\s\S]*)$/i);
+    if (lineMatch) {
+      const parsedLine = Number.parseInt(lineMatch[1] ?? "", 10);
+      const text = (lineMatch[2] ?? "").trimEnd();
+      if (!current) {
+        current = { filePath: "", matches: [] };
+        files.push(current);
+      }
+      current.matches.push({
+        ...(Number.isFinite(parsedLine) ? { lineNumber: parsedLine } : {}),
+        text,
+      });
+      continue;
+    }
+
+    const headerPath = cleanSearchFileHeader(trimmed);
+    if (!headerPath) continue;
+    const followedByMatch = nextNonEmptyMatchesLine(index);
+    if (followedByMatch || ((current?.matches.length ?? 0) > 0 && looksLikeSearchFilePath(headerPath))) {
+      current = { filePath: headerPath, matches: [] };
+      files.push(current);
+      continue;
+    }
+    if (!current && looksLikeSearchFilePath(headerPath)) {
+      current = { filePath: headerPath, matches: [] };
+      files.push(current);
+    }
+  }
+
+  const grouped = files.filter((file) => file.filePath || file.matches.length > 0);
+  if (grouped.length === 0) return undefined;
+  return { ...(numMatches !== undefined ? { numMatches } : {}), files: grouped };
+}
+
 export function readErrorMessage(content: string | undefined): string | undefined {
   const text = content?.trim();
   return text && /^(?:E[A-Z0-9_]+|Error):\s/.test(text) ? text : undefined;

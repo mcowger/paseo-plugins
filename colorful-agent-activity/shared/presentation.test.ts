@@ -57,6 +57,7 @@ import {
   extractApplyPatchEdits,
   isApplyPatchTool,
   previewText,
+  parseOpencodeSearchContent,
   relativeToRoot,
   splitFileDisplay,
   truncateDirFront,
@@ -1101,5 +1102,53 @@ describe("skill tool presentation", () => {
       icon: "Sparkles",
       label: "Skill",
     });
+  });
+});
+
+describe("opencode search content parsing", () => {
+  it("parses absolute paths with line matches and relativizes against cwd", () => {
+    const content = [
+      "Found 3 matches",
+      "/home/matt.cowger/workspace/paseo-plugins/colorful-agent-activity/shared/presentation.ts",
+      " Line 1591: export function resolveToolCallPresentation(",
+      "",
+      " Line 1949: export function formatUnknownValue(value: unkno",
+      "",
+      " Line 1982:  const text = typeof error === \"string\" ? error : for",
+    ].join("\n");
+    const parsed = parseOpencodeSearchContent(content);
+    expect(parsed?.numMatches).toBe(3);
+    expect(parsed?.files).toHaveLength(1);
+    expect(parsed?.files[0]?.filePath).toBe(
+      "/home/matt.cowger/workspace/paseo-plugins/colorful-agent-activity/shared/presentation.ts",
+    );
+    expect(parsed?.files[0]?.matches).toEqual([
+      { lineNumber: 1591, text: "export function resolveToolCallPresentation(" },
+      { lineNumber: 1949, text: "export function formatUnknownValue(value: unkno" },
+      { lineNumber: 1982, text: ' const text = typeof error === "string" ? error : for' },
+    ]);
+    expect(
+      relativeToRoot(
+        parsed?.files[0]?.filePath ?? "",
+        "/home/matt.cowger/workspace/paseo-plugins/colorful-agent-activity",
+      ),
+    ).toBe("shared/presentation.ts");
+  });
+
+  it("parses multiple relative files with trailing colons", () => {
+    const parsed = parseOpencodeSearchContent(
+      "Found 2 matches\nsrc/file.ts:\n  Line 1: todowrite\nsrc/other.ts:\n  Line 4: todowrite again",
+    );
+    expect(parsed?.numMatches).toBe(2);
+    expect(parsed?.files).toEqual([
+      { filePath: "src/file.ts", matches: [{ lineNumber: 1, text: "todowrite" }] },
+      { filePath: "src/other.ts", matches: [{ lineNumber: 4, text: "todowrite again" }] },
+    ]);
+  });
+
+  it("falls back to raw text for non-search output", () => {
+    expect(parseOpencodeSearchContent("just some output")).toBeUndefined();
+    expect(parseOpencodeSearchContent("")).toBeUndefined();
+    expect(parseOpencodeSearchContent(undefined)).toBeUndefined();
   });
 });
