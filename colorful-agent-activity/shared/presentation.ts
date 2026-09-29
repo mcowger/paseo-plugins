@@ -426,6 +426,7 @@ export function expansionTargetForToolCall(toolName: string, detailType: string)
   if (isAskTool(toolName)) return "ask";
   if (toolName.trim().toLowerCase() === "speak") return "speak";
   if (isTodoTool(toolName)) return "todo";
+  if (isOpencodeSubagentTool(toolName)) return "sub_agent";
   switch (detailType) {
     case "read":
     case "edit":
@@ -540,6 +541,165 @@ export function isTodoTool(toolName: string): boolean {
 
 export function isSkillTool(toolName: string): boolean {
   return normalizePiToolName(toolName) === "skill";
+}
+
+/**
+ * Whether a tool name refers to the opencode subagent delegation tool.
+ * OpenCode v1 calls it `task` (input `subagent_type`/`description`); v2
+ * renamed it to `subagent` (input `agent`/`description`/`prompt`). Paseo's
+ * server translator only maps `task` to `sub_agent` detail, so `subagent`
+ * arrives here as `unknown` — handle both names identically in the plugin.
+ */
+export function isOpencodeSubagentTool(toolName: string): boolean {
+  const normalized = normalizePiToolName(toolName);
+  return normalized === "subagent" || normalized === "task";
+}
+
+export interface OpencodeSubagentInput {
+  agent?: string;
+  description?: string;
+  prompt?: string;
+  model?: string;
+  sessionID?: string;
+  background?: boolean;
+}
+
+export interface OpencodeSubagentOutput {
+  sessionID?: string;
+  status?: string;
+  description?: string;
+  text?: string;
+  isBackgroundNotice?: boolean;
+}
+
+/** Parse the opencode `subagent`/`task` tool input (`agent`/`description`/`prompt`). */
+export function parseOpencodeSubagentInput(input: unknown): OpencodeSubagentInput {
+  const record = decodeToolInput(input) ?? {};
+  const agent =
+    stringField(record, "agent") ??
+    stringField(record, "subagent_type") ??
+    stringField(record, "subAgentType") ??
+    stringField(record, "subagent") ??
+    stringField(record, "type");
+  const description = stringField(record, "description");
+  const prompt =
+    stringField(record, "prompt") ?? stringField(record, "task") ?? stringField(record, "text");
+  const model = stringField(record, "model");
+  const sessionID =
+    stringField(record, "sessionID") ??
+    stringField(record, "sessionId") ??
+    stringField(record, "task_id") ??
+    stringField(record, "taskId");
+  const background = typeof record.background === "boolean" ? record.background : undefined;
+  return {
+    ...(agent ? { agent } : {}),
+    ...(description ? { description } : {}),
+    ...(prompt ? { prompt } : {}),
+    ...(model ? { model } : {}),
+    ...(sessionID ? { sessionID } : {}),
+    ...(background !== undefined ? { background } : {}),
+  };
+}
+
+function opencodeSubagentTextFromValue(value: unknown, depth = 0): string | undefined {
+  if (depth > 4) return undefined;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  }
+  if (Array.isArray(value)) {
+    const parts = value.flatMap((entry) => {
+      if (typeof entry === "string" && entry.trim()) return [entry.trim()];
+      if (isRecord(entry) && entry.type === "text" && typeof entry.text === "string" && entry.text.trim()) {
+        return [entry.text.trim()];
+      }
+      const nested = opencodeSubagentTextFromValue(entry, depth + 1);
+      return nested ? [nested] : [];
+    });
+    return parts.length > 0 ? parts.join("\n") : undefined;
+  }
+  if (!isRecord(value)) return undefined;
+  for (const key of ["output", "text", "result", "content", "response", "body", "message"]) {
+    const nested = opencodeSubagentTextFromValue(value[key], depth + 1);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function parseSubagentEnvelopeTag(text: string): OpencodeSubagentOutput | undefined {
+  const openMatch = text.match(/<subagent\s+([^>]*?)>/i);
+  if (!openMatch?.[1]) return undefined;
+  const attrs = openMatch[1] ?? "";
+  const attr = (name: string): string | undefined => {
+    const match = attrs.match(new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, "i"));
+    return match?.[1]?.trim() || undefined;
+  };
+  const sessionID = attr("sessionID") ?? attr("sessionId") ?? attr("session_id");
+  const status = attr("state") ?? attr("status");
+  const description = attr("description");
+  const afterOpen = text.slice((openMatch.index ?? 0) + openMatch[0].length);
+  const closeIndex = afterOpen.search(/<\/subagent\s*>/i);
+  const body = (closeIndex >= 0 ? afterOpen.slice(0, closeIndex) : afterOpen).trim();
+  return {
+    ...(sessionID ? { sessionID } : {}),
+    ...(status ? { status } : {}),
+    ...(description ? { description } : {}),
+    ...(body ? { text: body } : {}),
+  };
+}
+
+/** Parse the opencode `subagent` tool output (envelope tag, object, or plain text). */
+export function parseOpencodeSubagentOutput(output: unknown): OpencodeSubagentOutput | undefined {
+  if (typeof output === "string") {
+    const trimmed = output.trim();
+    if (!trimmed) return undefined;
+    const envelope = parseSubagentEnvelopeTag(trimmed);
+    if (envelope && (envelope.sessionID || envelope.status || envelope.text)) return envelope;
+    const backgroundMatch = trimmed.match(/working in the background\s*\(sessionID:\s*([^)]+)\)/i);
+    if (backgroundMatch?.[1]) {
+      return {
+        sessionID: backgroundMatch[1].trim(),
+        status: "running",
+        text: trimmed,
+        isBackgroundNotice: true,
+      };
+    }
+    const sessionMatch = trimmed.match(/\bsessionID:\s*(ses_[A-Za-z0-9]+)/i);
+    return {
+      ...(sessionMatch?.[1] ? { sessionID: sessionMatch[1] } : {}),
+      text: trimmed,
+    };
+  }
+  if (!isRecord(output)) return undefined;
+  const sessionID =
+    stringField(output, "sessionID") ??
+    stringField(output, "sessionId") ??
+    stringField(output, "session_id") ??
+    stringField(output, "task_id") ??
+    stringField(output, "taskId");
+  const status = stringField(output, "status") ?? stringField(output, "state");
+  const description = stringField(output, "description");
+  const text = opencodeSubagentTextFromValue(output);
+  if (!sessionID && !status && !description && !text) return undefined;
+  const backgroundNotice = text ? /working in the background/i.test(text) : false;
+  return {
+    ...(sessionID ? { sessionID } : {}),
+    ...(status ? { status } : {}),
+    ...(description ? { description } : {}),
+    ...(text ? { text } : {}),
+    ...(backgroundNotice ? { isBackgroundNotice: true as const } : {}),
+  };
+}
+
+/** One-line header summary for the opencode subagent tool (description first). */
+export function opencodeSubagentSummary(input: unknown, output: unknown): string | undefined {
+  const parsed = parseOpencodeSubagentInput(input);
+  if (parsed.description) return compactText(parsed.description);
+  const outputParsed = parseOpencodeSubagentOutput(output);
+  if (outputParsed?.description) return compactText(outputParsed.description);
+  if (parsed.agent) return compactText(parsed.agent);
+  if (parsed.prompt) return compactText(parsed.prompt.split("\n")[0] ?? "", 120);
+  return undefined;
 }
 
 function skillNameFromRecord(record: Record<string, unknown>): string | undefined {
@@ -1915,8 +2075,13 @@ export function resolveToolCallPresentation(
       if (name === "ls") {
         return { category: "file", icon: "List", label: "List" };
       }
-      if (name === "task") {
-        return { category: "agent", icon: "Bot", label: "Task", summary: compactText(item.name) };
+      if (isOpencodeSubagentTool(item.name)) {
+        return {
+          category: "agent",
+          icon: "Bot",
+          label: "Agent Task",
+          summary: opencodeSubagentSummary(detail.input, detail.output),
+        };
       }
       if (isAskTool(item.name)) {
         return { category: "communication", icon: "MessageCircleQuestionMark", label: "Ask Question" };

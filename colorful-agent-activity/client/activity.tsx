@@ -38,6 +38,7 @@ import { CodeModeToolDetail } from "./codemode";
 import { BgWaitToolDetail, SupervisorToolDetail } from "./pi-subagents";
 import { OmpWaitToolDetail } from "./omp-wait";
 import { OmpFindToolDetail } from "./omp-find";
+import { OpencodeSubagentToolDetail } from "./opencode-subagent";
 import { TodoToolDetail } from "./todo";
 import {
   compactText,
@@ -54,6 +55,7 @@ import {
   hasMeaningfulUnknownValue,
   isBgWaitTool,
   isOmpWaitTool,
+  isOpencodeSubagentTool,
   isSkillTool,
   isSubagentSupervisorTool,
   isTodoTool,
@@ -1358,6 +1360,18 @@ function DetailBody({
     case "plan":
       return <Text selectable style={styles.detailText}>{detail.text}</Text>;
     case "unknown": {
+      if (isOpencodeSubagentTool(data.name)) {
+        return (
+          <OpencodeSubagentToolDetail
+            toolName={data.name}
+            input={detail.input}
+            output={detail.output}
+            theme={theme}
+            palette={palette}
+            styles={styles}
+          />
+        );
+      }
       if (isCodeModeTool(data.name)) {
         const code = extractCodeModeCode(detail.input);
         if (code) {

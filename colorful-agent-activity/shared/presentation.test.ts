@@ -38,6 +38,10 @@ import {
   todoToolSummary,
   isBgWaitTool,
   isSubagentSupervisorTool,
+  isOpencodeSubagentTool,
+  parseOpencodeSubagentInput,
+  parseOpencodeSubagentOutput,
+  opencodeSubagentSummary,
   skillNameForDetail,
   shortRunId,
   subagentSupervisorLabel,
@@ -1322,5 +1326,69 @@ describe("opencode codemode execute presentation", () => {
       label: "Exa Web Search",
       summary: "hi",
     });
+  });
+});
+
+describe("opencode subagent tool presentation", () => {
+  const subagentInput = {
+    agent: "explore",
+    description: "explore opencode subagents",
+    prompt: "In repo /tmp/x, investigate how Paseo handles opencode subagents.",
+  };
+
+  it("recognizes subagent and legacy task tool names", () => {
+    expect(isOpencodeSubagentTool("subagent")).toBe(true);
+    expect(isOpencodeSubagentTool("Subagent")).toBe(true);
+    expect(isOpencodeSubagentTool("task")).toBe(true);
+    expect(isOpencodeSubagentTool("mcp__opencode__subagent")).toBe(true);
+    expect(isOpencodeSubagentTool("ask")).toBe(false);
+    expect(isOpencodeSubagentTool("todo")).toBe(false);
+  });
+
+  it("parses v2 subagent input and legacy task input", () => {
+    expect(parseOpencodeSubagentInput(subagentInput)).toMatchObject({
+      agent: "explore",
+      description: "explore opencode subagents",
+      prompt: "In repo /tmp/x, investigate how Paseo handles opencode subagents.",
+    });
+    expect(
+      parseOpencodeSubagentInput({ subagent_type: "explore", description: "look around" }),
+    ).toMatchObject({ agent: "explore", description: "look around" });
+    expect(parseOpencodeSubagentInput(JSON.stringify(subagentInput)).agent).toBe("explore");
+  });
+
+  it("parses subagent envelope and background outputs", () => {
+    const envelope =
+      '<subagent sessionID="ses_abc123" state="completed" description="explore opencode subagents">\nCHILD_OK\n</subagent>';
+    expect(parseOpencodeSubagentOutput(envelope)).toMatchObject({
+      sessionID: "ses_abc123",
+      status: "completed",
+      description: "explore opencode subagents",
+      text: "CHILD_OK",
+    });
+    expect(
+      parseOpencodeSubagentOutput({
+        sessionID: "ses_abc123",
+        status: "running",
+        output: "The subagent is working in the background (sessionID: ses_abc123).",
+      }),
+    ).toMatchObject({ sessionID: "ses_abc123", status: "running", isBackgroundNotice: true });
+  });
+
+  it("projects subagent tools as agent task rows", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "subagent",
+        detail: { type: "unknown", input: subagentInput, output: null },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Bot",
+      label: "Agent Task",
+      summary: "explore opencode subagents",
+    });
+    expect(opencodeSubagentSummary(subagentInput, null)).toBe("explore opencode subagents");
+    expect(expansionTargetForToolCall("subagent", "unknown")).toBe("sub_agent");
+    expect(expansionTargetForToolCall("task", "unknown")).toBe("sub_agent");
   });
 });
