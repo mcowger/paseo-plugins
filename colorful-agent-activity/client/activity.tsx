@@ -100,6 +100,14 @@ import {
 const MAX_DETAIL_HEIGHT = 420;
 const MAX_VISIBLE_SUBAGENT_ACTIONS = 5;
 
+// Paseo spaces consecutive activity rows by applying its inter-row gap to the row
+// that still has a newer neighbor. On the native inverted timeline the newest live
+// row gets none, leaving no gap above it. The plugin supplies the missing gap on the
+// row itself whenever it is the live tail.
+const STREAM_ROW_GAP = 16;
+const CARD_VERTICAL_MARGIN = -3;
+const CARD_TAIL_MARGIN_TOP = STREAM_ROW_GAP + CARD_VERTICAL_MARGIN;
+
 type Theme = PluginTimelineItemProps["theme"];
 type ReasoningData = z.output<typeof reasoningItemDataSchema>;
 type ToolCallData = z.output<typeof toolCallItemDataSchema>;
@@ -162,6 +170,37 @@ function useIsLatestToolCall(agentId: string, timestamp: Date, isRunning: boolea
   return isRunning || (latestTime > 0 && itemTime >= latestTime);
 }
 
+/**
+ * Whether a row is the live tail: the newest activity row, still being produced, on
+ * the native inverted timeline. Paseo's inverted stream skips the inter-row gap on
+ * that row (the gap lands above the row before it), so only it needs the plugin to
+ * supply its own top spacing. Comparing against both activity stores keeps parallel
+ * (or background) rows from claiming the tail while a newer row exists; the web
+ * timeline is not inverted and already receives the host's gap.
+ */
+function useIsLiveTail(
+  agentId: string,
+  timestamp: Date,
+  active: boolean,
+  platform: PluginTimelineItemProps["layout"]["platform"],
+): boolean {
+  const reasoningLatest = useSyncExternalStore(
+    subscribeLatestReasoning,
+    () => latestReasoningTimestamps.get(agentId) ?? 0,
+    () => 0,
+  );
+  const toolCallLatest = useSyncExternalStore(
+    subscribeLatestToolCall,
+    () => latestToolCallTimestamps.get(agentId) ?? 0,
+    () => 0,
+  );
+  return (
+    active &&
+    platform !== "web" &&
+    timestamp.getTime() >= Math.max(reasoningLatest, toolCallLatest)
+  );
+}
+
 function useExpansionMode(target: ExpansionTarget): ExpansionMode {
   const settings = useSettings(activitySettings);
   if (settings.status === "ready") return settings.values.expansion[target] ?? DEFAULT_EXPANSION[target];
@@ -182,7 +221,10 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
     () => ({
       card: {
         marginHorizontal: 0,
-        marginVertical: -3,
+        marginVertical: CARD_VERTICAL_MARGIN,
+      } satisfies ViewStyle,
+      cardTail: {
+        marginTop: CARD_TAIL_MARGIN_TOP,
       } satisfies ViewStyle,
       headerButton: {
         alignItems: "center",
@@ -1908,11 +1950,13 @@ export function ColorfulReasoning({
   item,
   theme,
   timestamp,
+  layout,
 }: PluginTimelineItemProps<ReasoningItemData>) {
   const palette = usePalette(theme);
   const styles = useActivityStyles(theme, palette);
   const isStreaming = item.data.phase === "streaming";
   const isLatest = useIsLatestReasoning(agentId, timestamp, isStreaming);
+  const isLiveTail = useIsLiveTail(agentId, timestamp, isStreaming, layout.platform);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const expanded = resolveExpansion(useExpansionMode("thinking"), isLatest, userExpanded);
   const meta = useMemo(
@@ -1927,7 +1971,7 @@ export function ColorfulReasoning({
     setUserExpanded(!expanded);
   }, [expanded]);
   return (
-    <View {...pmonoViewEscape} style={styles.card}>
+    <View {...pmonoViewEscape} style={[styles.card, isLiveTail ? styles.cardTail : null]}>
       <ActivityHeader
         icon="Sparkles"
         iconColor={palette.categoryColors.reasoning}
@@ -1951,11 +1995,13 @@ export function ColorfulToolCall({
   item,
   theme,
   timestamp,
+  layout,
 }: PluginTimelineItemProps<ToolCallItemData>) {
   const palette = usePalette(theme);
   const styles = useActivityStyles(theme, palette);
   const isRunning = item.data.status === "running";
   const isLatest = useIsLatestToolCall(agentId, timestamp, isRunning);
+  const isLiveTail = useIsLiveTail(agentId, timestamp, isRunning, layout.platform);
   const detail = asToolCallDetail(item.data.detail);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const categoryColor = palette.categoryColors[item.data.presentation.category];
@@ -1982,7 +2028,7 @@ export function ColorfulToolCall({
       ? stripLeadingCwdCd(item.data.presentation.summary, cwd)
       : item.data.presentation.summary;
   return (
-    <View {...pmonoViewEscape} style={styles.card}>
+    <View {...pmonoViewEscape} style={[styles.card, isLiveTail ? styles.cardTail : null]}>
       <ActivityHeader
         icon={item.data.presentation.icon}
         iconColor={categoryColor}
