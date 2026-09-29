@@ -564,14 +564,25 @@ describe("colorful activity presentation", () => {
       { kind: "add", text: "new" },
       { kind: "context", text: "same" },
     ]);
-    // Header-like lines after the first hunk are content and must not be dropped.
-    expect(
-      diffLinesForDetail({
-        type: "edit",
-        filePath: "/tmp/a.md",
-        unifiedDiff: `${header}@@ -1 +1 @@\n--- x\n+++ y`,
-      }).map((line) => line.text),
-    ).toEqual(["@@ -1 +1 @@", "--- x", "+++ y"]);
+    // Header-like lines after the first hunk are content: a removed "-- rule"
+    // renders as "--- rule" and must count and render as a removal.
+    const markdown = {
+      type: "edit" as const,
+      filePath: "/tmp/a.md",
+      unifiedDiff: `--- /tmp/a.md\n+++ /tmp/a.md\n@@ -1,3 +1,3 @@\n # Title\n--- rule\n+++ plus rule\n text`,
+    };
+    expect(diffLinesForDetail(markdown)).toEqual([
+      { kind: "meta", text: "@@ -1,3 +1,3 @@" },
+      { kind: "context", text: "# Title" },
+      { kind: "remove", text: "-- rule" },
+      { kind: "add", text: "++ plus rule" },
+      { kind: "context", text: "text" },
+    ]);
+    expect(diffStatsForDetail(markdown)).toEqual({ additions: 1, deletions: 1 });
+    expect(resolveToolCallPresentation({ name: "edit", detail: markdown }).diffStats).toEqual({
+      additions: 1,
+      deletions: 1,
+    });
     // Diffs without a hunk header are untouched.
     expect(diffLinesForDetail({ type: "edit", filePath: "a", unifiedDiff: "-old\n+new" })).toEqual([
       { kind: "remove", text: "old" },

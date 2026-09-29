@@ -1284,6 +1284,16 @@ function patchInputEdits(input: string): ApplyPatchEdit[] {
   return edits;
 }
 
+/**
+ * Whether a unified-diff line is a `---`/`+++` file header. Once a hunk has
+ * started, such a line is content (a removed `-- x` renders as `--- x`), so
+ * only lines before the first `@@` count. Diffs with no hunk header at all
+ * keep treating them as headers.
+ */
+function isDiffFileHeader(line: string, index: number, firstHunk: number): boolean {
+  return (line.startsWith("---") || line.startsWith("+++")) && (firstHunk === -1 || index < firstHunk);
+}
+
 function unifiedDiffEdits(unifiedDiff: string, firstFilePath?: string): ApplyPatchEdit[] {
   const sections = unifiedDiff
     .replace(/\r\n?/g, "\n")
@@ -1296,10 +1306,11 @@ function unifiedDiffEdits(unifiedDiff: string, firstFilePath?: string): ApplyPat
     const operation: ApplyPatchOperation = plusHeader === "/dev/null" ? "delete" : minusHeader === "/dev/null" ? "add" : "update";
     const filePath = index === 0 && firstFilePath ? firstFilePath : operation === "delete" ? minusHeader : plusHeader ?? minusHeader;
     if (!filePath || filePath === "/dev/null") continue;
-    const body = section
-      .split("\n")
+    const sectionLines = section.split("\n");
+    const firstHunk = sectionLines.findIndex((line) => line.startsWith("@@"));
+    const body = sectionLines
+      .filter((line, lineIndex) => !isDiffFileHeader(line, lineIndex, firstHunk))
       .filter((line) => line.startsWith("@@") || line.startsWith("+") || line.startsWith("-") || line.startsWith(" "))
-      .filter((line) => !line.startsWith("+++") && !line.startsWith("---"))
       .join("\n");
     edits.push({ filePath, operation, unifiedDiff: body });
   }
@@ -1365,8 +1376,10 @@ export function isApplyPatchTool(toolName: string): boolean {
 export function diffStatsFromUnifiedDiff(unifiedDiff: string): DiffStats {
   let additions = 0;
   let deletions = 0;
-  for (const line of unifiedDiff.replace(/\r/g, "").split("\n")) {
-    if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) continue;
+  const lines = unifiedDiff.replace(/\r/g, "").split("\n");
+  const firstHunk = lines.findIndex((line) => line.startsWith("@@"));
+  for (const [index, line] of lines.entries()) {
+    if (line.startsWith("@@") || isDiffFileHeader(line, index, firstHunk)) continue;
     if (line.startsWith("+")) additions += 1;
     else if (line.startsWith("-")) deletions += 1;
   }
@@ -1630,21 +1643,20 @@ export function diffLinesForDetail(detail: Extract<ToolCallDetail, { type: "edit
 
   if (unifiedDiff !== undefined) {
     const rawLines = unifiedDiff.replace(/\r/g, "").split("\n");
-    // The file path is already in the row title, so drop `---`/`+++` file
-    // headers that precede the first hunk. Later `---`/`+++` lines are content.
     const firstHunk = rawLines.findIndex((line) => line.startsWith("@@"));
-    const lines: DiffLine[] = rawLines
-      .filter((line, index) => !(index === rawLines.length - 1 && line === ""))
-      .filter((line, index) => !(index < firstHunk && (line.startsWith("---") || line.startsWith("+++"))))
-      .map((line): DiffLine => {
-        if (line.startsWith("@@") || line.startsWith("+++") || line.startsWith("---")) {
-          return { kind: "meta", text: line };
-        }
-        if (line.startsWith("+")) return { kind: "add", text: line.slice(1) };
-        if (line.startsWith("-")) return { kind: "remove", text: line.slice(1) };
-        if (line.startsWith(" ")) return { kind: "context", text: line.slice(1) };
-        return { kind: "context", text: line };
-      });
+    const lines: DiffLine[] = [];
+    for (const [index, line] of rawLines.entries()) {
+      if (index === rawLines.length - 1 && line === "") continue;
+      if (isDiffFileHeader(line, index, firstHunk)) {
+        // The file path is already in the row title; hide headers that precede
+        // a hunk. Without any hunk header, keep them as meta rows.
+        if (firstHunk === -1) lines.push({ kind: "meta", text: line });
+      } else if (line.startsWith("@@")) lines.push({ kind: "meta", text: line });
+      else if (line.startsWith("+")) lines.push({ kind: "add", text: line.slice(1) });
+      else if (line.startsWith("-")) lines.push({ kind: "remove", text: line.slice(1) });
+      else if (line.startsWith(" ")) lines.push({ kind: "context", text: line.slice(1) });
+      else lines.push({ kind: "context", text: line });
+    }
     return focusDiffChanges(lines);
   }
 
