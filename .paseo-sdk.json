@@ -13,10 +13,6 @@
     "@getpaseo/protocol"
   ],
   "plugins": [
-    "colorful-agent-activity",
-    "pi-plugin-mcowger",
-    "scratch-chat",
-    "subagent-activity",
-    "theme-studio"
+    "colorful-agent-activity"
   ]
 }
