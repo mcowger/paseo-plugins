@@ -3,9 +3,11 @@ import { ReviewPanel } from "./client/review-panel";
 import { OcrSettings } from "./client/settings";
 import { searchSelectionsRpc } from "./shared/contracts.js";
 
+export const REVIEW_PANEL_ID = "open-code-review";
+
 export default function contribute(client: PluginClientContext) {
   const removePanel = client.addWorkspacePanel({
-    id: "open-code-review",
+    id: REVIEW_PANEL_ID,
     title: "OpenCodeReview",
     icon: "SearchCheck",
     locations: ["workspace", "explorer"],
@@ -26,9 +28,56 @@ export default function contribute(client: PluginClientContext) {
     icon: "Settings2",
     Component: OcrSettings,
   });
+  // Command palette entries: the only panel opener reachable on mobile,
+  // where the new-tab launcher has no touch entry point.
+  const removeWorkspaceCommand = client.addCommandCenterItem({
+    id: "open-review-panel",
+    title: "Open OpenCodeReview",
+    icon: "SearchCheck",
+    keywords: ["ocr", "review", "findings", "panel"],
+    context: "workspace",
+    onSelect: (context) => {
+      context.openPanel(REVIEW_PANEL_ID);
+    },
+  });
+  const removeAgentCommand = client.addCommandCenterItem({
+    id: "open-review-panel-agent",
+    title: "Open OpenCodeReview",
+    icon: "SearchCheck",
+    keywords: ["ocr", "review", "findings", "panel"],
+    context: "agent",
+    onSelect: (context) => {
+      context.openPanel(REVIEW_PANEL_ID);
+    },
+  });
+  // Composer slash command: second opener route via the agent composer.
+  // Note: slash commands do not run while the composer has attachments;
+  // the command palette entries above cover that case.
+  const removeWorkspaceSlash = client.addSlashCommand({
+    name: "ocr",
+    description: "Open the OpenCodeReview panel",
+    argumentHint: "",
+    context: "workspace",
+    onSubmit: (context) => {
+      context.openPanel(REVIEW_PANEL_ID);
+    },
+  });
+  const removeAgentSlash = client.addSlashCommand({
+    name: "ocr",
+    description: "Open the OpenCodeReview panel",
+    argumentHint: "",
+    context: "agent",
+    onSubmit: (context) => {
+      context.openPanel(REVIEW_PANEL_ID);
+    },
+  });
   return () => {
     removePanel();
     removeAttachments();
     removeSettings();
+    removeWorkspaceCommand();
+    removeAgentCommand();
+    removeWorkspaceSlash();
+    removeAgentSlash();
   };
 }
