@@ -5,7 +5,7 @@ IDE-style activity rows across desktop, web, and native mobile (iOS and Android)
 thinking block and latest tool call open, shows useful details on demand, and uses Prism for shell and
 code output.
 
-Requires Paseo `>=0.10.1`.
+Requires Paseo `>=0.10.0`.
 
 ## Screenshots
 
