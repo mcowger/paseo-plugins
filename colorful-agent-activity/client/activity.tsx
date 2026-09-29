@@ -12,6 +12,7 @@ import React, {
   type ReactNode,
 } from "react";
 import {
+  ActivityIndicator,
   Image,
   Pressable,
   Text,
@@ -46,6 +47,8 @@ import {
   formatReasoningMeta,
   formatUnknownValue,
   expansionTargetForToolCall,
+  hasMeaningfulToolCallDetail,
+  hasMeaningfulUnknownValue,
   isBgWaitTool,
   isOmpWaitTool,
   isSkillTool,
@@ -625,6 +628,12 @@ function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         fontSize: 11,
         lineHeight: 16,
       } satisfies TextStyle,
+      pendingRow: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 8,
+        paddingVertical: 4,
+      } satisfies ViewStyle,
       paseoStack: {
         gap: 6,
       } satisfies ViewStyle,
@@ -1068,6 +1077,15 @@ function DiffRow({
   );
 }
 
+function PendingOutput({ styles }: { styles: ReturnType<typeof useActivityStyles> }) {
+  return (
+    <View style={styles.pendingRow}>
+      <ActivityIndicator size="small" color={styles.mutedText.color} />
+      <Text style={styles.mutedText}>Waiting for output…</Text>
+    </View>
+  );
+}
+
 function DetailBody({
   data,
   agentId,
@@ -1391,6 +1409,32 @@ function DetailBody({
               styles={styles}
               theme={theme}
             />
+            {hasMeaningfulUnknownValue(detail.output) ? (
+              <HighlightedCodeBlock
+                code={formatUnknownValue(detail.output)}
+                language="json"
+                label="Output"
+                styles={styles}
+                theme={theme}
+              />
+            ) : data.status === "running" ? (
+              <PendingOutput styles={styles} />
+            ) : null}
+          </>
+        );
+      }
+      return (
+        <>
+          {hasMeaningfulUnknownValue(detail.input) ? (
+            <HighlightedCodeBlock
+              code={formatUnknownValue(detail.input)}
+              language="json"
+              label="Input"
+              styles={styles}
+              theme={theme}
+            />
+          ) : null}
+          {hasMeaningfulUnknownValue(detail.output) ? (
             <HighlightedCodeBlock
               code={formatUnknownValue(detail.output)}
               language="json"
@@ -1398,25 +1442,9 @@ function DetailBody({
               styles={styles}
               theme={theme}
             />
-          </>
-        );
-      }
-      return (
-        <>
-          <HighlightedCodeBlock
-            code={formatUnknownValue(detail.input)}
-            language="json"
-            label="Input"
-            styles={styles}
-            theme={theme}
-          />
-          <HighlightedCodeBlock
-            code={formatUnknownValue(detail.output)}
-            language="json"
-            label="Output"
-            styles={styles}
-            theme={theme}
-          />
+          ) : data.status === "running" ? (
+            <PendingOutput styles={styles} />
+          ) : null}
         </>
       );
     }
@@ -1710,6 +1738,7 @@ function ActivityHeader({
   stats,
   expanded,
   onPress,
+  expandable = true,
   styles,
 }: {
   icon: string;
@@ -1722,15 +1751,11 @@ function ActivityHeader({
   stats?: ToolCallData["presentation"]["diffStats"];
   expanded: boolean;
   onPress: () => void;
+  expandable?: boolean;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  return (
-    <Pressable
-      accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${title}`}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={styles.headerButton}
-    >
+  const content = (
+    <>
       <View style={styles.iconBadge}>
         <Icon name={icon} color={iconColor} size={12} />
       </View>
@@ -1762,7 +1787,24 @@ function ActivityHeader({
           <Icon name={statusIcon(status)} color={statusColor ?? styles.title.color} size={12} />
         </View>
       ) : null}
-      <Icon name={expanded ? "ChevronDown" : "ChevronRight"} color={styles.summary.color} size={12} />
+      {expandable ? (
+        <Icon name={expanded ? "ChevronDown" : "ChevronRight"} color={styles.summary.color} size={12} />
+      ) : (
+        <Icon name="ChevronRight" color="transparent" size={12} />
+      )}
+    </>
+  );
+  if (!expandable) {
+    return <View style={styles.headerButton}>{content}</View>;
+  }
+  return (
+    <Pressable
+      accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${title}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={styles.headerButton}
+    >
+      {content}
     </Pressable>
   );
 }
@@ -1825,7 +1867,11 @@ export function ColorfulToolCall({
   const categoryColor = palette.categoryColors[item.data.presentation.category];
   const statusColor = palette.statusColors[item.data.status];
   const expansionMode = useExpansionMode(expansionTargetForToolCall(item.data.name, detail?.type ?? "unknown"));
-  const expanded = resolveExpansion(expansionMode, isLatest, userExpanded);
+  const baseExpanded = resolveExpansion(expansionMode, isLatest, userExpanded);
+  const isSkill = isSkillTool(item.data.name);
+  const hasDetails = detail ? hasMeaningfulToolCallDetail(detail) : true;
+  const expandable = !isSkill && hasDetails;
+  const expanded = expandable ? baseExpanded : false;
   const toggle = useCallback(() => {
     setUserExpanded(!expanded);
   }, [expanded]);
@@ -1854,10 +1900,11 @@ export function ColorfulToolCall({
         stats={item.data.presentation.diffStats}
         expanded={expanded}
         onPress={toggle}
+        expandable={expandable}
         styles={styles}
       />
-      {subAgentDetail ? <SubAgentProgress detail={subAgentDetail} styles={styles} /> : null}
-      {expanded ? (
+      {expandable && subAgentDetail ? <SubAgentProgress detail={subAgentDetail} styles={styles} /> : null}
+      {expandable && expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
           <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} nestedScrollEnabled showsVerticalScrollIndicator>
             <DetailBody data={item.data} agentId={agentId} theme={theme} palette={palette} styles={styles} />

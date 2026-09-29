@@ -49,6 +49,8 @@ import {
   prettyJson,
   formatUnknownValue,
   expansionTargetForToolCall,
+  hasMeaningfulToolCallDetail,
+  hasMeaningfulUnknownValue,
   isAskTool,
   extractCodeInput,
   extractApplyPatchEdits,
@@ -625,6 +627,52 @@ describe("reasoning steps and header metadata", () => {
     expect(expansionTargetForToolCall("todo", "unknown")).toBe("todo");
     expect(expansionTargetForToolCall("some-future-tool", "unknown")).toBe("unknown");
     expect(expansionTargetForToolCall("read", "bogus")).toBe("unknown");
+  });
+
+  it("detects pending tool calls with no arguments or output", () => {
+    expect(hasMeaningfulUnknownValue(null)).toBe(false);
+    expect(hasMeaningfulUnknownValue(undefined)).toBe(false);
+    expect(hasMeaningfulUnknownValue("")).toBe(false);
+    expect(hasMeaningfulUnknownValue("   ")).toBe(false);
+    expect(hasMeaningfulUnknownValue({})).toBe(false);
+    expect(hasMeaningfulUnknownValue([])).toBe(false);
+    expect(hasMeaningfulUnknownValue({ path: "" })).toBe(false);
+    expect(hasMeaningfulUnknownValue(0)).toBe(true);
+    expect(hasMeaningfulUnknownValue(false)).toBe(true);
+    expect(hasMeaningfulUnknownValue({ path: "src/index.ts" })).toBe(true);
+    expect(hasMeaningfulUnknownValue('{"path":"x"}')).toBe(true);
+
+    expect(
+      hasMeaningfulToolCallDetail({ type: "unknown", input: null, output: null }),
+    ).toBe(false);
+    expect(
+      hasMeaningfulToolCallDetail({ type: "unknown", input: {}, output: null }),
+    ).toBe(false);
+    expect(
+      hasMeaningfulToolCallDetail({
+        type: "unknown",
+        input: { path: "src/index.ts" },
+        output: null,
+      }),
+    ).toBe(true);
+    expect(
+      hasMeaningfulToolCallDetail({
+        type: "unknown",
+        input: { path: "src/index.ts" },
+        output: { content: [] },
+      }),
+    ).toBe(true);
+    expect(hasMeaningfulToolCallDetail(undefined)).toBe(false);
+    expect(hasMeaningfulToolCallDetail(null)).toBe(false);
+    expect(
+      hasMeaningfulToolCallDetail({ type: "read", filePath: "", content: undefined }),
+    ).toBe(false);
+    expect(
+      hasMeaningfulToolCallDetail({ type: "read", filePath: "src/index.ts" }),
+    ).toBe(true);
+    expect(
+      hasMeaningfulToolCallDetail({ type: "shell", command: "", output: undefined }),
+    ).toBe(true);
   });
 });
 
