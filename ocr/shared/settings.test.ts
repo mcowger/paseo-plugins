@@ -29,14 +29,19 @@ function makeBatch(overrides: Partial<SelectionBatch> & { id: string }): Selecti
 }
 
 describe("providerModelSchema", () => {
-  it("accepts provider/model values", () => {
+  it("accepts provider/model values, including nested model paths", () => {
     expect(providerModelSchema.safeParse("acme/gpt-5-mini").success).toBe(true);
+    expect(providerModelSchema.safeParse("opencode/openrouter/glm-5.3-flash").success).toBe(
+      true,
+    );
   });
 
   it("rejects bare providers, paths, and whitespace", () => {
     expect(providerModelSchema.safeParse("acme").success).toBe(false);
-    expect(providerModelSchema.safeParse("a/b/c").success).toBe(false);
     expect(providerModelSchema.safeParse("acme/my model").success).toBe(false);
+    expect(providerModelSchema.safeParse("/leading-slash").success).toBe(false);
+    expect(providerModelSchema.safeParse("trailing-slash/").success).toBe(false);
+    expect(providerModelSchema.safeParse("doubled//slash").success).toBe(false);
     expect(providerModelSchema.safeParse("").success).toBe(false);
   });
 });

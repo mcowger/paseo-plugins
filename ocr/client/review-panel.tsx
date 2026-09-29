@@ -16,6 +16,7 @@ import {
   useWorkspace,
   type PluginWorkspacePanelProps,
 } from "@getpaseo/plugin/client";
+import { SettingsSelect } from "@getpaseo/plugin/client/ui";
 import {
   cancelReviewRpc,
   capabilitiesRpc,
@@ -139,10 +140,30 @@ function FindingRow({
         gap: 4,
         backgroundColor: theme.colors.surface1,
       },
-      title: { color: theme.colors.foreground, fontSize: compact ? 13 : 14 },
+      title: { color: theme.colors.foreground, fontSize: compact ? 13 : 14, flex: 1 },
       detail: { color: theme.colors.foregroundMuted, fontSize: compact ? 12 : 13 },
       code: { color: theme.colors.foregroundMuted, fontSize: compact ? 11 : 12 },
       toggle: { color: theme.colors.accent, fontSize: compact ? 12 : 13 },
+      findingHeader: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
+      checkbox: {
+        width: 22,
+        height: 22,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        borderRadius: 5,
+        alignItems: "center" as const,
+        justifyContent: "center" as const,
+        backgroundColor: theme.colors.surface0,
+      },
+      checkboxChecked: {
+        backgroundColor: theme.colors.accent,
+        borderColor: theme.colors.accent,
+      },
+      checkMark: {
+        color: theme.colors.accentForeground,
+        fontSize: 14,
+        lineHeight: 16,
+      },
     }),
     [theme, compact],
   );
@@ -153,10 +174,14 @@ function FindingRow({
         accessibilityState={{ checked }}
         accessibilityLabel={`Select finding ${finding.path} lines ${finding.startLine} to ${finding.endLine}`}
         onPress={onToggle}
+        style={styles.findingHeader}
       >
+        <View style={[styles.checkbox, checked ? styles.checkboxChecked : null]}>
+          {checked ? <Text style={styles.checkMark}>{"\u2713"}</Text> : null}
+        </View>
         <Text style={styles.title}>
-          {checked ? "[x]" : "[ ]"} [{SEVERITY_LABELS[finding.severity]}] {finding.path}:
-          {finding.startLine}-{finding.endLine}
+          [{SEVERITY_LABELS[finding.severity]}] {finding.path}:{finding.startLine}-
+          {finding.endLine}
         </Text>
       </Pressable>
       {finding.category ? <Text style={styles.detail}>Category: {finding.category}</Text> : null}
@@ -1210,29 +1235,21 @@ export function ReviewPanel({
                       {suggestedFrom}”). This is a suggestion, not necessarily the focused chat.
                     </Text>
                   ) : null}
-                  <TextInput
-                    accessibilityLabel="Provider and model in provider slash model format"
+                  <SettingsSelect
+                    label="Provider and model"
+                    hint={
+                      chosenModel &&
+                      preferences.status === "ready" &&
+                      preferences.values.defaultProviderModel === chosenModel
+                        ? "Saved default"
+                        : "Choose a model"
+                    }
                     value={chosenModel}
-                    onChangeText={setChosenModel}
-                    placeholder="provider/model"
-                    placeholderTextColor={theme.colors.foregroundMuted}
-                    style={styles.input}
+                    options={availableModels.map((model) => ({ label: model, value: model }))}
+                    disabled={creating}
+                    onValueChange={setChosenModel}
                   />
-                  {availableModels.length > 0 ? (
-                    <View style={styles.row}>
-                      {availableModels.slice(0, 30).map((model) => (
-                        <Pressable
-                          key={model}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Use model ${model}`}
-                          onPress={() => setChosenModel(model)}
-                          style={model === chosenModel ? styles.chipActive : styles.chip}
-                        >
-                          <Text style={styles.chipText}>{model}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  ) : (
+                  {availableModels.length > 0 ? null : (
                     <Text style={styles.warning}>
                       No models are currently available in this workspace.
                     </Text>

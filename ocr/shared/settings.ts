@@ -8,7 +8,9 @@ export const providerModelSchema = z
   .string()
   .trim()
   .min(1)
-  .regex(/^[^/\s]+\/[^/\s]+$/, "Expected provider/model format");
+  // Provider is the first segment; model ids may nest further
+  // (e.g. opencode/openrouter/glm-5.3-flash).
+  .regex(/^[^/\s]+\/[^/\s]+(?:\/[^/\s]+)*$/, "Expected provider/model format");
 
 export const preferencesSchema = z.object({
   newAgentInstructions: z.string().trim().min(1).default(DEFAULT_NEW_AGENT_INSTRUCTIONS),
