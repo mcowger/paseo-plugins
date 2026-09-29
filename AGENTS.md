@@ -3,9 +3,9 @@
 This repository contains Paseo plugins. Use the following Paseo resources as the source of truth
 when creating or changing a plugin:
 
-The current target host and SDK baseline is **Paseo v0.10.1**. Pin `@getpaseo/client`,
-`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.10.1. Declare compatibility in
-`paseo-plugin.json` via `requirements: { "paseo": ">=0.10.1" }` to enforce version checks at startup.
+The current target host and SDK baseline is **Paseo v0.10.0**. Pin `@getpaseo/client`,
+`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.10.0. Declare compatibility in
+`paseo-plugin.json` via `requirements: { "paseo": ">=0.10.0" }` to enforce version checks at startup.
 
 When researching Paseo contracts (plugin SDK types, protocol, examples), use the local
 Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
@@ -17,7 +17,7 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
   components, SDK usage, RPC, themes, hosts, and troubleshooting.
 - [Runtime entry migration guide](https://paseo.sh/docs/plugins/migration.md): migrating from
   mixed root entries to explicit client and server runtime entries.
-- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.10.1/plugin-examples):
+- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.10.0/plugin-examples):
   working examples for panels and commands (`local-plugin`), RPC, attachment sources (`linear`),
   themes (`catppuccin`), and timeline items (`timeline-items`, `inline-thinking`).
   Provider examples (`provider-direct`, `provider-acp-transformer`) are included as well.

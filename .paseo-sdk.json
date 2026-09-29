@@ -1,5 +1,5 @@
 {
-  "version": "0.10.1",
+  "version": "0.10.0",
   "localRepository": "~/workspace/paseo",
   "packages": {
     "@getpaseo/protocol": "packages/protocol",
@@ -13,6 +13,7 @@
     "@getpaseo/protocol"
   ],
   "plugins": [
-    "colorful-agent-activity"
+    "colorful-agent-activity",
+    "ocr"
   ]
 }
