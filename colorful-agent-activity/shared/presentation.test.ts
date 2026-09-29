@@ -42,6 +42,7 @@ import {
   resolveSubAgentActionPresentation,
   resolveToolCallPresentation,
   formatJson,
+  isDirectoryRead,
   formatError,
   prettyJson,
   formatUnknownValue,
@@ -170,6 +171,39 @@ describe("colorful activity presentation", () => {
       icon: "List",
       label: "List Files",
     });
+  });
+
+  it("labels directory reads as List Directory instead of Read File", () => {
+    expect(
+      isDirectoryRead(
+        "/home/matt.cowger/workspace/paseo-worktrees/0e5bdwyx/filthy-robin/colorful-agent-activity",
+        "Read directory /home/matt.cowger/workspace/paseo-worktrees/0e5bdwyx/filthy-robin/colorful-agent-activity:\nclient/\nimages/\n",
+      ),
+    ).toBe(true);
+    expect(isDirectoryRead("/tmp/some-dir/", "anything")).toBe(true);
+    expect(isDirectoryRead("src/index.ts", "const x = 1;")).toBe(false);
+    expect(
+      resolveToolCallPresentation({
+        name: "read",
+        detail: {
+          type: "read",
+          filePath:
+            "/home/matt.cowger/workspace/paseo-worktrees/0e5bdwyx/filthy-robin/colorful-agent-activity",
+          content:
+            "Read directory /home/matt.cowger/workspace/paseo-worktrees/0e5bdwyx/filthy-robin/colorful-agent-activity:\nclient/\nimages/\n",
+        },
+      }),
+    ).toMatchObject({
+      category: "file",
+      icon: "Folder",
+      label: "List Directory",
+    });
+    expect(
+      resolveToolCallPresentation({
+        name: "read",
+        detail: { type: "read", filePath: "src/index.ts", content: "const x = 1;" },
+      }),
+    ).toMatchObject({ label: "Read File" });
   });
 
   it("strips a leading cd to the session cwd from shell titles", () => {
