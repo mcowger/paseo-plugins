@@ -94,3 +94,15 @@ export function findActiveTaskLabel(groups: readonly AgentTasksGroup[]): string 
   }
   return null;
 }
+
+export function formatTaskSidebarLabel(
+  counts: AgentTaskCounts,
+  activeLabel: string | null,
+): string {
+  if (counts.total === 0) return "Super Tasks";
+  const progress = `${counts.completed}/${counts.total}`;
+  if (!activeLabel) return `${progress} done`;
+  const brief =
+    activeLabel.length > 24 ? `${activeLabel.slice(0, 23).trimEnd()}…` : activeLabel;
+  return `${progress} · ${brief}`;
+}

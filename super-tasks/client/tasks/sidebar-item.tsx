@@ -11,6 +11,7 @@ import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-nat
 import { openAgentInPaseoWorkspace } from "../agents/navigation";
 import {
   findActiveTaskLabel,
+  formatTaskSidebarLabel,
   sumCounts,
   type AgentTasksGroup,
   type TaskItemViewModel,
@@ -29,9 +30,6 @@ interface SuperTasksPopoverProps extends PluginPopoverProps {
 }
 
 interface SidebarStyles {
-  readonly trailing: ViewStyle;
-  readonly trailingCount: TextStyle;
-  readonly trailingActive: TextStyle;
   readonly popover: ViewStyle;
   readonly summary: ViewStyle;
   readonly summaryText: TextStyle;
@@ -58,24 +56,6 @@ function createStyles(theme: PluginTheme, compact: boolean): SidebarStyles {
   const smallFontSize = compact ? 10 : 11;
   const detailFontSize = compact ? 9 : 10;
   return {
-    trailing: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      flexShrink: 1,
-      justifyContent: "flex-end",
-    },
-    trailingCount: {
-      color: theme.colors.foregroundMuted,
-      fontSize: detailFontSize,
-      fontVariant: ["tabular-nums"],
-    },
-    trailingActive: {
-      color: theme.colors.foregroundMuted,
-      fontSize: detailFontSize,
-      flexShrink: 1,
-      maxWidth: 160,
-    },
     popover: {
       gap: 8,
     },
@@ -186,32 +166,14 @@ function createStyles(theme: PluginTheme, compact: boolean): SidebarStyles {
  * popover with the full list. Sidebar items are host-wide, so the workspace is inferred.
  */
 export function SuperTasksSidebarItem({
-  theme,
-  layout,
   openPopover,
   openPanel,
 }: SuperTasksSidebarItemProps): ReactElement {
   const workspaceId = useMostRecentWorkspaceId();
   const { groups } = useWorkspaceTaskGroups(workspaceId);
-  const styles = useMemo(() => createStyles(theme, layout.compact), [theme, layout.compact]);
   const totals = useMemo(() => sumCounts(groups), [groups]);
   const activeLabel = useMemo(() => findActiveTaskLabel(groups), [groups]);
-
-  const trailing = useMemo(() => {
-    if (totals.total === 0) return null;
-    return (
-      <View style={styles.trailing}>
-        <Text style={styles.trailingCount}>
-          {totals.completed}/{totals.total}
-        </Text>
-        {activeLabel ? (
-          <Text style={styles.trailingActive} numberOfLines={1}>
-            {activeLabel}
-          </Text>
-        ) : null}
-      </View>
-    );
-  }, [activeLabel, styles, totals.completed, totals.total]);
+  const label = formatTaskSidebarLabel(totals, activeLabel);
 
   const PopoverContent = useCallback(
     (props: PluginPopoverProps) => <SuperTasksPopover {...props} openPanel={openPanel} />,
@@ -221,7 +183,7 @@ export function SuperTasksSidebarItem({
     openPopover(PopoverContent);
   }, [openPopover, PopoverContent]);
 
-  return <SidebarRow icon="ListChecks" onPress={handlePress} trailing={trailing} />;
+  return <SidebarRow icon="ListChecks" label={label} onPress={handlePress} />;
 }
 
 function SuperTasksPopover({
