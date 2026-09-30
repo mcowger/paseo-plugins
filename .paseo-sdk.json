@@ -15,6 +15,7 @@
   "plugins": [
     "colorful-agent-activity",
     "ocr",
-    "skill-picker"
+    "skill-picker",
+    "super-tasks"
   ]
 }

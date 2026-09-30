@@ -1,0 +1,4 @@
+{
+  "id": "super-tasks",
+  "requirements": { "paseo": ">=0.10.0" }
+}
