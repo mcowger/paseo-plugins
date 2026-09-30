@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isExcludedSummaryToolCall,
   summarizeAgentActivity,
+  summaryFileLabels,
   type SummarySourceEntry,
 } from "./summary";
 
@@ -118,6 +119,20 @@ describe("summarizeAgentActivity tool grouping", () => {
     const summary = summarizeAgentActivity(excluded.map((item) => entry(item)), { now: NOW });
     expect(summary.toolCallCount).toBe(0);
     expect(summary.toolGroups).toEqual([]);
+  });
+});
+
+describe("summaryFileLabels", () => {
+  it("shortens to basenames and dedupes in first-seen order", () => {
+    expect(
+      summaryFileLabels([
+        "/home/u/repo/colorful-agent-activity/shared/summary.ts",
+        "/home/u/repo/colorful-agent-activity/client/summary/panel.tsx",
+        "/other/summary.ts",
+        "shared/summary.ts",
+        "C:\\repo\\types.ts",
+      ]),
+    ).toEqual(["summary.ts", "panel.tsx", "types.ts"]);
   });
 });
 

@@ -230,3 +230,23 @@ export function summarizeAgentActivity(
     activeToolCalls,
   };
 }
+
+function fileBaseName(filePath: string): string {
+  const trimmed = filePath.replace(/[/\\]+$/, "");
+  const slash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  const base = slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
+  return base || filePath;
+}
+
+/** Compact basenames for summary rows, deduped in first-seen order. */
+export function summaryFileLabels(files: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const file of files) {
+    const label = fileBaseName(file);
+    if (seen.has(label)) continue;
+    seen.add(label);
+    labels.push(label);
+  }
+  return labels;
+}

@@ -3,7 +3,7 @@ import { useAgent, usePaseo } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, Text, View, type TextStyle, type ViewStyle } from "react-native";
-import { summarizeAgentActivity, type SummarySourceEntry } from "../../shared/summary";
+import { summarizeAgentActivity, summaryFileLabels, type SummarySourceEntry } from "../../shared/summary";
 import { useActivityStyles, usePalette } from "../activity";
 
 const TIMELINE_LIMIT = 400;
@@ -260,7 +260,7 @@ export function AgentSummaryPanel({ agentId, theme, layout }: PluginAgentPanelPr
               </Text>
               {group.files.length > 0 ? (
                 <Text style={panelStyles.toolFiles} numberOfLines={1}>
-                  {group.files.join(", ")}
+                  {summaryFileLabels(group.files).join(", ")}
                 </Text>
               ) : null}
               {group.status !== "completed" ? (
