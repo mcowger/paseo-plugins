@@ -63,6 +63,21 @@ File edit with colored line diff:
 - Dedicated OMP wait view lists waited agents with status, elapsed time, and model instead of the raw jobs envelope.
 - Dedicated OMP find view shows the query, searched scope, keywords, matched files, snippets, and search summary.
 - Dedicated task-list view shows todo tool results as a checklist with status icons, active-form labels, and blockers instead of the raw action envelope.
+- An agent **Activity Summary** panel folds the full canonical timeline into grouped tool calls
+  (`Read (5×): a.ts, b.ts`), Thinking and Output expandos, and a live Status section. Task/subagent
+  delegation and todo coordination calls are left out of the tool summary.
+
+## Activity Summary panel
+
+Open it from the command center inside an agent (**Open Activity Summary**). The panel reads canonical
+timeline rows through the agent handle and refetches on live events, because the timeline transformer
+and renderer API is strictly per item and cannot aggregate across rows.
+
+- Tool calls are grouped by type with counts and distinct file lists for reads, writes, and edits.
+  `apply_patch` expands into one edit per file; MCP tools group by their leaf name; Opencode Code Mode
+  groups under `Codemode`.
+- **Thinking** and **Output** expand to every reasoning block and assistant message on the agent.
+- **Status** shows the agent state, tool calls per minute, time since the last call, and running calls.
 
 ## Install
 
@@ -84,8 +99,11 @@ paseo plugin install "$PWD"
 
 ## Setup
 
-Set Paseo's **Tool call detail** setting to **Detailed**. In Overview mode, Paseo groups consecutive
-tool calls before plugin transforms run, so the plugin cannot recover each individual call.
+No **Tool call detail** change is required. Paseo runs plugin timeline transformers on every
+original tool call *before* its Overview grouping, so this plugin renders one row per call in both
+**Detailed** and **Overview** modes. Overview's grouped summary only merges rows that are still
+native tool-call items, and this plugin claims all of them, so the setting does not change these
+rows.
 
 Choose a palette under the plugin's **Colorful activity** settings screen:
 
@@ -102,7 +120,9 @@ paseo plugin reload colorful-agent-activity
 ## Limitations
 
 - The plugin sees public agent tool calls, not internal orchestrator calls.
-- Detailed tool-call mode is required for one card per tool call.
+- Paseo's built-in Overview tool-call grouping does not apply to this plugin's rows, because the
+  plugin transforms every call before grouping runs. Use the Activity Summary panel for whole-agent
+  aggregation instead.
 - Paseo's native detail and syntax components are private, so this plugin renders its own details.
 - Syntax highlighting uses Prism in the plugin bundle. It is not a terminal emulator.
 - Unsupported or oversized output falls back to plain monospace text.
@@ -133,7 +153,7 @@ would be `registry/colorful-agent-activity.json`:
   "path": "colorful-agent-activity",
   "categories": ["developer-tools", "productivity"],
   "caveats": [
-    "Requires Paseo Tool call detail to be set to Detailed"
+    "Paseo's built-in Overview tool-call grouping is bypassed while this plugin is enabled"
   ],
   "submittedBy": "mcowger"
 }
