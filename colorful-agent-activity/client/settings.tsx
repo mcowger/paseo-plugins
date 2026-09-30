@@ -76,8 +76,8 @@ function ExpansionControls({ settings, theme }: { settings: ReadySettings; theme
       <SettingsRow label="Behavior">
         <Text style={descriptionStyle}>
           Always rows start expanded, Latest rows expand only while they are the newest row of any kind, and Never rows
-          start collapsed even while running. Tapping a row always overrides its setting. Set Paseo's Tool call detail
-          setting to Detailed so each call reaches the plugin separately.
+          start collapsed even while running. Tapping a row always overrides its setting. Paseo runs plugin transformers
+          before its Overview grouping, so each call reaches the plugin separately in either tool call detail mode.
         </Text>
       </SettingsRow>
     </SettingsSection>

@@ -207,7 +207,7 @@ function useExpansionMode(target: ExpansionTarget): ExpansionMode {
   return DEFAULT_EXPANSION[target];
 }
 
-function usePalette(theme: Theme): ActivityPalette {
+export function usePalette(theme: Theme): ActivityPalette {
   const settings = useSettings(activitySettings);
   const mode = settings.status === "ready" ? settings.values.palette : DEFAULT_PALETTE_MODE;
   return useMemo(
@@ -216,7 +216,7 @@ function usePalette(theme: Theme): ActivityPalette {
   );
 }
 
-function useActivityStyles(theme: Theme, palette: ActivityPalette) {
+export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
   return useMemo(
     () => ({
       card: {
