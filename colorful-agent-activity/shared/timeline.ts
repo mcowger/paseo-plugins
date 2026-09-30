@@ -4,6 +4,7 @@ import type { ExpansionMode } from "./settings";
 import {
   formatError,
   formatReasoningText,
+  normalizeToolCallDetail,
   resolveToolCallPresentation,
   toJsonValue,
   withMetadataEditDiff,
@@ -98,12 +99,13 @@ export function createToolCallData(
   source: Extract<AgentTimelineItem, { type: "tool_call" }>,
 ): ToolCallItemData {
   const item = withMetadataEditDiff(source);
-  const presentation = resolveToolCallPresentation(item);
+  const detail = normalizeToolCallDetail(item.detail, item.name);
+  const presentation = resolveToolCallPresentation({ name: item.name, detail });
   const errorText = formatError(item.error);
   return {
     name: item.name,
     status: item.status,
-    detail: toJsonValue(item.detail),
+    detail: toJsonValue(detail),
     ...(errorText ? { errorText } : {}),
     presentation: {
       category: presentation.category,

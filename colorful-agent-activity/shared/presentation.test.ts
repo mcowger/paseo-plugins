@@ -49,6 +49,8 @@ import {
   readErrorMessage,
   stripLeadingCwdCd,
   unwrapPaseoToolOutput,
+  parsePiShellResult,
+  normalizeToolCallDetail,
   resolveActivityPalette,
   resolveSubAgentActionPresentation,
   resolveToolCallPresentation,
@@ -377,6 +379,103 @@ describe("colorful activity presentation", () => {
     ).toEqual({
       ok: false,
       error: { code: "browser_timeout", message: "Timed out" },
+    });
+  });
+
+  it("unwraps Pi 0.99 bash structured results", () => {
+    const envelope = {
+      content: [{ type: "text", text: "copied\nvalid json\n" }],
+      structuredContent: {
+        output: "copied\nvalid json\n",
+        truncated: false,
+        exit_code: 0,
+        wall_time_seconds: 0.1,
+      },
+    };
+    const expected = { output: "copied\nvalid json\n", exitCode: 0, truncated: false };
+    expect(parsePiShellResult(envelope)).toEqual(expected);
+    expect(parsePiShellResult(JSON.stringify(envelope))).toEqual(expected);
+    // Plain output and MCP envelopes without a shell result pass through untouched.
+    expect(parsePiShellResult("copied\n")).toBeUndefined();
+    expect(parsePiShellResult({ content: [{ type: "text", text: "hi" }] })).toBeUndefined();
+  });
+
+  it("normalizes shell and unknown Pi bash details", () => {
+    const envelope = {
+      content: [{ type: "text", text: "short" }],
+      structuredContent: {
+        output: "full output",
+        truncated: true,
+        exit_code: 1,
+        full_output_path: "/tmp/out.txt",
+      },
+    };
+
+    expect(
+      normalizeToolCallDetail({
+        type: "shell",
+        command: "run",
+        output: JSON.stringify(envelope),
+        exitCode: null,
+      }),
+    ).toMatchObject({
+      type: "shell",
+      command: "run",
+      output: "full output",
+      exitCode: 1,
+      truncated: true,
+      fullOutputPath: "/tmp/out.txt",
+    });
+
+    expect(
+      normalizeToolCallDetail(
+        { type: "unknown", input: { command: "run" }, output: envelope },
+        "bash",
+      ),
+    ).toMatchObject({
+      type: "shell",
+      command: "run",
+      output: "full output",
+      exitCode: 1,
+      truncated: true,
+    });
+
+    // Envelopes without a structured result still render as shell output.
+    expect(
+      normalizeToolCallDetail(
+        {
+          type: "unknown",
+          input: { command: "bun test" },
+          output: { content: [{ type: "text", text: "170 pass" }] },
+        },
+        "bash",
+      ),
+    ).toMatchObject({ type: "shell", command: "bun test", output: "170 pass" });
+
+    // Ordinary unknown payloads are left alone.
+    expect(
+      normalizeToolCallDetail({ type: "unknown", input: { q: "x" }, output: "plain" }, "grep"),
+    ).toEqual({ type: "unknown", input: { q: "x" }, output: "plain" });
+  });
+
+  it("presents a Pi bash envelope as a shell row", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "bash",
+        detail: {
+          type: "unknown",
+          input: { command: "bun test" },
+          output: {
+            content: [{ type: "text", text: "170 pass" }],
+            structuredContent: { output: "170 pass", truncated: false, exit_code: 0 },
+          },
+        },
+      }),
+    ).toMatchObject({
+      category: "shell",
+      icon: "SquareTerminal",
+      label: "Shell",
+      summary: "bun test",
     });
   });
 

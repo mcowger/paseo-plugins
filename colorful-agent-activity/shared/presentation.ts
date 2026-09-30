@@ -1222,6 +1222,127 @@ export function paseoToolResult(value: unknown): unknown {
   return record?.ok === true && record.result !== undefined ? record.result : unwrapped;
 }
 
+export interface PiShellResult {
+  output?: string;
+  exitCode?: number | null;
+  truncated?: boolean;
+  fullOutputPath?: string;
+}
+
+export type ShellToolDetail = Extract<ToolCallDetail, { type: "shell" }> & {
+  truncated?: boolean;
+  fullOutputPath?: string;
+};
+
+function numberOrNull(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function textFromContent(record: Record<string, unknown> | undefined): string | undefined {
+  if (!record || !Array.isArray(record.content)) return undefined;
+  const parts = record.content.flatMap((part) =>
+    isRecord(part) && part.type === "text" && typeof part.text === "string" ? [part.text] : [],
+  );
+  return parts.length > 0 ? parts.join("\n") : undefined;
+}
+
+/**
+ * Recognize the Pi 0.99+ bash/shell structured result:
+ *   { output, exit_code, truncated, full_output_path }
+ * It arrives either directly or nested under an MCP-style `structuredContent`
+ * envelope (`{ content, structuredContent }`). Returns `undefined` for values
+ * that do not carry a shell result so ordinary output strings pass through.
+ */
+export function parsePiShellResult(value: unknown, depth = 0): PiShellResult | undefined {
+  if (depth > 4) return undefined;
+  let record: Record<string, unknown> | undefined;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed.startsWith("{") || trimmed.length > MAX_FORMAT_CHARS) return undefined;
+    const parsed = parseEmbeddedJson(trimmed);
+    record = isRecord(parsed) ? parsed : undefined;
+  } else if (isRecord(value)) {
+    record = value;
+  }
+  if (!record) return undefined;
+
+  const structured = isRecord(record.structuredContent) ? record.structuredContent : undefined;
+  if (structured) {
+    const nested = parsePiShellResult(structured, depth + 1);
+    if (nested) return nested;
+  }
+
+  const inner = structured ?? record;
+  const exitCode = numberOrNull(inner.exit_code) ?? numberOrNull(inner.exitCode);
+  const truncated = typeof inner.truncated === "boolean" ? inner.truncated : undefined;
+  const fullOutputPath =
+    stringField(inner, "full_output_path") ?? stringField(inner, "fullOutputPath");
+  const hasShellShape =
+    exitCode !== undefined ||
+    truncated !== undefined ||
+    fullOutputPath !== undefined ||
+    "exit_code" in inner ||
+    "exitCode" in inner;
+  if (!hasShellShape) return undefined;
+
+  const output = stringField(inner, "output") ?? textFromContent(inner) ?? textFromContent(record);
+  return {
+    ...(output !== undefined ? { output } : {}),
+    ...(exitCode !== undefined ? { exitCode } : {}),
+    ...(truncated !== undefined ? { truncated } : {}),
+    ...(fullOutputPath !== undefined ? { fullOutputPath } : {}),
+  };
+}
+
+function shellDetailFromResult(detail: Extract<ToolCallDetail, { type: "shell" }>): ShellToolDetail {
+  const parsed = parsePiShellResult(detail.output);
+  if (!parsed) return detail;
+  const keepExitCode =
+    detail.exitCode !== undefined && detail.exitCode !== null
+      ? { exitCode: detail.exitCode }
+      : parsed.exitCode !== undefined
+        ? { exitCode: parsed.exitCode }
+        : {};
+  return {
+    ...detail,
+    ...(parsed.output !== undefined ? { output: parsed.output } : {}),
+    ...keepExitCode,
+    ...(parsed.truncated !== undefined ? { truncated: parsed.truncated } : {}),
+    ...(parsed.fullOutputPath !== undefined ? { fullOutputPath: parsed.fullOutputPath } : {}),
+  };
+}
+
+/**
+ * Unwrap Pi's structured shell envelope so shell rows show the real output,
+ * exit code, and truncation state. Unknown tool calls whose payload is a shell
+ * result are projected to a shell detail so they render like the host shell tool.
+ */
+export function normalizeToolCallDetail(detail: ToolCallDetail, name?: string): ToolCallDetail {
+  if (detail.type === "shell") return shellDetailFromResult(detail);
+  if (detail.type !== "unknown") return detail;
+  const result = parsePiShellResult(detail.output);
+  const input = decodeToolInput(detail.input);
+  const command =
+    stringField(input, "command") ??
+    stringField(input, "cmd") ??
+    stringField(input, "script") ??
+    (result && name ? prettyToolName(name) : undefined);
+  if (!command) return detail;
+  // Prefer the full structured output, falling back to the model-facing content
+  // text for envelopes whose structured result was not persisted (history).
+  const output = result?.output ?? extractPiToolText(detail.output)?.text;
+  if (!result && output === undefined) return detail;
+  return {
+    type: "shell",
+    command,
+    ...(output !== undefined ? { output } : {}),
+    ...(result?.exitCode !== undefined ? { exitCode: result.exitCode } : {}),
+    ...(result?.truncated !== undefined ? { truncated: result.truncated } : {}),
+    ...(result?.fullOutputPath !== undefined ? { fullOutputPath: result.fullOutputPath } : {}),
+  };
+}
+
 export const PREVIEW_LINES = 20;
 export const PREVIEW_CHARS = 4_000;
 export const MAX_FORMAT_CHARS = 100_000;
@@ -2030,7 +2151,7 @@ export function resolveToolCallPresentation(
   item: Pick<ToolCallTimelineItem, "name" | "detail">,
 ): ToolCallPresentation {
   const name = item.name.trim().toLowerCase();
-  const detail = item.detail;
+  const detail = normalizeToolCallDetail(item.detail, item.name);
   if (isSkillTool(item.name)) {
     const skillName = skillNameForDetail(detail);
     return {

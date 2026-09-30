@@ -117,6 +117,46 @@ describe("colorful activity timeline transforms", () => {
     });
   });
 
+  it("projects Pi bash structured envelopes into shell details", () => {
+    const result = transformToolCall({
+      phase: "complete",
+      item: {
+        ...toolCall({
+          type: "unknown",
+          input: { command: "bun test" },
+          output: {
+            content: [{ type: "text", text: "short" }],
+            structuredContent: {
+              output: "170 pass",
+              truncated: true,
+              exit_code: 0,
+              full_output_path: "/tmp/out.txt",
+            },
+          },
+        }),
+        name: "bash",
+      },
+    });
+    expect(result?.items[0]?.data).toMatchObject({
+      name: "bash",
+      status: "completed",
+      detail: {
+        type: "shell",
+        command: "bun test",
+        output: "170 pass",
+        exitCode: 0,
+        truncated: true,
+        fullOutputPath: "/tmp/out.txt",
+      },
+      presentation: {
+        category: "shell",
+        icon: "SquareTerminal",
+        label: "Shell",
+        summary: "bun test",
+      },
+    });
+  });
+
   it("emits one edit timeline item per apply_patch file", () => {
     const patch = [
       "*** Begin Patch",

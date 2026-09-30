@@ -1250,7 +1250,8 @@ function DetailBody({
   }
 
   switch (detail.type) {
-    case "shell":
+    case "shell": {
+      const shell = detail as typeof detail & { truncated?: boolean; fullOutputPath?: string };
       return (
         <>
           <HighlightedCodeBlock
@@ -1272,8 +1273,16 @@ function DetailBody({
           {detail.exitCode !== undefined && detail.exitCode !== null ? (
             <Text style={styles.mutedText}>Exit code {detail.exitCode}</Text>
           ) : null}
+          {shell.truncated === true ? (
+            <Text selectable style={styles.mutedText}>
+              {shell.fullOutputPath
+                ? `Output truncated · ${compactText(shell.fullOutputPath, 160)}`
+                : "Output truncated"}
+            </Text>
+          ) : null}
         </>
       );
+    }
     case "read":
       if (readErrorMessage(detail.content) && data.errorText) {
         return <PathRow icon={data.presentation.fileIcon ?? "Eye"} path={detail.filePath} styles={styles} />;
