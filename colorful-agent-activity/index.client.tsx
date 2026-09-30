@@ -1,5 +1,6 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { ActivitySettings } from "./client/settings";
+import { AgentSummaryPanel } from "./client/summary/panel";
 import { ColorfulReasoning, ColorfulTodo, ColorfulToolCall } from "./client/activity";
 import { transformReasoning, transformTodo, transformToolCall } from "./client/transform";
 import { installColorfulFonts } from "./client/web";
@@ -22,6 +23,23 @@ export default function contribute(client: PluginClientContext) {
     title: "Colorful activity",
     icon: "Palette",
     Component: ActivitySettings,
+  });
+  client.addWorkspacePanel({
+    id: "summary",
+    title: "Activity Summary",
+    icon: "Activity",
+    context: "agent",
+    Component: AgentSummaryPanel,
+  });
+  client.addCommandCenterItem({
+    id: "open-agent-summary",
+    title: "Open Activity Summary",
+    icon: "Activity",
+    keywords: ["summary", "activity", "tools", "thinking", "status"],
+    context: "agent",
+    onSelect({ openPanel }) {
+      openPanel("summary");
+    },
   });
   client.addTimelineTransformer({
     id: "reasoning",
