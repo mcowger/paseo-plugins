@@ -1,6 +1,7 @@
-import type { PluginClientContext } from "@getpaseo/plugin/client";
+import type { PluginClientContext, PluginSidebarItemProps } from "@getpaseo/plugin/client";
 import { WorkspaceSubagentsPanel } from "./client/agents/panel";
 import { WorkspaceTasksPanel } from "./client/tasks/panel";
+import { SuperTasksSidebarItem } from "./client/tasks/sidebar-item";
 
 export default function contribute(client: PluginClientContext) {
   client.addWorkspacePanel({
@@ -11,6 +12,18 @@ export default function contribute(client: PluginClientContext) {
     locations: ["workspace", "explorer"],
     Component: WorkspaceTasksPanel,
   });
+
+  // Older client entries predate sidebar header/footer items; skip the row instead of failing
+  // the whole plugin on them.
+  if (typeof client.addSidebarFooterItem === "function") {
+    client.addSidebarFooterItem({
+      id: "tasks",
+      title: "Super Tasks",
+      Component: function SuperTasksSidebarContribution(props: PluginSidebarItemProps) {
+        return <SuperTasksSidebarItem {...props} openPanel={client.openPanel} />;
+      },
+    });
+  }
   client.addWorkspacePanel({
     id: "agent-monitor",
     title: "Agent Monitor",

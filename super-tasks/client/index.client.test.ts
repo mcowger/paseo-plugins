@@ -3,6 +3,7 @@ import type {
   PluginClientContext,
   PluginClientSlashCommandContribution,
   PluginCommandCenterItemContribution,
+  PluginSidebarItemContribution,
   PluginWorkspacePanelContribution,
 } from "@getpaseo/plugin/client";
 
@@ -13,6 +14,7 @@ import type {
 // (and its panel imports) evaluate.
 vi.mock("../client/agents/panel", () => ({ WorkspaceSubagentsPanel: () => null }));
 vi.mock("../client/tasks/panel", () => ({ WorkspaceTasksPanel: () => null }));
+vi.mock("../client/tasks/sidebar-item", () => ({ SuperTasksSidebarItem: () => null }));
 import contributeClient from "../index.client";
 
 describe("index.client v0.10 entry point", () => {
@@ -20,6 +22,7 @@ describe("index.client v0.10 entry point", () => {
     const workspacePanels: PluginWorkspacePanelContribution[] = [];
     const commandCenterItems: PluginCommandCenterItemContribution[] = [];
     const slashCommands: PluginClientSlashCommandContribution[] = [];
+    const sidebarItems: PluginSidebarItemContribution[] = [];
 
     const mockClient = {
       addSettingsScreen: vi.fn(() => () => {}),
@@ -38,6 +41,11 @@ describe("index.client v0.10 entry point", () => {
         return () => {};
       }),
       addComposerPill: vi.fn(() => () => {}),
+      addSidebarFooterItem: vi.fn((contribution) => {
+        sidebarItems.push(contribution);
+        return () => {};
+      }),
+      addSidebarHeaderItem: vi.fn(() => () => {}),
       addAttachmentSource: vi.fn(() => () => {}),
       addTheme: vi.fn(() => () => {}),
       addTimelineTransformer: vi.fn(() => () => {}),
@@ -62,6 +70,9 @@ describe("index.client v0.10 entry point", () => {
     ]);
 
     expect(slashCommands.map((c) => c.name)).toEqual(["tasks", "agents"]);
+
+    expect(sidebarItems.map((i) => i.id)).toEqual(["tasks"]);
+    expect(sidebarItems.map((i) => i.title)).toEqual(["Super Tasks"]);
 
     const openPanelMock = vi.fn();
     slashCommands[0]?.onSubmit({ openPanel: openPanelMock } as never);

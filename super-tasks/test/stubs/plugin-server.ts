@@ -17,3 +17,11 @@ export function usePaseo(): unknown {
 export function useRpc(): () => Promise<unknown> {
   return async () => ({});
 }
+
+export function SidebarRow(): null {
+  return null;
+}
+
+export function SidebarSeparator(): null {
+  return null;
+}

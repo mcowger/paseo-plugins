@@ -1,12 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import {
-  usePaseo,
-  type PluginHostProps,
-  type PluginWorkspacePanelProps,
-} from "@getpaseo/plugin/client";
+import { type PluginHostProps, type PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useCallback, useMemo, useState, type ReactElement } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -16,39 +11,18 @@ import {
   type ViewStyle,
 } from "react-native";
 import { TooltipPressable as Pressable } from "../ui/tooltip";
-import { isAgentStream } from "../timeline-events";
 import { openAgentInPaseoWorkspace } from "../agents/navigation";
+import {
+  sumCounts,
+  type AgentTasksGroup,
+  type TaskItemViewModel,
+  type TaskStatusFilter,
+} from "./model";
+import { TaskStatusIcon } from "./status-icon";
+import { useWorkspaceTaskGroups } from "./use-workspace-task-groups";
 
 const AGENT_TITLE_COLUMN_STYLE: ViewStyle = { flexShrink: 1 };
 const TOUCH_HIT_SLOP = { top: 10, right: 10, bottom: 10, left: 10 } as const;
-
-export interface TaskItemViewModel {
-  readonly id: string;
-  readonly text: string;
-  readonly status: "pending" | "in_progress" | "completed";
-  readonly completed: boolean;
-  readonly activeForm?: string;
-}
-
-export interface AgentTaskCounts {
-  readonly total: number;
-  readonly pending: number;
-  readonly inProgress: number;
-  readonly completed: number;
-}
-
-export interface AgentTasksGroup {
-  readonly agentId: string;
-  readonly agentTitle: string;
-  readonly isMain: boolean;
-  readonly provider: string;
-  readonly status: "initializing" | "idle" | "running" | "error" | "closed";
-  readonly updatedAt: string;
-  readonly tasks: readonly TaskItemViewModel[];
-  readonly counts: AgentTaskCounts;
-}
-
-export type TaskStatusFilter = "all" | "in_progress" | "pending" | "completed";
 
 interface TasksPanelStyles {
   readonly screen: ViewStyle;
@@ -96,31 +70,6 @@ interface TasksPanelStyles {
   readonly summaryStatItem: ViewStyle;
   readonly summaryStatValue: TextStyle;
   readonly summaryStatLabel: TextStyle;
-}
-
-function extractLatestTodoSnapshot(items: readonly AgentTimelineItem[]): TaskItemViewModel[] {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const item = items[i];
-    if (item && item.type === "todo" && Array.isArray(item.items)) {
-      return item.items.map((t, idx) => {
-        const status: "pending" | "in_progress" | "completed" =
-          t.status === "completed" || t.status === "in_progress" || t.status === "pending"
-            ? t.status
-            : t.completed
-              ? "completed"
-              : "pending";
-
-        return {
-          id: t.id || `task-${idx}-${t.text.slice(0, 16)}`,
-          text: t.text || "(empty task)",
-          status,
-          completed: status === "completed" || !!t.completed,
-          activeForm: t.activeForm,
-        };
-      });
-    }
-  }
-  return [];
 }
 
 function createStyles(theme: PluginTheme, compact: boolean): TasksPanelStyles {
@@ -410,24 +359,6 @@ function createStyles(theme: PluginTheme, compact: boolean): TasksPanelStyles {
   };
 }
 
-function TaskStatusIcon({
-  status,
-  theme,
-  size = 14,
-}: {
-  status: "pending" | "in_progress" | "completed";
-  theme: PluginTheme;
-  size?: number;
-}): ReactElement {
-  if (status === "completed") {
-    return <Icon name="CheckCircle2" size={size} color={theme.colors.statusSuccess} />;
-  }
-  if (status === "in_progress") {
-    return <Icon name="Clock" size={size} color={theme.colors.accent} />;
-  }
-  return <Icon name="Circle" size={size} color={theme.colors.foregroundMuted} />;
-}
-
 export function WorkspaceTasksBody({
   workspaceId,
   theme,
@@ -439,163 +370,18 @@ export function WorkspaceTasksBody({
   host: PluginHostProps["host"];
   layout: PluginHostProps["layout"];
 }): ReactElement {
-  const paseo = usePaseo();
-  const [loading, setLoading] = useState<boolean>(true);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [agentGroups, setAgentGroups] = useState<readonly AgentTasksGroup[]>([]);
+  const {
+    groups: agentGroups,
+    loading,
+    refreshing,
+    error: errorMessage,
+    refresh: handleManualRefresh,
+  } = useWorkspaceTaskGroups(workspaceId);
   const [filter, setFilter] = useState<TaskStatusFilter>("all");
   const [collapsedAgents, setCollapsedAgents] = useState<ReadonlySet<string>>(new Set());
   const [expandedCompletedAgents, setExpandedCompletedAgents] = useState<ReadonlySet<string>>(
     new Set(),
   );
-
-  const isMountedRef = useRef<boolean>(true);
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const fetchTasksForWorkspace = useCallback(async () => {
-    if (!paseo || !workspaceId) return;
-    try {
-      setErrorMessage(null);
-      const listResult = await paseo.agents.list({
-        filter: { includeArchived: false },
-        page: { limit: 200 },
-      });
-
-      const workspaceAgents = listResult.entries
-        .map((entry) => entry.agent)
-        .filter((agent) => agent.workspaceId === workspaceId);
-
-      const groupPromises = workspaceAgents.map(async (agent): Promise<AgentTasksGroup> => {
-        let tasks: TaskItemViewModel[] = [];
-        try {
-          const agentRef = paseo.agents.ref(agent.id);
-          const timelinePayload = await agentRef.timeline.refetch({
-            direction: "tail",
-            limit: 200,
-            projection: "projected",
-          });
-          tasks = extractLatestTodoSnapshot(
-            timelinePayload.entries.map((entry) => entry.item) as AgentTimelineItem[],
-          );
-        } catch {
-          tasks = [];
-        }
-
-        const counts: AgentTaskCounts = {
-          total: tasks.length,
-          pending: tasks.filter((t) => t.status === "pending").length,
-          inProgress: tasks.filter((t) => t.status === "in_progress").length,
-          completed: tasks.filter((t) => t.status === "completed").length,
-        };
-
-        return {
-          agentId: agent.id,
-          agentTitle: agent.title || `Agent ${agent.id.slice(0, 8)}`,
-          isMain: !agent.labels["paseo.parent-agent-id"]?.trim(),
-          provider: agent.provider,
-          status: agent.status,
-          updatedAt: agent.updatedAt,
-          tasks,
-          counts,
-        };
-      });
-
-      const resolvedGroups = await Promise.all(groupPromises);
-      if (isMountedRef.current) {
-        resolvedGroups.sort((a, b) => {
-          if (a.counts.inProgress !== b.counts.inProgress) {
-            return b.counts.inProgress - a.counts.inProgress;
-          }
-          if (a.counts.pending !== b.counts.pending) {
-            return b.counts.pending - a.counts.pending;
-          }
-          return Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || "");
-        });
-        setAgentGroups(resolvedGroups);
-      }
-    } catch (err: unknown) {
-      if (isMountedRef.current) {
-        setErrorMessage(err instanceof Error ? err.message : "Failed to load workspace tasks.");
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    }
-  }, [paseo, workspaceId]);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchTasksForWorkspace();
-
-    if (!paseo) return;
-
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const triggerDebouncedFetch = () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        if (isMountedRef.current) {
-          fetchTasksForWorkspace();
-        }
-      }, 400);
-    };
-
-    const unsubAgents = paseo.agents.subscribe(() => {
-      triggerDebouncedFetch();
-    });
-
-    return () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      unsubAgents();
-    };
-  }, [paseo, workspaceId, fetchTasksForWorkspace]);
-
-  useEffect(() => {
-    if (!paseo || agentGroups.length === 0) return;
-
-    const unsubscribers = agentGroups.map((group) =>
-      paseo.agents.ref(group.agentId).timeline.subscribe((stream) => {
-        // A re-established subscription resolves a new epoch, and the counts held here
-        // came from the previous one.
-        if (!isAgentStream(stream)) {
-          fetchTasksForWorkspace();
-          return;
-        }
-        if (stream.event.type !== "timeline" || stream.event.item.type !== "todo") return;
-
-        const tasks = extractLatestTodoSnapshot([stream.event.item]);
-        const counts: AgentTaskCounts = {
-          total: tasks.length,
-          pending: tasks.filter((task) => task.status === "pending").length,
-          inProgress: tasks.filter((task) => task.status === "in_progress").length,
-          completed: tasks.filter((task) => task.status === "completed").length,
-        };
-        setAgentGroups((groups) =>
-          groups.map((candidate) =>
-            candidate.agentId === group.agentId
-              ? { ...candidate, tasks, counts, updatedAt: stream.timestamp }
-              : candidate,
-          ),
-        );
-      }),
-    );
-
-    return () => {
-      for (const unsubscribe of unsubscribers) unsubscribe();
-    };
-  }, [agentGroups, fetchTasksForWorkspace, paseo]);
-
-  const handleManualRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchTasksForWorkspace();
-  }, [fetchTasksForWorkspace]);
 
   const toggleAgentCollapse = useCallback((agentId: string) => {
     setCollapsedAgents((prev) => {
@@ -629,19 +415,7 @@ export function WorkspaceTasksBody({
     [host.id, workspaceId],
   );
 
-  const totalWorkspaceCounts = useMemo<AgentTaskCounts>(() => {
-    let total = 0;
-    let pending = 0;
-    let inProgress = 0;
-    let completed = 0;
-    for (const group of agentGroups) {
-      total += group.counts.total;
-      pending += group.counts.pending;
-      inProgress += group.counts.inProgress;
-      completed += group.counts.completed;
-    }
-    return { total, pending, inProgress, completed };
-  }, [agentGroups]);
+  const totalWorkspaceCounts = useMemo(() => sumCounts(agentGroups), [agentGroups]);
 
   const filteredGroups = useMemo(() => {
     return agentGroups

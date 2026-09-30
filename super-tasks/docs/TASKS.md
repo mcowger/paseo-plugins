@@ -13,6 +13,10 @@ The plugin registers the panel under the id `tasks` with the title "Super Tasks"
 - The workspace sidebar or the Explorer dock.
 - Command center: **Open Super Tasks** (`open-tasks`) or **Open Super Tasks in Explorer** (`open-tasks-explorer`).
 
+## Sidebar footer item
+
+`addSidebarFooterItem` adds a host-wide row (sidebar items are not workspace-scoped). The row shows the most recently active workspace's `completed/total` and the active task's `activeForm`; pressing it opens a popover with each agent's tasks, a `Done (N)` fold, and an **Open in workspace** action that opens the `tasks` panel for that workspace. `useMostRecentWorkspaceId` infers the workspace from the agent with the latest activity, and `useWorkspaceTaskGroups` shares the panel's fetch and live-update logic.
+
 ## Where tasks come from
 
 Agents that keep a todo list (for example via a todo or plan tool) emit a timeline item of type `todo` each time the list changes. Each item carries the full list, not a delta:

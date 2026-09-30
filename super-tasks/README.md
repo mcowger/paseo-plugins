@@ -27,6 +27,7 @@ The Agent Monitor panel gives you full visibility and interactive control over e
 The Super Tasks panel provides real-time tracking of workspace todos and progress:
 
 - **Real-Time Workspace Todo Tracking**: Aggregates todos and action items emitted across active agents in the current workspace.
+- **Sidebar footer entry**: A compact progress row (`2/5 · activeForm`) in the sidebar footer for the most recently active workspace. Press it for a popover with the full list and an **Open in workspace** action.
 - **Grouped by Agent**: Visualizes tasks categorized by agent with status metrics (completed vs total).
 - **Status Filtering**: Filter tasks by status tabs: All, In Progress, Pending, and Completed.
 - **Direct Navigation**: Jump directly to the relevant task context or agent thread from any task card.
