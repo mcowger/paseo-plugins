@@ -7,7 +7,7 @@ import {
   type PluginButtonContentProps,
 } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/react-native";
-import { filterSkills, toSkillInvocation, type SkillCommand } from "../shared/skills";
+import { filterSkills, toSkillDisplayName, toSkillInvocation, type SkillCommand } from "../shared/skills";
 import { recordSkillUsage, skillUsageSettings, sortSkillsByUsage } from "../shared/usage";
 
 export function SkillPickerContent(props: PluginButtonContentProps) {
@@ -175,13 +175,13 @@ export function SkillPickerContent(props: PluginButtonContentProps) {
             <Pressable
               key={skill.name}
               accessibilityRole="button"
-              accessibilityLabel={`Invoke skill ${skill.name}`}
+              accessibilityLabel={`Invoke skill ${toSkillDisplayName(skill.name)}`}
               accessibilityState={{ disabled: busy, busy: active, selected: isHighlighted }}
               disabled={busy}
               onPress={() => void handleSelect(skill.name)}
               style={[styles.row, isHighlighted ? styles.rowHighlighted : null, busy ? styles.rowBusy : null]}
             >
-              <Text style={styles.rowName}>{active ? `Sending /${skill.name}…` : `/${skill.name}`}</Text>
+              <Text style={styles.rowName}>{active ? `Sending /${toSkillDisplayName(skill.name)}…` : `/${toSkillDisplayName(skill.name)}`}</Text>
               {skill.description ? (
                 <Text style={styles.rowDetail} numberOfLines={2}>
                   {skill.description}

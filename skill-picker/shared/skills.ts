@@ -42,9 +42,28 @@ export function filterSkills(
   return skills;
 }
 
+// Providers may namespace command names (e.g. Pi reports skills as
+// "skill:opencodereview-cli" and extensions as "ext:foo"), so allow
+// colon-separated segments in addition to bare names.
+const SKILL_NAME_PATTERN = /^[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*$/;
+
+export function normalizeSkillName(name: string | null | undefined): string | null {
+  const trimmed = (name ?? "").trim().replace(/^\/+/, "");
+  if (!trimmed || !SKILL_NAME_PATTERN.test(trimmed)) return null;
+  return trimmed;
+}
+
 export function toSkillInvocation(name: string | null | undefined): string {
   const trimmed = (name ?? "").trim().replace(/^\/+/, "");
   if (!trimmed) throw new Error("Skill name is required");
-  if (!/^[A-Za-z0-9_-]+$/.test(trimmed)) throw new Error(`Invalid skill name: ${trimmed}`);
-  return `/${trimmed}`;
+  const normalized = normalizeSkillName(trimmed);
+  if (!normalized) throw new Error(`Invalid skill name: ${trimmed}`);
+  return `/${normalized}`;
+}
+
+// Strips the provider's `skill:` namespace for display so the pill reads
+// `/grill-me` rather than `/skill:grill-me`; invocation still uses the full name.
+export function toSkillDisplayName(name: string | null | undefined): string {
+  const trimmed = (name ?? "").trim().replace(/^\/+/, "");
+  return trimmed.startsWith("skill:") ? trimmed.slice("skill:".length) : trimmed;
 }

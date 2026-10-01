@@ -1,6 +1,6 @@
 import { defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
-import type { SkillCommand } from "./skills";
+import { normalizeSkillName, type SkillCommand } from "./skills";
 
 export const MAX_TRACKED_SKILLS = 50;
 
@@ -25,9 +25,7 @@ export const skillUsageSettings = defineSettings({
 });
 
 export function normalizeUsageName(name: string | null | undefined): string | null {
-  const trimmed = (name ?? "").trim().replace(/^\/+/, "");
-  if (!trimmed || !/^[A-Za-z0-9_-]+$/.test(trimmed)) return null;
-  return trimmed;
+  return normalizeSkillName(name);
 }
 
 function timeOf(iso: string | null | undefined): number {

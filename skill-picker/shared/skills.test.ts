@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterSkills, isSkillCommand, toSkillInvocation } from "./skills";
+import { filterSkills, isSkillCommand, toSkillDisplayName, toSkillInvocation } from "./skills";
 
 describe("isSkillCommand", () => {
   it("accepts skill entries with a name", () => {
@@ -45,8 +45,25 @@ describe("toSkillInvocation", () => {
     expect(toSkillInvocation("/commit-push-pr")).toBe("/commit-push-pr");
   });
 
+  it("preserves provider namespaces", () => {
+    expect(toSkillInvocation("skill:opencodereview-cli")).toBe("/skill:opencodereview-cli");
+    expect(toSkillInvocation("/skill:docs")).toBe("/skill:docs");
+    expect(toSkillInvocation("ext:my-tool")).toBe("/ext:my-tool");
+  });
+
   it("rejects empty or invalid names", () => {
     expect(() => toSkillInvocation("")).toThrow();
     expect(() => toSkillInvocation("has space")).toThrow();
+    expect(() => toSkillInvocation("skill:")).toThrow();
+    expect(() => toSkillInvocation(":skill")).toThrow();
+  });
+});
+
+describe("toSkillDisplayName", () => {
+  it("strips the skill namespace but keeps other namespaces", () => {
+    expect(toSkillDisplayName("skill:opencodereview-cli")).toBe("opencodereview-cli");
+    expect(toSkillDisplayName("/skill:docs")).toBe("docs");
+    expect(toSkillDisplayName("commit-push-pr")).toBe("commit-push-pr");
+    expect(toSkillDisplayName("ext:my-tool")).toBe("ext:my-tool");
   });
 });

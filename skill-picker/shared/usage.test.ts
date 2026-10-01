@@ -13,6 +13,10 @@ describe("normalizeUsageName", () => {
     expect(normalizeUsageName("  grill-me  ")).toBe("grill-me");
   });
 
+  it("preserves provider namespaces", () => {
+    expect(normalizeUsageName("skill:opencodereview-cli")).toBe("skill:opencodereview-cli");
+  });
+
   it("rejects empty and invalid names", () => {
     expect(normalizeUsageName(null)).toBeNull();
     expect(normalizeUsageName("")).toBeNull();
