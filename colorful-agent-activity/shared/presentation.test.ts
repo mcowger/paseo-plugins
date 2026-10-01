@@ -34,6 +34,9 @@ import {
   parseSkillName,
   parseTodoToolInput,
   parseTodoToolOutput,
+  notInHeader,
+  toolCallHasBody,
+  textAfterHeader,
   todoTaskLabel,
   todoToolDetailModel,
   todoToolSummary,
@@ -1590,5 +1593,75 @@ describe("opencode subagent tool presentation", () => {
     expect(opencodeSubagentSummary(subagentInput, null)).toBe("explore opencode subagents");
     expect(expansionTargetForToolCall("subagent", "unknown")).toBe("sub_agent");
     expect(expansionTargetForToolCall("task", "unknown")).toBe("sub_agent");
+  });
+});
+
+describe("header de-duplication", () => {
+  it("hides values the one-line header already shows whole", () => {
+    expect(notInHeader("abc123", "abc123")).toBeUndefined();
+    expect(notInHeader("run abc", "worker done · run abc · 5m timeout")).toBeUndefined();
+    expect(notInHeader("owner/repo", "owner/repo#12")).toBeUndefined();
+    expect(notInHeader(12, "owner/repo#12")).toBeUndefined();
+    expect(notInHeader("Timed Out", "next run · timed out")).toBeUndefined();
+  });
+
+  it("keeps values the header doesn't show or can't show in full", () => {
+    expect(notInHeader("gpt-5", "Audit parser · claude")).toBe("gpt-5");
+    expect(notInHeader("1", "run 12")).toBe("1");
+    expect(notInHeader("abc", undefined)).toBe("abc");
+    expect(notInHeader(undefined, "abc")).toBeUndefined();
+    const long = "a long description that easily exceeds what a single header line can display";
+    expect(notInHeader(long, long)).toBe(long);
+    expect(notInHeader("line one\nline two", "line one line two")).toBe("line one\nline two");
+  });
+
+  it("drops a leading line that the header repeats", () => {
+    expect(textAfterHeader("3 pending\n- a\n- b", "3 pending")).toBe("- a\n- b");
+    expect(textAfterHeader("3 pending", "3 pending")).toBeUndefined();
+    expect(textAfterHeader("other\nbody", "3 pending")).toBe("other\nbody");
+    expect(textAfterHeader("  ", "x")).toBeUndefined();
+  });
+});
+
+describe("toolCallHasBody", () => {
+  it("never expands skills", () => {
+    expect(toolCallHasBody("skill", { type: "unknown", input: { name: "x" }, output: "ok" }, "x")).toBe(false);
+  });
+
+  it("collapses search and fetch when the header already shows everything", () => {
+    expect(toolCallHasBody("grep", { type: "search", query: "foo" }, "foo")).toBe(false);
+    expect(toolCallHasBody("grep", { type: "search", query: "foo", content: "a.ts:1:foo" }, "foo")).toBe(true);
+    expect(toolCallHasBody("fetch", { type: "fetch", url: "https://x.dev" }, "https://x.dev")).toBe(false);
+    expect(toolCallHasBody("fetch", { type: "fetch", url: "https://x.dev", result: "body" }, "https://x.dev")).toBe(true);
+  });
+
+  it("collapses sub-agents whose progress rows already show the whole log", () => {
+    const detail = { type: "sub_agent" as const, description: "Audit", log: "[read] a.ts\n[grep] foo" };
+    expect(toolCallHasBody("task", detail, "Audit")).toBe(false);
+    expect(toolCallHasBody("task", { ...detail, log: `${detail.log}\nfree text` }, "Audit")).toBe(true);
+  });
+
+  it("collapses file cards without contents or a diff", () => {
+    expect(toolCallHasBody("read", { type: "read", filePath: "a.ts" }, undefined)).toBe(false);
+    expect(toolCallHasBody("read", { type: "read", filePath: "a.ts", content: "x" }, undefined)).toBe(true);
+    expect(toolCallHasBody("read", { type: "read", filePath: "logo.png" }, undefined)).toBe(true);
+    expect(toolCallHasBody("edit", { type: "edit", filePath: "a.ts" }, undefined)).toBe(false);
+    expect(toolCallHasBody("edit", { type: "edit", filePath: "a.ts", newString: "y" }, undefined)).toBe(true);
+  });
+
+  it("collapses Paseo action tools that only echo the header", () => {
+    const cancel = (output: unknown) =>
+      toolCallHasBody("mcp__paseo__cancel_agent", { type: "unknown", input: { agentId: "a1" }, output }, "a1");
+    expect(cancel({})).toBe(false);
+    expect(cancel({ success: true })).toBe(true);
+    expect(
+      toolCallHasBody("mcp__paseo__speak", { type: "unknown", input: { text: "hi" }, output: {} }, "hi"),
+    ).toBe(false);
+  });
+
+  it("collapses todo and wait tools with nothing beyond the header", () => {
+    expect(toolCallHasBody("todo", { type: "unknown", input: { action: "clear" }, output: null }, undefined)).toBe(false);
+    expect(toolCallHasBody("wait", { type: "unknown", input: {}, output: { content: [{ type: "text", text: "ok" }] } }, "ok")).toBe(false);
+    expect(toolCallHasBody("bash", { type: "shell", command: "ls" }, "ls")).toBe(true);
   });
 });

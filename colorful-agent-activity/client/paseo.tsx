@@ -9,12 +9,15 @@ import { extractPaseoChildAgentId } from "../shared/child-agent";
 import {
   exaOutputText,
   exaToolKind,
+  exaToolSummary,
   parseExaSearchResults,
   type ExaSearchResult,
 } from "../shared/exa";
 import {
   formatUnknownValue,
+  notInHeader,
   paseoToolLeafName,
+  paseoToolSummary,
   paseoToolResult,
   previewText,
   type ActivityPalette,
@@ -253,8 +256,7 @@ export function PaseoFields({
   styles: ActivityStyles;
 }) {
   const visible = fields.filter(([, value]) => value !== undefined);
-  if (visible.length === 0)
-    return <Text style={styles.empty}>No details returned.</Text>;
+  if (visible.length === 0) return null;
   return (
     <View style={styles.paseoRows}>
       {visible.map(([label, value]) => (
@@ -267,6 +269,44 @@ export function PaseoFields({
         />
       ))}
     </View>
+  );
+}
+
+/** Field value with header-duplicate scalars removed (see `notInHeader`). */
+function unlessInHeader(value: unknown, headerSummary: string | undefined): unknown {
+  return typeof value === "string" || typeof value === "number"
+    ? notInHeader(value, headerSummary)
+    : value;
+}
+
+/** One muted line of secondary facts, joined with middots. */
+function MetaLine({ parts, styles }: { parts: Array<string | undefined>; styles: ActivityStyles }) {
+  const text = parts.filter(Boolean).join(" · ");
+  if (!text) return null;
+  return (
+    <Text numberOfLines={2} style={styles.paseoHeroSubtitle}>
+      {text}
+    </Text>
+  );
+}
+
+/** A titled field list that disappears when every field is already shown elsewhere. */
+export function FieldsSection({
+  title,
+  fields,
+  palette,
+  styles,
+}: {
+  title: string;
+  fields: Array<[string, unknown]>;
+  palette: ActivityPalette;
+  styles: ActivityStyles;
+}) {
+  if (fields.every(([, value]) => value === undefined)) return null;
+  return (
+    <Section title={title} styles={styles}>
+      <PaseoFields fields={fields} palette={palette} styles={styles} />
+    </Section>
   );
 }
 
@@ -453,6 +493,7 @@ function OutputFields({
   const values = fields.map(
     ([key, label]) => [label, result?.[key]] as [string, unknown]
   );
+  if (values.every(([, value]) => value === undefined)) return null;
   return (
     <Section title="Result" styles={styles}>
       <PaseoFields fields={values} palette={palette} styles={styles} />
@@ -475,6 +516,7 @@ function ActionResult({
     .map(([key, label]) => [label, result?.[key]] as [string, unknown])
     .filter(([, value]) => value !== undefined);
   const success = result?.success;
+  if (typeof success !== "boolean" && visibleFields.length === 0) return null;
   return (
     <Section title="Result" styles={styles}>
       <View style={styles.paseoRows}>
@@ -493,15 +535,16 @@ function ActionResult({
 
 function AgentSnapshot({
   snapshot,
+  headerSummary,
   palette,
   styles,
 }: {
   snapshot: JsonRecord | null;
+  headerSummary: string | undefined;
   palette: ActivityPalette;
   styles: ActivityStyles;
 }) {
-  if (!snapshot)
-    return <Text style={styles.empty}>No agent snapshot returned.</Text>;
+  if (!snapshot) return null;
   const capabilities = asRecord(snapshot.capabilities);
   const modes = fieldArray(snapshot, "availableModes");
   const permissions = fieldArray(snapshot, "pendingPermissions");
@@ -509,7 +552,7 @@ function AgentSnapshot({
     <View style={styles.paseoStack}>
       <PaseoFields
         fields={[
-          ["Agent", snapshot.id],
+          ["Agent", unlessInHeader(snapshot.id, headerSummary)],
           ["Title", snapshot.title],
           ["Provider", snapshot.provider],
           ["Model", snapshot.model],
@@ -527,9 +570,6 @@ function AgentSnapshot({
         palette={palette}
         styles={styles}
       />
-      {typeof snapshot.status === "string" ? (
-        <StatusPill value={snapshot.status} palette={palette} styles={styles} />
-      ) : null}
       {capabilities ? (
         <Section title="Capabilities" styles={styles}>
           <View style={styles.paseoChips}>
@@ -671,6 +711,7 @@ function PermissionList({
 
 function AgentTool({
   leaf,
+  headerSummary,
   input,
   result,
   theme,
@@ -678,6 +719,7 @@ function AgentTool({
   styles,
 }: Omit<PaseoProps, "toolName" | "output"> & {
   leaf: string;
+  headerSummary: string | undefined;
   result: unknown;
 }) {
   const inputRecord = asRecord(input);
@@ -688,24 +730,17 @@ function AgentTool({
       const provider = fieldString(inputRecord, "provider");
       const settings = asRecord(inputRecord?.settings);
       const thinkingOptionId = fieldString(settings, "thinkingOptionId");
-      const subtitle = [
-        provider,
-        thinkingOptionId ? `Thinking option ${thinkingOptionId}` : undefined,
-        inputRecord?.background === true ? "Background" : undefined,
-        inputRecord?.notifyOnFinish === true ? "Notify on finish" : undefined,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      const status = fieldString(outputRecord, "status");
       return (
         <View style={styles.paseoStack}>
-          <PaseoHero
-            icon="Bot"
-            title={fieldString(inputRecord, "title") ?? "New agent"}
-            subtitle={subtitle}
-            status={status}
-            palette={palette}
-            color={palette.categoryColors.agent}
+          <MetaLine
+            parts={[
+              notInHeader(fieldString(inputRecord, "title"), headerSummary),
+              notInHeader(provider, headerSummary),
+              thinkingOptionId ? `Thinking option ${thinkingOptionId}` : undefined,
+              inputRecord?.background === true ? "Background" : undefined,
+              inputRecord?.notifyOnFinish === true ? "Notify on finish" : undefined,
+              fieldString(outputRecord, "status"),
+            ]}
             styles={styles}
           />
           <PromptBlock
@@ -727,27 +762,21 @@ function AgentTool({
     case "send_agent_prompt":
       return (
         <View style={styles.paseoStack}>
-          <PaseoHero
-            icon="Send"
-            title={fieldString(inputRecord, "agentId") ?? "Agent"}
-            subtitle={fieldString(inputRecord, "sessionMode")}
-            color={palette.categoryColors.agent}
-            styles={styles}
-          />
           <PromptBlock
             text={fieldString(inputRecord, "prompt")}
             styles={styles}
           />
-          <Section title="Delivery" styles={styles}>
-            <PaseoFields
-              fields={[
-                ["Background", inputRecord?.background],
-                ["Notify on finish", inputRecord?.notifyOnFinish],
-              ]}
-              palette={palette}
-              styles={styles}
-            />
-          </Section>
+          <FieldsSection
+            title="Delivery"
+            fields={[
+              ["Agent", unlessInHeader(inputRecord?.agentId, headerSummary)],
+              ["Session mode", inputRecord?.sessionMode],
+              ["Background", inputRecord?.background],
+              ["Notify on finish", inputRecord?.notifyOnFinish],
+            ]}
+            palette={palette}
+            styles={styles}
+          />
           <OutputFields
             result={outputRecord}
             fields={[
@@ -758,13 +787,6 @@ function AgentTool({
             palette={palette}
             styles={styles}
           />
-          {fieldString(outputRecord, "status") ? (
-            <StatusPill
-              value={fieldString(outputRecord, "status")!}
-              palette={palette}
-              styles={styles}
-            />
-          ) : null}
           {outputRecord?.permission ? (
             <Section title="Permission" styles={styles}>
               <PermissionList
@@ -779,14 +801,9 @@ function AgentTool({
     case "get_agent_status":
       return (
         <View style={styles.paseoStack}>
-          <PaseoHero
-            icon="Activity"
-            title={fieldString(inputRecord, "agentId") ?? "Agent status"}
-            color={palette.categoryColors.agent}
-            styles={styles}
-          />
           <AgentSnapshot
             snapshot={asRecord(outputRecord?.snapshot) ?? outputRecord}
+            headerSummary={headerSummary}
             palette={palette}
             styles={styles}
           />
@@ -818,7 +835,7 @@ function AgentTool({
         <View style={styles.paseoStack}>
           <PaseoFields
             fields={[
-              ["Agent", inputRecord?.agentId],
+              ["Agent", unlessInHeader(inputRecord?.agentId, headerSummary)],
               ["Limit", inputRecord?.limit],
               ["Mode", outputRecord?.currentModeId],
               ["Updates", outputRecord?.updateCount],
@@ -840,16 +857,21 @@ function AgentTool({
     case "set_agent_mode":
       return (
         <View style={styles.paseoStack}>
-          <PaseoHero
-            icon="SlidersHorizontal"
-            title={fieldString(inputRecord, "modeId") ?? "Set mode"}
-            subtitle={fieldString(inputRecord, "agentId")}
-            color={palette.categoryColors.agent}
+          <PaseoFields
+            fields={[
+              ["Agent", unlessInHeader(inputRecord?.agentId, headerSummary)],
+              ["Mode", inputRecord?.modeId],
+            ]}
+            palette={palette}
             styles={styles}
           />
           <ActionResult
             result={outputRecord}
-            fields={[["newMode", "New mode"]]}
+            fields={
+              outputRecord?.newMode !== undefined && outputRecord.newMode !== inputRecord?.modeId
+                ? [["newMode", "New mode"]]
+                : []
+            }
             palette={palette}
             styles={styles}
           />
@@ -860,7 +882,7 @@ function AgentTool({
         <View style={styles.paseoStack}>
           <PaseoFields
             fields={[
-              ["Agent", inputRecord?.agentId],
+              ["Agent", unlessInHeader(inputRecord?.agentId, headerSummary)],
               ["Name", inputRecord?.name],
               ["Labels", inputRecord?.labels],
               ["Settings", inputRecord?.settings],
@@ -880,18 +902,13 @@ function AgentTool({
     case "kill_agent":
       return (
         <View style={styles.paseoStack}>
-          <PaseoHero
-            icon={
-              leaf === "cancel_agent"
-                ? "CircleStop"
-                : leaf === "kill_agent"
-                ? "CircleX"
-                : "Archive"
-            }
-            title={fieldString(inputRecord, "agentId") ?? "Agent"}
-            color={palette.categoryColors.agent}
-            styles={styles}
-          />
+          {notInHeader(fieldString(inputRecord, "agentId"), headerSummary) ? (
+            <PaseoFields
+              fields={[["Agent", inputRecord?.agentId]]}
+              palette={palette}
+              styles={styles}
+            />
+          ) : null}
           <ActionResult
             result={outputRecord}
             palette={palette}
@@ -1025,12 +1042,14 @@ function WorkspaceSummary({
 
 function WorkspaceTool({
   leaf,
+  headerSummary,
   input,
   result,
   palette,
   styles,
 }: Omit<PaseoProps, "toolName" | "output" | "theme"> & {
   leaf: string;
+  headerSummary: string | undefined;
   result: unknown;
 }) {
   const inputRecord = asRecord(input);
@@ -1039,16 +1058,10 @@ function WorkspaceTool({
     case "create_workspace":
       return (
         <View style={styles.paseoStack}>
-          <PaseoHero
-            icon="FolderPlus"
-            title={fieldString(inputRecord, "title") ?? "New workspace"}
-            subtitle={fieldString(inputRecord, "isolation")}
-            color={palette.categoryColors.file}
-            styles={styles}
-          />
           <Section title="Configuration" styles={styles}>
             <PaseoFields
               fields={[
+                ["Title", unlessInHeader(inputRecord?.title, headerSummary)],
                 ["Isolation", inputRecord?.isolation],
                 ["Path", inputRecord?.path],
                 ["Project", inputRecord?.projectId],
@@ -1081,16 +1094,12 @@ function WorkspaceTool({
     case "archive_workspace":
       return (
         <View style={styles.paseoStack}>
-          <PaseoHero
-            icon="Archive"
-            title={fieldString(inputRecord, "workspaceId") ?? "Workspace"}
-            color={palette.categoryColors.file}
-            styles={styles}
-          />
           <ActionResult
             result={outputRecord}
             fields={[
-              ["workspaceId", "Workspace"],
+              ...(notInHeader(fieldString(outputRecord, "workspaceId"), headerSummary)
+                ? ([["workspaceId", "Workspace"]] as Array<[string, string]>)
+                : []),
               ["archivedAgentIds", "Archived agents"],
               ["removedDirectory", "Removed directory"],
             ]}
@@ -1104,7 +1113,7 @@ function WorkspaceTool({
         <View style={styles.paseoStack}>
           <PaseoFields
             fields={[
-              ["Workspace", inputRecord?.workspaceId],
+              ["Workspace", unlessInHeader(inputRecord?.workspaceId, headerSummary)],
               ["New title", inputRecord?.title],
             ]}
             palette={palette}
@@ -1397,9 +1406,7 @@ function TerminalTool({
               theme={theme}
               styles={styles}
             />
-          ) : (
-            <Text style={styles.empty}>No terminal output returned.</Text>
-          )}
+          ) : null}
         </View>
       );
     }
@@ -1452,6 +1459,7 @@ function TerminalTool({
 
 function ScheduleTool({
   leaf,
+  headerSummary,
   input,
   result,
   theme: _theme,
@@ -1459,6 +1467,7 @@ function ScheduleTool({
   styles,
 }: Omit<PaseoProps, "toolName" | "output"> & {
   leaf: string;
+  headerSummary: string | undefined;
   result: unknown;
 }) {
   const inputRecord = asRecord(input);
@@ -1522,23 +1531,14 @@ function ScheduleTool({
   if (leaf === "create_schedule" || leaf === "create_heartbeat") {
     return (
       <View style={styles.paseoStack}>
-        <PaseoHero
-          icon={leaf === "create_heartbeat" ? "HeartPulse" : "CalendarClock"}
-          title={
-            fieldString(inputRecord, "name") ??
-            (leaf === "create_heartbeat" ? "New heartbeat" : "New schedule")
-          }
-          subtitle={fieldString(inputRecord, "cron")}
-          color={palette.categoryColors.plan}
-          styles={styles}
-        />
         <PromptBlock
-          text={fieldString(inputRecord, "prompt")}
+          text={notInHeader(fieldString(inputRecord, "prompt"), headerSummary)}
           styles={styles}
         />
         <Section title="Configuration" styles={styles}>
           <PaseoFields
             fields={[
+              ["Name", inputRecord?.name],
               ["Cron", inputRecord?.cron],
               ["Timezone", inputRecord?.timezone],
               ["Provider", inputRecord?.provider],
@@ -1553,6 +1553,7 @@ function ScheduleTool({
         </Section>
         <ScheduleSummary
           schedule={outputRecord}
+          input={inputRecord}
           palette={palette}
           styles={styles}
         />
@@ -1582,6 +1583,7 @@ function ScheduleTool({
         />
         <ScheduleSummary
           schedule={outputRecord}
+          input={inputRecord}
           palette={palette}
           styles={styles}
         />
@@ -1599,14 +1601,19 @@ function ScheduleTool({
 
 function ScheduleSummary({
   schedule,
+  input = null,
   palette,
   styles,
 }: {
   schedule: JsonRecord | null;
+  /** Tool input already rendered above; result values that just echo it are skipped. */
+  input?: JsonRecord | null;
   palette: ActivityPalette;
   styles: ActivityStyles;
 }) {
-  if (!schedule) return <Text style={styles.empty}>No schedule returned.</Text>;
+  if (!schedule) return null;
+  const echoed = (key: string) =>
+    input?.[key] !== undefined && input[key] === schedule[key];
   const cadence = asRecord(schedule.cadence);
   const target = asRecord(schedule.target);
   const targetConfig = asRecord(target?.config);
@@ -1622,11 +1629,14 @@ function ScheduleSummary({
           ["lastRunAt", "Last run"],
           ["expiresAt", "Expires"],
           ["maxRuns", "Maximum runs"],
-        ]}
+        ].filter(([key]) => !echoed(key)) as Array<[string, string]>}
         palette={palette}
         styles={styles}
       />
-      <PromptBlock text={fieldString(schedule, "prompt")} styles={styles} />
+      <PromptBlock
+        text={echoed("prompt") ? undefined : fieldString(schedule, "prompt")}
+        styles={styles}
+      />
       <Section title="Cadence and target" styles={styles}>
         <PaseoFields
           fields={[
@@ -1643,13 +1653,6 @@ function ScheduleSummary({
           styles={styles}
         />
       </Section>
-      {fieldString(schedule, "status") ? (
-        <StatusPill
-          value={fieldString(schedule, "status")!}
-          palette={palette}
-          styles={styles}
-        />
-      ) : null}
     </View>
   );
 }
@@ -1772,12 +1775,14 @@ function ScheduleRuns({
 
 function ProviderTool({
   leaf,
+  headerSummary,
   input,
   result,
   palette,
   styles,
 }: Omit<PaseoProps, "toolName" | "output" | "theme"> & {
   leaf: string;
+  headerSummary: string | undefined;
   result: unknown;
 }) {
   const inputRecord = asRecord(input);
@@ -1793,16 +1798,13 @@ function ProviderTool({
   if (leaf === "list_models")
     return (
       <View style={styles.paseoStack}>
-        <PaseoHero
-          icon="Cpu"
-          title={
-            fieldString(outputRecord, "provider") ??
-            fieldString(inputRecord, "provider") ??
-            "Models"
-          }
-          color={palette.categoryColors.agent}
-          styles={styles}
-        />
+        {notInHeader(fieldString(outputRecord, "provider"), headerSummary) ? (
+          <PaseoFields
+            fields={[["Provider", outputRecord?.provider]]}
+            palette={palette}
+            styles={styles}
+          />
+        ) : null}
         <ModelList
           models={fieldArray(outputRecord, "models")}
           palette={palette}
@@ -1821,21 +1823,11 @@ function ProviderTool({
   if (leaf === "inspect_provider")
     return (
       <View style={styles.paseoStack}>
-        <PaseoHero
-          icon="ScanSearch"
-          title={
-            fieldString(outputRecord, "label") ??
-            fieldString(outputRecord, "provider") ??
-            fieldString(inputRecord, "provider") ??
-            "Provider"
-          }
-          subtitle={fieldString(outputRecord, "description")}
-          color={palette.categoryColors.agent}
-          styles={styles}
-        />
+        <MetaLine parts={[fieldString(outputRecord, "description")]} styles={styles} />
         <PaseoFields
           fields={[
             ["Provider", outputRecord?.provider ?? inputRecord?.provider],
+            ["Name", outputRecord?.label],
             ["Status", outputRecord?.status],
             ["Enabled", outputRecord?.enabled],
             ["Selected model", outputRecord?.selectedModel],
@@ -1843,13 +1835,6 @@ function ProviderTool({
           palette={palette}
           styles={styles}
         />
-        {fieldString(outputRecord, "status") ? (
-          <StatusPill
-            value={fieldString(outputRecord, "status")!}
-            palette={palette}
-            styles={styles}
-          />
-        ) : null}
         <ModeList
           modes={fieldArray(outputRecord, "modes")}
           palette={palette}
@@ -2073,13 +2058,15 @@ function FeatureList({
 
 function BrowserTool({
   leaf,
+  headerSummary,
   input,
   output,
   result,
   theme,
   palette,
   styles,
-}: Omit<PaseoProps, "toolName"> & { leaf: string; result: unknown }) {
+}: Omit<PaseoProps, "toolName"> & { leaf: string;
+  headerSummary: string | undefined; result: unknown }) {
   const inputRecord = asRecord(input);
   const outputRecord = asRecord(output);
   const resultRecord = asRecord(result);
@@ -2097,7 +2084,7 @@ function BrowserTool({
       <View style={styles.paseoStack}>
         <PaseoFields
           fields={[
-            ["Browser tab", inputRecord?.browserId],
+            ["Browser tab", unlessInHeader(inputRecord?.browserId, headerSummary)],
             ["Error", error?.message],
             ["Retryable", error?.retryable],
           ]}
@@ -2120,22 +2107,11 @@ function BrowserTool({
     case "browser_new_tab":
       return (
         <View style={styles.paseoStack}>
-          <PaseoHero
-            icon="Globe2"
-            title={
-              fieldString(asRecord(browserResult), "url") ??
-              fieldString(inputRecord, "url") ??
-              "New browser tab"
-            }
-            subtitle={fieldString(asRecord(browserResult), "browserId")}
-            color={palette.categoryColors.search}
-            styles={styles}
-          />
           <PaseoFields
             fields={[
-              ["Browser tab", asRecord(browserResult)?.browserId],
+              ["Browser tab", unlessInHeader(asRecord(browserResult)?.browserId, headerSummary)],
               ["Workspace", asRecord(browserResult)?.workspaceId],
-              ["URL", asRecord(browserResult)?.url],
+              ["URL", unlessInHeader(asRecord(browserResult)?.url, headerSummary)],
             ]}
             palette={palette}
             styles={styles}
@@ -2147,8 +2123,8 @@ function BrowserTool({
         <View style={styles.paseoStack}>
           <PaseoFields
             fields={[
-              ["Browser tab", browserResult?.browserId],
-              ["URL", browserResult?.url],
+              ["Browser tab", unlessInHeader(browserResult?.browserId, headerSummary)],
+              ["URL", unlessInHeader(browserResult?.url, headerSummary)],
               ["Title", browserResult?.title],
               ["Format", browserResult?.format],
               ["Truncated", browserResult?.truncated],
@@ -2173,7 +2149,7 @@ function BrowserTool({
         <View style={styles.paseoStack}>
           <PaseoFields
             fields={[
-              ["Browser tab", browserResult?.browserId],
+              ["Browser tab", unlessInHeader(browserResult?.browserId, headerSummary)],
               ["MIME type", browserResult?.mimeType],
               ["Width", browserResult?.width],
               ["Height", browserResult?.height],
@@ -2192,7 +2168,7 @@ function BrowserTool({
         <View style={styles.paseoStack}>
           <PaseoFields
             fields={[
-              ["Browser tab", browserResult?.browserId],
+              ["Browser tab", unlessInHeader(browserResult?.browserId, headerSummary)],
               ["Maximum entries", inputRecord?.maxEntries],
             ]}
             palette={palette}
@@ -2211,7 +2187,7 @@ function BrowserTool({
         <View style={styles.paseoStack}>
           <PaseoFields
             fields={[
-              ["Browser tab", browserResult?.browserId],
+              ["Browser tab", unlessInHeader(browserResult?.browserId, headerSummary)],
               ["Element", inputRecord?.ref],
             ]}
             palette={palette}
@@ -2237,21 +2213,20 @@ function BrowserTool({
           ) : null}
         </View>
       );
-    default:
+    default: {
+      const visible = (fields: Array<[string, unknown]>) =>
+        fields
+          .map(([label, value]) => [label, unlessInHeader(value, headerSummary)] as [string, unknown])
+          .filter(([, value]) => value !== undefined);
+      const inputFields = visible(browserInputFields(leaf, inputRecord));
+      const outputFields = visible(browserOutputFields(leaf, browserResult));
       return (
         <View style={styles.paseoStack}>
-          <PaseoFields
-            fields={browserInputFields(leaf, inputRecord)}
-            palette={palette}
-            styles={styles}
-          />
-          <PaseoFields
-            fields={browserOutputFields(leaf, browserResult)}
-            palette={palette}
-            styles={styles}
-          />
+          <PaseoFields fields={inputFields} palette={palette} styles={styles} />
+          <PaseoFields fields={outputFields} palette={palette} styles={styles} />
         </View>
       );
+    }
   }
 }
 
@@ -2480,11 +2455,15 @@ export function ExaToolDetail({
   const query = fieldString(inputRecord, "query");
   const url = fieldString(inputRecord, "url");
   const prompt = fieldString(inputRecord, "prompt");
+  const headerSummary = exaToolSummary(kind, input);
+  const shownQuery = notInHeader(query, headerSummary);
+  const shownUrl = notInHeader(url, headerSummary);
+  const shownPrompt = notInHeader(prompt, headerSummary);
   return (
     <View style={styles.paseoStack}>
-      {query ? <PromptBlock text={query} label="Query" styles={styles} /> : null}
-      {url ? <PromptBlock text={url} label="URL" styles={styles} /> : null}
-      {prompt ? <PromptBlock text={prompt} label="Prompt" styles={styles} /> : null}
+      {shownQuery ? <PromptBlock text={shownQuery} label="Query" styles={styles} /> : null}
+      {shownUrl ? <PromptBlock text={shownUrl} label="URL" styles={styles} /> : null}
+      {shownPrompt ? <PromptBlock text={shownPrompt} label="Prompt" styles={styles} /> : null}
       {results.length > 0 ? (
         <ExaResultList results={results} styles={styles} />
       ) : outputText ? (
@@ -2579,6 +2558,7 @@ export function PaseoToolDetail({
   const leaf = paseoToolLeafName(toolName);
   if (!leaf) return null;
   const result = paseoToolResult(output);
+  const headerSummary = paseoToolSummary(toolName, input);
   if (asRecord(result)?.ok === false) {
     return <PaseoFailure result={result} palette={palette} styles={styles} />;
   }
@@ -2586,6 +2566,7 @@ export function PaseoToolDetail({
     return (
       <BrowserTool
         leaf={leaf}
+        headerSummary={headerSummary}
         input={input}
         output={output}
         result={result}
@@ -2599,6 +2580,7 @@ export function PaseoToolDetail({
     return (
       <AgentTool
         leaf={leaf}
+        headerSummary={headerSummary}
         input={input}
         result={result}
         theme={theme}
@@ -2611,6 +2593,7 @@ export function PaseoToolDetail({
     return (
       <WorkspaceTool
         leaf={leaf}
+        headerSummary={headerSummary}
         input={input}
         result={result}
         palette={palette}
@@ -2634,6 +2617,7 @@ export function PaseoToolDetail({
     return (
       <ScheduleTool
         leaf={leaf}
+        headerSummary={headerSummary}
         input={input}
         result={result}
         theme={theme}
@@ -2646,6 +2630,7 @@ export function PaseoToolDetail({
     return (
       <ProviderTool
         leaf={leaf}
+        headerSummary={headerSummary}
         input={input}
         result={result}
         palette={palette}
@@ -2657,14 +2642,8 @@ export function PaseoToolDetail({
     const inputRecord = asRecord(input);
     return (
       <View style={styles.paseoStack}>
-        <PaseoHero
-          icon="MicVocal"
-          title="Speak"
-          color={palette.categoryColors.communication}
-          styles={styles}
-        />
         <PromptBlock
-          text={fieldString(inputRecord, "text")}
+          text={notInHeader(fieldString(inputRecord, "text"), headerSummary)}
           label="Message"
           styles={styles}
         />

@@ -2,8 +2,10 @@ import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import React from "react";
 import { Text, View } from "react-native";
 import type { ActivityStyles } from "./activity";
-import { PaseoCodeBlock, PaseoFields, PaseoHero, Section, StatusPill } from "./paseo";
+import { FieldsSection, PaseoCodeBlock, Section } from "./paseo";
 import {
+  notInHeader,
+  opencodeSubagentSummary,
   parseOpencodeSubagentInput,
   parseOpencodeSubagentOutput,
   type ActivityPalette,
@@ -23,41 +25,27 @@ type DetailProps = {
 export function OpencodeSubagentToolDetail({ input, output, theme, palette, styles }: DetailProps) {
   const parsedInput = parseOpencodeSubagentInput(input);
   const parsedOutput = parseOpencodeSubagentOutput(output);
-  const title = parsedInput.description ?? parsedInput.agent ?? "Agent Task";
-  const subtitleParts: string[] = [];
-  if (parsedInput.agent && parsedInput.description) subtitleParts.push(parsedInput.agent);
-  if (parsedInput.model) subtitleParts.push(parsedInput.model);
-  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(" · ") : undefined;
+  const summary = opencodeSubagentSummary(input, output);
   const status = parsedOutput?.status;
   const sessionID = parsedOutput?.sessionID ?? parsedInput.sessionID;
   const resultText = parsedOutput?.text;
 
   return (
     <View style={styles.paseoStack}>
-      <PaseoHero
-        icon="Bot"
-        title={title}
-        subtitle={subtitle}
-        status={status}
+      <FieldsSection
+        title="Task"
+        fields={[
+          ["Agent", notInHeader(parsedInput.agent, summary)],
+          ["Description", notInHeader(parsedInput.description, summary)],
+          ["Model", parsedInput.model],
+          ["Status", status],
+          ["Session", sessionID],
+          ["Continue", parsedInput.sessionID && parsedInput.sessionID !== sessionID ? parsedInput.sessionID : undefined],
+          ["Background", parsedInput.background],
+        ]}
         palette={palette}
-        color={palette.categoryColors.agent}
         styles={styles}
       />
-      {status ? <StatusPill value={status} palette={palette} styles={styles} /> : null}
-      <Section title="Task" styles={styles}>
-        <PaseoFields
-          fields={[
-            ["Agent", parsedInput.agent],
-            ["Description", parsedInput.description],
-            ["Model", parsedInput.model],
-            ["Session", sessionID],
-            ["Continue", parsedInput.sessionID && parsedInput.sessionID !== sessionID ? parsedInput.sessionID : undefined],
-            ["Background", parsedInput.background],
-          ]}
-          palette={palette}
-          styles={styles}
-        />
-      </Section>
       {parsedInput.prompt ? (
         <PaseoCodeBlock
           code={parsedInput.prompt}

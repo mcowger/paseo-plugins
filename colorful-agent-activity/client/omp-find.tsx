@@ -7,7 +7,7 @@ type OmpFindToolDetailProps = { input: unknown; output: unknown; styles: Activit
 
 export function OmpFindToolDetail({ input, output, styles }: OmpFindToolDetailProps) {
   const result = parseOmpFindResult(input, output);
-  if (!result) return <Text style={styles.empty}>No find results returned.</Text>;
+  if (!result) return null;
   const summary = [
     result.listed !== undefined ? `${result.listed} listed` : undefined,
     result.judged !== undefined ? `${result.judged} judged` : undefined,

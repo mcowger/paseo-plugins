@@ -1,6 +1,7 @@
 import type { JsonValue, ToolCallDetail, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
 import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization";
 import type { ExpansionTarget, PaletteMode } from "./settings";
+import { shouldAttemptImageLoad } from "./read-image";
 import {
   extractCodeModeCode,
   isCodeModeTool,
@@ -195,6 +196,46 @@ export function compactText(value: string, maxLength = 180): string | undefined 
   const normalized = value.replace(/\s+/g, " ").trim();
   if (!normalized) return undefined;
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
+}
+
+/** Card header summaries render on one line; roughly what fits before truncation. */
+const HEADER_SUMMARY_FIT = 60;
+
+function normalizeSpace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Returns `value` unless the card header summary already shows it whole.
+ * Expanded bodies use this so they only repeat header text when the one-line
+ * header truncates it (long or multi-line values).
+ */
+export function notInHeader<T extends string | number | boolean>(value: T | undefined, headerSummary: string | undefined): T | undefined {
+  if (value === undefined || value === null || !headerSummary) return value ?? undefined;
+  const text = normalizeSpace(String(value));
+  if (!text) return value;
+  const shown = normalizeSpace(headerSummary);
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!new RegExp(`(^|[^\\w])${escaped}($|[^\\w])`, "i").test(shown)) return value;
+  const multiline = typeof value === "string" && value.trim().includes("\n");
+  return multiline || shown.length > HEADER_SUMMARY_FIT ? value : undefined;
+}
+
+/**
+ * Drops a leading line the card header already shows (header summaries are
+ * often the first line of a tool's text result) and returns what's left.
+ */
+export function textAfterHeader(text: string | undefined, headerSummary: string | undefined): string | undefined {
+  const trimmed = text?.trim();
+  if (!trimmed) return undefined;
+  if (!headerSummary) return trimmed;
+  const lines = trimmed.split("\n");
+  const firstIndex = lines.findIndex((line) => line.trim());
+  const first = lines[firstIndex] ?? "";
+  const shown = normalizeSpace(headerSummary);
+  if (normalizeSpace(first) !== shown || shown.length > HEADER_SUMMARY_FIT) return trimmed;
+  const rest = lines.slice(firstIndex + 1).join("\n").trim();
+  return rest || undefined;
 }
 
 function fileName(filePath: string): string {
@@ -2772,6 +2813,107 @@ export function hasMeaningfulToolCallDetail(detail: ToolCallDetail | undefined |
       return detail.text.trim().length > 0;
     case "unknown":
       return hasMeaningfulUnknownDetail(detail);
+  }
+}
+
+/** Sub-agent progress rows shown under the header; older actions collapse to "+N more". */
+export const MAX_VISIBLE_SUBAGENT_ACTIONS = 5;
+
+/**
+ * True when the progress rows under a sub-agent header already render every
+ * line of its log, so a raw "Activity log" block would only repeat them.
+ */
+export function subAgentLogFullyShown(detail: Extract<ToolCallDetail, { type: "sub_agent" }>): boolean {
+  if ((detail.actions?.length ?? 0) > 0) return false;
+  const lines = (detail.log ?? "").split(/\r?\n/).filter((line) => line.trim()).length;
+  const parsed = parseSubAgentActionLog(detail.log ?? "");
+  return parsed.length > 0 && parsed.length === lines && parsed.length <= MAX_VISIBLE_SUBAGENT_ACTIONS;
+}
+
+/**
+ * Paseo tool cards whose body can be reduced to nothing once header
+ * duplicates are dropped: agent lifecycle actions, speak, and workspace
+ * archive. Every other Paseo tool renders input or result fields.
+ */
+function paseoToolHasBody(
+  toolName: string,
+  input: unknown,
+  output: unknown,
+  headerSummary: string | undefined,
+): boolean {
+  const leaf = paseoToolLeafName(toolName);
+  const result = paseoToolResult(output);
+  const record = isRecord(result) ? result : null;
+  if (record?.ok === false || typeof record?.success === "boolean") return true;
+  switch (leaf) {
+    case "cancel_agent":
+    case "archive_agent":
+    case "kill_agent":
+      return Boolean(notInHeader(stringField(input, "agentId"), headerSummary));
+    case "speak":
+      return Boolean(notInHeader(stringField(input, "text"), headerSummary));
+    case "archive_workspace":
+      return (
+        Boolean(notInHeader(stringField(record, "workspaceId"), headerSummary)) ||
+        record?.archivedAgentIds !== undefined ||
+        record?.removedDirectory !== undefined
+      );
+    default:
+      return true;
+  }
+}
+
+/**
+ * Whether the expanded body would show anything the header doesn't. Cards
+ * without a body must not be expandable. Mirrors the client detail renderers
+ * for the cases where header de-duplication can leave the body empty.
+ */
+export function toolCallHasBody(
+  name: string,
+  detail: ToolCallDetail | undefined | null,
+  headerSummary: string | undefined,
+): boolean {
+  if (isSkillTool(name)) return false;
+  if (!detail) return true;
+  if (!hasMeaningfulToolCallDetail(detail)) return false;
+  switch (detail.type) {
+    case "search":
+      return Boolean(
+        notInHeader(detail.query.trim() || undefined, headerSummary) ||
+          detail.content ||
+          detail.filePaths?.length ||
+          detail.webResults?.length ||
+          detail.annotations?.length ||
+          detail.numMatches !== undefined ||
+          detail.numFiles !== undefined,
+      );
+    case "fetch":
+      return Boolean(
+        notInHeader(detail.url || undefined, headerSummary) || detail.result || detail.code !== undefined,
+      );
+    case "sub_agent":
+      return Boolean(
+        notInHeader(detail.subAgentType || undefined, headerSummary) ||
+          notInHeader(detail.description || undefined, headerSummary) ||
+          detail.childSessionId ||
+          (detail.log && !subAgentLogFullyShown(detail)),
+      );
+    case "read":
+      return Boolean(detail.content) || shouldAttemptImageLoad(detail.filePath, detail.content);
+    case "write":
+      return Boolean(detail.content);
+    case "edit":
+      return Boolean(detail.unifiedDiff || detail.oldString || detail.newString);
+    case "unknown":
+      if (paseoToolLeafName(name)) return paseoToolHasBody(name, detail.input, detail.output, headerSummary);
+      if (isTodoTool(name)) {
+        const model = todoToolDetailModel(detail.input, detail.output);
+        return Boolean(model.resultText) || model.tasks.length > 0;
+      }
+      if (isOmpWaitTool(name)) return (parseOmpWaitOutput(detail.output)?.jobs.length ?? 0) > 0;
+      return true;
+    default:
+      return true;
   }
 }
 

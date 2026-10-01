@@ -64,6 +64,10 @@ import {
   parseOpencodeSearchContent,
   parsePiLsOutput,
   resolveSearchCounts,
+  MAX_VISIBLE_SUBAGENT_ACTIONS,
+  notInHeader,
+  subAgentLogFullyShown,
+  toolCallHasBody,
   parseSubAgentActionLog,
   previewText,
   readErrorMessage,
@@ -99,7 +103,6 @@ import {
 } from "../shared/timeline";
 
 const MAX_DETAIL_HEIGHT = 420;
-const MAX_VISIBLE_SUBAGENT_ACTIONS = 5;
 
 // Paseo spaces consecutive activity rows by applying its inter-row gap to the row
 // that still has a newer neighbor. On the native inverted timeline the newest live
@@ -1145,11 +1148,13 @@ function PendingOutput({ styles }: { styles: ReturnType<typeof useActivityStyles
 
 function SearchDetail({
   detail,
+  headerSummary,
   agentId,
   theme,
   styles,
 }: {
   detail: Extract<ToolCallDetail, { type: "search" }>;
+  headerSummary: string | undefined;
   agentId: string;
   theme: Theme;
   styles: ReturnType<typeof useActivityStyles>;
@@ -1170,7 +1175,9 @@ function SearchDetail({
 
   return (
     <>
-      <Text style={styles.detailText}>Query: {detail.query}</Text>
+      {notInHeader(detail.query, headerSummary) ? (
+        <Text style={styles.detailText}>Query: {detail.query}</Text>
+      ) : null}
       {meta ? <Text style={styles.mutedText}>{meta}</Text> : null}
       {parsed && parsed.files.length > 0 ? (
         parsed.files.map((file, fileIndex) => {
@@ -1300,9 +1307,7 @@ function DetailBody({
                 styles={styles}
                 theme={theme}
               />
-            ) : (
-              <Text style={styles.empty}>No file contents returned.</Text>
-            )}
+            ) : null}
           </>
         );
       }
@@ -1322,9 +1327,7 @@ function DetailBody({
                   styles={styles}
                   theme={theme}
                 />
-              ) : (
-                <Text style={styles.empty}>No file contents returned.</Text>
-              )
+              ) : null
             }
           />
         </>
@@ -1381,11 +1384,21 @@ function DetailBody({
       );
     }
     case "search":
-      return <SearchDetail detail={detail} agentId={agentId} theme={theme} styles={styles} />;
+      return (
+        <SearchDetail
+          detail={detail}
+          headerSummary={data.presentation.summary}
+          agentId={agentId}
+          theme={theme}
+          styles={styles}
+        />
+      );
     case "fetch":
       return (
         <>
-          <Text selectable style={styles.detailText}>{detail.url}</Text>
+          {notInHeader(detail.url, data.presentation.summary) ? (
+            <Text selectable style={styles.detailText}>{detail.url}</Text>
+          ) : null}
           {detail.result ? <HighlightedCodeBlock code={detail.result} language="text" label="Result" styles={styles} theme={theme} /> : null}
           {detail.code !== undefined ? <Text style={styles.mutedText}>HTTP {detail.code} {detail.codeText ?? ""}</Text> : null}
         </>
@@ -1401,10 +1414,10 @@ function DetailBody({
     case "sub_agent":
       return (
         <>
-          {detail.subAgentType ? <Text style={styles.detailText}>{detail.subAgentType}</Text> : null}
-          {detail.description ? <Text style={styles.mutedText}>{detail.description}</Text> : null}
+          {notInHeader(detail.subAgentType, data.presentation.summary) ? <Text style={styles.detailText}>{detail.subAgentType}</Text> : null}
+          {notInHeader(detail.description, data.presentation.summary) ? <Text style={styles.mutedText}>{detail.description}</Text> : null}
           {detail.childSessionId ? <Text style={styles.mutedText}>Session {detail.childSessionId}</Text> : null}
-          {detail.log ? <HighlightedCodeBlock code={detail.log} language="ansi" label="Activity log" styles={styles} theme={theme} /> : null}
+          {detail.log && !subAgentLogFullyShown(detail) ? <HighlightedCodeBlock code={detail.log} language="ansi" label="Activity log" styles={styles} theme={theme} /> : null}
         </>
       );
     case "plain_text":
@@ -2018,9 +2031,9 @@ export function ColorfulToolCall({
   const statusColor = palette.statusColors[item.data.status];
   const expansionMode = useExpansionMode(expansionTargetForToolCall(item.data.name, detail?.type ?? "unknown"));
   const baseExpanded = resolveExpansion(expansionMode, isLatest, userExpanded);
-  const isSkill = isSkillTool(item.data.name);
   const hasDetails = detail ? hasMeaningfulToolCallDetail(detail) : true;
-  const expandable = !isSkill && hasDetails;
+  const hasBody = toolCallHasBody(item.data.name, detail, item.data.presentation.summary);
+  const expandable = hasBody || Boolean(item.data.errorText);
   const expanded = expandable ? baseExpanded : false;
   const toggle = useCallback(() => {
     setUserExpanded(!expanded);
@@ -2053,11 +2066,13 @@ export function ColorfulToolCall({
         expandable={expandable}
         styles={styles}
       />
-      {expandable && subAgentDetail ? <SubAgentProgress detail={subAgentDetail} styles={styles} /> : null}
+      {hasDetails && subAgentDetail ? <SubAgentProgress detail={subAgentDetail} styles={styles} /> : null}
       {expandable && expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
           <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} nestedScrollEnabled showsVerticalScrollIndicator>
-            <DetailBody data={item.data} agentId={agentId} theme={theme} palette={palette} styles={styles} />
+            {hasBody ? (
+              <DetailBody data={item.data} agentId={agentId} theme={theme} palette={palette} styles={styles} />
+            ) : null}
             {item.data.errorText ? (
               <View style={styles.section}>
                 <DetailLabel style={styles.detailLabel}>Error</DetailLabel>
