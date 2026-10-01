@@ -59,6 +59,7 @@ import {
   isSkillTool,
   isSubagentSupervisorTool,
   isTodoTool,
+  todoTaskLabel,
   paseoToolLeafName,
   parseOpencodeSearchContent,
   parsePiLsOutput,
@@ -2128,7 +2129,7 @@ export function ColorfulTodo({ item, theme }: PluginTimelineItemProps<TodoData>)
                     selectable
                     style={entry.status === "completed" ? styles.todoDone : styles.todoTitle}
                   >
-                    {entry.title}
+                    {todoTaskLabel(entry.id, entry.title)}
                   </Text>
                 </View>
               ))}

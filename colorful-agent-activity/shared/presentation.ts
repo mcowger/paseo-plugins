@@ -1165,24 +1165,35 @@ export function todoToolSummary(output: unknown): string | undefined {
   return `${done}/${summary.tasks.length} done`;
 }
 
-/** Title for the task-list card body, keyed off the action being performed. */
-export function todoToolActionLabel(action: string | undefined): string {
-  switch (action?.trim().toLowerCase()) {
-    case "create":
-      return "Create Task";
-    case "update":
-      return "Update Task";
-    case "list":
-      return "List Tasks";
-    case "get":
-      return "Task Detail";
-    case "delete":
-      return "Delete Task";
-    case "clear":
-      return "Clear Tasks";
-    default:
-      return "Tasks";
-  }
+/** Task row label shared by the todo list and task tool card: `#id title` for numeric ids. */
+export function todoTaskLabel(id: string | number, title: string): string {
+  return /^\d+$/.test(String(id)) ? `#${id} ${title}` : title;
+}
+
+export interface TodoToolDetailModel {
+  /** Tool text not already shown in the header summary (multi-line results only). */
+  resultText?: string;
+  /** The task the call touched, or the full list when no single task is in focus. */
+  tasks: TodoToolTask[];
+}
+
+/**
+ * Body model for the task-list tool card. The header already carries the
+ * one-line result and the adjacent todo timeline item carries the full list,
+ * so the body only shows what the header can't: the touched task's details.
+ */
+export function todoToolDetailModel(input: unknown, output: unknown): TodoToolDetailModel {
+  const summary = parseTodoToolOutput(output);
+  if (!summary) return { tasks: [] };
+  const text = summary.text.trim();
+  const resultText = text.includes("\n") ? text : undefined;
+  const focusId = summary.task?.id ?? parseTodoToolInput(input).id;
+  const focus =
+    focusId !== undefined ? summary.tasks.find((task) => task.id === focusId) ?? summary.task : summary.task;
+  return {
+    ...(resultText ? { resultText } : {}),
+    tasks: focus ? [focus] : summary.tasks,
+  };
 }
 
 function parseEmbeddedJson(value: string): unknown {

@@ -34,7 +34,8 @@ import {
   parseSkillName,
   parseTodoToolInput,
   parseTodoToolOutput,
-  todoToolActionLabel,
+  todoTaskLabel,
+  todoToolDetailModel,
   todoToolSummary,
   isBgWaitTool,
   isSubagentSupervisorTool,
@@ -1293,10 +1294,24 @@ describe("pi todo tool presentation", () => {
     expect(todoToolSummary(null)).toBeUndefined();
   });
 
-  it("labels task actions", () => {
-    expect(todoToolActionLabel("create")).toBe("Create Task");
-    expect(todoToolActionLabel("update")).toBe("Update Task");
-    expect(todoToolActionLabel(undefined)).toBe("Tasks");
+  it("labels numeric task ids and leaves generated ids alone", () => {
+    expect(todoTaskLabel(2, "Normalize status")).toBe("#2 Normalize status");
+    expect(todoTaskLabel("2", "Normalize status")).toBe("#2 Normalize status");
+    expect(todoTaskLabel("todo-1", "Run tests")).toBe("Run tests");
+  });
+
+  it("builds a body with only the touched task and no repeated result", () => {
+    const model = todoToolDetailModel({ action: "update", id: 8 }, todoOutput);
+    expect(model.resultText).toBeUndefined();
+    expect(model.tasks.map((task) => task.id)).toEqual([8]);
+    const listOutput = {
+      content: [{ type: "text", text: "Tasks:\n#1 pending foo" }],
+      details: { action: "list", tasks, nextId: 11 },
+    };
+    const list = todoToolDetailModel({ action: "list" }, listOutput);
+    expect(list.resultText).toBe("Tasks:\n#1 pending foo");
+    expect(list.tasks).toHaveLength(3);
+    expect(todoToolDetailModel({}, null)).toEqual({ tasks: [] });
   });
 
   it("maps the todo tool to a plan presentation", () => {

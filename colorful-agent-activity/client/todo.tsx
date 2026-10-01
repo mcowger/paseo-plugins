@@ -3,11 +3,10 @@ import { Icon } from "@getpaseo/plugin/client/react-native";
 import React from "react";
 import { Text, View } from "react-native";
 import type { ActivityStyles } from "./activity";
-import { PaseoHero, Section } from "./paseo";
+import { Section } from "./paseo";
 import {
-  parseTodoToolInput,
-  parseTodoToolOutput,
-  todoToolActionLabel,
+  todoTaskLabel,
+  todoToolDetailModel,
   type ActivityPalette,
   type TodoToolStatus,
   type TodoToolTask,
@@ -35,8 +34,10 @@ function TodoTaskRow({
   theme,
   palette,
   styles,
+  showDescription,
 }: {
   task: TodoToolTask;
+  showDescription: boolean;
   theme: Theme;
   palette: ActivityPalette;
   styles: ActivityStyles;
@@ -63,7 +64,7 @@ function TodoTaskRow({
           selectable
           style={task.status === "completed" ? styles.todoDone : styles.paseoListItemTitle}
         >
-          {`#${task.id} ${task.subject}`}
+          {todoTaskLabel(task.id, task.subject)}
         </Text>
       </View>
       {meta ? (
@@ -71,7 +72,7 @@ function TodoTaskRow({
           {meta}
         </Text>
       ) : null}
-      {task.status === "in_progress" && task.description ? (
+      {showDescription && task.description ? (
         <Text numberOfLines={2} style={styles.paseoListItemMeta}>
           {task.description}
         </Text>
@@ -81,45 +82,30 @@ function TodoTaskRow({
 }
 
 export function TodoToolDetail({ input, output, theme, palette, styles }: DetailProps) {
-  const parsedInput = parseTodoToolInput(input);
-  const summary = parseTodoToolOutput(output);
-  const tasks = summary?.tasks ?? [];
-  const done = tasks.filter((task) => task.status === "completed").length;
-  const focusId = summary?.task?.id ?? parsedInput.id;
-  const focusTask =
-    focusId !== undefined ? tasks.find((task) => task.id === focusId) ?? summary?.task : summary?.task;
-  const subtitle = [
-    tasks.length > 0 ? `${done}/${tasks.length} done` : undefined,
-    focusTask ? `#${focusTask.id} ${focusTask.activeForm ?? focusTask.subject}` : undefined,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const model = todoToolDetailModel(input, output);
+  if (!model.resultText && model.tasks.length === 0) return null;
 
   return (
     <View style={styles.paseoStack}>
-      <PaseoHero
-        icon="ListChecks"
-        title={todoToolActionLabel(summary?.action ?? parsedInput.action)}
-        subtitle={subtitle || undefined}
-        palette={palette}
-        color={palette.categoryColors.plan}
-        styles={styles}
-      />
-      {summary?.text ? (
-        <Section title="Result" styles={styles}>
-          <Text selectable style={styles.detailText}>
-            {summary.text.trim()}
-          </Text>
-        </Section>
+      {model.resultText ? (
+        <Text selectable style={styles.detailText}>
+          {model.resultText}
+        </Text>
       ) : null}
-      {tasks.length > 0 ? (
-        <Section title={`Tasks (${tasks.length})`} styles={styles}>
+      {model.tasks.length > 1 ? (
+        <Section title={`Tasks (${model.tasks.length})`} styles={styles}>
           <View style={styles.paseoList}>
-            {tasks.map((task) => (
-              <TodoTaskRow key={task.id} task={task} theme={theme} palette={palette} styles={styles} />
+            {model.tasks.map((task) => (
+              <TodoTaskRow
+                key={task.id}
+                task={task}
+                showDescription={task.status === "in_progress"}
+                theme={theme} palette={palette} styles={styles} />
             ))}
           </View>
         </Section>
+      ) : model.tasks[0] ? (
+        <TodoTaskRow task={model.tasks[0]} showDescription theme={theme} palette={palette} styles={styles} />
       ) : null}
     </View>
   );
