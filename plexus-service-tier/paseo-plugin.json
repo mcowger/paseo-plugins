@@ -1,0 +1,4 @@
+{
+  "id": "plexus-service-tier",
+  "requirements": { "paseo": ">=0.10.0" }
+}

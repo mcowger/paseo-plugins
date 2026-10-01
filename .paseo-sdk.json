@@ -13,6 +13,7 @@
     "@getpaseo/protocol"
   ],
   "plugins": [
+    "plexus-service-tier",
     "colorful-agent-activity",
     "ocr",
     "skill-picker",
