@@ -97,6 +97,35 @@ describe("opencode v2 edit metadata", () => {
   });
 });
 
+describe("Pi read normalization", () => {
+  it.each(["running", "completed"] as const)("recovers %s reads in timeline data", (status) => {
+    const data = createToolCallData({
+      type: "tool_call",
+      callId: "read-image",
+      name: "read",
+      status,
+      error: null,
+      detail: {
+        type: "unknown",
+        input: { path: "/tmp/screenshot.png", offset: null, limit: null },
+        output: status === "completed" ? {
+          content: [
+            { type: "text", text: "Read image file [image/png]" },
+            { type: "image", data: "base64-image-data", mimeType: "image/png" },
+          ],
+        } : undefined,
+      },
+    });
+
+    expect(data.detail).toEqual({
+      type: "read",
+      filePath: "/tmp/screenshot.png",
+      ...(status === "completed" ? { content: "Read image file [image/png]" } : {}),
+    });
+    expect(data.presentation).toMatchObject({ category: "file", label: "Read", filePath: "/tmp/screenshot.png" });
+  });
+});
+
 describe("row expansion", () => {
   it("always expands regardless of latest state", () => {
     expect(resolveExpansion("always", true, null)).toBe(true);

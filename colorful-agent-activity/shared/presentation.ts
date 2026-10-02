@@ -1369,15 +1369,29 @@ function shellDetailFromResult(detail: Extract<ToolCallDetail, { type: "shell" }
 }
 
 /**
- * Unwrap Pi's structured shell envelope so shell rows show the real output,
- * exit code, and truncation state. Unknown tool calls whose payload is a shell
- * result are projected to a shell detail so they render like the host shell tool.
+ * Recover Pi reads rejected for null pagination and unwrap structured shell
+ * results so unknown tool calls can use their dedicated renderers.
  */
 export function normalizeToolCallDetail(detail: ToolCallDetail, name?: string): ToolCallDetail {
   if (detail.type === "shell") return shellDetailFromResult(detail);
   if (detail.type !== "unknown") return detail;
-  const result = parsePiShellResult(detail.output);
   const input = decodeToolInput(detail.input);
+  if (name && normalizePiToolName(name) === "read") {
+    const filePath = stringField(input, "path");
+    if (!filePath || !input) return detail;
+    const { offset, limit } = input;
+    if (offset != null && (typeof offset !== "number" || !Number.isFinite(offset))) return detail;
+    if (limit != null && (typeof limit !== "number" || !Number.isFinite(limit))) return detail;
+    const content = extractPiToolText(detail.output)?.text;
+    return {
+      type: "read",
+      filePath,
+      ...(content !== undefined ? { content } : {}),
+      ...(typeof offset === "number" ? { offset } : {}),
+      ...(typeof limit === "number" ? { limit } : {}),
+    };
+  }
+  const result = parsePiShellResult(detail.output);
   const command =
     stringField(input, "command") ??
     stringField(input, "cmd") ??

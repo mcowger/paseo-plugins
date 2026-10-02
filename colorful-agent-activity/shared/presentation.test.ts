@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shouldAttemptImageLoad } from "./read-image";
 import {
   diffLinesForDetail,
   diffStatsForDetail,
@@ -225,6 +226,61 @@ describe("colorful activity presentation", () => {
         detail: { type: "read", filePath: "src/index.ts", content: "const x = 1;" },
       }),
     ).toMatchObject({ label: "Read" });
+  });
+
+  it("recovers Pi image reads with null pagination without retaining base64 output", () => {
+    const detail = normalizeToolCallDetail({
+      type: "unknown",
+      input: { path: "/tmp/screenshot.png", offset: null, limit: null },
+      output: {
+        content: [
+          { type: "text", text: "Read image file [image/png]" },
+          { type: "image", data: "base64-image-data", mimeType: "image/png" },
+        ],
+      },
+    }, "read");
+
+    expect(detail).toEqual({
+      type: "read",
+      filePath: "/tmp/screenshot.png",
+      content: "Read image file [image/png]",
+    });
+    expect(resolveToolCallPresentation({ name: "read", detail })).toMatchObject({
+      category: "file",
+      label: "Read",
+      filePath: "/tmp/screenshot.png",
+    });
+    expect(detail.type).toBe("read");
+    if (detail.type === "read") {
+      expect(shouldAttemptImageLoad(detail.filePath, detail.content)).toBe(true);
+    }
+  });
+
+  it("recovers namespaced text reads and preserves numeric pagination", () => {
+    expect(normalizeToolCallDetail({
+      type: "unknown",
+      input: JSON.stringify({ path: "src/index.ts", offset: 10, limit: 20 }),
+      output: { content: [{ type: "text", text: "line one" }, { type: "text", text: "line two" }] },
+    }, "functions.Read")).toEqual({
+      type: "read",
+      filePath: "src/index.ts",
+      offset: 10,
+      limit: 20,
+      content: "line one\nline two",
+    });
+  });
+
+  it("keeps other tools and malformed read inputs unknown", () => {
+    for (const [name, input] of [
+      ["find", { path: "src" }],
+      ["read", { path: 42 }],
+      ["read", { path: "" }],
+      ["read", { path: "src/index.ts", offset: "10" }],
+      ["read", { path: "src/index.ts", limit: false }],
+    ] as const) {
+      const detail = { type: "unknown" as const, input, output: "plain text" };
+      expect(normalizeToolCallDetail(detail, name)).toBe(detail);
+    }
   });
 
   it("strips a leading cd to the session cwd from shell titles", () => {
