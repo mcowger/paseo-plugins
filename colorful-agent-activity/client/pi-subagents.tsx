@@ -1,7 +1,8 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import React from "react";
 import { Text, View } from "react-native";
-import type { ActivityStyles } from "./activity";
+import { ReasoningMarkdown, type ActivityStyles } from "./activity";
+import { parsePiSubagentCall } from "../shared/pi-subagents";
 import { FieldsSection, PaseoCodeBlock, Section, StatusPill } from "./paseo";
 import {
   bgWaitSummary,
@@ -25,6 +26,9 @@ type DetailProps = {
   theme: Theme;
   palette: ActivityPalette;
   styles: ActivityStyles;
+  agentType?: string;
+  description?: string;
+  childSessionId?: string;
 };
 
 function MessageBlock({ label, text, styles }: { label: string; text: string; styles: ActivityStyles }) {
@@ -34,6 +38,55 @@ function MessageBlock({ label, text, styles }: { label: string; text: string; st
         {text}
       </Text>
     </Section>
+  );
+}
+
+export function PiSubagentToolDetail({ input, output, theme, palette, styles, agentType, description, childSessionId }: DetailProps) {
+  const parsed = parsePiSubagentCall(input, output);
+  return (
+    <View style={styles.paseoStack}>
+      <FieldsSection title="Agent" fields={[
+        ["Agent ID", parsed.agentId], ["Type", agentType ?? parsed.agentType],
+        ["Description", parsed.description ?? description], ["Session", childSessionId],
+        ["Mode", parsed.wait === true ? "Blocking wait" : parsed.wait === false ? "Non-blocking result check" : undefined],
+      ]} palette={palette} styles={styles} />
+      {parsed.status ? <StatusPill value={parsed.status} palette={palette} styles={styles} /> : null}
+      <FieldsSection title="Usage" fields={[
+        ["Tool uses", parsed.toolUses], ["Tokens", parsed.tokens],
+        ["Context", parsed.context], ["Duration", parsed.duration],
+      ]} palette={palette} styles={styles} />
+      <FieldsSection title="Transcript" fields={[["Output file", parsed.outputFile]]} palette={palette} styles={styles} />
+      {parsed.error ? <Section title="Error" styles={styles}>
+        <Text selectable style={[styles.detailText, { color: theme.colors.statusDanger }]}>{parsed.error}</Text>
+      </Section> : null}
+      {parsed.notice ? <Text style={styles.mutedText}>{parsed.notice}</Text> : null}
+      {parsed.prompt ? <MessageBlock label="Prompt" text={parsed.prompt} styles={styles} /> : null}
+      {parsed.message ? <MessageBlock label="Steering message" text={parsed.message} styles={styles} /> : null}
+      {parsed.body ? <Section title="Result" styles={styles}>
+        <ReasoningMarkdown text={parsed.body} theme={theme} styles={styles} />
+      </Section> : null}
+    </View>
+  );
+}
+
+export function PiSubagentLifecycleSummary({ output, theme, palette, styles }: DetailProps) {
+  const parsed = parsePiSubagentCall(undefined, output);
+  if (!parsed.lifecycle) return null;
+  const usage = [
+    parsed.toolUses !== undefined ? `${parsed.toolUses} tool uses` : undefined,
+    parsed.tokens ? `${parsed.tokens} tokens` : undefined,
+    parsed.context ? `${parsed.context} context` : undefined,
+    parsed.duration,
+  ].filter(Boolean).join(" · ");
+  return (
+    <View style={styles.subAgentProgress}>
+      <View style={styles.subAgentLine}>
+        {parsed.status ? <StatusPill value={parsed.status} palette={palette} styles={styles} /> : null}
+        {usage ? <Text style={styles.mutedText}>{usage}</Text> : null}
+      </View>
+      {parsed.error ? <Text style={[styles.detailText, { color: theme.colors.statusDanger }]}>{parsed.error}</Text> : null}
+      {parsed.notice ? <Text style={styles.mutedText}>{parsed.notice}</Text> : null}
+    </View>
   );
 }
 

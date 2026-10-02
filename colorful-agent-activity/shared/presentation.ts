@@ -2,6 +2,7 @@ import type { JsonValue, ToolCallDetail, ToolCallTimelineItem } from "@getpaseo/
 import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization";
 import type { ExpansionTarget, PaletteMode } from "./settings";
 import { shouldAttemptImageLoad } from "./read-image";
+import { piSubagentOperation, piSubagentPresentation } from "./pi-subagents";
 import {
   extractCodeModeCode,
   isCodeModeTool,
@@ -467,6 +468,7 @@ export function expansionTargetForToolCall(toolName: string, detailType: string)
   if (isAskTool(toolName)) return "ask";
   if (toolName.trim().toLowerCase() === "speak") return "speak";
   if (isTodoTool(toolName)) return "todo";
+  if (piSubagentOperation(toolName)) return "sub_agent";
   if (isOpencodeSubagentTool(toolName)) return "sub_agent";
   switch (detailType) {
     case "read":
@@ -2205,6 +2207,15 @@ export function resolveToolCallPresentation(
 ): ToolCallPresentation {
   const name = item.name.trim().toLowerCase();
   const detail = normalizeToolCallDetail(item.detail, item.name);
+  if (piSubagentOperation(item.name) && (detail.type === "unknown" || detail.type === "sub_agent")) {
+    return piSubagentPresentation(
+      item.name,
+      detail.type === "unknown" ? detail.input : undefined,
+      detail.type === "unknown" ? detail.output : detail.log,
+      detail.type === "sub_agent" ? detail.description : undefined,
+      detail.type === "sub_agent" ? detail.subAgentType : undefined,
+    );
+  }
   if (isSkillTool(item.name)) {
     const skillName = skillNameForDetail(detail);
     return {
@@ -2407,6 +2418,10 @@ export function resolveSubAgentActionPresentation(
   toolName: string,
   summary?: string,
 ): SubAgentActionPresentation {
+  if (piSubagentOperation(toolName)) {
+    const { icon, label } = piSubagentPresentation(toolName, undefined, undefined);
+    return { icon, label };
+  }
   const normalized = toolName.trim().toLowerCase().replace(/[\s.-]+/g, "_");
   if (normalized === "ls") {
     return { icon: "List", label: "List" };

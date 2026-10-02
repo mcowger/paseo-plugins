@@ -14,6 +14,21 @@ function toolCall(detail: ToolCallDetail, status: "running" | "completed" = "com
 }
 
 describe("colorful activity timeline transforms", () => {
+  it.each([
+    ["wait", "Wait for Agent"],
+    ["result", "Check Agent Result"],
+  ])("identifies translated live %s calls from operation progress", (operation, label) => {
+    const log = `Agent: f4815d0d77b2\nOperation: ${operation}\nType: reviewer | Status: running\nDescription: Review changes`;
+    const result = transformToolCall({
+      phase: "streaming",
+      item: { ...toolCall({ type: "sub_agent", log }, "running"), name: "get_subagent_result" },
+    });
+    expect(result?.items[0]?.data).toMatchObject({
+      status: "running", detail: { type: "sub_agent", log },
+      presentation: { label, summary: "reviewer · Review changes · running" },
+    });
+  });
+
   it("replaces reasoning while preserving the streaming phase", () => {
     expect(
       transformReasoning({

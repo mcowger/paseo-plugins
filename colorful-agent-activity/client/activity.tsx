@@ -36,7 +36,8 @@ import {
 import { GithubToolDetail } from "./github";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
 import { CodeModeToolDetail } from "./codemode";
-import { BgWaitToolDetail, SupervisorToolDetail } from "./pi-subagents";
+import { BgWaitToolDetail, PiSubagentLifecycleSummary, PiSubagentToolDetail, SupervisorToolDetail } from "./pi-subagents";
+import { parsePiSubagentCall, piSubagentOperation } from "../shared/pi-subagents";
 import { OmpWaitToolDetail } from "./omp-wait";
 import { OmpFindToolDetail } from "./omp-find";
 import { OpencodeSubagentToolDetail } from "./opencode-subagent";
@@ -1452,6 +1453,11 @@ function DetailBody({
         </>
       );
     case "sub_agent":
+      if (piSubagentOperation(data.name) && parsePiSubagentCall(undefined, detail.log).lifecycle) {
+        return <PiSubagentToolDetail toolName={data.name} input={undefined} output={detail.log}
+          agentType={detail.subAgentType} description={detail.description} childSessionId={detail.childSessionId}
+          theme={theme} palette={palette} styles={styles} />;
+      }
       return (
         <>
           {notInHeader(detail.subAgentType, data.presentation.summary) ? <Text style={styles.detailText}>{detail.subAgentType}</Text> : null}
@@ -1465,6 +1471,10 @@ function DetailBody({
     case "plan":
       return <Text selectable style={styles.detailText}>{detail.text}</Text>;
     case "unknown": {
+      if (piSubagentOperation(data.name)) {
+        return <PiSubagentToolDetail toolName={data.name} input={detail.input} output={detail.output}
+          theme={theme} palette={palette} styles={styles} />;
+      }
       if (isOpencodeSubagentTool(data.name)) {
         return (
           <OpencodeSubagentToolDetail
@@ -1653,9 +1663,11 @@ function DetailBody({
 function SubAgentProgress({
   detail,
   styles,
+  toolName,
 }: {
   detail: Extract<ToolCallDetail, { type: "sub_agent" }>;
   styles: ReturnType<typeof useActivityStyles>;
+  toolName: string;
 }) {
   const actions = useMemo(() => {
     const explicitActions = [...(detail.actions ?? [])].sort((left, right) => left.index - right.index);
@@ -1663,7 +1675,10 @@ function SubAgentProgress({
   }, [detail.actions, detail.log]);
   const hiddenActionCount = Math.max(0, actions.length - MAX_VISIBLE_SUBAGENT_ACTIONS);
   const visibleActions = actions.slice(hiddenActionCount);
-  const thinking = actions.length > 0 && !(detail.actions?.length ?? 0) ? null : detail.log?.replace(/\s+/g, " ").trim();
+  const thinking = (actions.length > 0 && !(detail.actions?.length ?? 0)) || (piSubagentOperation(toolName) && parsePiSubagentCall(undefined, detail.log).lifecycle)
+    ? null : detail.log?.replace(/\s+/g, " ").trim();
+
+  if (!thinking && actions.length === 0) return null;
 
   return (
     <View style={styles.subAgentProgress}>
@@ -1796,7 +1811,7 @@ function ReasoningBlockList({
   );
 }
 
-function ReasoningMarkdown({
+export function ReasoningMarkdown({
   text,
   theme,
   styles,
@@ -2089,6 +2104,7 @@ export function ColorfulToolCall({
       setUserExpanded(!expanded);
     }
   }, [expanded, isTaskUpdate, latestTaskUpdateTimestamp]);
+  const operation = piSubagentOperation(item.data.name);
   const subAgentDetail = detail?.type === "sub_agent" ? detail : null;
   const cwd = useAgent(agentId, (agent) => agent.cwd);
   const headerFile = useMemo(() => {
@@ -2117,7 +2133,10 @@ export function ColorfulToolCall({
         expandable={expandable}
         styles={styles}
       />
-      {hasDetails && subAgentDetail ? <SubAgentProgress detail={subAgentDetail} styles={styles} /> : null}
+      {operation && detail ? <PiSubagentLifecycleSummary toolName={item.data.name} input={undefined}
+        output={detail.type === "sub_agent" ? detail.log : detail.type === "unknown" ? detail.output : undefined}
+        theme={theme} palette={palette} styles={styles} /> : null}
+      {hasDetails && subAgentDetail ? <SubAgentProgress detail={subAgentDetail} toolName={item.data.name} styles={styles} /> : null}
       {expandable && expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
           <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} nestedScrollEnabled showsVerticalScrollIndicator>

@@ -104,6 +104,9 @@ describe("summarizeAgentActivity tool grouping", () => {
 
   it("excludes subagent delegation and todo calls", () => {
     const excluded = [
+      toolCall({ name: "Agent", detail: { type: "unknown", input: {}, output: {} } }),
+      toolCall({ name: "get_subagent_result", detail: { type: "unknown", input: {}, output: {} } }),
+      toolCall({ name: "steer_subagent", detail: { type: "unknown", input: {}, output: {} } }),
       toolCall({ name: "task", detail: { type: "unknown", input: {}, output: {} } }),
       toolCall({ name: "subagent", detail: { type: "unknown", input: {}, output: {} } }),
       toolCall({ name: "subagent_supervisor", detail: { type: "unknown", input: {}, output: {} } }),

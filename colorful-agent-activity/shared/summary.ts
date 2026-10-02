@@ -1,5 +1,6 @@
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { isCodeModeTool } from "./codemode";
+import { piSubagentOperation } from "./pi-subagents";
 import {
   extractApplyPatchEdits,
   isApplyPatchTool,
@@ -64,6 +65,7 @@ const RATE_WINDOW_MS = 60_000;
  */
 export function isExcludedSummaryToolCall(item: ToolCallItem): boolean {
   if (item.detail.type === "sub_agent") return true;
+  if (piSubagentOperation(item.name)) return true;
   if (isOpencodeSubagentTool(item.name) || isSubagentSupervisorTool(item.name)) return true;
   return isTodoTool(item.name);
 }
