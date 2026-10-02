@@ -41,6 +41,13 @@ const expansionDescriptions = {
   never: "Rows start collapsed, even while they are still running.",
 } as const;
 
+function expansionDescription(target: ExpansionTarget, mode: ExpansionMode): string {
+  if (target !== "todo") return expansionDescriptions[mode];
+  if (mode === "always") return "Task update cards start expanded.";
+  if (mode === "never") return "Task update cards start collapsed.";
+  return "The newest task update starts expanded; a later task update collapses earlier cards.";
+}
+
 function ExpansionControls({ settings, theme }: { settings: ReadySettings; theme: PluginSurfaceProps["theme"] }) {
   const descriptionStyle = useMemo(
     () => ({ color: theme.colors.foregroundMuted, fontSize: 13, lineHeight: 18 }),
@@ -64,7 +71,7 @@ function ExpansionControls({ settings, theme }: { settings: ReadySettings; theme
             <SettingsSelect
               key={target.key}
               label={target.label}
-              hint={expansionDescriptions[mode]}
+              hint={expansionDescription(target.key, mode)}
               value={mode}
               options={expansionOptions}
               disabled={settings.saving}
@@ -76,8 +83,10 @@ function ExpansionControls({ settings, theme }: { settings: ReadySettings; theme
       <SettingsRow label="Behavior">
         <Text style={descriptionStyle}>
           Always rows start expanded, Latest rows expand only while they are the newest row of any kind, and Never rows
-          start collapsed even while running. Tapping a row always overrides its setting. Paseo runs plugin transformers
-          before its Overview grouping, so each call reaches the plugin separately in either tool call detail mode.
+          start collapsed even while running. In Latest mode, Tasks compares task updates only. A newer task update
+          collapses older cards and clears their manual toggles. Saved Tasks settings are preserved, so choose Latest
+          if Tasks is currently set to Always. Paseo runs plugin transformers before its Overview grouping, so each call
+          reaches the plugin separately in either tool call detail mode.
         </Text>
       </SettingsRow>
     </SettingsSection>

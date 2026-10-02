@@ -5,6 +5,7 @@ import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -94,10 +95,13 @@ import { githubToolKind } from "../shared/github";
 import { activitySettings, DEFAULT_EXPANSION, DEFAULT_PALETTE_MODE } from "../shared/settings";
 import type { ExpansionMode, ExpansionTarget } from "../shared/settings";
 import {
+  isLatestTaskUpdate,
   resolveExpansion,
+  resolveTaskUpdateExpansion,
   reasoningItemDataSchema,
   toolCallItemDataSchema,
   type ReasoningItemData,
+  type TaskUpdateExpansionOverride,
   type TodoItemData,
   type ToolCallItemData,
 } from "../shared/timeline";
@@ -121,6 +125,9 @@ const latestReasoningTimestamps = new Map<string, number>();
 const latestReasoningListeners = new Set<() => void>();
 const latestToolCallTimestamps = new Map<string, number>();
 const latestToolCallListeners = new Set<() => void>();
+const latestTaskUpdateTimestamps = new Map<string, number>();
+const latestTaskUpdateListeners = new Set<() => void>();
+const getEmptyTaskUpdateTimestamp = () => 0;
 
 function updateLatestReasoningTimestamp(agentId: string, timestamp: number): void {
   const current = latestReasoningTimestamps.get(agentId) ?? 0;
@@ -172,6 +179,39 @@ function useIsLatestToolCall(agentId: string, timestamp: Date, isRunning: boolea
     () => 0,
   );
   return isRunning || (latestTime > 0 && itemTime >= latestTime);
+}
+
+function updateLatestTaskUpdateTimestamp(agentId: string, timestamp: number): void {
+  const current = latestTaskUpdateTimestamps.get(agentId) ?? 0;
+  if (timestamp <= current) return;
+  latestTaskUpdateTimestamps.set(agentId, timestamp);
+  for (const listener of latestTaskUpdateListeners) listener();
+}
+
+function subscribeLatestTaskUpdate(listener: () => void): () => void {
+  latestTaskUpdateListeners.add(listener);
+  return () => latestTaskUpdateListeners.delete(listener);
+}
+
+function useLatestTaskUpdateTimestamp(agentId: string, timestamp: Date, isTaskUpdate: boolean): number {
+  const itemTime = timestamp.getTime();
+  const subscribe = useCallback(
+    (listener: () => void) => (isTaskUpdate ? subscribeLatestTaskUpdate(listener) : () => {}),
+    [isTaskUpdate],
+  );
+  const getSnapshot = useCallback(
+    () => (isTaskUpdate ? (latestTaskUpdateTimestamps.get(agentId) ?? 0) : 0),
+    [agentId, isTaskUpdate],
+  );
+  const latestTimestamp = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getEmptyTaskUpdateTimestamp,
+  );
+  useLayoutEffect(() => {
+    if (isTaskUpdate) updateLatestTaskUpdateTimestamp(agentId, itemTime);
+  }, [agentId, isTaskUpdate, itemTime]);
+  return isTaskUpdate ? Math.max(latestTimestamp, itemTime) : latestTimestamp;
 }
 
 /**
@@ -2026,18 +2066,29 @@ export function ColorfulToolCall({
   const isLatest = useIsLatestToolCall(agentId, timestamp, isRunning);
   const isLiveTail = useIsLiveTail(agentId, timestamp, isRunning, layout.platform);
   const detail = asToolCallDetail(item.data.detail);
+  const isTaskUpdate = isTodoTool(item.data.name);
+  const itemTimestamp = timestamp.getTime();
+  const latestTaskUpdateTimestamp = useLatestTaskUpdateTimestamp(agentId, timestamp, isTaskUpdate);
+  const isLatestTaskCard = isLatestTaskUpdate(itemTimestamp, latestTaskUpdateTimestamp);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+  const [taskUpdateOverride, setTaskUpdateOverride] = useState<TaskUpdateExpansionOverride | null>(null);
   const categoryColor = palette.categoryColors[item.data.presentation.category];
   const statusColor = palette.statusColors[item.data.status];
   const expansionMode = useExpansionMode(expansionTargetForToolCall(item.data.name, detail?.type ?? "unknown"));
-  const baseExpanded = resolveExpansion(expansionMode, isLatest, userExpanded);
+  const baseExpanded = isTaskUpdate
+    ? resolveTaskUpdateExpansion(expansionMode, isLatestTaskCard, latestTaskUpdateTimestamp, taskUpdateOverride)
+    : resolveExpansion(expansionMode, isLatest, userExpanded);
   const hasDetails = detail ? hasMeaningfulToolCallDetail(detail) : true;
   const hasBody = toolCallHasBody(item.data.name, detail, item.data.presentation.summary);
   const expandable = hasBody || Boolean(item.data.errorText);
   const expanded = expandable ? baseExpanded : false;
   const toggle = useCallback(() => {
-    setUserExpanded(!expanded);
-  }, [expanded]);
+    if (isTaskUpdate) {
+      setTaskUpdateOverride({ expanded: !expanded, latestTimestamp: latestTaskUpdateTimestamp });
+    } else {
+      setUserExpanded(!expanded);
+    }
+  }, [expanded, isTaskUpdate, latestTaskUpdateTimestamp]);
   const subAgentDetail = detail?.type === "sub_agent" ? detail : null;
   const cwd = useAgent(agentId, (agent) => agent.cwd);
   const headerFile = useMemo(() => {
@@ -2097,15 +2148,29 @@ function todoStatusIcon(status: TodoData["items"][number]["status"]): string {
   }
 }
 
-export function ColorfulTodo({ item, theme }: PluginTimelineItemProps<TodoData>) {
+export function ColorfulTodo({
+  agentId,
+  item,
+  theme,
+  timestamp,
+}: PluginTimelineItemProps<TodoData>) {
   const palette = usePalette(theme);
   const styles = useActivityStyles(theme, palette);
   const done = item.data.items.filter((entry) => entry.status === "completed").length;
-  const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
-  const expanded = resolveExpansion(useExpansionMode("todo"), false, userExpanded);
+  const itemTimestamp = timestamp.getTime();
+  const latestTaskUpdateTimestamp = useLatestTaskUpdateTimestamp(agentId, timestamp, true);
+  const isLatestTaskCard = isLatestTaskUpdate(itemTimestamp, latestTaskUpdateTimestamp);
+  const expansionMode = useExpansionMode("todo");
+  const [userExpanded, setUserExpanded] = useState<TaskUpdateExpansionOverride | null>(null);
+  const expanded = resolveTaskUpdateExpansion(
+    expansionMode,
+    isLatestTaskCard,
+    latestTaskUpdateTimestamp,
+    userExpanded,
+  );
   const toggle = useCallback(() => {
-    setUserExpanded(!expanded);
-  }, [expanded]);
+    setUserExpanded({ expanded: !expanded, latestTimestamp: latestTaskUpdateTimestamp });
+  }, [expanded, latestTaskUpdateTimestamp]);
   return (
     <View {...pmonoViewEscape} style={styles.card}>
       <ActivityHeader

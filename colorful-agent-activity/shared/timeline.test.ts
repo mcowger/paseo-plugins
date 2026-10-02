@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createTodoData, createToolCallData, resolveExpansion } from "./timeline";
+import {
+  createTodoData,
+  createToolCallData,
+  isLatestTaskUpdate,
+  resolveExpansion,
+  resolveTaskUpdateExpansion,
+} from "./timeline";
 
 // Captured from a live opencode v2.0.18 session on daemon 0.10.0 (+PR 5603).
 const V2_EDIT_PATCH =
@@ -112,6 +118,42 @@ describe("row expansion", () => {
     expect(resolveExpansion("never", false, true)).toBe(true);
     expect(resolveExpansion("latest", false, true)).toBe(true);
     expect(resolveExpansion("latest", true, false)).toBe(false);
+  });
+});
+
+describe("task update expansion", () => {
+  it("recognizes the newest task update by timestamp", () => {
+    expect(isLatestTaskUpdate(200, 200)).toBe(true);
+    expect(isLatestTaskUpdate(100, 200)).toBe(false);
+    expect(isLatestTaskUpdate(100, 0)).toBe(false);
+  });
+
+  it("collapses earlier task cards when another task update follows", () => {
+    expect(resolveTaskUpdateExpansion("latest", false, 200, null)).toBe(false);
+  });
+
+  it("preserves the configured expansion mode", () => {
+    expect(resolveTaskUpdateExpansion("always", false, 200, null)).toBe(true);
+    expect(resolveTaskUpdateExpansion("latest", true, 200, null)).toBe(true);
+    expect(resolveTaskUpdateExpansion("never", true, 200, null)).toBe(false);
+  });
+
+  it("expires a manual toggle in Latest mode when another task update arrives", () => {
+    const override = { expanded: true, latestTimestamp: 200 };
+    expect(resolveTaskUpdateExpansion("latest", true, 200, { expanded: false, latestTimestamp: 200 })).toBe(
+      false,
+    );
+    expect(resolveTaskUpdateExpansion("latest", false, 200, override)).toBe(true);
+    expect(resolveTaskUpdateExpansion("latest", false, 300, override)).toBe(false);
+  });
+
+  it("preserves manual toggles in Always and Never modes across task updates", () => {
+    expect(
+      resolveTaskUpdateExpansion("always", false, 300, { expanded: false, latestTimestamp: 200 }),
+    ).toBe(false);
+    expect(
+      resolveTaskUpdateExpansion("never", false, 300, { expanded: true, latestTimestamp: 200 }),
+    ).toBe(true);
   });
 });
 

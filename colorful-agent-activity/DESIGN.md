@@ -87,9 +87,14 @@ keyed by renderer, with Unknown tools as the fallback:
 - Never rows start collapsed, even while they are still running.
 - Tapping a row always overrides its setting.
 
-Shipped defaults: reads and questions start collapsed, task lists start open, everything else
-follows Latest. Settings stay on schema version 1 with fully defaulted keys so previously
-stored values backfill without a migration.
+In Latest mode, task cards compare against the newest task update (not the newest activity row),
+so a newer task update collapses older cards and clears their manual expansion. Always keeps
+all task cards open by default; Never keeps them closed by default. In Always and Never modes,
+manual toggles persist across later task updates.
+
+Shipped defaults: reads and questions start collapsed, task updates and everything else follow
+Latest. Saved Tasks settings are preserved, so set Tasks to Latest if an existing install still
+has it set to Always. Settings stay on schema version 1 with fully defaulted keys.
 
 ## Expanded activity
 

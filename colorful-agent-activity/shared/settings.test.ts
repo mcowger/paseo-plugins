@@ -29,4 +29,9 @@ describe("activity settings", () => {
       expect(DEFAULT_EXPANSION[target.key]).toBe(target.default);
     }
   });
+
+  it("defaults task updates to the latest row", () => {
+    expect(DEFAULT_EXPANSION.todo).toBe("latest");
+    expect(activitySettings.schema.parse({}).expansion.todo).toBe("latest");
+  });
 });

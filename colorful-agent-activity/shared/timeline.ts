@@ -75,6 +75,28 @@ export function resolveExpansion(mode: ExpansionMode, isLatest: boolean, userExp
   return isLatest;
 }
 
+export function isLatestTaskUpdate(timestamp: number, latestTimestamp: number): boolean {
+  return latestTimestamp > 0 && timestamp >= latestTimestamp;
+}
+
+export interface TaskUpdateExpansionOverride {
+  expanded: boolean;
+  latestTimestamp: number;
+}
+
+export function resolveTaskUpdateExpansion(
+  mode: ExpansionMode,
+  isLatest: boolean,
+  latestTimestamp: number,
+  userOverride: TaskUpdateExpansionOverride | null,
+): boolean {
+  const userExpanded =
+    mode !== "latest" || userOverride?.latestTimestamp === latestTimestamp
+      ? userOverride?.expanded ?? null
+      : null;
+  return resolveExpansion(mode, isLatest, userExpanded);
+}
+
 export function createReasoningData(
   item: Extract<AgentTimelineItem, { type: "reasoning" }>,
   phase: ReasoningItemData["phase"],

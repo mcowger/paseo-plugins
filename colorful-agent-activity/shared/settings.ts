@@ -8,9 +8,8 @@ export const expansionModeSchema = z.enum(["always", "latest", "never"]);
 export type ExpansionMode = z.output<typeof expansionModeSchema>;
 
 /**
- * One expansion knob per collapsible row renderer. Defaults reproduce the
- * historical behavior: reads and questions start collapsed, task lists start
- * open, everything else opens only for the latest row.
+ * One expansion knob per collapsible row renderer. Defaults keep reads and
+ * questions collapsed and open the newest task update and activity row.
  */
 export const EXPANSION_TARGETS = [
   { key: "thinking", label: "Thinking", default: "latest" },
@@ -26,7 +25,7 @@ export const EXPANSION_TARGETS = [
   { key: "plan", label: "Plans", default: "latest" },
   { key: "ask", label: "Ask Question", default: "never" },
   { key: "speak", label: "Speak", default: "latest" },
-  { key: "todo", label: "Tasks", default: "always" },
+  { key: "todo", label: "Tasks", default: "latest" },
   { key: "unknown", label: "Unknown tools", default: "latest" },
 ] as const satisfies readonly { key: string; label: string; default: ExpansionMode }[];
 
@@ -46,7 +45,7 @@ export const DEFAULT_EXPANSION: Record<ExpansionTarget, ExpansionMode> = {
   plan: "latest",
   ask: "never",
   speak: "latest",
-  todo: "always",
+  todo: "latest",
   unknown: "latest",
 };
 
@@ -64,7 +63,7 @@ const expansionSettingsSchema = z.object({
   plan: expansionModeSchema.default("latest"),
   ask: expansionModeSchema.default("never"),
   speak: expansionModeSchema.default("latest"),
-  todo: expansionModeSchema.default("always"),
+  todo: expansionModeSchema.default("latest"),
   unknown: expansionModeSchema.default("latest"),
 });
 
