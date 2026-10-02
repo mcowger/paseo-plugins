@@ -1233,7 +1233,8 @@ export function todoToolDetailModel(input: unknown, output: unknown): TodoToolDe
     focusId !== undefined ? summary.tasks.find((task) => task.id === focusId) ?? summary.task : summary.task;
   return {
     ...(resultText ? { resultText } : {}),
-    tasks: focus ? [focus] : summary.tasks,
+    // Completed tasks are only relevant when just checked off (the focus task).
+    tasks: focus ? [focus] : summary.tasks.filter((task) => task.status !== "completed"),
   };
 }
 

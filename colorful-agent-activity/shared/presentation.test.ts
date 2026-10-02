@@ -1313,7 +1313,7 @@ describe("pi todo tool presentation", () => {
     };
     const list = todoToolDetailModel({ action: "list" }, listOutput);
     expect(list.resultText).toBe("Tasks:\n#1 pending foo");
-    expect(list.tasks).toHaveLength(3);
+    expect(list.tasks.every((task) => task.status !== "completed")).toBe(true);
     expect(todoToolDetailModel({}, null)).toEqual({ tasks: [] });
   });
 
