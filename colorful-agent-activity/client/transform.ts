@@ -2,12 +2,9 @@ import type { PluginTimelineTransformerContribution } from "@getpaseo/plugin/cli
 import type { ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
 import {
   createReasoningData,
-  createTodoData,
   createToolCallData,
   REASONING_RENDERER_KIND,
   REASONING_RENDERER_VERSION,
-  TODO_RENDERER_KIND,
-  TODO_RENDERER_VERSION,
   TOOL_CALL_RENDERER_KIND,
   TOOL_CALL_RENDERER_VERSION,
 } from "../shared/timeline";
@@ -28,20 +25,10 @@ export const transformReasoning: ReasoningTransformer = ({ item, phase }) => ({
   ],
 });
 
-export const transformTodo: TodoTransformer = ({ item }) => {
-  const data = createTodoData(item);
-  if (!data) return undefined;
-  return {
-    items: [
-      {
-        type: "plugin",
-        kind: TODO_RENDERER_KIND,
-        version: TODO_RENDERER_VERSION,
-        data,
-      },
-    ],
-  };
-};
+// The task tool card already reports each update (touched task or full list on
+// create/list), so the standalone full-list item is suppressed to avoid
+// repeating the whole checklist after every change.
+export const transformTodo: TodoTransformer = () => ({ items: [] });
 
 function transformApplyPatch(item: Extract<ToolCallTimelineItem, { type: "tool_call" }>) {
   const edits = extractApplyPatchEdits(

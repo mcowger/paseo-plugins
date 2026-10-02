@@ -293,7 +293,7 @@ describe("colorful activity timeline transforms", () => {
     expect(result).toBeUndefined();
   });
 
-  it("projects todo checklists", () => {
+  it("suppresses the standalone todo checklist", () => {
     expect(
       transformTodo({
         phase: "complete",
@@ -305,24 +305,6 @@ describe("colorful activity timeline transforms", () => {
           ],
         },
       }),
-    ).toEqual({
-      items: [
-        {
-          type: "plugin",
-          kind: "colorful-todo",
-          version: 1,
-          data: {
-            items: [
-              { id: "a", title: "Write code", status: "completed" },
-              { id: "todo-1", title: "Run tests", status: "in_progress" },
-            ],
-          },
-        },
-      ],
-    });
-  });
-
-  it("leaves empty todo checklists to the host", () => {
-    expect(transformTodo({ phase: "complete", item: { type: "todo", items: [] } })).toBeUndefined();
+    ).toEqual({ items: [] });
   });
 });
