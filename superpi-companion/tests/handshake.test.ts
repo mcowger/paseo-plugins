@@ -53,10 +53,11 @@ describe("hello handshake", () => {
     expect(data.capabilities).toEqual([...COMPANION_CAPABILITIES]);
     expect(data.settings).toEqual({ tier: "default", longContext: false });
     expect(data.origin).toBe("root");
-    expect(data.tiers).toEqual(["default", "fast", "flex", "ultrafast"]);
-    expect(data.tierApplicable).toBe(true);
+    expect(data.tiers).toEqual([]);
+    expect(data.tierApplicable).toBe(false);
     expect(data.conflicts).toEqual([]);
-    expect(data.longContextTarget).toBe(1_050_000);
+    expect(data.longContextTarget).toBeUndefined();
+    expect(data.longContextAvailable).toBe(false);
     expect(data.contextWindow).toBe(200_000);
     expect(data.sessionId).toBe("sess-42");
     expect(data.limitations.length).toBeGreaterThan(0);

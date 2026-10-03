@@ -98,8 +98,8 @@ settings screen preserves it through a plugin RPC and native text input.
 - Missing Superpi model labels and built-in slash-command advertisement were
   plugin bugs, fixed here. Pi's `get_commands` omits terminal built-ins; the
   plugin must advertise and dispatch the RPC-supported ones explicitly.
-- Long Context's old fixed target is Superpi policy, not host capability
-  discovery. See [the Plexus metadata assessment](plexus-context-metadata.md).
+- Long Context's old fixed target was Superpi policy, not a host defect. It is
+  now replaced by [Plexus policy metadata](plexus-context-metadata.md).
 - Direct steering, MCP translation, arbitrary Pi TUI widgets, and Windows
   descendant cleanup remain Superpi implementation limits unless a specific
   missing host contract is demonstrated.

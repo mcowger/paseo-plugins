@@ -30,32 +30,22 @@ describe("detectControlConflicts", () => {
 });
 
 describe("tier mapping", () => {
-  it("maps fast to the OpenAI priority service tier", () => {
-    expect(applyTierToPayload({ model: "gpt" }, { api: "openai-responses", id: "gpt" }, "fast")).toEqual({
-      model: "gpt",
-      service_tier: "priority",
-    });
+  const policy = { provider: "plexus", modelId: "gpt", serviceTiers: ["auto", "standard", "flex", "priority", "ultrafast"] };
+  it("injects exact advertised canonical tiers for all Plexus request dialects", () => {
+    for (const api of ["openai-completions", "openai-responses", "anthropic-messages"]) {
+      for (const tier of policy.serviceTiers) expect(applyTierToPayload({ model: "gpt" }, { provider: "plexus", api, id: "gpt" }, tier, policy)).toEqual({ model: "gpt", service_tier: tier });
+    }
   });
-
-  it("maps flex and ultrafast to literal service tiers", () => {
-    expect(applyTierToPayload({}, { api: "openai-codex-responses" }, "flex")).toEqual({ service_tier: "flex" });
-    expect(applyTierToPayload({}, { api: "openai-responses" }, "ultrafast")).toEqual({
-      service_tier: "ultrafast",
-    });
+  it("does not inject guesses, legacy names, foreign policies or native-provider requests", () => {
+    const model = { provider: "plexus", id: "gpt" };
+    expect(applyTierToPayload({}, model, "fast", policy)).toBeUndefined();
+    expect(applyTierToPayload({}, model, "default", undefined)).toBeUndefined();
+    expect(applyTierToPayload({}, model, "priority", { ...policy, modelId: "other" })).toBeUndefined();
+    expect(applyTierToPayload({}, { provider: "anthropic", id: "gpt" }, "priority", policy)).toBeUndefined();
+    expect(isTierApplicable(model, "flex", policy)).toBe(true);
+    expect(isTierApplicable(model, "fast", policy)).toBe(false);
   });
-
-  it("uses Anthropic fast mode for fast only", () => {
-    expect(applyTierToPayload({ betas: ["existing"] }, { api: "anthropic-messages" }, "fast")).toEqual({
-      betas: ["existing", "fast-mode-2026-02-01"],
-      speed: "fast",
-    });
-    expect(applyTierToPayload({}, { api: "anthropic-messages" }, "flex")).toBeUndefined();
-  });
-
-  it("leaves default and unknown dialects untouched", () => {
-    expect(isTierApplicable({ api: "openai-responses" }, "default")).toBe(true);
-    expect(applyTierToPayload({}, { api: "openai-responses" }, "default")).toBeUndefined();
-    expect(applyTierToPayload({}, { api: "mystery-api" }, "fast")).toBeUndefined();
-    expect(isTierApplicable({ api: "mystery-api" }, "fast")).toBe(false);
+  it("leaves malformed payloads untouched", () => {
+    for (const payload of [null, [], "text"]) expect(applyTierToPayload(payload, { provider: "plexus", id: "gpt" }, "priority", policy)).toBeUndefined();
   });
 });

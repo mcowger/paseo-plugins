@@ -12,6 +12,7 @@ import { PiRpcTimeoutError } from "../server/pi-rpc.js";
 import { SessionStore } from "../server/persistence.js";
 import { createSuperpiSession, type SuperpiSessionOptions } from "../server/session.js";
 import { SUBPI_CHILD_CHANNEL_PREFIX } from "../shared/subagents.js";
+import { companionStatePrefix } from "../shared/companion.js";
 import { FakePiRpc } from "../tests/fixtures/fake-pi-rpc.js";
 
 let root: string;
@@ -135,6 +136,127 @@ describe("root launch", () => {
 });
 
 describe("session open", () => {
+  it("keeps premium-only tier choices unselected rather than silently choosing one", async () => {
+    const fake = new FakePiRpc({ helloData: { capabilities: [], tiers: ["priority", "flex"], settings: { tier: "default", longContext: false } } });
+    const { session, events } = harness({ fake, config: baseConfig({ settings: { tier: "default" } }) });
+    await session.open("open-1");
+    expect(ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({ value: null, options: [{ label: "priority", value: "priority" }, { label: "flex", value: "flex" }] });
+    expect(fake.companionSettings.tier).toBe("default");
+    await session.close();
+  });
+
+  it("applies saved choices when metadata arrives between hello and readiness", async () => {
+    let fake: FakePiRpc;
+    let key = "";
+    let published = false;
+    fake = new FakePiRpc({ helloData: { capabilities: [], tiers: [], settings: { tier: "default", longContext: false } }, onRequest: (command) => {
+      if (command.type === "prompt" && String(command.message).startsWith("/superpi-control ")) {
+        const request = JSON.parse(Buffer.from(String(command.message).split(" ")[1]!, "base64url").toString("utf8"));
+        key = request.sessionKey;
+      }
+      if (command.type === "get_available_models" && !published) {
+        published = true;
+        fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey: key, state: { capabilities: [], tiers: ["standard", "priority"], longContextAvailable: true, settings: { tier: "standard", longContext: false } } }) });
+      }
+    } });
+    const { session, events } = harness({ fake, config: baseConfig({ settings: { tier: "fast", longContext: true } }) });
+    await session.open("open-1");
+    expect(ofType(events, "session.ready")).toHaveLength(1);
+    expect(fake.companionSettings).toEqual({ tier: "priority", longContext: true });
+    await session.close();
+  });
+  it("shows exactly discovered tier names and removes the selector when support disappears", async () => {
+    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "priority", longContext: false }, tiers: ["auto", "standard", "flex", "priority"] } });
+    const { session, events, getLaunch } = harness({ fake });
+    await session.open("open-1");
+    expect(ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({ value: "priority", options: ["auto", "standard", "flex", "priority"].map((value) => ({ label: value, value })) });
+    await session.configure("unsupported", { settings: { tier: "ultrafast" } });
+    expect(ofType(events, "request.failed").at(-1)?.error.message).toContain("not advertised");
+    fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY, state: { capabilities: [], settings: { tier: "default", longContext: false }, tiers: [] } }) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ofType(events, "session.config").at(-1)?.config.settings).toEqual([]);
+    await session.close();
+  });
+  it("migrates old fast input to advertised priority and defers saved selections until metadata arrives", async () => {
+    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "default", longContext: false }, tiers: [] } });
+    const { session, events, getLaunch } = harness({ fake, config: baseConfig({ settings: { tier: "fast" } }) });
+    await session.open("open-1");
+    expect(ofType(events, "session.ready")).toHaveLength(1);
+    fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY, state: { capabilities: [], settings: { tier: "standard", longContext: false }, tiers: ["standard", "priority"] } }) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fake.companionSettings.tier).toBe("priority");
+    await session.close();
+  });
+  it("publishes a text-bearing selector and translates selections to companion booleans", async () => {
+    const fake = new FakePiRpc({ state: { model: { provider: "test", id: "model", contextWindow: 272000 } }, helloData: { capabilities: [], settings: { tier: "default", longContext: false }, longContextAvailable: true, contextWindow: 272000, shortContextBudgetTokens: 272000, longContextTarget: 1050000 } });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    expect(ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "longContext")).toMatchObject({ type: "select", value: "false", options: [{ value: "false", label: "272K" }, { value: "true", label: "1M" }] });
+    await session.configure("on", { settings: { longContext: "true" } });
+    expect(fake.companionSettings.longContext).toBe(true);
+    await session.configure("off", { settings: { longContext: "false" } });
+    expect(fake.companionSettings.longContext).toBe(false);
+    await session.configure("invalid", { settings: { longContext: "invalid" } });
+    expect(ofType(events, "request.failed").at(-1)?.requestId).toBe("invalid");
+    await session.close();
+  });
+  it("labels both choices from policy even when the observed model budget differs from selected mode", async () => {
+    for (const longContext of [false, true]) {
+      const fake = new FakePiRpc({ state: { model: { provider: "plexus", id: "gpt-6-luna", contextWindow: 1050000 } }, helloData: { capabilities: [], settings: { tier: "default", longContext }, longContextAvailable: true, shortContextBudgetTokens: 272000, longContextTarget: 1050000 } });
+      const { session, events } = harness({ fake });
+      await session.open("open-1");
+      const setting = ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "longContext");
+      expect(setting).toMatchObject({ type: "select", value: String(longContext), options: [{ value: "false", label: "272K" }, { value: "true", label: "1M" }] });
+      await session.close();
+    }
+  });
+  it("omits Long Context for companions/models without a distinct short budget", async () => {
+    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "default", longContext: false }, longContextAvailable: false } });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    expect(ofType(events, "session.config")[0]?.config.settings.map((setting) => setting.id)).toEqual([]);
+    await session.close();
+  });
+
+  it("does not fail reload on a stale saved Long Context setting for an unqualified model", async () => {
+    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "default", longContext: false }, longContextAvailable: false } });
+    const { session, events } = harness({ fake, config: baseConfig({ settings: { longContext: true } }) });
+    await session.open("open-1");
+    expect(ofType(events, "session.ready")).toHaveLength(1);
+    expect(fake.companionSettings.longContext).toBe(false);
+    expect(ofType(events, "session.config")[0]?.config.settings.map((setting) => setting.id)).toEqual([]);
+    await session.close();
+  });
+
+  it("reapplies an explicit On selection when startup metadata becomes available", async () => {
+    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "default", longContext: false }, longContextAvailable: false } });
+    const { session, events, getLaunch } = harness({ fake, config: baseConfig({ settings: { longContext: true } }) });
+    await session.open("open-1");
+    fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY, state: { capabilities: [], settings: { tier: "default", longContext: false }, longContextAvailable: true } }) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fake.companionSettings.longContext).toBe(true);
+    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
+    await session.close();
+  });
+
+  it("refreshes and removes the live context control from session-key-scoped policy notifications", async () => {
+    const { session, fake, events, getLaunch } = harness();
+    await session.open("open-1");
+    events.length = 0;
+    const state = { capabilities: [], tiers: ["auto", "priority"], settings: { tier: "priority", longContext: false }, longContextAvailable: true, shortContextBudgetTokens: 200000, longContextTarget: 1000000 };
+    const emit = (sessionKey: string, state: unknown) => fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey, state }) });
+    emit("other-key", state);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ofType(events, "session.config")).toHaveLength(0);
+    emit(String(getLaunch()?.env?.SUPERPI_SESSION_KEY), state);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "longContext")?.description).toContain("Short budget: 200,000 tokens");
+    emit(String(getLaunch()?.env?.SUPERPI_SESSION_KEY), { ...state, longContextAvailable: false });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ofType(events, "session.config").at(-1)?.config.settings.map((setting) => setting.id)).toEqual(["tier"]);
+    expect(ofType(events, "timeline.item")).toHaveLength(0);
+    await session.close();
+  });
   it("publishes handshake configuration, commands, persistence, and readiness", async () => {
     const fake = new FakePiRpc({
       state: {
@@ -193,7 +315,7 @@ describe("session open", () => {
     ]);
     expect(config?.thinkingOptions.map((option) => option.id)).toEqual(["off", "high"]);
     expect(config?.settings.map((setting) => setting.id)).toEqual(["tier", "longContext"]);
-    expect(config?.settings.find((setting) => setting.id === "longContext")?.label).toBe("Long context: Off (2,000 tokens)");
+    expect(config?.settings.find((setting) => setting.id === "longContext")?.label).toBe("2K");
 
     expect(ofType(events, "session.commands")[0]?.commands).toEqual(expect.arrayContaining([
       { name: "compact", description: "Manually compact the session context", argumentHint: "[instructions]" },
@@ -785,12 +907,12 @@ describe("stage 2 configuration", () => {
     expect(fake.companionSettings).toEqual({ tier: "fast", longContext: true });
     const first = ofType(events, "session.config")[0]?.config;
     expect(first?.settings.find((setting) => setting.id === "tier")?.value).toBe("fast");
-    expect(first?.settings.find((setting) => setting.id === "longContext")?.value).toBe(true);
+    expect(first?.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
 
     await session.configure("cfg-2", { model: "test/other" });
     const second = ofType(events, "session.config")[1]?.config;
     expect(second?.settings.find((setting) => setting.id === "tier")?.value).toBe("fast");
-    expect(second?.settings.find((setting) => setting.id === "longContext")?.value).toBe(true);
+    expect(second?.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
     expect(fake.companionSettings).toEqual({ tier: "fast", longContext: true });
     await session.close();
   });
@@ -805,7 +927,7 @@ describe("stage 2 configuration", () => {
     expect(fake.companionSettings).toEqual({ tier: "fast", longContext: true });
     const config = ofType(events, "session.config")[0]?.config;
     expect(config?.settings.find((setting) => setting.id === "tier")?.value).toBe("fast");
-    expect(config?.settings.find((setting) => setting.id === "longContext")?.value).toBe(true);
+    expect(config?.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
     const readyIndex = events.findIndex((event) => event.type === "session.ready");
     const configIndex = events.findIndex((event) => event.type === "session.config");
     expect(configIndex).toBeGreaterThan(-1);
@@ -818,6 +940,8 @@ describe("stage 2 configuration", () => {
     const reloadFake = new FakePiRpc({
       helloData: {
         capabilities: ["tier", "context"],
+        tiers: ["default", "fast", "flex", "ultrafast"],
+        longContextAvailable: true,
         settings: { ...saved },
         sessionId: "pi-session-1",
       },
@@ -826,12 +950,14 @@ describe("stage 2 configuration", () => {
     await reload.session.open("open-1");
     const restored = ofType(reload.events, "session.config")[0]?.config;
     expect(restored?.settings.find((setting) => setting.id === "tier")?.value).toBe("fast");
-    expect(restored?.settings.find((setting) => setting.id === "longContext")?.value).toBe(true);
+    expect(restored?.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
     await reload.session.close();
 
     const overrideFake = new FakePiRpc({
       helloData: {
         capabilities: ["tier", "context"],
+        tiers: ["default", "fast", "flex", "ultrafast"],
+        longContextAvailable: true,
         settings: { ...saved },
         sessionId: "pi-session-1",
       },
@@ -844,7 +970,7 @@ describe("stage 2 configuration", () => {
     expect(overrideFake.companionSettings).toEqual({ tier: "flex", longContext: true });
     const merged = ofType(override.events, "session.config")[0]?.config;
     expect(merged?.settings.find((setting) => setting.id === "tier")?.value).toBe("flex");
-    expect(merged?.settings.find((setting) => setting.id === "longContext")?.value).toBe(true);
+    expect(merged?.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
     await override.session.close();
   });
 
@@ -1073,7 +1199,7 @@ describe("root integration", () => {
     const fake = new FakePiRpc({
       entriesProvider: () => ({ entries, leafId }),
       messagesProvider: () => messages,
-      companionStateProvider: () => ({ capabilities: [], settings: { tier: "default", longContext: false }, contextWindow: 1000, longContextTarget: 1050000, modelBaselineContextWindow: 1000 }),
+      companionStateProvider: () => ({ capabilities: [], settings: { tier: "default", longContext: false }, contextWindow: 1000, longContextAvailable: true, longContextTarget: 1050000, modelBaselineContextWindow: 1000 }),
       clearQueue: { steering: ["stale"], followUp: [] },
       onRewind: () => {
         // navigateTree moves the leaf to the selected user entry's parent.
@@ -1099,7 +1225,7 @@ describe("root integration", () => {
     await session.revert("rev-1", targetToken, "conversation");
 
     expect(ofType(events, "request.completed")[0]?.requestId).toBe("rev-1");
-    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "longContext")?.description).toContain("Expansion target: 1,050,000 tokens");
+    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "longContext")?.description).toContain("Maximum: 1,050,000 tokens");
     expect(
       ofType(events, "session.notice").some((notice) => notice.notice.id === "rewind-queue-cleared"),
     ).toBe(true);

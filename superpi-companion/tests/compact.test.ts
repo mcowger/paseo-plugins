@@ -59,9 +59,9 @@ describe("compact", () => {
   });
 
   it("does not emit a reply before the completion signal arrives", async () => {
-    const { pi, companion, ctx, notifies } = setup({ compactAuto: false });
+    const { pi, companion, ctx, notifies, compactions } = setup({ compactAuto: false });
     const pending = companion.handleArgs(compact(), ctx);
-    await Promise.resolve();
+    while (compactions.length === 0) await Promise.resolve();
     expect(notifies).toHaveLength(0);
 
     pi.handlers.get("session_compact")?.[0]?.({ type: "session_compact" }, ctx);

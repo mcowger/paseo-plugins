@@ -12,9 +12,10 @@ function configure(data: unknown, requestId = "configure-1"): string {
 function model(overrides: Partial<FakeModel> = {}): FakeModel {
   return { id: "gpt-5.6", api: "openai-responses", contextWindow: 200_000, provider: "plexus", ...overrides };
 }
+const budgets = (model: FakeModel) => ({ provider: model.provider ?? "plexus", modelId: model.id, maxContextTokens: 1_000_000, shortContextBudgetTokens: model.contextWindow });
 
 function setup(options: { model?: FakeModel; branch?: Array<Record<string, unknown>> } = {}) {
-  const pi = createFakePi({ registry: options.model ? [options.model] : [] });
+  const pi = createFakePi({ registry: options.model ? [options.model] : [], policies: options.model ? [budgets(options.model)] : [] });
   const companion = createCompanion(pi.api, { origin: "root", sessionKey: KEY, now: () => 1234 });
   const fake = createFakeContext({ pi, model: options.model, branch: options.branch });
   return { pi, companion, ...fake };
@@ -36,12 +37,12 @@ describe("configure", () => {
     const reply = readReply(notifies);
 
     expect(reply.ok).toBe(true);
-    expect(stateOf(reply).settings.tier).toBe("fast");
+    expect(stateOf(reply).settings.tier).toBe("priority");
     expect(stateOf(reply).tierApplicable).toBe(true);
 
     const entry = pi.entries.at(-1);
     expect(entry?.customType).toBe(CUSTOM_ENTRY_TYPE);
-    expect(entry?.data).toMatchObject({ version: 1, tier: "fast", longContext: false, timestamp: 1234 });
+    expect(entry?.data).toMatchObject({ version: 1, tier: "priority", longContext: false, timestamp: 1234 });
   });
 
   it("rejects unknown configure fields", async () => {
@@ -60,12 +61,12 @@ describe("configure", () => {
     let reply = readReply(notifies);
     expect(reply.ok).toBe(true);
     expect(stateOf(reply).settings.longContext).toBe(true);
-    expect(stateOf(reply).contextWindow).toBe(1_050_000);
+    expect(stateOf(reply).contextWindow).toBe(1_000_000);
     expect(stateOf(reply).modelBaselineContextWindow).toBe(200_000);
     // The session-local clone is expanded; the catalog object is untouched.
-    expect(pi.sessionModel?.contextWindow).toBe(1_050_000);
+    expect(pi.sessionModel?.contextWindow).toBe(1_000_000);
     expect(pi.setModelCalls).toHaveLength(1);
-    expect(pi.setModelCalls[0]?.contextWindow).toBe(1_050_000);
+    expect(pi.setModelCalls[0]?.contextWindow).toBe(1_000_000);
     expect(catalog.contextWindow).toBe(200_000);
     // An owned child resolving through the registry keeps the baseline budget.
     expect(pi.findModel("plexus", "gpt-5.6")).toBe(catalog);
@@ -76,7 +77,7 @@ describe("configure", () => {
     expect(reply.ok).toBe(true);
     expect(stateOf(reply).settings.longContext).toBe(false);
     expect(stateOf(reply).contextWindow).toBe(200_000);
-    expect(stateOf(reply).modelBaselineContextWindow).toBeUndefined();
+    expect(stateOf(reply).modelBaselineContextWindow).toBe(200_000);
     expect(pi.sessionModel?.contextWindow).toBe(200_000);
     expect(pi.setModelCalls).toHaveLength(2);
     expect(catalog.contextWindow).toBe(200_000);
@@ -92,9 +93,9 @@ describe("configure", () => {
 
     const reply = readReply(notifies);
     expect(reply.ok).toBe(true);
-    expect(stateOf(reply).contextWindow).toBe(1_050_000);
+    expect(stateOf(reply).contextWindow).toBe(1_000_000);
     expect(stateOf(reply).modelBaselineContextWindow).toBe(200_000);
-    expect(pi.setModelCalls.map((call) => call.contextWindow)).toEqual([1_050_000, 200_000, 1_050_000]);
+    expect(pi.setModelCalls.map((call) => call.contextWindow)).toEqual([1_000_000, 200_000, 1_000_000]);
     expect(catalog.contextWindow).toBe(200_000);
   });
 
@@ -103,11 +104,11 @@ describe("configure", () => {
     await companion.handleArgs(configure({ longContext: true }), ctx);
     const reply = readReply(notifies);
     expect(reply.ok).toBe(false);
-    expect(reply.error).toContain("context window");
+    expect(reply.error).toContain("no distinct");
     expect(stateOf(reply).settings.longContext).toBe(false);
   });
 
-  it("reports a non-default tier as not applicable for an unknown API dialect", async () => {
+  it("uses Plexus policy irrespective of upstream API dialect", async () => {
     const { companion, ctx, notifies } = setup({
       model: model({ id: "mystery", api: "mystery-api", contextWindow: 100_000 }),
     });
@@ -116,7 +117,7 @@ describe("configure", () => {
     const reply = readReply(notifies);
     expect(reply.ok).toBe(true);
     expect(stateOf(reply).settings.tier).toBe("flex");
-    expect(stateOf(reply).tierApplicable).toBe(false);
+    expect(stateOf(reply).tierApplicable).toBe(true);
   });
 
   it("restores branch-local settings on session_start as a session-local clone", async () => {
@@ -128,7 +129,7 @@ describe("configure", () => {
         data: { version: 1, tier: "ultrafast", longContext: true, contextWindow: 200_000, timestamp: 7 },
       },
     ];
-    const pi = createFakePi({ registry: [catalog] });
+    const pi = createFakePi({ registry: [catalog], policies: [budgets(catalog)] });
     const companion = createCompanion(pi.api, { origin: "root", sessionKey: KEY });
     const fake = createFakeContext({ pi, model: catalog, branch });
 
@@ -138,16 +139,19 @@ describe("configure", () => {
 
     const state = companion.buildState(fake.ctx);
     expect(state.settings).toEqual({ tier: "ultrafast", longContext: true });
-    expect(state.contextWindow).toBe(1_050_000);
+    expect(state.contextWindow).toBe(1_000_000);
     expect(state.modelBaselineContextWindow).toBe(200_000);
-    expect(pi.sessionModel?.contextWindow).toBe(1_050_000);
+    expect(pi.sessionModel?.contextWindow).toBe(1_000_000);
     expect(catalog.contextWindow).toBe(200_000);
   });
 });
 
 describe("configure atomicity", () => {
   it("leaves the previous tier and persistence untouched when long context fails", async () => {
-    const { pi, companion, ctx, notifies } = setup();
+    const catalog = model();
+    const pi = createFakePi({ registry: [catalog] });
+    const companion = createCompanion(pi.api, { origin: "root", sessionKey: KEY });
+    const { ctx, notifies } = createFakeContext({ pi, model: catalog });
     await companion.handleArgs(configure({ tier: "fast" }), ctx);
     expect(readReply(notifies).ok).toBe(true);
     const entriesAfterTier = pi.entries.length;
@@ -155,8 +159,8 @@ describe("configure atomicity", () => {
     await companion.handleArgs(configure({ tier: "ultrafast", longContext: true }, "configure-2"), ctx);
     const reply = readReply(notifies);
     expect(reply.ok).toBe(false);
-    expect(reply.error).toContain("context window");
-    expect(stateOf(reply).settings).toEqual({ tier: "fast", longContext: false });
+    expect(reply.error).toContain("no distinct");
+    expect(stateOf(reply).settings).toEqual({ tier: "priority", longContext: false });
     // A combined request that never applied must not persist a partial tier.
     expect(pi.entries).toHaveLength(entriesAfterTier);
   });
@@ -168,7 +172,7 @@ describe("configure atomicity", () => {
     await companion.handleArgs(configure({ tier: "fast", longContext: true }), ctx);
     const reply = readReply(notifies);
     expect(reply.ok).toBe(false);
-    expect(reply.error).toContain("expanded model");
+    expect(reply.error).toContain("could not apply");
     expect(stateOf(reply).settings).toEqual({ tier: "default", longContext: false });
     expect(pi.entries).toHaveLength(0);
     expect(pi.sessionModel?.contextWindow).toBe(200_000);
@@ -179,7 +183,7 @@ describe("model_select isolation", () => {
   it("re-applies expansion to a catalog model selected while long context is on", async () => {
     const catalog = model();
     const next = model({ id: "claude", api: "anthropic-messages", contextWindow: 300_000 });
-    const pi = createFakePi({ registry: [catalog, next] });
+    const pi = createFakePi({ registry: [catalog, next], policies: [budgets(catalog), budgets(next)] });
     const companion = createCompanion(pi.api, { origin: "root", sessionKey: KEY });
     const fake = createFakeContext({ pi, model: catalog });
 
@@ -188,14 +192,14 @@ describe("model_select isolation", () => {
     pi.sessionModel = next;
     await modelSelect(pi, { type: "model_select", model: next, previousModel: catalog, source: "set" }, fake.ctx);
 
-    expect(pi.sessionModel?.contextWindow).toBe(1_050_000);
+    expect(pi.sessionModel?.contextWindow).toBe(1_000_000);
     expect(next.contextWindow).toBe(300_000);
-    expect(pi.setModelCalls.at(-1)?.contextWindow).toBe(1_050_000);
+    expect(pi.setModelCalls.at(-1)?.contextWindow).toBe(1_000_000);
   });
 
   it("ignores its own session-local clone and catalog-less events", async () => {
     const catalog = model();
-    const pi = createFakePi({ registry: [catalog] });
+    const pi = createFakePi({ registry: [catalog], policies: [budgets(catalog)] });
     const companion = createCompanion(pi.api, { origin: "root", sessionKey: KEY });
     const fake = createFakeContext({ pi, model: catalog });
 

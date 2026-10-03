@@ -9,7 +9,6 @@ export {
 } from "./src/companion.ts";
 export { createSubagentBridgeTracker, formatChildForward, type SubagentBridgeTracker } from "./src/bridge.ts";
 export { detectControlConflicts, KNOWN_CONTROL_OWNERS } from "./src/conflicts.ts";
-export { EXPANDED_CONTEXT_WINDOW } from "./src/context.ts";
 export { buildRewindEntry, findActiveBranchUserEntry, navigationCancelled } from "./src/rewind.ts";
 export {
   CHILD_NOTIFY_PREFIX,

@@ -1,5 +1,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { NOTIFY_PREFIX, SuperpiReplySchema, type SuperpiReply } from "../src/protocol.ts";
+import { CONTEXT_POLICY_REQUEST, CONTEXT_POLICY_SNAPSHOT, type ContextPolicy } from "../src/context-policy.ts";
+import { SERVICE_TIERS_REQUEST, SERVICE_TIERS_SNAPSHOT, type ServiceTierPolicy } from "../src/service-tiers.ts";
 
 export interface FakeNotify {
   message: string;
@@ -37,7 +39,7 @@ export interface FakePi {
   findModel(provider: string | undefined, modelId: string): FakeModel | undefined;
 }
 
-export function createFakePi(seed: { commands?: FakeCommandSeed[]; registry?: FakeModel[] } = {}): FakePi {
+export function createFakePi(seed: { commands?: FakeCommandSeed[]; registry?: FakeModel[]; policies?: ContextPolicy[]; noPolicyPublisher?: boolean; tierPolicies?: ServiceTierPolicy[]; noTierPublisher?: boolean } = {}): FakePi {
   const state = {
     sessionModel: undefined as FakeModel | undefined,
     registry: seed.registry ?? [],
@@ -53,6 +55,15 @@ export function createFakePi(seed: { commands?: FakeCommandSeed[]; registry?: Fa
   const entries: FakePi["entries"] = [];
   const handlers = new Map<string, Array<(...args: any[]) => any>>();
   const eventHandlers = new Map<string, Set<(data: unknown) => void>>();
+  if (!seed.noPolicyPublisher) eventHandlers.set(CONTEXT_POLICY_REQUEST, new Set([(data: unknown) => {
+    const { requestId } = data as { requestId: string };
+    for (const handler of eventHandlers.get(CONTEXT_POLICY_SNAPSHOT) ?? []) handler({ version: 1, publisherId: "00000000-0000-4000-8000-000000000001", revision: 1, requestId, status: "ready", policies: seed.policies ?? [] });
+  }]));
+  if (!seed.noTierPublisher) eventHandlers.set(SERVICE_TIERS_REQUEST, new Set([(data: unknown) => {
+    const { requestId } = data as { requestId: string };
+    const policies = seed.tierPolicies ?? (seed.registry ?? []).filter((model) => model.provider === "plexus").map((model) => ({ provider: "plexus", modelId: model.id, serviceTiers: ["auto", "standard", "flex", "priority", "ultrafast"] }));
+    for (const handler of eventHandlers.get(SERVICE_TIERS_SNAPSHOT) ?? []) handler({ version: 1, publisherId: "00000000-0000-4000-8000-000000000001", revision: 1, requestId, status: "ready", policies });
+  }]));
 
   const api = {
     registerFlag: (name: string, options: { default?: boolean | string }) => {

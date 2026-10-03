@@ -17,7 +17,10 @@ import type {
 import {
   companionPrefix,
   companionStateSchema,
+  companionStatePrefix,
+  companionStateUpdateSchema,
   contextSettingPresentation,
+  formatContextLength,
   tierSchema,
   type CompanionState,
 } from "../shared/companion.js";
@@ -240,32 +243,30 @@ function toProviderError(error: unknown): ProviderError {
   return { message: String(error) };
 }
 
-const TIER_LABELS: Record<Tier, string> = {  default: "Default",
-  fast: "Fast",
-  flex: "Flex",
-  ultrafast: "Ultrafast",
-};
-
 function buildCompanionSettings(state: CompanionState | undefined, modelContextWindow?: number): ProviderSetting[] {
   const tier = state?.settings.tier ?? "default";
   const longContext = state?.settings.longContext ?? false;
   const context = contextSettingPresentation(state, modelContextWindow);
   return [
-    {
+    ...(state?.tiers?.length ? [{
       type: "select",
       id: "tier",
       label: "Service tier",
       description: "Companion tier applied to the next provider request",
-      value: tier,
-      options: tierSchema.options.map((value) => ({ label: TIER_LABELS[value], value })),
-    },
-    {
-      type: "toggle",
+      value: state.tiers.includes(tier) ? tier : null,
+      options: state.tiers.map((value) => ({ label: value, value })),
+    } as const] : []),
+    ...(state?.longContextAvailable === true ? [{
+      type: "select",
       id: "longContext",
       label: context.label,
       description: context.description,
-      value: longContext,
-    },
+      value: String(longContext),
+      options: [
+        { value: "false", label: formatContextLength(state.shortContextBudgetTokens) },
+        { value: "true", label: formatContextLength(state.longContextTarget) },
+      ],
+    } as const] : []),
   ];
 }
 
@@ -294,10 +295,10 @@ export function parseCompanionSettings(
       if (!parsed.success) throw new Error(`Invalid Superpi tier: ${String(settings.tier)}`);
       data.tier = parsed.data;
     } else if (key === "longContext") {
-      if (typeof settings.longContext !== "boolean") {
-        throw new Error("Superpi longContext setting must be a boolean");
+      if (typeof settings.longContext !== "boolean" && settings.longContext !== "true" && settings.longContext !== "false") {
+        throw new Error("Superpi longContext setting must be a boolean or true/false selection");
       }
-      data.longContext = settings.longContext;
+      data.longContext = settings.longContext === true || settings.longContext === "true";
     } else {
       throw new Error(`Superpi does not support the ${key} setting`);
     }
@@ -370,6 +371,8 @@ export class SuperpiSession {
   private store: SessionStore | null = null;
   private companion: ReturnType<typeof createCompanionChannel> | null = null;
   private companionState: CompanionState | undefined;
+  private deferredLongContext = false;
+  private deferredTier: string | undefined;
   private readonly capabilities: readonly string[];
   private readonly timeline: Timeline;
   private removeRecord: (() => void) | null = null;
@@ -492,6 +495,20 @@ export class SuperpiSession {
       // companion has restored any saved branch settings so explicit values
       // override the restored state, then publish the committed config.
       const explicitSettings = parseCompanionSettings(this.options.config.settings ?? {});
+      if (typeof explicitSettings.tier === "string") {
+        if (!hello.tiers?.length) {
+          this.deferredTier = explicitSettings.tier;
+          delete explicitSettings.tier;
+        } else {
+          const tier = this.resolveTierSelection(explicitSettings.tier);
+          if (tier) explicitSettings.tier = tier;
+          else delete explicitSettings.tier;
+        }
+      }
+      if (explicitSettings.longContext === true && !hello.longContextAvailable) {
+        this.deferredLongContext = true;
+        delete explicitSettings.longContext;
+      }
       if (Object.keys(explicitSettings).length > 0) {
         const reply = await companion.request("configure", explicitSettings);
         this.companionState = companionStateSchema.parse(reply);
@@ -537,6 +554,7 @@ export class SuperpiSession {
         this.emit({ type: "session.persistence", sessionId: this.sessionId, persistence: store.persistence });
       }
       this.state = "ready";
+      await this.enqueueOperation(() => this.applyDeferredSettings());
       this.emit({ type: "session.ready", requestId, sessionId: this.sessionId });
     } catch (error) {
       this.state = "failed";
@@ -782,8 +800,15 @@ export class SuperpiSession {
     const rpc = this.rpc;
     if (!rpc) throw new Error("Superpi session transport is not available");
     const settings = changes.settings;
+    if (settings && "tier" in settings) this.deferredTier = undefined;
+    if (settings && "longContext" in settings) this.deferredLongContext = false;
     if (settings) {
       const data = parseCompanionSettings(settings);
+      if (typeof data.tier === "string") {
+        const tier = this.resolveTierSelection(data.tier);
+        if (!tier) throw new Error(`Service tier '${data.tier}' is not advertised for the current model.`);
+        data.tier = tier;
+      }
       if (Object.keys(data).length > 0) {
         if (!this.companion) throw new Error("Superpi companion channel is not available");
         const reply = await this.companion.request("configure", data);
@@ -791,6 +816,8 @@ export class SuperpiSession {
       }
     }
     if (changes.model !== undefined) {
+      this.deferredLongContext = false;
+      this.deferredTier = undefined;
       if (changes.model === null) {
         throw new Error("Superpi cannot restore the Pi default model; choose an explicit model");
       }
@@ -810,6 +837,32 @@ export class SuperpiSession {
     }
     const config = await this.readConfigState();
     this.emit({ type: "session.config", sessionId: this.sessionId, config });
+  }
+
+  private resolveTierSelection(value: string): string | undefined {
+    const choices = this.companionState?.tiers ?? [];
+    if (choices.includes(value)) return value;
+    if (value === "fast" && choices.includes("priority")) return "priority";
+    if (value === "default") return choices.includes("auto") ? "auto" : choices.includes("standard") ? "standard" : undefined;
+    return undefined;
+  }
+
+  private async applyDeferredSettings(): Promise<void> {
+    const settings: Record<string, string | boolean> = {};
+    if (this.deferredTier !== undefined && this.companionState?.tiers?.length) {
+      const tier = this.resolveTierSelection(this.deferredTier);
+      this.deferredTier = undefined;
+      if (tier) settings.tier = tier;
+    }
+    if (this.deferredLongContext && this.companionState?.longContextAvailable) {
+      this.deferredLongContext = false;
+      settings.longContext = true;
+    }
+    if (!Object.keys(settings).length) return;
+    try { await this.applyConfiguration({ settings }); }
+    catch (error) {
+      this.emit({ type: "session.notice", sessionId: this.sessionId, notice: { id: "settings-restore", severity: "warning", title: "Saved settings could not be applied", description: toProviderError(error).message } });
+    }
   }
 
   private async handleDisposition(clientMessageId: string, result: unknown): Promise<void> {
@@ -930,6 +983,26 @@ export class SuperpiSession {
     const method = asString(record.method);
     if (method === "notify" && typeof record.message === "string") {
       const message = record.message;
+      if (message.startsWith(companionStatePrefix)) {
+        let parsed;
+        try { parsed = companionStateUpdateSchema.safeParse(JSON.parse(message.slice(companionStatePrefix.length))); } catch { return; }
+        if (!parsed.success || parsed.data.sessionKey !== this.sessionKey) return;
+        this.companionState = parsed.data.state;
+        if (parsed.data.state.contextPolicyError && this.state === "ready") {
+          this.emit({ type: "session.notice", sessionId: this.sessionId, notice: { id: "context-policy-apply", severity: "warning", title: "Context budget could not be applied", description: parsed.data.state.contextPolicyError } });
+        }
+        if (this.state === "ready") {
+          void this.enqueueOperation(async () => {
+            if (this.state !== "ready") return;
+            await this.applyDeferredSettings();
+            const config = await this.readConfigState();
+            this.emit({ type: "session.config", sessionId: this.sessionId, config });
+          }).catch((error) => {
+            if (this.state === "ready") this.emit({ type: "session.notice", sessionId: this.sessionId, notice: { id: "context-policy-refresh", severity: "warning", title: "Context settings could not be refreshed", description: toProviderError(error).message } });
+          });
+        }
+        return;
+      }
       if (message.startsWith(companionPrefix)) return;
       const envelope = parseSubpiChildEnvelope(message);
       if (envelope) {

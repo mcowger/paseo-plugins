@@ -178,6 +178,8 @@ export class FakePiRpc implements PiRpc {
       data =
         hello ?? {
           capabilities: ["tier", "context"],
+          tiers: ["default", "fast", "flex", "ultrafast"],
+          longContextAvailable: true,
           settings: { ...this.companionSettings },
           sessionId: "pi-session-1",
         };
@@ -192,6 +194,8 @@ export class FakePiRpc implements PiRpc {
       }
       data = this.options.companionStateProvider?.() ?? {
         capabilities: ["tier", "context"],
+        tiers: ["default", "fast", "flex", "ultrafast"],
+        longContextAvailable: true,
         settings: { ...this.companionSettings },
         sessionId: "pi-session-1",
       };

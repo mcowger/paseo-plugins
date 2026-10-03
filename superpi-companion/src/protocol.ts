@@ -5,6 +5,7 @@ export const PROTOCOL_VERSION = 1;
 
 /** Prefix placed on every `ctx.ui.notify` message that carries a companion reply. */
 export const NOTIFY_PREFIX = "superpi:v1:";
+export const STATE_NOTIFY_PREFIX = "superpi:state:v1:";
 
 /** Pi slash command that carries base64url-encoded control requests. */
 export const COMMAND_NAME = "superpi-control";
@@ -37,9 +38,8 @@ export const SESSION_KEY_ENV = "SUPERPI_SESSION_KEY";
 /** Optional launch environment variable marking the root owner. */
 export const ROLE_ENV = "SUPERPI_COMPANION_ROLE";
 
-export const TierSchema = z.enum(["default", "fast", "flex", "ultrafast"]);
+export const TierSchema = z.string().min(1).max(100);
 export type Tier = z.infer<typeof TierSchema>;
-export const TIERS: readonly Tier[] = ["default", "fast", "flex", "ultrafast"];
 
 export const SuperpiSettingsSchema = z.strictObject({
   tier: TierSchema,
@@ -162,6 +162,10 @@ export const SuperpiStateSchema = z.strictObject({
   origin: OriginSchema,
   tiers: z.array(TierSchema),
   longContextTarget: z.number().int().nonnegative().optional(),
+  longContextAvailable: z.boolean().optional(),
+  shortContextBudgetTokens: z.number().int().positive().optional(),
+  pricingThresholdInputTokens: z.number().int().positive().optional(),
+  contextPolicyError: z.string().optional(),
   modelBaselineContextWindow: z.number().int().nonnegative().optional(),
   tierApplicable: z.boolean(),
   conflicts: z.array(ConflictSchema),

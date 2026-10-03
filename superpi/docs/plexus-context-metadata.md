@@ -1,21 +1,20 @@
 # Plexus context metadata bridge
 
-Feasible without changing Paseo or running Pi in-process. This is an assessment,
-not an implemented metadata integration.
+Implemented without changing Paseo or running Pi in-process. `plexus-pi` owns
+policy metadata; the Superpi companion consumes its versioned event API.
 
 ## Current behavior
 
-Superpi's companion clones the current Pi model with a context budget of
-`max(model.contextWindow, 1_050_000)`. It applies that clone to the root session
-through Pi's public `setModel`. The catalog and child defaults aren't mutated.
-The 1,050,000 target came from the previous microgpt integration, not a Plexus
-capability lookup. Turning it on doesn't establish that a backend accepts it.
+Superpi's companion applies the published short budget when Long Context is Off
+and the published maximum when On. It uses a root-session clone through Pi's
+public `setModel`; the catalog and child defaults aren't mutated. The old fixed
+1,050,000 target has been removed.
 
 The composer now shows On/Off and the observed Pi budget. Its description shows
-the baseline and target. Superpi preserves those companion fields and refreshes
-them after model changes instead of retaining the old model's limits.
+the short budget, maximum, and optional input pricing threshold. The control is
+absent for models without a policy or with equal short/max budgets.
 
-## Recommended path
+## Data path
 
 1. Plexus publishes model context policy in `/v1/models`.
 2. `plexus-models` preserves it in the normalized descriptor/cache.
@@ -43,18 +42,21 @@ A minimal versioned policy row would contain `provider`, `modelId`,
 `shortContextBudgetTokens <= maxContextTokens`. Use exact provider/model keys,
 not display names or heuristics based on vendor strings.
 
-`plexus-pi` should own publication, since it already has the model snapshot and
-refresh lifecycle. Pair a snapshot event with a request event so a companion
-loaded after the initial publication can ask for the current snapshot. Give
-snapshots a revision and replace them atomically. A catalog refresh should
-publish a replacement, including removed policies, not merge stale rows forever.
-Keep the snapshot bounded and free of credentials.
+The consumer subscribes to `plexus:context-policy:snapshot:v1` before requesting
+`plexus:context-policy:request:v1` with `{version:1,requestId}`. It accepts
+correlated immediate replies and broadcasts from the established publisher.
+New publishers require correlation. Revisions cannot move backwards; snapshots
+replace the complete policy list. Requests time out after one second. Invalid
+or over-1-MiB snapshots are ignored; listeners/timers are cleaned up on shutdown.
 
 With metadata available, Off selects the short-mode budget and On selects the
-maximum capacity. No policy means retain Pi's declared budget and show Long
-Context as unavailable; don't fall back to 1,050,000. If the catalog refresh
+maximum capacity. No policy means retain Pi's declared budget and omit Long
+Context. If the catalog refresh
 removes or lowers a policy, re-evaluate the active model and report the new
-applied state. Reject enabling expansion when model application fails.
+applied state through session-key-scoped companion state notifications. Reject
+enabling expansion when model application fails. Policy removal clears the
+selection and restores the original catalog budget. Saved legacy On selections
+cannot expand models without a policy.
 
 Children have independent model selection and independent event buses. Their
 own `plexus-pi` instances can consume the same backend policy. Do not inherit the
@@ -79,10 +81,10 @@ records; that's separate from supplying root metadata.
 - Companion state and application:
   `superpi-companion/src/protocol.ts`, `src/context.ts`, and `src/companion.ts`.
 
-## Decisions before implementation
+## Policy semantics
 
-Agree on the short-mode budget semantics, whether expansion needs provider flags
-(for example a beta header), and what budget children use by default. Prefer
-Plexus-backed metadata over a second per-model settings database in Superpi.
-Manual overrides can wait unless there is a model source that cannot publish
-policy metadata.
+The implemented `plexus-pi` contract uses raw `context_length` as maximum and the
+first `pricing.tiers[].input_tokens_above` boundary as the intended short budget.
+Plexus defines that boundary for both purposes. Models without that boundary are
+omitted. Superpi does not infer missing values or add provider beta headers.
+There is no duplicate settings database or manual per-model override in Superpi.

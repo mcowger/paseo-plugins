@@ -72,7 +72,8 @@ describe("ConfigureDataSchema", () => {
   });
 
   it("rejects unknown keys and bad values", () => {
-    expect(ConfigureDataSchema.safeParse({ tier: "turbo" }).success).toBe(false);
+    expect(ConfigureDataSchema.safeParse({ tier: "turbo" }).success).toBe(true);
+    expect(ConfigureDataSchema.safeParse({ tier: "" }).success).toBe(false);
     expect(ConfigureDataSchema.safeParse({ longContext: "yes" }).success).toBe(false);
     expect(ConfigureDataSchema.safeParse({ extra: true }).success).toBe(false);
   });
@@ -80,7 +81,7 @@ describe("ConfigureDataSchema", () => {
 
 describe("formatIssues", () => {
   it("includes the path of failing fields", () => {
-    const parsed = ConfigureDataSchema.safeParse({ tier: "turbo" });
+    const parsed = ConfigureDataSchema.safeParse({ tier: "" });
     expect(parsed.success).toBe(false);
     if (parsed.success) return;
     expect(formatIssues(parsed.error)).toContain("tier");

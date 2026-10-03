@@ -11,11 +11,21 @@ that pin is not a claim that newer hosts are unsupported.
 
 ## Implemented
 
-- Model/thinking selection, visible Default/Fast/Flex/Ultrafast tier choices,
-  and a long-context toggle showing On/Off and the current Pi token budget.
+- Model/thinking selection and service-tier choices discovered per model from
+  `plexus-pi`, preserving advertised names. Models without tier support have no
+  service-tier selector. Catalog refreshes and model changes update it live.
+  A context-length selector shows rounded budgets such as `272K` and `1M` on
+  the button itself, with short/max choices. It appears only for models with
+  distinct short/max budgets supplied
+  by `plexus-pi`. Off uses the short budget; On uses the maximum. Models without
+  a short budget retain Pi's declared limit and have no context selector.
   Settings apply to subsequent requests without
   interrupting a response. Backend errors are surfaced, not hidden behind an
   eligibility matrix.
+  Legacy Fast selections migrate to advertised `priority`; unsupported saved
+  tiers use `auto` or `standard` while retaining the user's choice for compatible
+  models. Premium-only lists remain unselected until the user chooses. Plexus
+  handles upstream tier translation; Superpi sends the advertised spelling.
 - Private durable conversation handles and active-branch history restoration.
   Large histories are read from the owned Pi transcript instead of requesting
   one growing RPC response.
@@ -61,14 +71,14 @@ controls automatic compaction and manual compaction is idle-only.
 Daemon cleanup was tested on Linux. Windows descendant process-group cleanup
 is not implemented.
 
-Registry costs and expanded context windows are estimates/configured budgets,
-not verified billing or backend capacity. Text-only models receive a visible
+Registry costs are estimates, not verified billing. Context budgets come from
+Plexus policy metadata, not a separate backend probe. Text-only models receive a visible
 image-omission explanation rather than a claim that the image was analyzed.
 
 Host API gaps, including the built-in resume menu and harmless child-outline
 errors, are tracked in [PaseoShortcomings.md](docs/PaseoShortcomings.md).
-The fixed expanded budget is not model capability discovery; a possible
-replacement is described in [the Plexus metadata assessment](docs/plexus-context-metadata.md).
+The policy event contract and lifecycle are described in
+[the Plexus context integration](docs/plexus-context-metadata.md).
 
 ## Install
 

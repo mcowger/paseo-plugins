@@ -34,9 +34,9 @@ function controlEntry(tier: string): Record<string, unknown> {
 }
 
 function setup(seed: FakeContextSeed = {}) {
-  const pi = createFakePi();
+  const pi = createFakePi({ registry: seed.model ? [seed.model] : [] });
   const companion = createCompanion(pi.api, { origin: "root", sessionKey: KEY, now: () => 55 });
-  const fake = createFakeContext(seed);
+  const fake = createFakeContext({ ...seed, pi });
   return { pi, companion, ...fake };
 }
 
@@ -146,6 +146,7 @@ describe("rewind navigation", () => {
 
   it("restores companion controls from the rewound branch", async () => {
     const { pi, companion, ctx, notifies } = setup({
+      model: { provider: "plexus", id: "gpt", api: "openai-completions", contextWindow: 200000 },
       branch: [userEntry("u1"), assistantEntry("a1", "u1"), userEntry("u2", "a1"), controlEntry("ultrafast")],
       navigateLeafId: "a1",
     });

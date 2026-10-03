@@ -114,17 +114,21 @@ Zod defines the exact shape (`src/protocol.ts`). Undeclared keys are rejected.
 {
   capabilities: string[],                // implemented operations only
   settings: {
-    tier: "default" | "fast" | "flex" | "ultrafast",
+    tier: string,
     longContext: boolean
   },
   contextWindow?: number,                // current effective model window
   activeChildren?: number,               // owned bridge runs without a terminal record
   sessionId?: string,
   origin: "root" | "child",
-  tiers: ("default" | "fast" | "flex" | "ultrafast")[],
-  longContextTarget?: number,            // expanded budget advertised
-  modelBaselineContextWindow?: number,   // pre-expansion model baseline
-  tierApplicable: boolean,               // injectable for the current dialect
+  tiers: string[],                       // exact advertised choices for this model
+  longContextAvailable?: boolean,        // distinct short/max budgets apply
+  longContextTarget?: number,            // Plexus maximum context tokens
+  shortContextBudgetTokens?: number,     // Plexus short-mode budget
+  pricingThresholdInputTokens?: number,  // optional input pricing boundary
+  contextPolicyError?: string,           // model application failed
+  modelBaselineContextWindow?: number,   // original catalog budget
+  tierApplicable: boolean,               // selected tier is advertised for this model
   conflicts: { owner: string, command: string, resolution: string }[],
   limitations: string[]
 }
@@ -205,28 +209,67 @@ in-progress compaction is rejected.
 `data`:
 
 ```ts
-{ tier?: "default" | "fast" | "flex" | "ultrafast", longContext?: boolean }
+{ tier?: string, longContext?: boolean }
 ```
 
 Returns the same state. Behavior:
 
-- `tier` is stored and injected into `before_provider_request` only for known
-  API dialects: OpenAI Responses (`service_tier`; `fast` -> `"priority"`) and
-  Anthropic Messages (`speed: "fast"` + beta). Unknown dialects leave the
-  payload untouched and report `tierApplicable: false`.
-- `longContext` expands the current model's context window to the known owned
-  target `1_050_000` (from `pi-microgpt`) while recording the model baseline.
-  Turning it off, changing models, or session shutdown restores the baseline.
-  A missing model/context window returns an honest error and leaves the toggle
-  off.
+- `tier` must be advertised for the selected Plexus model. The companion sends
+  that exact name as `service_tier` in `before_provider_request`, including
+  OpenAI Completions and Anthropic-compatible requests. Plexus owns translation
+  to provider-native fields, values, and beta headers. Models without advertised
+  tiers have no selector and receive no injected tier.
+- `longContext` selects the Plexus maximum budget when on, or the published
+  short budget when off. Policies are requested from `plexus-pi` over Pi's public
+  event bus and updated from complete revisioned snapshots. Models without a
+  policy, or with equal short/max budgets, retain Pi's declared budget and have
+  no Long Context control. There is no fixed expansion fallback.
+- Budgets are applied to session-local model clones. The shared model catalog
+  and child defaults are untouched. Policy removal restores the catalog budget
+  and clears the toggle. Application failures are reported, not treated as a
+  successful toggle.
 - Runtime changes are persisted as branch-local `superpi-controls` custom
   session entries and restored on `session_start`/`session_tree`/`model_select`.
   Nothing is written to global Pi settings.
 
-## Known-owned values
+## Context-policy lifecycle
 
-- Expanded context target: `1_050_000` (`EXPANDED_CONTEXT_WINDOW`).
-- Tier mapping: `default` (no payload), `fast` -> `priority`, `flex`, `ultrafast`.
+The companion subscribes to `plexus:context-policy:snapshot:v1` and requests the
+current snapshot on `plexus:context-policy:request:v1`, setting up correlation
+before emitting because replies can be synchronous. An absent publisher times
+out after one second without blocking the agent indefinitely. Unknown publisher
+IDs require a correlated reply; stale revisions and invalid/oversized snapshots
+are ignored. Listeners and pending timers are removed on shutdown.
+
+The root re-evaluates budgets on startup, tree restoration, catalog policy
+broadcasts, and model selection. It publishes live state via
+`superpi:state:v1:{version:1,sessionKey,state}` notifications so Paseo can add,
+update, or remove the control without starting a model turn. Child companions
+never apply the root's context selection.
+Saved On intent is retained while startup metadata is loading/unavailable and
+applied when a qualifying policy arrives. A ready catalog without that model's
+policy clears the intent. Before each turn, the companion repairs any budget
+clone silently replaced by another extension's provider registration.
+
+## Service-tier lifecycle
+
+The companion requests `plexus:service-tiers:request:v1` and consumes complete
+snapshots on `plexus:service-tiers:snapshot:v1`. The same bounded, correlated,
+revision-aware lifecycle used for context policies applies. Both startup
+requests run concurrently. Broadcasts and model changes update the selector
+through the existing companion state notification.
+
+Names are preserved as advertised (for example `auto`, `standard`, `flex`,
+`priority`, `ultrafast`), not renamed to Fast/Default. Saved legacy `fast` maps to
+`priority` when available. Legacy `default`, removed selections, and unsupported
+selections after a model switch use `auto`, then `standard`; if neither is
+advertised, no tier is injected until the user chooses one. A premium-only list
+starts unselected, not at its first tier. Explicit new unsupported selections
+fail instead of silently falling back. With no policy, internal `default` means
+no tier injection; it is not a manufactured UI option. The chosen tier survives
+metadata loss and switches to models that cannot offer it, and is reapplied when
+supported again. Saved intent is retained while metadata loads.
+Children never inherit or inject the root's tier selection.
 
 ## Current gaps
 
@@ -239,8 +282,9 @@ Returns the same state. Behavior:
   never reports completion early.
 - Active owned children are counted only from the `pi-subagents` bridge; an
   unbridged child is not visible to the guard.
-- Backend acceptance of tier/context values is not verified; the state reports
-  what the companion configured, not what the backend honored.
+- Plexus supplies context-policy limits; the state reports Pi's applied budget,
+  not a separate backend probe. Backend acceptance of service-tier values is
+  not verified.
 - Conflict detection covers known/declared owners only, not arbitrary payload
   modifiers.
 - Pi is validated against the pinned `@earendil-works/pi-coding-agent` types and

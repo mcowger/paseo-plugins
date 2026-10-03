@@ -2,16 +2,14 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@e
 import { createSubagentBridgeTracker, formatChildForward } from "./bridge.ts";
 import { detectControlConflicts } from "./conflicts.ts";
 import {
-  clearExpandedContext,
-  EXPANDED_CONTEXT_WINDOW,
-  planExpandedContext,
-  planRestoredContext,
-  trackExpandedContext,
+  planContextBudget,
   type ContextWindowModel,
-  type ExpandedContextTracking,
+  type ContextTracking,
 } from "./context.ts";
+import { createContextPolicyConsumer } from "./context-policy.ts";
+import { createServiceTiersConsumer } from "./service-tiers.ts";
 import { buildRewindEntry, findActiveBranchUserEntry, navigationCancelled } from "./rewind.ts";
-import { applyTierToPayload, isTierApplicable } from "./tier.ts";
+import { applyTierToPayload, isTierApplicable, resolveSavedTier } from "./tier.ts";
 import {
   COMMAND_NAME,
   CompactDataSchema,
@@ -20,6 +18,7 @@ import {
   CUSTOM_ENTRY_TYPE,
   formatIssues,
   NOTIFY_PREFIX,
+  STATE_NOTIFY_PREFIX,
   parseRequestArg,
   PROTOCOL_VERSION,
   REWIND_ENTRY_TYPE,
@@ -31,7 +30,6 @@ import {
   SubagentBridgeRecordSchema,
   SuperpiReplySchema,
   SuperpiStateSchema,
-  TIERS,
   type Conflict,
   type ControlEntry,
   type Origin,
@@ -49,8 +47,6 @@ export interface CompanionOptions {
   origin?: Origin;
   /** Clock for persisted entry timestamps. */
   now?: () => number;
-  /** Override the expanded context budget. */
-  expandedContextWindow?: number;
 }
 
 export interface CompanionHandle {
@@ -79,8 +75,8 @@ const COMPANION_LIMITATIONS: readonly string[] = [
   "compact completion is awaited via Pi's documented callbacks/events; the companion never reports completion early",
   "host history replacement after rewind is the provider's supported-adapter concern, not a companion-invented reset event",
   "active owned children are counted from the pi-subagents bridge; children not bridged are not visible",
-  "tier values are injected only for known provider dialects; backend acceptance is not verified",
-  "long-context target is an integration budgeting limit, not confirmed backend capacity",
+  "advertised service tiers describe Plexus capabilities, not a routing or backend acceptance guarantee",
+  "context budgets come from Plexus policy metadata; models without distinct short/max budgets have no long-context control",
 ];
 
 /**
@@ -136,7 +132,6 @@ type CompactOutcome = { ok: true } | { ok: false; error: string };
 
 export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}): CompanionHandle {
   const now = options.now ?? (() => Date.now());
-  const expandedTarget = options.expandedContextWindow ?? EXPANDED_CONTEXT_WINDOW;
   const expectedSessionKey = normalizeKey(options.sessionKey ?? process.env[SESSION_KEY_ENV]);
 
   pi.registerFlag(ROOT_FLAG, {
@@ -154,9 +149,93 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
   const rootFlagged = () => (options.origin ? options.origin === "root" : pi.getFlag(ROOT_FLAG) === true);
 
   const settings: { tier: Tier; longContext: boolean } = { tier: "default", longContext: false };
-  const tracking: ExpandedContextTracking = { model: undefined, baseline: undefined };
+  let desiredLongContext = false;
+  let desiredTier = "default";
+  const tracking: ContextTracking = { model: undefined, baseline: undefined };
   const bridgeTracker = createSubagentBridgeTracker(expectedSessionKey ?? "");
   let applyingModel = false;
+  let contextError: string | undefined;
+  let policyContext: ExtensionContext | undefined;
+  let contextReady = false;
+  let contextClosed = false;
+  let contextBarrier: Promise<unknown> = Promise.resolve();
+  let initialPolicies: Promise<void> | undefined;
+  const policies = createContextPolicyConsumer(pi.events, () => {
+    if (!contextReady || !policyContext || contextClosed) return;
+    void enqueueContext(async () => {
+      const ctx = policyContext;
+      if (!ctx || contextClosed) return;
+      const wasEnabled = settings.longContext;
+      await reconcileContext(ctx, desiredLongContext);
+      if (wasEnabled !== settings.longContext) persist();
+      publishState(ctx);
+    });
+  });
+  const serviceTiers = createServiceTiersConsumer(pi.events, () => {
+    if (!contextReady || !policyContext || contextClosed) return;
+    void enqueueContext(async () => {
+      const ctx = policyContext;
+      if (!ctx || contextClosed) return;
+      const before = settings.tier;
+      reconcileTier(ctx);
+      if (before !== settings.tier) persist();
+      publishState(ctx);
+    });
+  });
+
+  function tierChoices(ctx: ExtensionContext): readonly string[] {
+    return ctx.model?.provider === "plexus" ? serviceTiers.policy(ctx.model)?.serviceTiers ?? [] : [];
+  }
+
+  function reconcileTier(ctx: ExtensionContext): void {
+    const choices = tierChoices(ctx);
+    settings.tier = resolveSavedTier(desiredTier, choices);
+    if (choices.includes(desiredTier) || (desiredTier === "fast" && settings.tier === "priority") || (desiredTier === "default" && (settings.tier === "auto" || settings.tier === "standard"))) desiredTier = settings.tier;
+  }
+
+  function enqueueContext<T>(operation: () => Promise<T>): Promise<T> {
+    const run = contextBarrier.then(operation, operation);
+    contextBarrier = run.catch(() => undefined);
+    return run;
+  }
+
+  async function initializeContext(ctx: ExtensionContext): Promise<void> {
+    if (origin() !== "root" || contextClosed) return;
+    policyContext = ctx;
+    initialPolicies ??= Promise.all([policies.request(), serviceTiers.request()]).then(() => undefined);
+    await initialPolicies;
+  }
+
+  function publishState(ctx: ExtensionContext): void {
+    if (!expectedSessionKey || origin() !== "root" || contextClosed) return;
+    ctx.ui.notify(`${STATE_NOTIFY_PREFIX}${JSON.stringify({ version: 1, sessionKey: expectedSessionKey, state: buildState(ctx) })}`, "info");
+  }
+
+  async function reconcileContext(ctx: ExtensionContext, enabled = settings.longContext): Promise<boolean> {
+    if (contextClosed) return false;
+    const current = ctx.model;
+    const catalog = current ? ctx.modelRegistry.find(current.provider, current.id) : undefined;
+    const source = catalog ?? current;
+    const sourceTracking = catalog && tracking.model !== catalog ? { model: undefined, baseline: undefined } : tracking;
+    const policy = policies.policy(source);
+    const plan = planContextBudget(sourceTracking, source, policy, enabled);
+    if (!plan) {
+      settings.longContext = false;
+      contextError = undefined;
+      return false;
+    }
+    if (current?.contextWindow !== plan.model.contextWindow && !(await applySessionModel(plan.model))) {
+      contextError = "Pi could not apply the context policy budget.";
+      return false;
+    }
+    if (contextClosed) return false;
+    contextError = undefined;
+    tracking.model = plan.available ? source : undefined;
+    tracking.baseline = plan.available ? plan.baseline : undefined;
+    settings.longContext = enabled && plan.available;
+    if (plan.available || policies.status() === "ready") desiredLongContext = settings.longContext;
+    return true;
+  }
 
   let compactionActive = false;
   let pendingCompact: { settle: (outcome: CompactOutcome) => void } | undefined;
@@ -193,13 +272,15 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     const model = ctx.model;
     const contextWindow = typeof model?.contextWindow === "number" ? model.contextWindow : undefined;
     const sessionId = readSessionId(ctx);
+    const policy = policies.policy(model);
+    const available = root && policy !== undefined && policy.shortContextBudgetTokens < policy.maxContextTokens;
     const state: SuperpiState = {
       capabilities: root ? [...COMPANION_CAPABILITIES] : [],
       settings: { tier: settings.tier, longContext: settings.longContext },
       origin: origin(),
-      tiers: [...TIERS],
-      longContextTarget: expandedTarget,
-      tierApplicable: isTierApplicable(model, settings.tier),
+      tiers: [...tierChoices(ctx)],
+      longContextAvailable: available,
+      tierApplicable: isTierApplicable(model, settings.tier, serviceTiers.policy(model)),
       conflicts: conflicts(),
       limitations: [...COMPANION_LIMITATIONS],
     };
@@ -207,6 +288,12 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     if (contextWindow !== undefined) state.contextWindow = contextWindow;
     if (sessionId !== undefined) state.sessionId = sessionId;
     if (tracking.baseline !== undefined) state.modelBaselineContextWindow = tracking.baseline;
+    if (policy) {
+      state.longContextTarget = policy.maxContextTokens;
+      state.shortContextBudgetTokens = policy.shortContextBudgetTokens;
+      if (policy.pricingThresholdInputTokens !== undefined) state.pricingThresholdInputTokens = policy.pricingThresholdInputTokens;
+    }
+    if (contextError) state.contextPolicyError = contextError;
     return SuperpiStateSchema.parse(state);
   }
 
@@ -227,7 +314,7 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
   function persist(): void {
     pi.appendEntry(CUSTOM_ENTRY_TYPE, {
       version: PROTOCOL_VERSION,
-      tier: settings.tier,
+      tier: desiredTier,
       longContext: settings.longContext,
       ...(tracking.baseline !== undefined ? { contextWindow: tracking.baseline } : {}),
       timestamp: now(),
@@ -244,35 +331,19 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     return latest;
   }
 
-  async function restoreBaseline(ctx: ExtensionContext): Promise<boolean> {
-    const restored = planRestoredContext(tracking, ctx.model);
-    if (!restored) return true;
-    if (!(await applySessionModel(restored))) return false;
-    clearExpandedContext(tracking);
-    return true;
-  }
-
   async function restore(ctx: ExtensionContext): Promise<void> {
     if (origin() !== "root") return;
-    // Re-derive the baseline clone before reading persisted controls, so a
-    // tracked expansion is never planned against its own expanded window. If
-    // the baseline cannot be restored, leave the session as it is.
-    if (!(await restoreBaseline(ctx))) return;
-    const entry = latestControlEntry(ctx);
-    if (!entry) {
-      settings.tier = "default";
+    await initializeContext(ctx);
+    await enqueueContext(async () => {
+      const entry = latestControlEntry(ctx);
+      desiredTier = entry?.tier ?? "default";
+      reconcileTier(ctx);
       settings.longContext = false;
-      return;
-    }
-    settings.tier = entry.tier;
-    settings.longContext = entry.longContext;
-    if (entry.longContext) {
-      // Failure here (no current model) leaves the selection set; model_select re-applies.
-      const plan = planExpandedContext(tracking, ctx.model, expandedTarget);
-      if (plan.ok && (await applySessionModel(plan.model))) {
-        trackExpandedContext(tracking, plan.source, plan.baseline);
-      }
-    }
+      desiredLongContext = entry?.longContext ?? false;
+      await reconcileContext(ctx, desiredLongContext);
+      contextReady = true;
+      publishState(ctx);
+    });
   }
 
   function settleCompact(outcome: CompactOutcome): void {
@@ -363,48 +434,28 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     }
 
     const before = { tier: settings.tier, longContext: settings.longContext };
-    const nextTier = parsed.data.tier ?? settings.tier;
+    const choices = tierChoices(ctx);
+    const requestedTier = parsed.data.tier;
+    const nextTier = requestedTier === undefined ? settings.tier : choices.includes(requestedTier) ? requestedTier : requestedTier === "fast" ? "priority" : requestedTier === "default" ? resolveSavedTier(requestedTier, choices) : requestedTier;
+    if (requestedTier !== undefined && !choices.includes(nextTier)) {
+      emit(ctx, { ...base(request), ok: false, data: buildState(ctx), error: `Service tier '${requestedTier}' is not advertised for the current model.` });
+      return;
+    }
     const nextLongContext = parsed.data.longContext ?? settings.longContext;
 
-    // Plan every model change before mutating any selection, so a model that
-    // cannot be expanded leaves the previous tier and toggle untouched and
-    // nothing is persisted for a configuration that never applied.
-    const expandPlan =
-      nextLongContext && !settings.longContext
-        ? planExpandedContext(tracking, ctx.model, expandedTarget)
-        : undefined;
-    if (expandPlan && !expandPlan.ok) {
-      emit(ctx, { ...base(request), ok: false, data: buildState(ctx), error: expandPlan.error });
+    const policy = policies.policy(ctx.model);
+    if (nextLongContext && (!policy || policy.shortContextBudgetTokens >= policy.maxContextTokens)) {
+      emit(ctx, { ...base(request), ok: false, data: buildState(ctx), error: "The current model has no distinct short and long context budgets." });
+      return;
+    }
+    if (parsed.data.longContext !== undefined && !(await reconcileContext(ctx, nextLongContext)) && ctx.model) {
+      emit(ctx, { ...base(request), ok: false, data: buildState(ctx), error: contextError ?? "The current model has no known context window." });
       return;
     }
 
-    if (expandPlan?.ok) {
-      if (!(await applySessionModel(expandPlan.model))) {
-        emit(ctx, {
-          ...base(request),
-          ok: false,
-          data: buildState(ctx),
-          error: "could not move the session to the expanded model",
-        });
-        return;
-      }
-      trackExpandedContext(tracking, expandPlan.source, expandPlan.baseline);
-    } else if (!nextLongContext && settings.longContext) {
-      const restored = planRestoredContext(tracking, ctx.model);
-      if (restored && !(await applySessionModel(restored))) {
-        emit(ctx, {
-          ...base(request),
-          ok: false,
-          data: buildState(ctx),
-          error: "could not restore the session model baseline",
-        });
-        return;
-      }
-      clearExpandedContext(tracking);
-    }
-
     settings.tier = nextTier;
-    settings.longContext = nextLongContext;
+    if (requestedTier !== undefined) desiredTier = nextTier;
+    if (parsed.data.longContext !== undefined) desiredLongContext = settings.longContext;
     if (before.tier !== settings.tier || before.longContext !== settings.longContext) persist();
 
     emit(ctx, { ...base(request), ok: true, data: buildState(ctx) });
@@ -571,6 +622,10 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
       return;
     }
 
+    await initializeContext(ctx);
+    await contextBarrier;
+    contextReady = true;
+
     switch (request.operation) {
       case "hello":
         handleHello(request, ctx);
@@ -579,7 +634,7 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
         emit(ctx, { ...base(request), ok: true, data: buildState(ctx) });
         return;
       case "configure":
-        await handleConfigure(request, ctx);
+        await enqueueContext(() => handleConfigure(request, ctx));
         return;
       case "rewind":
         await handleRewind(request, ctx);
@@ -606,19 +661,34 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     if (origin() !== "root") return;
     // Our own session-only setModel call must not re-enter expansion.
     if (applyingModel) return;
-    if (!settings.longContext) return;
-    // Catalog guard: only react to genuine catalog selections, never the
-    // session-local clone already carrying the expanded window (absent from the
-    // registry). Old-baseline guard: the tracked source is already expanded.
-    if (ctx.modelRegistry.find(event.model.provider, event.model.id) !== event.model) return;
-    if (tracking.model === event.model && tracking.baseline !== undefined) return;
-    const plan = planExpandedContext(tracking, event.model, expandedTarget);
-    if (plan.ok && (await applySessionModel(plan.model))) {
-      trackExpandedContext(tracking, plan.source, plan.baseline);
-    }
+    // Pi's selectable snapshot may use a different object from registry.find.
+    // Resolve by identity, and ignore an event for a model no longer selected.
+    if (!ctx.modelRegistry.find(event.model.provider, event.model.id) || ctx.model !== event.model) return;
+    await initializeContext(ctx);
+    await enqueueContext(async () => {
+      tracking.model = undefined;
+      tracking.baseline = undefined;
+      const wasEnabled = settings.longContext;
+      const previousTier = settings.tier;
+      reconcileTier(ctx);
+      await reconcileContext(ctx, desiredLongContext);
+      if (wasEnabled !== settings.longContext || previousTier !== settings.tier) persist();
+      contextReady = true;
+      publishState(ctx);
+    });
   });
   pi.on("session_before_compact", () => {
     compactionActive = true;
+  });
+  pi.on("before_agent_start", async (_event, ctx) => {
+    if (origin() !== "root" || contextClosed) return;
+    await initializeContext(ctx);
+    await enqueueContext(async () => {
+      if (contextClosed) return;
+      await reconcileContext(ctx, desiredLongContext);
+      if (contextError) throw new Error(contextError);
+      publishState(ctx);
+    });
   });
   pi.on("session_compact", () => {
     settleCompact({ ok: true });
@@ -627,15 +697,21 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     settleCompact({ ok: false, error: event.errorMessage ?? "compaction was aborted" });
   });
   pi.on("session_shutdown", () => {
+    contextClosed = true;
+    contextReady = false;
+    policyContext = undefined;
+    policies.close();
+    serviceTiers.close();
     disposeBridge();
     settleCompact({ ok: false, error: "session shut down before compaction completed" });
     // The catalog object was never mutated, so shutdown only drops per-session
     // tracking; there is no registry window to restore.
-    if (origin() === "root") clearExpandedContext(tracking);
+    tracking.model = undefined;
+    tracking.baseline = undefined;
   });
   pi.on("before_provider_request", (event, ctx) => {
     if (origin() !== "root") return undefined;
-    return applyTierToPayload(event.payload, ctx.model, settings.tier);
+    return applyTierToPayload(event.payload, ctx.model, settings.tier, serviceTiers.policy(ctx.model));
   });
 
   pi.registerCommand(COMMAND_NAME, {
