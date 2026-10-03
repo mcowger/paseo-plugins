@@ -69,6 +69,18 @@ export class SessionStore {
   get data(): Readonly<Manifest> { return { ...this.manifest }; }
   get persistence(): ProviderPersistence { return { version: 1, data: { id: this.manifest.id } }; }
 
+  static async readTranscript(root: string, cwd: string, persistence: ProviderPersistence): Promise<string | undefined> {
+    if (persistence.version !== 1) throw new Error("Unsupported Superpi persistence version");
+    const { id } = handleSchema.parse(persistence.data);
+    const realRoot = await fs.realpath(root);
+    const directory = path.join(realRoot, id);
+    if (await fs.realpath(directory) !== directory) throw new Error("Session directory cannot be a symbolic link");
+    const manifest = manifestSchema.parse(await readJson(path.join(directory, "manifest.json")));
+    if (manifest.id !== id || manifest.cwd !== await fs.realpath(cwd)) throw new Error("Session persistence does not belong to this workspace");
+    const reader = new SessionStore(directory, manifest, async () => {});
+    return reader.transcript();
+  }
+
   async transcript(): Promise<string | undefined> {
     return this.manifest.nativeSessionFile ? this.resolveTranscript(this.manifest.nativeSessionFile) : undefined;
   }

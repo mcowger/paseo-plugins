@@ -17,6 +17,7 @@ import type {
 import {
   companionPrefix,
   companionStateSchema,
+  contextSettingPresentation,
   tierSchema,
   type CompanionState,
 } from "../shared/companion.js";
@@ -143,7 +144,7 @@ export function mapPiModels(
     const { thinkingOptions, defaultThinkingOptionId } = resolvePiThinkingOptions(raw);
     mapped.push({
       id: fullId,
-      label: `${provider}/${name}`,
+      label: name,
       description: fullId,
       isSelectable: true,
       metadata: { provider, modelId: id },
@@ -167,6 +168,20 @@ export function mapPiThinkingLevels(levels: readonly string[]): ProviderThinking
   });
 }
 
+const PI_RPC_COMMANDS: readonly ProviderCommand[] = [
+  { name: "compact", description: "Manually compact the session context", argumentHint: "[instructions]" },
+  { name: "autocompact", description: "Toggle automatic context compaction", argumentHint: "[on|off|toggle]" },
+  { name: "model", description: "Set model (or use the composer picker)", argumentHint: "<provider/model>" },
+  { name: "thinking", description: "Set thinking level", argumentHint: "<level>" },
+  { name: "name", description: "Set Pi session display name", argumentHint: "<name>" },
+  { name: "session", description: "Show Pi session info and stats" },
+];
+
+const PI_TUI_COMMANDS = new Set([
+  "settings", "tree", "scoped-models", "export", "import", "share", "bug", "copy",
+  "changelog", "hotkeys", "fork", "clone", "trust", "login", "logout", "new", "resume", "reload", "quit",
+]);
+
 export function mapPiCommands(commands: readonly unknown[]): ProviderCommand[] {
   const mapped: ProviderCommand[] = [];
   for (const raw of commands) {
@@ -176,7 +191,8 @@ export function mapPiCommands(commands: readonly unknown[]): ProviderCommand[] {
     if (name === "superpi-control") continue;
     mapped.push({ name, description: asString(raw.description) ?? "" });
   }
-  return mapped;
+  const names = new Set(mapped.map((command) => command.name));
+  return [...PI_RPC_COMMANDS.filter((command) => !names.has(command.name)), ...mapped];
 }
 
 function parsePiState(data: unknown): {
@@ -230,9 +246,10 @@ const TIER_LABELS: Record<Tier, string> = {  default: "Default",
   ultrafast: "Ultrafast",
 };
 
-function buildCompanionSettings(state: CompanionState | undefined): ProviderSetting[] {
+function buildCompanionSettings(state: CompanionState | undefined, modelContextWindow?: number): ProviderSetting[] {
   const tier = state?.settings.tier ?? "default";
   const longContext = state?.settings.longContext ?? false;
+  const context = contextSettingPresentation(state, modelContextWindow);
   return [
     {
       type: "select",
@@ -245,8 +262,8 @@ function buildCompanionSettings(state: CompanionState | undefined): ProviderSett
     {
       type: "toggle",
       id: "longContext",
-      label: "Long context",
-      description: "Expand the effective context budget for the next request",
+      label: context.label,
+      description: context.description,
       value: longContext,
     },
   ];
@@ -481,10 +498,9 @@ export class SuperpiSession {
       }
 
       const config = await this.readConfigState();
-      const commands = mapPiCommands(
-        extractArray(await rpc.request({ type: "get_commands" }), "commands"),
-      );
-      this.extensionCommands = new Set(commands.map((command) => command.name));
+      const nativeCommands = extractArray(await rpc.request({ type: "get_commands" }), "commands");
+      const commands = mapPiCommands(nativeCommands);
+      this.extensionCommands = new Set(nativeCommands.flatMap((command) => isRecord(command) && asString(command.name) && command.name !== "superpi-control" ? [String(command.name)] : []));
 
       this.emit({
         type: "session.opened",
@@ -549,7 +565,7 @@ export class SuperpiSession {
       models,
       modes: [],
       thinkingOptions,
-      settings: buildCompanionSettings(this.companionState),
+      settings: buildCompanionSettings(this.companionState, isRecord(state.model) && typeof state.model.contextWindow === "number" ? state.model.contextWindow : undefined),
     };
   }
 
@@ -584,9 +600,20 @@ export class SuperpiSession {
     if (prompt.delivery === "steer") {
       throw new Error("Superpi does not support steering yet");
     }
-    if (prompt.input.type === "command" && prompt.input.name === "compact") {
-      await this.runCompactCommand(prompt, prompt.input.arguments);
-      return;
+    const text = prompt.input.type === "message" && prompt.input.content.every((part) => part.type === "text")
+      ? prompt.input.content.map((part) => part.type === "text" ? part.text : "").join("\n").trim()
+      : undefined;
+    const typedCommand = text ? /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(text) : null;
+    const command = prompt.input.type === "command" ? prompt.input : typedCommand ? { name: typedCommand[1]!, arguments: typedCommand[2] ?? "" } : undefined;
+    if (command && !this.extensionCommands.has(command.name)) {
+      if (command.name === "compact") {
+        await this.runCompactCommand(prompt, command.arguments);
+        return;
+      }
+      if (PI_RPC_COMMANDS.some((entry) => entry.name === command.name) || PI_TUI_COMMANDS.has(command.name) || command.name === "superpi-control") {
+        await this.runNativeCommand(prompt, command.name, command.arguments);
+        return;
+      }
     }
     const rpc = this.rpc;
     // Admit synchronously, before any await (prompt building, manifest write),
@@ -675,6 +702,56 @@ export class SuperpiSession {
     }
   }
 
+  private async runNativeCommand(prompt: ProviderPrompt, name: string, args: string): Promise<void> {
+    try {
+      await this.enqueueOperation(async () => {
+        const rpc = this.rpc;
+        if (!rpc) throw new Error("Superpi session transport is not available");
+        switch (name) {
+          case "autocompact": {
+            const value = args.trim() || "toggle";
+            if (!["on", "off", "toggle"].includes(value)) throw new Error("Use /autocompact [on|off|toggle].");
+            const state = await rpc.request({ type: "get_state" });
+            if (value === "toggle" && (!isRecord(state) || typeof state.autoCompactionEnabled !== "boolean")) throw new Error("Pi did not report its automatic compaction state; use on or off.");
+            const enabled = value === "on" || (value === "toggle" && isRecord(state) && state.autoCompactionEnabled === false);
+            await rpc.request({ type: "set_auto_compaction", enabled });
+            const applied = await rpc.request({ type: "get_state" });
+            if (!isRecord(applied) || typeof applied.autoCompactionEnabled !== "boolean") throw new Error("Pi did not confirm its automatic compaction state.");
+            this.commandNotice(`Automatic compaction: ${applied.autoCompactionEnabled ? "on" : "off"}. This updates Pi's global compaction preference; project overrides may take precedence.`);
+            break;
+          }
+          case "model": {
+            if (!args.trim()) throw new Error("Use /model <provider/model>, or choose a model in the composer.");
+            await this.applyConfiguration({ model: args.trim() });
+            break;
+          }
+          case "thinking": {
+            if (!PI_THINKING_OPTIONS.some((option) => option.id === args.trim())) throw new Error("Use /thinking <off|minimal|low|medium|high|xhigh|max>.");
+            await this.applyConfiguration({ thinkingOption: args.trim() });
+            break;
+          }
+          case "name":
+            if (!args.trim()) throw new Error("Use /name <name>.");
+            await rpc.request({ type: "set_session_name", name: args.trim() });
+            this.commandNotice(`Pi session name: ${args.trim()}.`);
+            break;
+          case "session":
+            this.commandNotice(JSON.stringify(await rpc.request({ type: "get_session_stats" })) ?? "Pi returned no session statistics.");
+            break;
+          default:
+            throw new Error(`/${name} requires Pi's terminal UI and isn't available through Superpi. Use the Paseo controls or resume Pi in a terminal.`);
+        }
+      });
+      this.emit({ type: "session.prompt_result", sessionId: this.sessionId, clientMessageId: prompt.clientMessageId, result: { type: "completed" } });
+    } catch (error) {
+      this.emit({ type: "session.prompt_result", sessionId: this.sessionId, clientMessageId: prompt.clientMessageId, result: { type: "failed", error: toProviderError(error) } });
+    }
+  }
+
+  private commandNotice(message: string): void {
+    this.emit({ type: "timeline.item", sessionId: this.sessionId, item: { type: "notification", id: `${this.sessionId}:command:${++this.notificationCounter}`, level: "info", message } });
+  }
+
   async configure(requestId: string, changes: ProviderConfigChanges): Promise<void> {
     if (this.state !== "ready" || !this.rpc) {
       this.emit({
@@ -719,6 +796,14 @@ export class SuperpiSession {
       }
       const parsed = parseModelId(changes.model);
       await rpc.request({ type: "set_model", provider: parsed.provider, modelId: parsed.modelId });
+      if (this.companion) {
+        try { this.companionState = companionStateSchema.parse(await this.companion.request("get-state")); }
+        catch (error) {
+          if (this.companionState) this.companionState = { capabilities: this.companionState.capabilities, settings: this.companionState.settings };
+          this.emit({ type: "session.config", sessionId: this.sessionId, config: await this.readConfigState() });
+          throw error;
+        }
+      }
     }
     if (changes.thinkingOption !== undefined) {
       await rpc.request({ type: "set_thinking_level", level: changes.thinkingOption ?? "off" });
@@ -1428,6 +1513,7 @@ export class SuperpiSession {
       capabilities: this.companionState?.capabilities ?? [],
       settings,
     });
+    if (this.companion) this.companionState = companionStateSchema.parse(await this.companion.request("get-state"));
     this.timeline.reset();
     const history = await this.readActiveHistory({ messages: true });
     this.userRevertTokens = history.tokens;

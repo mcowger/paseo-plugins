@@ -1,5 +1,7 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { DialogEditorScreen } from "./client/dialog-editor";
+import { copyText } from "@getpaseo/plugin/client/react-native";
+import { resumeCommandRpc } from "./shared/resume";
 
 export default function contribute(client: PluginClientContext): () => void {
   const removeScreen = client.addSettingsScreen({
@@ -15,5 +17,16 @@ export default function contribute(client: PluginClientContext): () => void {
     context: "global",
     onSelect({ openSettings }) { openSettings("superpi-dialogs"); },
   });
-  return () => { removeCommand(); removeScreen(); };
+  const removeResume = client.addCommandCenterItem({
+    id: "copy-resume-command",
+    title: "Superpi: Copy Pi resume command (stop session first)",
+    icon: "Copy",
+    context: "agent",
+    keywords: ["resume", "terminal", "pi"],
+    async onSelect({ agent, rpc }) {
+      const { command } = await rpc(resumeCommandRpc, { agentId: agent.id });
+      await copyText(command);
+    },
+  });
+  return () => { removeResume(); removeCommand(); removeScreen(); };
 }

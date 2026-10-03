@@ -181,6 +181,8 @@ describe("session open", () => {
     expect(config?.thinkingOption).toBe("high");
     expect(config?.modes).toEqual([]);
     expect(config?.models.map((model) => model.id)).toEqual(["test/reasoner", "test/plain"]);
+    expect(config?.models.map((model) => model.label)).toEqual(["Reasoner", "Plain"]);
+    expect(config?.models.map((model) => model.description)).toEqual(["test/reasoner", "test/plain"]);
     const reasoner = config?.models.find((model) => model.id === "test/reasoner");
     expect(reasoner?.thinkingOptions?.map((option) => option.id)).toEqual([
       "off",
@@ -191,10 +193,13 @@ describe("session open", () => {
     ]);
     expect(config?.thinkingOptions.map((option) => option.id)).toEqual(["off", "high"]);
     expect(config?.settings.map((setting) => setting.id)).toEqual(["tier", "longContext"]);
+    expect(config?.settings.find((setting) => setting.id === "longContext")?.label).toBe("Long context: Off (2,000 tokens)");
 
-    expect(ofType(events, "session.commands")[0]?.commands).toEqual([
+    expect(ofType(events, "session.commands")[0]?.commands).toEqual(expect.arrayContaining([
+      { name: "compact", description: "Manually compact the session context", argumentHint: "[instructions]" },
+      { name: "autocompact", description: "Toggle automatic context compaction", argumentHint: "[on|off|toggle]" },
       { name: "skill", description: "Run a skill" },
-    ]);
+    ]));
     expect(ofType(events, "session.persistence")).toHaveLength(1);
     expect(ofType(events, "session.ready")[0]?.requestId).toBe("open-1");
 
@@ -908,6 +913,88 @@ describe("stage 2 configuration", () => {
     expect(fake.requestsOfType("compact").at(-1)).toMatchObject({ customInstructions: "tight" });
     await session.close();
   });
+
+  it("dispatches typed /compact without sending it to the model or opening a turn", async () => {
+    const { session, fake, events } = harness();
+    await session.open("open-1");
+    await session.prompt({ clientMessageId: "c1", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "/compact keep the plan" }] } });
+    expect(fake.requestsOfType("compact")).toEqual([{ type: "compact", customInstructions: "keep the plan" }]);
+    expect(fake.requestsOfType("prompt").some((entry) => entry.message === "/compact keep the plan")).toBe(false);
+    expect(ofType(events, "session.turn")).toHaveLength(0);
+    expect(ofType(events, "session.prompt_result").at(-1)?.result.type).toBe("completed");
+    await session.close();
+  });
+
+  it("dispatches native controls and rejects unavailable TUI commands without model work", async () => {
+    let autoCompactionEnabled = false;
+    const fake = new FakePiRpc({
+      stateProvider: () => ({ sessionId: "pi-session-1", autoCompactionEnabled }),
+      onRequest: (command) => { if (command.type === "set_auto_compaction") autoCompactionEnabled = command.enabled === true; },
+    });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    for (const [name, args] of [["autocompact", ""], ["autocompact", "off"], ["model", "test/model"], ["thinking", "high"], ["name", "New title"], ["session", ""], ["resume", ""], ["autocompact", "wrong"], ["model", ""], ["thinking", "wrong"]]) {
+      await session.prompt({ clientMessageId: `${name}-${args}`, delivery: "auto", input: { type: "command", name: name!, arguments: args! } });
+    }
+    expect(fake.requestsOfType("set_auto_compaction")).toEqual([{ type: "set_auto_compaction", enabled: true }, { type: "set_auto_compaction", enabled: false }]);
+    expect(fake.requestsOfType("set_model")).toContainEqual({ type: "set_model", provider: "test", modelId: "model" });
+    expect(fake.requestsOfType("set_thinking_level")).toEqual([{ type: "set_thinking_level", level: "high" }]);
+    expect(fake.requestsOfType("set_session_name")).toEqual([{ type: "set_session_name", name: "New title" }]);
+    expect(fake.requestsOfType("get_session_stats")).toHaveLength(1);
+    expect(fake.requestsOfType("prompt").filter((entry) => !String(entry.message).startsWith("/superpi-control "))).toHaveLength(0);
+    expect(ofType(events, "session.prompt_result").slice(-4).every((event) => event.result.type === "failed")).toBe(true);
+    await session.close();
+  });
+
+  it("keeps extension-owned built-in names on the native extension path", async () => {
+    const fake = new FakePiRpc({ commands: [{ name: "superpi-control" }, { name: "session", description: "Extension session command" }], promptDisposition: "handled" });
+    const { session } = harness({ fake });
+    await session.open("open-1");
+    await session.prompt({ clientMessageId: "c1", delivery: "auto", input: { type: "command", name: "session", arguments: "custom" } });
+    expect(fake.requestsOfType("prompt")).toContainEqual({ type: "prompt", message: "/session custom" });
+    expect(fake.requestsOfType("get_session_stats")).toHaveLength(0);
+    await session.close();
+  });
+
+  it("rejects the private companion command before invoking Pi", async () => {
+    const { session, fake, events } = harness();
+    await session.open("open-1");
+    const count = fake.requestsOfType("prompt").length;
+    await session.prompt({ clientMessageId: "private", delivery: "auto", input: { type: "command", name: "superpi-control", arguments: "forged" } });
+    expect(fake.requestsOfType("prompt")).toHaveLength(count);
+    expect(ofType(events, "session.prompt_result").at(-1)?.result.type).toBe("failed");
+    await session.close();
+  });
+
+  it("reports effective auto-compaction when project settings override the global preference", async () => {
+    const fake = new FakePiRpc({ stateProvider: () => ({ autoCompactionEnabled: false }) });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    await session.prompt({ clientMessageId: "auto", delivery: "auto", input: { type: "command", name: "autocompact", arguments: "on" } });
+    expect(fake.requestsOfType("set_auto_compaction")).toEqual([{ type: "set_auto_compaction", enabled: true }]);
+    expect(ofType(events, "timeline.item").at(-1)?.item).toMatchObject({ type: "notification", message: expect.stringContaining("Automatic compaction: off.") });
+    await session.close();
+  });
+
+  it("publishes the applied model even when companion metadata refresh fails", async () => {
+    let modelId = "first";
+    const fake = new FakePiRpc({
+      stateProvider: () => ({ model: { provider: "test", id: modelId, contextWindow: 128000 } }),
+      onRequest: (command) => {
+        if (command.type === "set_model") modelId = String(command.modelId);
+        if (command.type === "prompt" && String(command.message).startsWith("/superpi-control ")) {
+          const request = JSON.parse(Buffer.from(String(command.message).split(" ")[1]!, "base64url").toString("utf8"));
+          if (request.operation === "get-state") throw new Error("metadata unavailable");
+        }
+      },
+    });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    await session.configure("cfg", { model: "test/second" });
+    expect(ofType(events, "session.config").at(-1)?.config.model).toBe("test/second");
+    expect(ofType(events, "request.failed").at(-1)?.error.message).toBe("metadata unavailable");
+    await session.close();
+  });
 });
 
 function userEntry(
@@ -986,6 +1073,7 @@ describe("root integration", () => {
     const fake = new FakePiRpc({
       entriesProvider: () => ({ entries, leafId }),
       messagesProvider: () => messages,
+      companionStateProvider: () => ({ capabilities: [], settings: { tier: "default", longContext: false }, contextWindow: 1000, longContextTarget: 1050000, modelBaselineContextWindow: 1000 }),
       clearQueue: { steering: ["stale"], followUp: [] },
       onRewind: () => {
         // navigateTree moves the leaf to the selected user entry's parent.
@@ -1011,6 +1099,7 @@ describe("root integration", () => {
     await session.revert("rev-1", targetToken, "conversation");
 
     expect(ofType(events, "request.completed")[0]?.requestId).toBe("rev-1");
+    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "longContext")?.description).toContain("Expansion target: 1,050,000 tokens");
     expect(
       ofType(events, "session.notice").some((notice) => notice.notice.id === "rewind-queue-cleared"),
     ).toBe(true);

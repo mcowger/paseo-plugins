@@ -38,6 +38,7 @@ export interface FakePiRpcOptions {
   onRequest?: (command: PiRecord, fake: FakePiRpc) => void | Promise<void>;
   /** Companion `hello` data; defaults to a valid root state. */
   helloData?: unknown;
+  companionStateProvider?: () => unknown;
 }
 
 export class FakePiRpc implements PiRpc {
@@ -180,7 +181,7 @@ export class FakePiRpc implements PiRpc {
           settings: { ...this.companionSettings },
           sessionId: "pi-session-1",
         };
-    } else if (request.operation === "configure") {
+    } else if (request.operation === "configure" || request.operation === "get-state") {
       const requested = request.data;
       if (requested !== null && typeof requested === "object" && !Array.isArray(requested)) {
         const record = requested as Record<string, unknown>;
@@ -189,7 +190,7 @@ export class FakePiRpc implements PiRpc {
           this.companionSettings.longContext = record.longContext;
         }
       }
-      data = {
+      data = this.options.companionStateProvider?.() ?? {
         capabilities: ["tier", "context"],
         settings: { ...this.companionSettings },
         sessionId: "pi-session-1",

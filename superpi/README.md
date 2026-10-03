@@ -12,12 +12,22 @@ that pin is not a claim that newer hosts are unsupported.
 ## Implemented
 
 - Model/thinking selection, visible Default/Fast/Flex/Ultrafast tier choices,
-  and a long-context toggle. Settings apply to subsequent requests without
+  and a long-context toggle showing On/Off and the current Pi token budget.
+  Settings apply to subsequent requests without
   interrupting a response. Backend errors are surfaced, not hidden behind an
   eligibility matrix.
 - Private durable conversation handles and active-branch history restoration.
   Large histories are read from the owned Pi transcript instead of requesting
   one growing RPC response.
+- **Superpi: Copy Pi resume command (stop session first)** in the agent command
+  center copies a terminal command for the saved native transcript. Stop/detach
+  the Paseo session before running it to avoid concurrent transcript writers.
+- Native `/compact`, `/autocompact`, `/model`, `/thinking`, `/name`, and `/session`
+  commands are listed and dispatched without sending them to the model.
+  Terminal-only built-ins fail explicitly; extension commands keep precedence.
+  Run slash commands while idle: Paseo may interrupt an active turn before
+  dispatching them. `/autocompact` changes Pi's global preference, not just this
+  conversation; project overrides may still take precedence.
 - Image/text/file inputs, native blocking dialogs, and an editor-prefill screen.
   Open **Pi dialogs** from the command center (`Ctrl+K` on Linux).
 - Read-only native child views, ordered live activity, terminal outcomes, and
@@ -45,8 +55,8 @@ this does not establish every recovery/display path on every host version.
 
 Direct steering, arbitrary TUI widgets, and MCP configuration/tool-policy
 translation are not implemented. Nonempty MCP and exact preapproval requests
-fail explicitly. Existing Pi-managed retry/auto-compaction defaults are left
-alone; manual compaction is idle-only.
+fail explicitly. Pi-managed retry defaults are left alone; `/autocompact`
+controls automatic compaction and manual compaction is idle-only.
 
 Daemon cleanup was tested on Linux. Windows descendant process-group cleanup
 is not implemented.
@@ -54,6 +64,11 @@ is not implemented.
 Registry costs and expanded context windows are estimates/configured budgets,
 not verified billing or backend capacity. Text-only models receive a visible
 image-omission explanation rather than a claim that the image was analyzed.
+
+Host API gaps, including the built-in resume menu and harmless child-outline
+errors, are tracked in [PaseoShortcomings.md](docs/PaseoShortcomings.md).
+The fixed expanded budget is not model capability discovery; a possible
+replacement is described in [the Plexus metadata assessment](docs/plexus-context-metadata.md).
 
 ## Install
 
