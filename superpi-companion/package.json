@@ -1,0 +1,27 @@
+{
+  "name": "superpi-companion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Superpi root Pi companion extension: versioned control envelope over Pi RPC-visible notifications.",
+  "license": "MIT",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "lint": "oxlint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.0.0",
+    "@types/node": "^20.9.0",
+    "jiti": "2.7.0",
+    "oxlint": "1.61.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "id": "superpi",
+  "requirements": { "paseo": ">=0.10.0" }
+}
