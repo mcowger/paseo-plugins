@@ -1,5 +1,10 @@
 # Paseo provider plugin API
 
+Historical source report from 2026-10-03. Version/line references below belong
+to that snapshot, not an arbitrary current checkout. Superpi now implements the
+provider; SDK pins remain 0.10.0 and runtime checks used 0.11.0-beta.3. Start with
+[current behavior](../README.md) and [implementation contracts](implementation-contracts.md).
+
 Paseo exposes a direct provider protocol that is broad enough to represent a
 subprocess-backed coding agent without changing Paseo core. The plugin owns the
 native agent's lifecycle and translates its output into canonical Paseo events.

@@ -4,6 +4,11 @@ Candidate upstream issues, checked on 2026-10-03 against the local Paseo
 checkout and the installed 0.11.0-beta.3 host. Superpi uses the public 0.10.0
 plugin contracts. No Paseo source was modified.
 
+The documentation audit reconfirmed the resume-template and child-outline source
+gaps in the local checkout. These are upstream limitations, not permission to
+patch Paseo. Current Superpi features and the self-development workflow are in
+[the provider README](../README.md).
+
 ## Plugin providers cannot supply native resume commands
 
 **Repro:** right-click a Superpi conversation and choose **Copy Resume Command**.
@@ -106,3 +111,7 @@ settings screen preserves it through a plugin RPC and native text input.
 - Reload worked in the user's test. The earlier `ERR_IPC_CHANNEL_CLOSED` during
   worker shutdown is recorded, but not enough by itself to claim a persistent
   reload failure.
+- Plugin reload deliberately tears down owned Pi processes. Ending the SuperPi
+  development conversation by reloading its own provider is expected cleanup,
+  not a host bug. Test on the isolated daemon and reload the active host from a
+  separate terminal after saving the handoff.

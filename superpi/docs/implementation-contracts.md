@@ -1,8 +1,9 @@
-# Superpi Stage 0 implementation contracts
+# Superpi implementation contracts
 
-Status: Stage 0 public-adapter gate results. This document records what was
-verified against the public host/adapter contracts before implementation, and
-the exported pure-timeline contract implemented in `server/timeline.ts`.
+Status: original Stage 0 public-adapter gate results plus the current exported
+pure-timeline contract. Root controls, native commands, child observation, and
+Pi branch rewind are implemented. Gate 3 remains an acceptance gap, not evidence
+that rewind implementation hasn't started. See [current behavior](../README.md).
 
 No Paseo core was modified. No Paseo internals were imported by plugin code.
 Adapter evidence was read from the local checkout at
@@ -113,18 +114,11 @@ Not a workaround, for the record:
 - Closing/reopening inside the revert request is not representable: the host
   holds the existing `agent.session` reference for the duration of `rewind`.
 
-Blocker decision needed (owner: delegating agent/user): choose one of
-
-1. Treat rewind as reopen-scoped only and require the host to reopen after a
-   successful revert before the active history is authoritative (product scope
-   change, needs host behavior that the current public adapter does not
-   provide), or
-2. Keep rewind out of V1 until a public timeline replacement/reset contract
-   exists (aligns with requirements R5 and the stage-5 exit gate), or
-3. Confirm an alternate supported replacement path not found here.
-
-No Stage 5 (rewind) work should claim in-place history replacement until this is
-resolved. Stages 0–4 are unaffected.
+Current decision: expose the requested OMP-style Pi navigation with this visible
+history limitation documented. This does not satisfy complete in-place history
+replacement or make reopening a supported workaround. The remaining gate needs
+a public host replacement/reset contract or a verified supported alternate path.
+Do not patch Paseo, import production internals, or claim full R5 acceptance.
 
 ## Exported pure-timeline contract (`server/timeline.ts`)
 
@@ -150,14 +144,15 @@ interface Timeline {
 - Emitted timeline items are always complete `ProviderTimelineItem` snapshots.
   Updates reuse the item `id`; Paseo derives deltas from the snapshots.
 - Stable identities:
-  - assistant message → `assistant:<responseId|messageId|timestamp>`
+  - assistant message → `assistant:<timestamp|messageId|responseId|unknown>`
   - reasoning block → `reasoning:<nativeKey>:<contentIndex>`
   - tool call → `tool:<toolCallId>`
-  - user message → `user:<clientMessageId|messageId|timestamp>`
+  - user message → `user:<timestamp|messageId|unknown>`
   Replay and live records therefore share identities.
 - `clientMessageId` correlation: a user message folded with
-  `context.clientMessageId` uses `user:<clientMessageId>` and sets
-  `item.clientMessageId`, so the host replaces its optimistic row.
+  `context.clientMessageId` sets `item.clientMessageId` for optimistic host
+  correlation. It never forms the canonical item ID; native timestamp takes
+  precedence so live/replayed identities remain stable.
 - Usage: `message_update`/`message_end` usage is mapped to `ProviderUsage` and
   emitted as `session.usage` (deduplicated while unchanged). `turnId` is carried
   from `context.turnId`.
@@ -165,7 +160,11 @@ interface Timeline {
   `ProviderToolCallDetail` variants (shell/read/edit/write/search/fetch/
   sub_agent/plain_text/plan) with an `unknown` fallback.
 - `replay` resets active history and folds an authoritative Pi message array
-  (e.g. `get_messages`) into the same identities, without emitting usage.
+  into the same identities, without emitting usage. Root restoration reads the
+  owned transcript incrementally and selects active ancestry. Lifetime RPC
+  `get_entries`/`get_messages` is a fallback for ephemeral sessions, not the
+  primary growing-history transport. Resetting this provider-local fold does
+  not reset the host's append-only history mirror.
 
 ## Gate summary
 

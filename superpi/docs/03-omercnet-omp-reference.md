@@ -1,5 +1,10 @@
 # omercnet's OMP provider plugin
 
+Historical source report from 2026-10-03. OMP-specific APIs and private host
+workarounds are not Superpi contracts. Superpi adapted the navigation/configuration/
+replay sequence through public Pi APIs; the [host history gap](rewind-011-verification.md)
+remains. See [current behavior](../README.md).
+
 `paseo-omp` is a useful reference because it implements a large coding-agent
 integration outside Paseo core. Its strongest examples are careful protocol
 admission, prompt settlement, session ownership, permission handling, replay,

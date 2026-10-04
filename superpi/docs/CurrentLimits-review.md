@@ -1,8 +1,12 @@
 # Review of the current-limits survey
 
+Historical review from 2026-10-03. It evaluates the original native-provider
+survey, not the implemented Superpi provider or today's upstream PR status.
+See [current behavior](../README.md) for the development handoff.
+
 Reviewed against the five research reports in this directory. This review did
 not repeat the source audit or independently verify the survey's session-log
-analysis. The original [survey](CurrentLimits.md) remains unchanged.
+analysis. The original [survey](CurrentLimits.md) findings remain a historical snapshot.
 
 The issue list is useful, but its closing summary understates what remains
 broken. It mixes user-visible problems, source-level fixes, and proposed

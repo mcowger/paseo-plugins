@@ -6,6 +6,10 @@ the **installed compiled npm host**, not the local source and not 0.10 types.
 
 Verdict: **CONFIRMED BLOCKER.** No Paseo core was modified.
 
+This is the 2026-10-03 host verification snapshot, not a query of today's npm
+dist-tags. Pi branch rewind is now implemented and exposed with this limitation;
+the probe remains the check to rerun when changing host versions.
+
 ## Versions and evidence
 
 | Surface | Value | How checked |
@@ -17,10 +21,9 @@ Verdict: **CONFIRMED BLOCKER.** No Paseo core was modified.
 | Local checkout | `v0.11.0-beta.3-13-g5293ddac3`, source rev `5293ddac3f17f35ea090b292447ec0498edafafe` | `~/workspace/paseo` `git describe` |
 | Source vs beta tag (relevant files) | **identical** | `git diff --stat v0.11.0-beta.3..HEAD -- plugin-provider.ts agent-manager.ts rewind/rewind.ts provider.ts` → empty |
 
-The version table in `implementation-contracts.md` says the installed npm beta is
-at `superpi/.test-env/npm/node_modules/@getpaseo/*`. That path is stale; the
-live isolated host is `superpi/.test-env/simple/node_modules/@getpaseo/*`. The
-rest of that document's evidence is consistent with what is recorded here.
+The default isolated host and `implementation-contracts.md` both use
+`superpi/.test-env/simple/node_modules/@getpaseo/*`. Other older harnesses may
+exist locally; the regression resolves `simple` unless `PASEO_HOST_ROOT` is set.
 
 ## Exact behavior
 
@@ -144,9 +147,9 @@ dynamic import of
 `@getpaseo/server/dist/server/server/agent/plugin-provider.js` is test-only
 evidence; production Superpi code must never import Paseo internals.
 
-Validation: `npm run lint` passes (0 warnings, 0 errors); `npm run typecheck`
-passes; `npm test` passes with this test included (7 test files at
-verification time).
+The original verification passed lint, typecheck, and tests with this probe
+included. Current full-suite checks and live coverage are recorded in
+[testing](testing.md); rerun the probe rather than relying on a historical test count.
 
 ## Verdict
 
@@ -154,4 +157,5 @@ The `implementation-contracts.md` Gate 3 claim is independently reproduced
 against the installed compiled `@getpaseo/server@0.11.0-beta.3`: a successful
 rewind cannot replace live conversation history for a public plugin provider,
 and no public reset/replace/refresh contract exists in 0.11.0-beta.3. The
-blocker decision in that document is unchanged.
+visible-history limitation remains. Superpi implements Pi navigation and branch
+persistence without claiming this host gap is fixed.

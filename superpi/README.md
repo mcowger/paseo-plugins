@@ -16,12 +16,12 @@ that pin is not a claim that newer hosts are unsupported.
   service-tier selector. Catalog refreshes and model changes update it live.
   A context-length selector shows rounded budgets such as `272K` and `1M` on
   the button itself, with short/max choices. It appears only for models with
-  distinct short/max budgets supplied
-  by `plexus-pi`. Off uses the short budget; On uses the maximum. Models without
-  a short budget retain Pi's declared limit and have no context selector.
-  Settings apply to subsequent requests without
-  interrupting a response. Backend errors are surfaced, not hidden behind an
-  eligibility matrix.
+  distinct short/max budgets supplied by `plexus-pi`. Internally, Off uses the
+  short budget and On uses the maximum; the UI shows token lengths, not On/Off.
+  Models without a short budget retain Pi's declared limit and have no context
+  selector.
+  Settings apply to subsequent requests without interrupting a response.
+  Backend errors are surfaced, not hidden behind an eligibility matrix.
   Legacy Fast selections migrate to advertised `priority`; unsupported saved
   tiers use `auto` or `standard` while retaining the user's choice for compatible
   models. Premium-only lists remain unselected until the user chooses. Plexus
@@ -98,6 +98,14 @@ runtime dependencies, or set the daemon environment's
 `SUPERPI_PI_COMMAND` optionally selects a Pi executable; the default is `pi`.
 These are daemon settings, not shell initialization performed by the plugin.
 
+The daemon must inherit the intended `PI_CODING_AGENT_DIR` and `PASEO_HOME`.
+They default to `~/.pi/agent` and `~/.paseo`. Superpi stores private manifests,
+native transcripts, and child journals under
+`$PASEO_HOME/plugins/superpi/state`. Pi subprocesses inherit the daemon
+environment plus per-session overrides. Configure the host explicitly; Paseo
+doesn't discover an arbitrary copied Pi installation. The isolated launcher in
+[testing](docs/testing.md) writes that config and sets these paths for you.
+
 Pi loads its normal resources plus the explicit companion. Known competing
 tier/context owners cause a clear startup failure. Resolve that conflict in
 your Pi configuration; Superpi does not disable extensions or rewrite defaults
@@ -111,10 +119,39 @@ paseo plugin install --help
 paseo plugin install "$PWD/superpi"
 paseo plugin reload --help
 paseo plugin reload superpi
+paseo plugin ls --help
+paseo plugin ls superpi
+paseo plugin logs --help
+paseo plugin logs superpi
 ```
 
 Select **Superpi** for a new Paseo conversation. Native-provider conversations
 aren't converted or imported.
+
+## Developing through SuperPi
+
+Future work uses SuperPi itself with this repository as the workspace. The
+provider label in Paseo remains **Superpi**.
+
+1. Read [the docs index](docs/README.md), then the current limits here and in
+   [Paseo shortcomings](docs/PaseoShortcomings.md). The numbered research reports
+   are source snapshots, not a list of unfinished implementation tasks.
+2. Run the checks below in both packages. Test changed runtime behavior in the
+   [isolated daemon](docs/testing.md), not the daemon hosting your work session.
+3. After companion edits, sync its copied source and open a fresh test Pi session.
+   After provider/client edits, reload Superpi on the isolated host. Check plugin
+   load state/logs and the actual UI, not just CLI request success.
+4. Before updating the active host, save changes and leave the next session a
+   summary of changed files, checks, and unresolved limits. Run the active-host
+   reload from a separate terminal. Plugin reload closes owned Pi processes,
+   including the one running this development conversation.
+
+Do not replace the root subprocess with Pi's in-process SDK, patch Paseo core,
+or add fixed model-policy fallbacks. Keep credentials in the daemon/Pi environment.
+To move a saved conversation into terminal Pi, use **Superpi: Copy Pi resume
+command (stop session first)** and stop/detach its Paseo session before executing
+the command. Supply required credentials/environment separately; never run two
+transcript writers at once. The copied command uses POSIX shell quoting.
 
 ## Development and checks
 
@@ -125,6 +162,7 @@ npm --prefix superpi test
 npm --prefix superpi-companion run lint
 npm --prefix superpi-companion run typecheck
 npm --prefix superpi-companion test
+npm run sdk:check
 ```
 
 Client tests check bundle size, classes, server-boundary isolation, and Hermes
@@ -134,7 +172,7 @@ in tests, never as a production internal import.
 For the isolated launch script and browser workflow, see
 [testing](docs/testing.md). The original scope remains in
 [requirements](docs/requirements.md), with the
-[implementation plan](docs/design.md) and
+[architecture and staged acceptance goals](docs/design.md) and
 [contract findings](docs/implementation-contracts.md).
 
 The rewind adaptation retains OMP's MIT notice in

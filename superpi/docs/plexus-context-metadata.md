@@ -1,16 +1,17 @@
-# Plexus context metadata bridge
+# Plexus model-policy bridge
 
 Implemented without changing Paseo or running Pi in-process. `plexus-pi` owns
 policy metadata; the Superpi companion consumes its versioned event API.
 
 ## Current behavior
 
-Superpi's companion applies the published short budget when Long Context is Off
-and the published maximum when On. It uses a root-session clone through Pi's
+Superpi's companion applies the published short budget when `longContext` is
+false and the published maximum when true. It uses a root-session clone through Pi's
 public `setModel`; the catalog and child defaults aren't mutated. The old fixed
 1,050,000 target has been removed.
 
-The composer now shows On/Off and the observed Pi budget. Its description shows
+The composer button and its two choices show rounded context lengths (`272K`,
+`1M`), not On/Off. Its description shows
 the short budget, maximum, and optional input pricing threshold. The control is
 absent for models without a policy or with equal short/max budgets.
 
@@ -29,14 +30,15 @@ root model configuration.
 
 Keep three values separate:
 
-- **Maximum context tokens:** the backend's actual total context capacity.
+- **Maximum context tokens:** the backend's advertised total context capacity,
+  not independently probed capacity.
 - **Short-mode budget tokens:** the intentionally smaller budget used when Long
   Context is off, at or below maximum capacity.
 - **Pricing threshold input tokens:** where input pricing changes. This is not
   necessarily a safe total context budget; output reservation and compaction
   headroom still matter.
 
-A minimal versioned policy row would contain `provider`, `modelId`,
+A versioned policy row contains `provider`, `modelId`,
 `maxContextTokens`, and `shortContextBudgetTokens`, with an optional
 `pricingThresholdInputTokens`. Validate positive integer limits and
 `shortContextBudgetTokens <= maxContextTokens`. Use exact provider/model keys,
@@ -55,8 +57,10 @@ Context. If the catalog refresh
 removes or lowers a policy, re-evaluate the active model and report the new
 applied state through session-key-scoped companion state notifications. Reject
 enabling expansion when model application fails. Policy removal clears the
-selection and restores the original catalog budget. Saved legacy On selections
-cannot expand models without a policy.
+selection and restores the original catalog budget. Saved On intent survives
+metadata loading/unavailability and is applied if a qualifying policy arrives;
+a ready catalog without that policy clears it. Saved intent cannot manufacture
+a budget for a model without policy.
 
 Children have independent model selection and independent event buses. Their
 own `plexus-pi` instances can consume the same backend policy. Do not inherit the
@@ -70,7 +74,8 @@ records; that's separate from supplying root metadata.
   It emits `context_length` and pricing tiers, with ETag/Last-Modified support.
 - Plexus policy definitions:
   `packages/backend/src/services/models/model-metadata-manager.ts` and
-  `packages/backend/src/config.ts`. Currently there is only one context limit.
+  `packages/backend/src/config.ts`. Superpi consumes the published metadata;
+  it doesn't introduce another backend limit or configure enforcement.
 - Enforcement: `packages/backend/src/services/models/enforce-limits.ts`.
   It reserves output against the published context limit.
 - Shared Plexus descriptors:
@@ -79,7 +84,8 @@ records; that's separate from supplying root metadata.
   `plexus-agent-plugins/packages/plexus-pi/src/mapper.ts` and `src/extension.ts`.
 - Public Pi bus: `pi/packages/coding-agent/src/core/event-bus.ts`.
 - Companion state and application:
-  `superpi-companion/src/protocol.ts`, `src/context.ts`, and `src/companion.ts`.
+  `superpi-companion/src/protocol.ts`, `src/context-policy.ts`, `src/context.ts`,
+  `src/policy-consumer.ts`, and `src/companion.ts`.
 
 ## Policy semantics
 
@@ -88,3 +94,29 @@ first `pricing.tiers[].input_tokens_above` boundary as the intended short budget
 Plexus defines that boundary for both purposes. Models without that boundary are
 omitted. Superpi does not infer missing values or add provider beta headers.
 There is no duplicate settings database or manual per-model override in Superpi.
+
+## Service-tier policy
+
+The same consumer lifecycle handles complete snapshots on
+`plexus:service-tiers:snapshot:v1`, requested through
+`plexus:service-tiers:request:v1`. Context/tier requests run concurrently at
+startup. Per-model advertised names become the exact selector labels/values;
+no policy means no tier selector or root injection.
+
+The companion injects the selected advertised spelling as `service_tier` for
+the `plexus` provider, including OpenAI Completions and Anthropic-compatible
+requests. Plexus owns upstream field/value/header translation. This isn't a
+claim that each tier has been accepted by every upstream backend.
+
+Legacy `fast` migrates to `priority` when advertised. Saved tier intent survives
+metadata loss and incompatible model switches. Effective fallback prefers
+advertised `auto`, then `standard`; a premium-only list remains unselected until
+the user chooses. Explicit new unadvertised selections fail. Children don't
+inherit or inject root choices. See the
+[companion README](../../superpi-companion/README.md#service-tier-lifecycle) for
+the exact lifecycle and [testing](testing.md#policy-discovery-checks) for live probes.
+
+The latest fresh Luna catalog check advertised `auto`, `standard`, `flex`,
+`priority` and 272,000 / 1,050,000 token budgets. Astra's advertised tiers and
+`flex` selection also passed live checks. Neither model observation is a
+hardcoded fallback; catalog refresh is the authority.

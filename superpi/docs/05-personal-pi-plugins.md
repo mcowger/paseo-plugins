@@ -1,5 +1,11 @@
 # Personal Pi plugins and subagent contract
 
+Historical source report from 2026-10-03, before the owned Superpi bridge and
+Plexus policy-discovery work. Descriptions of existing control owners and missing
+export paths below are snapshot evidence, not today's Superpi feature list.
+See [the companion](../../superpi-companion/README.md) and
+[Plexus policy bridge](plexus-context-metadata.md) for current contracts.
+
 The personal Pi extensions expose more useful remote state than their terminal
 renderers alone suggest, but their contracts use several different channels.
 Tools, custom messages, custom entries, and UI notifications can cross Pi RPC.

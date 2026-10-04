@@ -1,8 +1,27 @@
 # Superpi documentation
 
-These reports document the existing integration contracts before requirements or
-design work. They describe what the inspected code does, where the integrations
-meet, what information crosses those boundaries, and what gets lost.
+Superpi is implemented and usable for continued development through SuperPi.
+This index separates current behavior and validation from the original research.
+
+## Start here
+
+- [Provider README](../README.md): implemented features, known limits, installation,
+  checks, and safe self-development/reload workflow.
+- [Companion README](../../superpi-companion/README.md): exact control envelopes,
+  branch-local persistence, child bridge, and policy lifecycle.
+- [Plexus policy integration](plexus-context-metadata.md): live per-model context
+  budgets and service-tier discovery. There is no fixed tier enum or budget.
+- [Paseo shortcomings](PaseoShortcomings.md): current host gaps and supported
+  plugin workarounds.
+- [Rewind verification](rewind-011-verification.md): executable evidence for the
+  append-only host-history limitation.
+
+SDK dependencies remain pinned to `0.10.0`. Runtime checks used Paseo
+`0.11.0-beta.3` and Pi `1.0.0+local`. The latest implementation baseline is
+`1c13cae` (Plexus model policies), following `cd2e74c` (session controls/commands).
+Lint, typecheck, and 292 tests passed across both packages at that baseline,
+including SDK, bundle-boundary, and Hermes checks. Mobile device smoke remains
+unverified. This is not a claim that every original V1 acceptance goal passes.
 
 The agreed integration boundary is a Pi subprocess speaking RPC. Embedding Pi in
 the Paseo plugin through the in-process SDK is out of scope. The existing
@@ -14,7 +33,9 @@ fact, not a change to this boundary.
 - [Agreed V1 requirements](requirements.md): scope, non-goals, acceptance criteria,
   contract-driven deferrals, and remaining validation gates.
 - [Technical design and implementation plan](design.md): runtime boundaries,
-  proposed integration contracts, lifecycle rules, and staged acceptance checks.
+  current integration contracts, lifecycle rules, and original staged acceptance goals.
+- [Implementation contracts](implementation-contracts.md): public-adapter gates
+  and current pure-timeline identities/history sources.
 - [Independent testing environment](testing.md): copied Pi/extensions, npm beta
   Paseo, isolated config, and direct agent-browser checks.
 - [Current-limits survey](CurrentLimits.md): historical problems and native
@@ -22,7 +43,11 @@ fact, not a change to this boundary.
 - [Survey review](CurrentLimits-review.md): contradictions, qualifications, and
   requirements implications from the existing research.
 
-## Reports
+## Historical source reports
+
+Reports 01–05 and the current-limits survey/review retain the snapshots listed
+below. Their external source line numbers and PR status are historical evidence,
+not assertions about the current checkout or Superpi's completion status.
 
 1. [Paseo provider plugin API](01-paseo-provider-api.md). Registration, capability
    negotiation, session and prompt lifecycles, permissions, persistence, child
@@ -95,7 +120,8 @@ summaries verbatim:
 - Personal subagents have no implemented concurrency queue or run-resume registry,
   despite some related vocabulary in types and presentation helpers.
 
-The [V1 requirements](requirements.md) are agreed, and the [design and plan](design.md)
-propose how to implement them. Exact supported versions and bounded implementation
-choices remain to be verified. Research reports retain their original source
-snapshots; no implementation has started.
+The [V1 requirements](requirements.md) retain acceptance goals and record later
+scope changes, including policy-discovered selectors and native slash commands.
+The [design](design.md) describes the implemented boundaries and flags unresolved
+acceptance gaps. Use the provider README for the current feature/limit summary;
+do not treat the original staged plan as a backlog of wholly unstarted work.

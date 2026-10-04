@@ -1,5 +1,11 @@
 # Pi subprocess RPC contract
 
+Historical source report from 2026-10-03. The subprocess boundary remains current,
+but source line numbers and command examples refer to the recorded Pi snapshot.
+For implemented native command dispatch, durable history sources, and companion
+operations, see [current behavior](../README.md) and
+[implementation contracts](implementation-contracts.md).
+
 Pi's RPC mode is a long-lived, out-of-process control interface. It exposes
 commands, correlated responses, session events, and supported extension UI
 interactions over stdin/stdout. It retains normal Pi resource loading and

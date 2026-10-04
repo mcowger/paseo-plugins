@@ -1,9 +1,10 @@
 # Superpi technical design and implementation plan
 
-Status: proposed implementation design for the [agreed V1 requirements](requirements.md).
-This is a plan, not an implementation or authorization to modify Pi/Paseo core.
-The research reports remain the contract references; invented integration
-messages below are proposed Superpi contracts, not existing Pi RPC commands.
+Status: implemented architecture and original staged acceptance goals for the
+[V1 requirements](requirements.md), updated through Plexus policy discovery.
+Use the [provider README](../README.md) for the current feature/limit summary.
+The companion envelopes below are implemented extension contracts, not core Pi
+RPC commands. No Pi/Paseo core changes are authorized.
 
 ## Approach
 
@@ -12,16 +13,16 @@ Use a required Pi companion extension for integration controls and tree
 navigation, and an explicit bridge from the owned subagent extension for child
 activity. Keep the normal Paseo composer, timeline, and child views.
 
-First deliver a working vertical slice:
+The implemented root lifecycle is:
 
 ```text
 launch -> handshake -> prompt -> stream -> settle -> close -> reopen history
 ```
 
-Then add composer controls, attachment/dialog parity, child observation, and
-conversation rewind. Each stage gets tests before the next stage expands scope.
-Do not build an exhaustive backend compatibility matrix. Send selected tier and
-context settings, keep controls visible, and surface errors honestly.
+Composer controls, attachments/dialogs, child observation, and Pi branch rewind
+are implemented. The host's visible-history replacement gap remains unresolved.
+Do not build an exhaustive backend matrix. Expose advertised tier/context policy,
+preserve saved intent where supported, and surface application/request errors.
 
 ## Runtime boundaries
 
@@ -48,7 +49,7 @@ The companion runs inside Pi, not inside the Paseo plugin runtime. Existing
 in-process child execution in `pi-subagents` remains its own implementation.
 Superpi must not use `createAgentSession` to execute the root agent.
 
-### Proposed code organization
+### Code organization
 
 | Location | Responsibility |
 | --- | --- |
@@ -57,30 +58,32 @@ Superpi must not use `createAgentSession` to execute the root agent.
 | `superpi/server/session.ts` | Session ownership, admission, lifecycle coordination, native state. |
 | `superpi/server/pi-rpc.ts` | Process launch, UTF-8 JSONL framing, correlation, backpressure, exit handling. |
 | `superpi/server/timeline.ts` | Pure-event folding into full Paseo snapshots and stable identities. |
-| `superpi/server/persistence.ts` | Versioned session metadata, child journal, authorized restore. |
+| `superpi/server/persistence.ts`, `child-journal.ts` | Versioned session metadata, child journal, authorized restore. |
 | `superpi/server/subagents.ts` | Owned bridge events into read-only provider subsessions. |
 | `superpi/shared/` | Serializable contracts, Zod schemas, presentation-independent types. |
 | `superpi/client/`, `index.client.tsx` | Only necessary plugin UI/RPC contributions; no replacement tool renderer. |
-| Separate Pi companion package | Pi extension entry, controls, handshake, rewind, bridge serialization. |
+| `superpi-companion/index.ts`, `src/` | Pi extension entry, controls, handshake, rewind, bridge serialization. |
+| Companion `context-policy.ts`, `service-tiers.ts`, `policy-consumer.ts` | Correlated, revisioned Plexus policy snapshots on Pi's public bus. |
+| Companion `context.ts`, `tier.ts` | Session-local model budgeting and exact advertised tier injection. |
 | Owned `pi-subagents` package | Explicit event export, independent child defaults, durable run metadata. |
 
-Names are organizational proposals, not a requirement to create every module
-immediately. Keep Paseo code under its strict client/server/shared boundaries.
-Package the companion as a Pi-loadable artifact, not as a Paseo runtime entry.
-Decide its final repository location during scaffolding; do not create a second
-execution SDK integration just to package an extension.
+Keep Paseo code under its strict client/server/shared boundaries. The companion
+is a separate Pi-loadable package, not a Paseo runtime entry or a second root
+execution SDK integration.
 
 ## 1. Provider registration and discovery
 
 - Register a distinct `superpi` provider. Do not patch the built-in Pi provider.
-- Start from the existing 0.10.0 dependency baseline. Verify native feature
+- Retain the 0.10.0 dependency baseline. Runtime checks used host 0.11.0-beta.3
+  and Pi 1.0.0+local. Verify native feature
   discovery and required history behavior against the chosen installed host;
   explicitly rebaseline only if required available APIs demand it.
 - Discover Pi's actual model catalog, thinking choices, and defaults using the
   same executable, cwd, environment, and resource rules as session launch.
-- Publish model/thinking choices and tier/context toggle/select settings through
+- Publish model/thinking choices and policy-discovered tier/context selectors through
   public provider configuration. Do not simulate Pi modes.
-- Key discovery caches by actual configuration identity and workspace context.
+- Catalog discovery currently opts out of host caching (`getCatalogCacheKey`
+  returns `undefined`). Any future cache must include configuration/workspace identity.
 - Temporary discovery sessions must never submit model work, change global
   defaults, spawn subagents, or leave processes/subscriptions alive. Normal
   extension startup can have effects; observe and report them rather than claim
@@ -171,43 +174,60 @@ Pi RPC `prompt`, directly from the owned server transport, rather than routing
 them as ordinary Paseo chat messages. Their native `handled` disposition is a
 control completion, not a user turn.
 
-Define Zod-validated, versioned request/result envelopes. A proposed envelope
-contains protocol version, integration session key/generation, request ID,
-operation, and operation-specific data. Initial operations:
+Use Zod-validated, versioned request/result envelopes. Each control envelope
+contains protocol version, integration session key, request ID, operation, and
+operation-specific data. The exact schemas live in the companion's `protocol.ts`.
+Implemented operations:
 
 - `hello`: protocol capabilities, current configuration, defaults and known
   control-owner conflicts.
 - `get-state` / `configure`: tier/context state and effective local configuration.
-- `rewind`: target entry, navigation result, new leaf and history/config revision.
+- `rewind`: target entry, navigation result, new leaf and branch-local settings.
+- `compact`: idle-only compaction settled by documented callback/events. The
+  provider's native `/compact` command currently uses core Pi RPC instead.
 - Bridge events: child identities, ancestry, activity sequence, and outcomes.
 
 Serialize replies/events through a recognizable structured `ctx.ui.notify`
 payload, using Pi's RPC-visible UI channel. Validate and consume only exact
 Superpi envelopes; do not swallow ordinary user notifications or treat arbitrary
-JSON notification text as trusted control data. Private `pi.events` emissions
-alone are not a transport.
+JSON notification text as trusted control data. Pi's public event bus carries
+Plexus policy and owned-child records inside Pi; those events still need the
+companion's RPC-visible notifications to reach the provider subprocess boundary.
 
 ### Configuration application
 
-- Use core session-only model/thinking RPC setters. Use the companion for tier
-  payload injection and expanded context budgeting.
-- Default tier does not force a special request parameter unless required by the
-  chosen payload dialect. Fast/Flex/Ultrafast map to the existing intended values.
-- Keep tier/context controls visible without backend support probes. If no
-  applicable request dialect or context operation can apply a setting, return a
-  clear error instead of silently ignoring it.
-- Persist requested tier/context choices across model changes. Apply them to the
-  next applicable request; backend rejection is an ordinary error, not a reason
-  to silently reset or retry defaults.
+- Use core session-only model/thinking RPC setters. The companion requests
+  complete versioned context/service-tier snapshots from `plexus-pi`, with bounded
+  timeouts, publisher correlation, revision checks, and shutdown cleanup.
+- Advertised tier names are the selector options and the exact `service_tier`
+  payload values. Plexus owns upstream translation. Missing policy means no
+  selector/injection, not a manufactured Default option. Explicit unsupported
+  selections fail. Legacy `fast` migrates to advertised `priority`.
+- Retain tier intent across metadata loss/incompatible models. Use advertised
+  `auto`, then `standard`, or inject nothing when the saved tier isn't offered.
+  Premium-only lists stay unselected until the user chooses. Backend errors
+  never trigger automatic retry with a different tier.
+- Context Off uses the published short budget; On uses maximum. Show rounded
+  lengths on the selector button/options only for distinct short/max budgets.
+  Missing/equal policy retains Pi's declared limit. No hardcoded expansion.
+- Apply budgets through session-local model clones, never catalog mutation.
+  Reconcile on startup, tree restoration, model selection, policy broadcasts,
+  and before each turn. Live `superpi:state:v1:` notifications update controls.
+  Saved On intent survives metadata loading; a ready catalog without a
+  qualifying policy clears it and restores the catalog budget.
 - Capture a request configuration snapshot before dispatch, so an in-flight
   response can report its original model/settings after later changes.
-- Restore ordinary context budgeting correctly when the toggle is turned off or
-  the model changes. Track model-local baseline values instead of cumulatively
-  mutating shared catalog objects.
 - Read Pi-side defaults, then replay saved branch/session settings, then apply
   explicit open/configure values. Don't write runtime choices into Pi defaults.
-- Leave mutable auto-retry/auto-compaction toggles deferred. No global settings
-  snapshot/restore or monkey-patching private setters.
+- Leave session-only auto-retry/auto-compaction toggles deferred. Native
+  `/autocompact` intentionally changes Pi's global preference, with project
+  overrides still possible. No settings snapshot/restore or private setters.
+
+The provider publishes `session.commands` for supported native commands and
+dispatches `/compact`, `/autocompact`, `/model`, `/thinking`, `/name`, and `/session`
+without model work. Extension commands keep precedence; terminal-only built-ins
+fail explicitly. Slash commands are idle-use actions because the host may
+interrupt before dispatch. Composer configuration is the live-control path.
 
 Serialize conflicting state mutations with a short operation barrier, not one
 long mutex held for the entire model run. Stream-safe configuration and permission
@@ -222,7 +242,9 @@ revision, child associations and delivery/projection state, not a second editabl
 copy of the root conversation.
 
 - Use Pi custom entries for durable companion settings and the rewind marker;
-  restore branch-sensitive state on `session_start` and tree navigation.
+  restore branch-sensitive state on `session_start`, tree navigation, and model
+  selection. Root history prefers incremental reads of the owned transcript;
+  ephemeral sessions use the lifetime RPC fallback.
 - Use a versioned, validated Superpi manifest plus append-only child journal for
   child lifecycle/history not present in root JSONL. Store under a plugin-owned
   directory with restrictive permissions, serialized updates and atomic manifest
@@ -334,14 +356,22 @@ The host history-replacement contract is an early integration test, not an
 excuse to edit native files or use daemon internals. If the available public
 adapter cannot satisfy it, report a blocker and revisit the design explicitly.
 
+Current result: steps 1–7 and Pi branch persistence are implemented using OMP's
+navigation/configuration/replay sequence. Step 8 remains blocked on the tested
+0.11 host; reload does not guarantee abandoned visible rows disappear. No reset
+event is invented. See [the executable verification](rewind-011-verification.md).
+
 ## 9. Cleanup and failure handling
 
 - Parent interrupt clears/settles parent work according to existing host behavior
   but does not dispose owned background children.
-- Root archive/close, connection teardown and plugin teardown converge on one
+- Root close, connection teardown and plugin teardown converge on one
   idempotent shutdown function: mark closing, stop admissions, settle controls/
   dialogs, invoke orderly Pi shutdown, await owned child cleanup, flush durable
   history, then release handles.
+- Provider `session.archive`/`session.unarchive` requests are explicitly
+  unsupported. Host agent archiving and provider transcript operations aren't
+  interchangeable capabilities.
 - Drain output during shutdown. Use bounded waits and process termination
   escalation if orderly shutdown fails; report what was or wasn't confirmed.
 - Do not assume killing the plugin process kills its Pi grandchildren. Track
@@ -354,9 +384,18 @@ adapter cannot satisfy it, report a blocker and revisit the design explicitly.
 
 ## Implementation stages
 
-Each stage starts only after the previous stage's acceptance checks pass. Stages
-produce small runnable increments; they are not a mandate to complete all code
-before testing. No worker delegation is implied by this plan.
+These are the original delivery stages and acceptance targets, not a list of
+unstarted work. Their implementation is present, with the acceptance gaps below.
+No worker delegation is implied.
+
+| Stage | Current state |
+| --- | --- |
+| 0–1 | Packages, public-adapter gates, root transport, history, lifecycle implemented/tested. |
+| 2 | Native model/thinking, policy-discovered selectors, persistence, conflicts, commands and idle compaction implemented/tested. |
+| 3 | Attachments, blocking dialogs/editor prefill, notices and tool metadata implemented; desktop/web probes recorded. |
+| 4 | Owned bridge, independent defaults, native child views and durable replay implemented; synthetic long-history display probe is bounded evidence. |
+| 5 | Pi navigation, branch pin, queue clearing and guards implemented; full Paseo visible-history replacement blocked. |
+| 6 | Linux cleanup, failure/reload regression coverage and automated bundle/Hermes checks pass; mobile smoke unverified, Windows descendant cleanup unsupported. |
 
 ### Stage 0. Contract fixtures and package scaffolding
 
@@ -390,8 +429,9 @@ publication, draft discovery, session persistence, known conflict detection,
 and idle-only manual compaction. Preserve normal Pi defaults on omission.
 
 Exit: choices apply to the first/next request without interrupting current work;
-controls stay visible; settings survive reopen/model changes; defaults aren't
-rewritten. Unsupported selections produce normal errors, not silent fallback.
+controls match current advertised policy; settings survive reopen/model changes
+under the reconciliation rules above; defaults aren't rewritten. Explicit
+unsupported selections produce errors, not a backend-error retry.
 
 ### Stage 3. Attachment and extension interaction parity
 
@@ -424,8 +464,9 @@ and canceled/rejected operations explain actual outcomes.
 
 ### Stage 6. Lifecycle hardening and release validation
 
-Test root close/archive, child-tab closure, frontend reconnect, plugin reload,
-daemon stop, concurrent configuration, permission timeout, and cleanup escalation.
+Test root close, explicit unsupported archive requests, child-tab closure,
+frontend reconnect, plugin reload, daemon stop, concurrent configuration,
+permission timeout, and cleanup escalation.
 Run the full acceptance matrix in [requirements](requirements.md#acceptance-criteria).
 
 Exit: lint/typecheck/tests and applicable bundle/Hermes checks pass without
@@ -452,19 +493,21 @@ No iOS/Android device test is required for this personal V1 release.
 - Bundle checks: client size/class/Hermes checks and absence of Node/server code
   in client/shared reachability. Do not add heavy rendering libraries.
 
-## Decisions still to make during implementation
+## Resolved choices and remaining limits
 
-These are bounded implementation decisions, not permission to reopen agreed
-scope or start another broad requirements interview:
+The companion lives in `superpi-companion/` and is loaded explicitly through
+`SUPERPI_COMPANION_PATH` or the Pi agent-directory extension path. SDK pins stay
+at 0.10.0; the isolated launcher pins host 0.11.0-beta.3 and copies Pi 1.0.0+local.
+Transport limits/deadlines and cleanup grace periods are named constants in
+`server/pi-rpc.ts`, with regression coverage. Plexus supplies context/tier policy;
+Superpi does not choose a fixed expansion or provider-specific translation.
+Minimal plugin UI consists of the Pi dialogs screen and resume-command action.
 
-1. Final companion package location and distribution/loading mechanism.
-2. Exact deployed SDK/Pi versions and supported launch flags.
-3. Payload limits, batching intervals, command deadlines and cleanup grace periods,
-   selected from fixtures and runtime behavior rather than arbitrary promises.
-4. Expanded local context budget and request-dialect mappings, based on existing
-   intended behavior. Backend acceptance isn't a release gate.
-5. Minimal plugin UI only if required dialog/action data cannot be represented by
-   supported native controls.
+Remaining limits are host visible-history replacement, direct steering, arbitrary
+TUI widgets, MCP/tool-policy translation, and Windows descendant cleanup. Mobile
+device smoke remains unverified. Continue through
+[the SuperPi development workflow](../README.md#developing-through-superpi), using
+an isolated daemon instead of reloading the provider running the work session.
 
 Unsupported public history/status behavior, inability to apply a control honestly,
 or a requirement that needs core changes is a blocker to report, not a reason to

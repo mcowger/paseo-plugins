@@ -1,5 +1,10 @@
 # Paseo Pi Integration — Current Limits & Working Capabilities to Borrow
 
+Historical native-Paseo survey from 2026-10-03, retained at its source snapshot.
+"Current" below means that snapshot; external PR/issue status hasn't been
+rechecked. This isn't Superpi's present feature/limit list. Start with
+[the provider README](../README.md) and [Paseo shortcomings](PaseoShortcomings.md).
+
 **Verified against:** paseo `0.11.0-beta.3` @ `5293ddac3` (`~/workspace/paseo`)
 **Source basis:** survey of pi session logs Aug–Oct 2026 (~2,730 sessions), cross-checked against current source.
 

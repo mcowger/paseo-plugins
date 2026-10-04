@@ -1,8 +1,16 @@
 # Superpi V1 product requirements
 
-Status: agreed requirements baseline, confirmed after the requirements interview
-on 2026-10-03. This document authorizes neither implementation nor changes to Pi
-or Paseo core. Architecture and an implementation plan are separate work.
+Status: agreed V1 goals from 2026-10-03, updated for the implemented policy
+selectors and native command support. This is product scope, not proof that every
+acceptance criterion passes. Current behavior and limits are in the
+[provider README](../README.md); architecture is in [design](design.md).
+No change to Pi or Paseo core is authorized.
+
+Later scope changes replace the fixed Default/Fast/Flex/Ultrafast list and generic
+Long Context toggle with Plexus-advertised tiers and short/max token selectors.
+Native `/autocompact` is available with explicit global-setting semantics, not
+as a session-only runtime toggle. Pi branch rewind is implemented; complete
+Paseo visible-history replacement remains blocked by the public host contract.
 
 ## Product goal
 
@@ -81,23 +89,29 @@ launch workflow or guess which choices were explicit.
 1. Use native composer model/thinking and provider feature controls first,
    including pre-agent draft selection wherever supported. Composer pills are
    secondary, not a substitute for pre-run configuration.
-2. Provide one mutually exclusive tier selector: Default, Fast, Flex, Ultrafast.
-   Send the selected request value through the applicable provider payload.
-   Backend acceptance isn't a prerequisite: unsupported values may produce a
-   normal request error. No exhaustive eligibility matrix is required for V1.
-3. Provide a visible long-context toggle that applies the integration's expanded
-   context setting. Backend acceptance isn't a prerequisite for exposing it.
-   Report the configured budgeting limit honestly, not as verified backend
-   capacity, and surface configuration or request errors normally.
+2. Provide one tier selector using exactly the selected model's advertised
+   Plexus names. Omit it when no tier policy is available. Inject the selected
+   advertised spelling as `service_tier`; Plexus owns upstream translation.
+   Reject explicit unsupported choices. Advertised support isn't a separate
+   backend-acceptance probe; request errors still surface normally.
+3. Show a context-length selector only for distinct Plexus short/max budgets.
+   Its button and options show rounded lengths such as `272K` and `1M`, not
+   On/Off. Internally Off selects short and On selects maximum. Models without
+   a qualifying policy retain Pi's declared budget. Never infer missing budgets
+   or use a hardcoded expansion fallback. Report the applied Pi budget, not
+   independently verified backend capacity.
 4. Tier/thinking changes apply to the next provider request, including a
    continuation within the current turn. Don't interrupt an in-flight response.
 5. Model changes use the simplest supported Pi behavior, provisionally the same
    next-request behavior. Don't build a custom deferred-model scheduler.
-6. Preserve selected tier/context settings across model changes. Don't hide
-   controls or proactively reset values because support is unverified. Attempt
-   to apply the selection and surface any configuration or backend error.
-7. Backend rejection surfaces as an error. No automatic tier/context fallback or
-   dedicated fallback/retry action is required in V1.
+6. Retain saved tier intent across metadata loss and incompatible models. Apply
+   it again when advertised; otherwise prefer advertised `auto`, then `standard`,
+   or inject nothing. A premium-only list starts unselected. Restore legacy
+   `fast` as `priority` when supported. Context On intent survives metadata
+   loading/unavailability; a ready catalog without a qualifying policy clears it
+   and restores the declared budget. Broadcasts/model switches update controls.
+7. Backend rejection surfaces as an error, not an automatic retry with different
+   settings. Catalog-driven reconciliation in R3.6 isn't a backend-error fallback.
 8. Manual compaction is available only when idle. Pi's manual compaction aborts
    current work, so it must not be disguised as a non-interrupting busy action.
 9. Queue interaction needs only existing Paseo UI capabilities. Don't add a
@@ -106,6 +120,11 @@ launch workflow or guess which choices were explicit.
     reject stale identities, and coordinate with provider lifecycle operations.
     Reflect relevant changes through supported provider events so Paseo and Pi
     don't maintain conflicting configuration truth.
+11. Advertise and dispatch RPC-supported native `/compact`, `/autocompact`,
+    `/model`, `/thinking`, `/name`, and `/session` without sending them to the
+    model. Extension commands keep precedence. Terminal-only built-ins fail
+    explicitly. Use slash commands while idle because the host may interrupt a
+    running turn before dispatch; use composer configuration for live controls.
 
 ### Deferred retry/auto-compaction toggles
 
@@ -114,10 +133,12 @@ The inspected Pi RPC setters write global settings; the public extension API
 doesn't expose session-only setters. A new RPC endpoint alone doesn't fix that
 semantic gap.
 
-These mutable toggles are deferred unless a supported extension-only,
-session-scoped solution is established. Do not patch Pi, embed its SDK, or
-snapshot/restore global settings around sessions. Leave Pi-managed automatic
-behavior governed by its configured defaults. Manual compaction remains in V1.
+Session-only mutable toggles remain deferred unless a supported extension-only
+solution is established. Do not patch Pi, embed its SDK, or snapshot/restore
+global settings around sessions. Pi-managed retry follows configured defaults.
+The native `/autocompact` command intentionally changes Pi's global preference;
+project overrides can still take precedence. It is not advertised as a
+conversation-local toggle. Manual compaction remains idle-only.
 
 ## R4. Subagent observation and history
 
@@ -203,14 +224,15 @@ behavior governed by its configured defaults. Manual compaction remains in V1.
    waking agent work. Companion control responses shouldn't appear as raw JSON
    notification noise.
 5. Preserve token usage and available cost data. Label unverified tier-adjusted
-   costs as estimates or unavailable; don't invent Ultrafast pricing.
+   costs as estimates or unavailable; don't invent tier-specific pricing.
 6. Loading, unavailable, stale, and error states must be explicit.
 
 ## V1 non-goals and deferrals
 
 - Pi/Paseo core changes or in-process SDK integration.
 - Shell/mise environment reconstruction.
-- Mutable retry/auto-compaction toggles under the currently inspected contracts.
+- Session-only mutable retry/auto-compaction toggles under the current contracts.
+  Native `/autocompact` is supported with global-setting semantics.
 - Generic extension settings discovery or arbitrary TUI component execution.
 - Additional subagent extension families and interactive child controls.
 - Resumable child execution or automatic replay after failure.
@@ -232,9 +254,9 @@ Desktop/web is the required V1 smoke-test target. Tests should cover:
 | --- | --- |
 | Startup | Missing companion or known owner conflict fails clearly; optional failures are visible; discovery starts no model work and leaves no live resources behind. |
 | Draft configuration | Native composer selections reach the first request; omission uses Pi defaults; submitted remembered values aren't silently overwritten. |
-| Live controls | Tier/thinking changes don't interrupt or replace the current response; the next request uses selected settings; tier/context controls remain visible and selections aren't silently reset on model changes. |
+| Live controls | Tier/thinking changes don't interrupt the current response; the next request uses selected settings. Policy broadcasts/model switches update advertised tiers and short/max lengths; saved tier intent survives incompatible models. |
 | Configuration durability | Resume restores session values; runtime changes don't rewrite configured Pi defaults; independent child defaults don't inherit parent choices. |
-| Backend refusal | Unsupported tier/context selections may be attempted; configuration and backend errors surface normally without automatic fallback or replay. No backend-acceptance proof is required to expose either control. |
+| Backend refusal | Explicit unadvertised tiers are rejected; advertised settings can still fail upstream. Configuration/backend errors surface without automatic retry or replay. No separate backend probe is required to expose an advertised control. |
 | Compaction | Manual compaction is unavailable while busy; idle compaction doesn't create a phantom user/model turn. |
 | Children | Live tool/message activity appears in native child views; completion is sticky even when followed by a steered result; parent isn't awakened by reporting. |
 | Long child history | Activity beyond the native prefix limits remains durable and recoverable; oversized payload omissions are explicit; final outcomes/results remain visible. |
@@ -250,25 +272,28 @@ Implementation validation must include the project's lint, typecheck, tests,
 bundle-boundary checks, and applicable mobile/Hermes automated checks. Device
 smoke tests on iOS/Android aren't required to declare this personal V1 usable.
 
-## Remaining research and validation gates
+## Current validation and remaining gates
 
-These are implementation facts to establish, not product choices to silently
-replace with guesses:
+These are established results and outstanding acceptance gaps, not permission to
+replace unresolved contracts with guesses:
 
-1. Verify tier request mapping and error propagation. Backend acceptance,
-   including Ultrafast acceptance, isn't a release gate or eligibility-matrix
-   requirement.
-2. Validate application of the expanded context setting, local budgeting, and
-   error propagation. Backend capacity verification isn't a release gate or a
-   reason to hide the control.
-3. Validate pre-agent feature discovery, session-only persistence, and complete
-   child-history restoration through the selected host APIs.
-4. Validate conversation rewind, branch persistence, history replacement, and
-   queue clearing end to end through the companion/public provider contract.
-5. Confirm selected versions and available public APIs before choosing dependency
-   pins. No unsupported API or core patch may be assumed to close a gap.
-6. Deferred toggles can only return to scope after a supported extension-only
-   session-scoped solution is demonstrated and the scope change is confirmed.
+1. Tier discovery, exact-name injection, legacy migration, unsupported-selection
+   errors, and state restoration have automated coverage. Live Astra discovery
+   and `flex` selection passed. A fresh Luna check advertised `auto`, `standard`,
+   `flex`, `priority`; these are observations, not a permanent model list.
+2. Context policy consumption, session-local clones, restoration, removal, and
+   live updates are implemented/tested. Luna's observed short/max budgets were
+   272,000 / 1,050,000 tokens. No independent capacity/billing proof is claimed.
+3. Draft controls, durable restore, dialogs, attachments, and child views have
+   automated/live coverage described in [testing](testing.md). A synthetic
+   long-child probe reached row 259; it doesn't prove all recovery/display paths.
+4. Pi navigation, branch persistence, guards, and queue clearing are implemented.
+   R5's complete visible-history requirement is still blocked: abandoned rows
+   can remain in Paseo after rewind/reload. See [verification](rewind-011-verification.md).
+5. SDK pins remain `0.10.0`; the tested host is `0.11.0-beta.3`, Pi `1.0.0+local`.
+   Preserve supported APIs and rerun host-contract checks before a host upgrade.
+6. Session-only automatic toggles remain deferred. Mobile device smoke is
+   unverified and Windows descendant process-group cleanup isn't implemented.
 
 ## Evidence
 

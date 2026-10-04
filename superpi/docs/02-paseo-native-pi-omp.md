@@ -1,5 +1,9 @@
 # Native Paseo Pi and OMP integrations
 
+Historical source report from 2026-10-03. Native-provider internals below are
+comparison evidence, not supported imports or a description of Superpi's current
+implementation. See [current behavior](../README.md) and [architecture](design.md).
+
 Native Paseo Pi support translates a generic Pi RPC stream using a fixed set of
 daemon-side extension parsers. Subagents are inferred from tool calls, custom
 messages, and child files. Native OMP support consumes explicit subagent RPC

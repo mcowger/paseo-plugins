@@ -4,10 +4,6 @@ Separate Pi extension package for the Superpi root companion. It runs inside the
 root Pi process, not inside the Paseo plugin runtime, and owns the versioned
 control/rewind envelope used by the Superpi provider transport.
 
-This is the root companion for the Superpi provider. It runs inside the root
-Pi process, not inside the Paseo plugin runtime, and owns the versioned
-control/rewind envelope used by the Superpi provider transport.
-
 Protocol, session-key enforcement, root/child handling, conflict detection, and
 the `hello` / `get-state` / `configure` / `rewind` / `compact` operations are
 implemented and tested. The companion also subscribes to the owned
@@ -19,9 +15,9 @@ The provider launches the root Pi with the companion as an explicit extension,
 marks the root owner, and passes the integration session key:
 
 ```text
-pi --extension <path>/superpi-companion/index.ts \
-   --superpi-companion-root \
-   SUPERPI_SESSION_KEY=<opaque-session-key>
+SUPERPI_SESSION_KEY=<opaque-session-key> pi --mode rpc \
+   --extension <path>/superpi-companion/index.ts \
+   --superpi-companion-root
 ```
 
 - `--superpi-companion-root` (or `SUPERPI_COMPANION_ROLE=root`) selects root
@@ -223,7 +219,8 @@ Returns the same state. Behavior:
   short budget when off. Policies are requested from `plexus-pi` over Pi's public
   event bus and updated from complete revisioned snapshots. Models without a
   policy, or with equal short/max budgets, retain Pi's declared budget and have
-  no Long Context control. There is no fixed expansion fallback.
+  no context-length selector. The UI shows rounded short/max token lengths,
+  not On/Off. There is no fixed expansion fallback.
 - Budgets are applied to session-local model clones. The shared model catalog
   and child defaults are untouched. Policy removal restores the catalog budget
   and clears the toggle. Application failures are reported, not treated as a
@@ -273,6 +270,10 @@ Children never inherit or inject the root's tier selection.
 
 ## Current gaps
 
+The provider's native `/compact` dispatch uses Pi's core RPC `compact` command.
+The companion's `compact` envelope is implemented/tested but isn't the provider's
+current dispatch path.
+
 - Host history replacement after rewind is the provider's supported-adapter
   concern. The companion re-reads the active branch and appends a branch pin;
   it does not invent a reset/replacement event.
@@ -301,3 +302,9 @@ bun run test
 
 The load smoke test evaluates the real `index.ts` through Pi's jiti transform
 with a no-model extension context.
+
+Run the provider package checks too when changing shared envelope behavior; see
+[the SuperPi development workflow](../superpi/README.md#developing-through-superpi).
+Existing Pi processes don't hot-reload this extension. Sync the isolated copy
+and open a fresh test conversation. Do not reload the provider hosting the
+development session from that same session.
