@@ -29,6 +29,17 @@ export const MAX_PROMPT_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_PROMPT_IMAGE_TOTAL_BYTES = 16 * 1024 * 1024;
 /** Maximum number of inline images forwarded in one prompt. */
 export const MAX_PROMPT_IMAGES = 16;
+/**
+ * Character cap for the combined text sent in one Pi prompt.
+ *
+ * Paseo's Fork action seeds the new session with a curated `<chat-history-summary>`
+ * text block that is unbounded on the host. Without a cap a very long history
+ * becomes one huge Pi prompt. Truncation keeps the frame well under the
+ * transport budget and leaves the user's new instruction intact.
+ */
+export const MAX_PROMPT_TEXT_CHARS = 200_000;
+
+const CHAT_HISTORY_MARKER = "<chat-history-summary>";
 
 const IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
   "image/png",
@@ -209,6 +220,37 @@ function renderUploadedFileHint(part: {
   ].join("\n");
 }
 
+function isChatHistoryText(part: { text: string } & Record<string, unknown>): boolean {
+  if (part.contextKind === "chat_history") return true;
+  return part.text.includes(CHAT_HISTORY_MARKER);
+}
+
+function truncateForkHistory(entries: Array<{ text: string; isFork: boolean }>): string[] {
+  const separator = "\n\n";
+  const joinedLength = (): number =>
+    entries.reduce((total, entry, index) => total + entry.text.length + (index > 0 ? separator.length : 0), 0);
+  if (joinedLength() <= MAX_PROMPT_TEXT_CHARS) return entries.map((entry) => entry.text);
+  const originalForkChars = entries.filter((entry) => entry.isFork).reduce((total, entry) => total + entry.text.length, 0);
+  let overflow = joinedLength() - MAX_PROMPT_TEXT_CHARS;
+  for (const entry of entries) {
+    if (overflow <= 0) break;
+    if (!entry.isFork) continue;
+    const cut = Math.min(entry.text.length, overflow);
+    entry.text = entry.text.slice(entry.text.length - cut);
+    overflow -= cut;
+  }
+  const note =
+    `[Forked chat history truncated to fit the Pi prompt budget (showing part of ${originalForkChars} chars).]`;
+  const forkIndex = entries.findIndex((entry) => entry.isFork);
+  if (forkIndex >= 0) entries[forkIndex]!.text = `${note}\n${entries[forkIndex]!.text}`;
+  else entries.unshift({ text: note, isFork: false });
+  let message = entries.map((entry) => entry.text).join(separator);
+  if (message.length > MAX_PROMPT_TEXT_CHARS + note.length) {
+    message = message.slice(-(MAX_PROMPT_TEXT_CHARS + note.length));
+  }
+  return [message];
+}
+
 export async function buildPiPrompt(
   prompt: ProviderPrompt,
   modelSupportsImages: boolean,
@@ -219,7 +261,10 @@ export async function buildPiPrompt(
     return { message: `/${name}${args ? ` ${args}` : ""}` };
   }
 
-  const textParts: string[] = [];
+  const textEntries: Array<{ text: string; isFork: boolean }> = [];
+  const pushText = (text: string, isFork = false): void => {
+    textEntries.push({ text, isFork });
+  };
   const images: PiPromptImage[] = [];
   let totalImageBytes = 0;
 
@@ -237,7 +282,7 @@ export async function buildPiPrompt(
   for (const part of prompt.input.content) {
     switch (part.type) {
       case "text":
-        textParts.push(part.text);
+        pushText(part.text, isChatHistoryText(part as { text: string } & Record<string, unknown>));
         break;
 
       case "image": {
@@ -246,7 +291,7 @@ export async function buildPiPrompt(
           throw new Error(`Invalid prompt image: ${validated.reason}`);
         }
         if (!modelSupportsImages) {
-          textParts.push(omitImageNote(part.mimeType, decodedByteLength(validated.data)));
+          pushText(omitImageNote(part.mimeType, decodedByteLength(validated.data)));
           break;
         }
         if (images.length >= MAX_PROMPT_IMAGES) {
@@ -273,32 +318,32 @@ export async function buildPiPrompt(
           }
         }
         if (isImage && !modelSupportsImages) {
-          textParts.push(omitImageNote(part.mimeType, part.size));
-          textParts.push(renderUploadedFileHint(part));
+          pushText(omitImageNote(part.mimeType, part.size));
+          pushText(renderUploadedFileHint(part));
           break;
         }
-        textParts.push(renderUploadedFileHint(part));
+        pushText(renderUploadedFileHint(part));
         break;
       }
 
       case "forge_change_request":
-        textParts.push(renderChangeRequest(part));
+        pushText(renderChangeRequest(part));
         break;
 
       case "github_pr":
-        textParts.push(renderChangeRequest({ ...part, forge: "github" }));
+        pushText(renderChangeRequest({ ...part, forge: "github" }));
         break;
 
       case "forge_issue":
-        textParts.push(renderIssue(part));
+        pushText(renderIssue(part));
         break;
 
       case "github_issue":
-        textParts.push(renderIssue({ ...part, forge: "github" }));
+        pushText(renderIssue({ ...part, forge: "github" }));
         break;
 
       case "review":
-        textParts.push(renderReview(part));
+        pushText(renderReview(part));
         break;
 
       default: {
@@ -308,6 +353,6 @@ export async function buildPiPrompt(
     }
   }
 
-  const message = textParts.join("\n\n");
+  const message = truncateForkHistory(textEntries).join("\n\n");
   return images.length > 0 ? { message, images } : { message };
 }

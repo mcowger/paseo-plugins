@@ -29,6 +29,9 @@ that pin is not a claim that newer hosts are unsupported.
 - Private durable conversation handles and active-branch history restoration.
   Large histories are read from the owned Pi transcript instead of requesting
   one growing RPC response.
+- Paseo's Fork action works as a text copy. The new session starts with the
+  curated chat history plus your first message. Very long histories are
+  truncated with a visible note; tool runs and child activity don't carry over.
 - **Superpi: Copy Pi resume command (stop session first)** in the agent command
   center copies a terminal command for the saved native transcript. Stop/detach
   the Paseo session before running it to avoid concurrent transcript writers.

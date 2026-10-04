@@ -4,6 +4,7 @@ import {
   buildPiPrompt,
   MAX_PROMPT_IMAGE_BYTES,
   MAX_PROMPT_IMAGE_TOTAL_BYTES,
+  MAX_PROMPT_TEXT_CHARS,
 } from "./attachments";
 
 function messagePrompt(content: ProviderContent[]): ProviderPrompt {
@@ -211,5 +212,46 @@ describe("buildPiPrompt image aggregate", () => {
       ),
     ).rejects.toThrow(/aggregate limit/);
     expect(MAX_PROMPT_IMAGE_TOTAL_BYTES).toBe(16 * 1024 * 1024);
+  });
+});
+
+describe("buildPiPrompt forked chat history", () => {
+  const forkSummary = (body: string): ProviderContent => ({
+    type: "text",
+    mimeType: "text/plain",
+    contextKind: "chat_history",
+    title: "Chat history",
+    text: `<chat-history-summary>\nChat history from a previous Paseo agent.\n\n${body}\n</chat-history-summary>`,
+  });
+
+  test("forwards Paseo fork history ahead of the new instruction", async () => {
+    const result = await buildPiPrompt(
+      messagePrompt([forkSummary("[User] hello\n[Assistant] hi"), { type: "text", text: "continue from here" }]),
+      true,
+    );
+    expect(result.message).toContain("<chat-history-summary>");
+    expect(result.message).toContain("continue from here");
+    expect(result.message.indexOf("<chat-history-summary>")).toBeLessThan(
+      result.message.indexOf("continue from here"),
+    );
+  });
+
+  test("detects fork history by marker even without contextKind", async () => {
+    const result = await buildPiPrompt(
+      messagePrompt([{ type: "text", text: "<chat-history-summary>\nold stuff\n</chat-history-summary>" }]),
+      true,
+    );
+    expect(result.message).toContain("old stuff");
+  });
+
+  test("truncates huge fork history but keeps the new instruction", async () => {
+    const huge = "x".repeat(MAX_PROMPT_TEXT_CHARS + 10_000);
+    const result = await buildPiPrompt(
+      messagePrompt([forkSummary(huge), { type: "text", text: "do the thing" }]),
+      true,
+    );
+    expect(result.message).toContain("do the thing");
+    expect(result.message).toContain("truncated to fit the Pi prompt budget");
+    expect(result.message.length).toBeLessThanOrEqual(MAX_PROMPT_TEXT_CHARS + 500);
   });
 });
