@@ -40,8 +40,8 @@ npm run sdk:check
 Provider tests include client size/classes/Hermes and runtime-boundary checks.
 The rewind host-contract probe runs against the installed isolated host; it
 skips when that host is absent. Install the test host or set `PASEO_HOST_ROOT`
-before claiming the host contract was checked. Mobile device smoke is separate
-and remains unverified.
+before claiming the host contract was checked. Mobile device smoke is separate;
+iOS passed (2026-10-04), Android remains unverified.
 
 ## Layout and configuration
 

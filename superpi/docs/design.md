@@ -89,7 +89,7 @@ execution SDK integration.
   extension startup can have effects; observe and report them rather than claim
   that arbitrary third-party factories are side-effect-free.
 - Advertise capabilities only after their implementation is tested. No file
-  revert, native fork, exact MCP preapproval, or arbitrary child control claims.
+  revert, Pi-native exact fork, exact MCP preapproval, or arbitrary child control claims.
 
 ## 2. Root session and transport
 
@@ -395,7 +395,7 @@ No worker delegation is implied.
 | 3 | Attachments, blocking dialogs/editor prefill, notices and tool metadata implemented; desktop/web probes recorded. |
 | 4 | Owned bridge, independent defaults, native child views and durable replay implemented; synthetic long-history display probe is bounded evidence. |
 | 5 | Pi navigation, branch pin, queue clearing and guards implemented; full Paseo visible-history replacement blocked. |
-| 6 | Linux cleanup, failure/reload regression coverage and automated bundle/Hermes checks pass; mobile smoke unverified, Windows descendant cleanup unsupported. |
+| 6 | Linux cleanup, failure/reload regression coverage and automated bundle/Hermes checks pass; mobile smoke passed on iOS (2026-10-04), Android unverified, Windows descendant cleanup unsupported. |
 
 ### Stage 0. Contract fixtures and package scaffolding
 
@@ -505,7 +505,7 @@ Minimal plugin UI consists of the Pi dialogs screen and resume-command action.
 
 Remaining limits are host visible-history replacement, direct steering, arbitrary
 TUI widgets, MCP/tool-policy translation, and Windows descendant cleanup. Mobile
-device smoke remains unverified. Continue through
+smoke passed on iOS (2026-10-04); Android remains unverified. Continue through
 [the SuperPi development workflow](../README.md#developing-through-superpi), using
 an isolated daemon instead of reloading the provider running the work session.
 

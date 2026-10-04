@@ -20,8 +20,8 @@ SDK dependencies remain pinned to `0.10.0`. Runtime checks used Paseo
 `0.11.0-beta.3` and Pi `1.0.0+local`. The latest implementation baseline is
 `1c13cae` (Plexus model policies), following `cd2e74c` (session controls/commands).
 Lint, typecheck, and 292 tests passed across both packages at that baseline,
-including SDK, bundle-boundary, and Hermes checks. Mobile device smoke remains
-unverified. This is not a claim that every original V1 acceptance goal passes.
+including SDK, bundle-boundary, and Hermes checks. Mobile smoke passed on iOS
+(2026-10-04); Android remains unverified. This is not a claim that every original V1 acceptance goal passes.
 
 The agreed integration boundary is a Pi subprocess speaking RPC. Embedding Pi in
 the Paseo plugin through the in-process SDK is out of scope. The existing

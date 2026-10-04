@@ -236,7 +236,8 @@ conversation-local toggle. Manual compaction remains idle-only.
 - Generic extension settings discovery or arbitrary TUI component execution.
 - Additional subagent extension families and interactive child controls.
 - Resumable child execution or automatic replay after failure.
-- Native-agent migration/import, Pi-native fork, and file rollback.
+- Native-agent migration/import, Pi-native exact fork, and file rollback.
+  Paseo's text-copy Fork action is supported; Pi DAG fidelity is the deferred part.
 - New queue editing or dedicated shutdown UI.
 - Bespoke todo/MCP integration work as a release gate. Normal loaded extension
   tool/result data and blocking dialogs still follow the relevant requirements;
@@ -266,6 +267,7 @@ Desktop/web is the required V1 smoke-test target. Tests should cover:
 | Recovery | Frontend reconnect preserves live work; plugin/Pi loss restores history with honest terminal outcomes and no automatic prompt replay. |
 | Reload races | Cleanup works even when session-close delivery races plugin teardown; no stale UI request controls a replacement session. |
 | Attachments | Image/file handling matches normal Paseo behavior and exposes model incompatibility accurately. |
+| Fork | Paseo Fork seeds a new session with curated history plus the new instruction; huge histories truncate visibly with the new instruction intact. |
 | Dialogs/data | Dialog answers, cancellation, timeout, and prefill work; ordinary tool data remains usable by existing rendering plugins; errors and cost-estimate limitations are visible. |
 
 Implementation validation must include the project's lint, typecheck, tests,
@@ -292,8 +294,9 @@ replace unresolved contracts with guesses:
    can remain in Paseo after rewind/reload. See [verification](rewind-011-verification.md).
 5. SDK pins remain `0.10.0`; the tested host is `0.11.0-beta.3`, Pi `1.0.0+local`.
    Preserve supported APIs and rerun host-contract checks before a host upgrade.
-6. Session-only automatic toggles remain deferred. Mobile device smoke is
-   unverified and Windows descendant process-group cleanup isn't implemented.
+6. Session-only automatic toggles remain deferred. Mobile smoke passed on iOS
+   (2026-10-04); Android remains unverified. Windows descendant process-group
+   cleanup isn't implemented and isn't wanted.
 
 ## Evidence
 

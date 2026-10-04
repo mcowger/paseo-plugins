@@ -6,8 +6,9 @@ the **installed compiled npm host**, not the local source and not 0.10 types.
 
 Verdict: **CONFIRMED BLOCKER.** No Paseo core was modified.
 
-This is the 2026-10-03 host verification snapshot, not a query of today's npm
-dist-tags. Pi branch rewind is now implemented and exposed with this limitation;
+This is the 2026-10-03 host verification snapshot, re-confirmed 2026-10-04
+against the same installed 0.11.0-beta.3 host (still the current beta dist-tag),
+not a query of today's npm dist-tags. Pi branch rewind is now implemented and exposed with this limitation;
 the probe remains the check to rerun when changing host versions.
 
 ## Versions and evidence
