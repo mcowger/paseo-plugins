@@ -567,4 +567,22 @@ describe("mapToolDetail and mapUsage", () => {
       totalCostUsd: 0,
     });
   });
+
+  test("passes through reported context window fields", () => {
+    expect(mapUsage({
+      input: 5,
+      output: 1,
+      cacheRead: 0,
+      cost: { total: 0 },
+      contextWindowMaxTokens: 200000,
+      contextWindowUsedTokens: 175,
+    })).toEqual({
+      inputTokens: 5,
+      cachedInputTokens: 0,
+      outputTokens: 1,
+      totalCostUsd: 0,
+      contextWindowMaxTokens: 200000,
+      contextWindowUsedTokens: 175,
+    });
+  });
 });

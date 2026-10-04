@@ -21,6 +21,9 @@ export interface FakePiRpcOptions {
   messagesProvider?: () => unknown[];
   /** Static `get_entries` payload, or a dynamic provider. */
   entries?: unknown[];
+  /** Static `get_session_stats` payload, or a dynamic provider. */
+  sessionStats?: unknown;
+  sessionStatsProvider?: () => unknown;
   leafId?: string | null;
   entriesProvider?: () => unknown;
   /** Custom `clear_queue` response; defaults to empty queues. */
@@ -109,6 +112,20 @@ export class FakePiRpc implements PiRpc {
         return {
           entries: this.options.entries ?? [],
           leafId: this.options.leafId ?? null,
+        };
+      case "get_session_stats":
+        if (this.options.sessionStatsProvider) return this.options.sessionStatsProvider();
+        return this.options.sessionStats ?? {
+          sessionId: "pi-session-1",
+          sessionFile: undefined,
+          userMessages: 0,
+          assistantMessages: 0,
+          toolCalls: 0,
+          toolResults: 0,
+          totalMessages: 0,
+          tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          cost: 0,
+          contextUsage: { tokens: 0, contextWindow: 1000, percent: 0 },
         };
       case "prompt": {
         this.options.onPrompt?.(command);

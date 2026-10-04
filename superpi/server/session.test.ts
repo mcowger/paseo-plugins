@@ -1059,6 +1059,7 @@ describe("stage 2 configuration", () => {
     });
     const { session, events } = harness({ fake });
     await session.open("open-1");
+    const statsAfterOpen = fake.requestsOfType("get_session_stats").length;
     for (const [name, args] of [["autocompact", ""], ["autocompact", "off"], ["model", "test/model"], ["thinking", "high"], ["name", "New title"], ["session", ""], ["resume", ""], ["autocompact", "wrong"], ["model", ""], ["thinking", "wrong"]]) {
       await session.prompt({ clientMessageId: `${name}-${args}`, delivery: "auto", input: { type: "command", name: name!, arguments: args! } });
     }
@@ -1066,7 +1067,9 @@ describe("stage 2 configuration", () => {
     expect(fake.requestsOfType("set_model")).toContainEqual({ type: "set_model", provider: "test", modelId: "model" });
     expect(fake.requestsOfType("set_thinking_level")).toEqual([{ type: "set_thinking_level", level: "high" }]);
     expect(fake.requestsOfType("set_session_name")).toEqual([{ type: "set_session_name", name: "New title" }]);
-    expect(fake.requestsOfType("get_session_stats")).toHaveLength(1);
+    // Only the native `/session` display reads stats; model/thinking changes
+    // re-report through the usage publish path, which also reads stats.
+    expect(fake.requestsOfType("get_session_stats").length).toBeGreaterThanOrEqual(statsAfterOpen + 1);
     expect(fake.requestsOfType("prompt").filter((entry) => !String(entry.message).startsWith("/superpi-control "))).toHaveLength(0);
     expect(ofType(events, "session.prompt_result").slice(-4).every((event) => event.result.type === "failed")).toBe(true);
     await session.close();
@@ -1076,9 +1079,12 @@ describe("stage 2 configuration", () => {
     const fake = new FakePiRpc({ commands: [{ name: "superpi-control" }, { name: "session", description: "Extension session command" }], promptDisposition: "handled" });
     const { session } = harness({ fake });
     await session.open("open-1");
+    const statsAfterOpen = fake.requestsOfType("get_session_stats").length;
     await session.prompt({ clientMessageId: "c1", delivery: "auto", input: { type: "command", name: "session", arguments: "custom" } });
     expect(fake.requestsOfType("prompt")).toContainEqual({ type: "prompt", message: "/session custom" });
-    expect(fake.requestsOfType("get_session_stats")).toHaveLength(0);
+    // The extension-owned command takes the prompt path and issues no
+    // additional stats read beyond the open-time usage publish.
+    expect(fake.requestsOfType("get_session_stats")).toHaveLength(statsAfterOpen);
     await session.close();
   });
 
@@ -1644,6 +1650,149 @@ describe("interrupt cancels pending dialogs", () => {
     );
     expect(ofType(events, "session.permission_resolved")[0]?.permissionId).toBe("editor-1");
     expect(ofType(events, "request.completed")[0]?.requestId).toBe("int-1");
+    await session.close();
+  });
+});
+
+describe("context usage reporting", () => {
+  function statsPayload(used: number | null, window = 272000) {
+    return {
+      sessionId: "pi-session-1",
+      sessionFile: undefined,
+      userMessages: 1,
+      assistantMessages: 1,
+      toolCalls: 0,
+      toolResults: 0,
+      totalMessages: 2,
+      tokens: { input: 12000, output: 800, cacheRead: 4000, cacheWrite: 0, total: 12800 },
+      cost: 0.02,
+      contextUsage: { tokens: used, contextWindow: window, percent: 5 },
+    };
+  }
+
+  it("publishes the effective companion budget with live consumption on open", async () => {
+    const fake = new FakePiRpc({
+      helloData: {
+        capabilities: ["tier", "context"],
+        tiers: ["default"],
+        settings: { tier: "default", longContext: false },
+        contextWindow: 272000,
+      },
+      sessionStats: statsPayload(12345),
+    });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+
+    const usage = ofType(events, "session.usage");
+    expect(usage.length).toBeGreaterThan(0);
+    // The companion-cloned effective budget wins over the raw Pi model window.
+    expect(usage.at(-1)).toMatchObject({
+      sessionId: "host-1",
+      usage: {
+        contextWindowMaxTokens: 272000,
+        contextWindowUsedTokens: 12345,
+        inputTokens: 12000,
+        outputTokens: 800,
+        totalCostUsd: 0.02,
+      },
+    });
+    expect(usage.at(-1)).not.toHaveProperty("turnId");
+    await session.close();
+  });
+
+  it("falls back to the Pi model window when the companion reports none", async () => {
+    const fake = new FakePiRpc({ sessionStats: statsPayload(64, 1000) });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+
+    expect(ofType(events, "session.usage").at(-1)).toMatchObject({
+      usage: { contextWindowMaxTokens: 1000, contextWindowUsedTokens: 64 },
+    });
+    await session.close();
+  });
+
+  it("refreshes consumption with the turn id when a turn completes", async () => {
+    let statsCalls = 0;
+    const fake = new FakePiRpc({
+      promptDisposition: "started",
+      sessionStatsProvider: () => {
+        statsCalls += 1;
+        return statsPayload(statsCalls <= 1 ? 1000 : 50000);
+      },
+      onPrompt: () => {
+        fake.emit({ type: "message_start", message: { role: "user", id: "u1", content: "hello" } });
+        fake.emit({ type: "message_start", message: { role: "assistant", id: "a1" } });
+        fake.emit({
+          type: "message_end",
+          message: {
+            role: "assistant",
+            id: "a1",
+            content: [{ type: "text", text: "done" }],
+            usage: { input: 100, output: 12, cacheRead: 7, cost: { total: 0.001 } },
+          },
+        });
+        fake.emit({ type: "agent_settled" });
+      },
+    });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    events.length = 0;
+
+    await session.prompt({
+      clientMessageId: "client-1",
+      delivery: "auto",
+      input: { type: "message", content: [{ type: "text", text: "hello" }] },
+    });
+
+    const usage = ofType(events, "session.usage");
+    expect(usage.length).toBeGreaterThan(0);
+    expect(usage.at(-1)).toMatchObject({
+      turnId: expect.any(String),
+      usage: { contextWindowMaxTokens: 1000, contextWindowUsedTokens: 50000 },
+    });
+    await session.close();
+  });
+
+  it("omits used tokens when Pi reports unknown consumption", async () => {
+    const fake = new FakePiRpc({ sessionStats: statsPayload(null) });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+
+    const latest = ofType(events, "session.usage").at(-1);
+    // The raw Pi model window applies when the companion reports no budget.
+    expect(latest?.usage.contextWindowMaxTokens).toBe(1000);
+    expect(latest?.usage).not.toHaveProperty("contextWindowUsedTokens");
+    await session.close();
+  });
+
+  it("keeps prior usage when session stats are unavailable", async () => {
+    const fake = new FakePiRpc({
+      sessionStatsProvider: () => {
+        throw new Error("stats unavailable");
+      },
+    });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+
+    expect(ofType(events, "session.ready")).toHaveLength(1);
+    expect(ofType(events, "session.usage")).toHaveLength(0);
+    await session.close();
+  });
+
+  it("re-reports usage after configuration changes", async () => {
+    let used = 7000;
+    const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used) });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    events.length = 0;
+
+    used = 9000;
+    await session.configure("config-1", { thinkingOption: "high" });
+
+    expect(ofType(events, "request.completed").map((event) => event.requestId)).toContain("config-1");
+    expect(ofType(events, "session.usage").at(-1)).toMatchObject({
+      usage: { contextWindowMaxTokens: 1000, contextWindowUsedTokens: 9000 },
+    });
     await session.close();
   });
 });

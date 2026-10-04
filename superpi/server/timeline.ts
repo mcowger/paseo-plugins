@@ -504,6 +504,13 @@ export function mapUsage(usage: unknown): ProviderUsage | null {
   if (cached !== undefined) mapped.cachedInputTokens = cached;
   if (output !== undefined) mapped.outputTokens = output;
   if (total !== undefined) mapped.totalCostUsd = total;
+  // Pi's streaming usage deltas do not carry context capacity today, but pass
+  // the fields through when a future Pi (or bridge) reports them so the host
+  // meter can use them without another adapter change.
+  const maxTokens = numberValue(usage.contextWindowMaxTokens);
+  const usedTokens = numberValue(usage.contextWindowUsedTokens);
+  if (maxTokens !== undefined) mapped.contextWindowMaxTokens = maxTokens;
+  if (usedTokens !== undefined) mapped.contextWindowUsedTokens = usedTokens;
   const hasSignal = Object.values(mapped).some((value) => value !== 0);
   return hasSignal ? mapped : null;
 }

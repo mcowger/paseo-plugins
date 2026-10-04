@@ -13,6 +13,7 @@ import type {
   ProviderSetting,
   ProviderThinkingOption,
   ProviderCommand,
+  ProviderUsage,
 } from "@getpaseo/plugin/server/provider";
 import {
   companionPrefix,
@@ -243,6 +244,52 @@ function toProviderError(error: unknown): ProviderError {
   return { message: String(error) };
 }
 
+/** Session totals plus context window figures from Pi's `get_session_stats`. */
+interface ParsedSessionStats {
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  totalCostUsd?: number;
+  /** Effective context capacity, when Pi reports it. */
+  contextWindow?: number;
+  /** Live consumed context tokens; null when Pi reports unknown (e.g. right after compaction). */
+  usedTokens?: number | null;
+}
+
+function positiveNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function nonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function parseSessionStats(data: unknown): ParsedSessionStats {
+  if (!isRecord(data)) return {};
+  const stats: ParsedSessionStats = {};
+  if (isRecord(data.tokens)) {
+    const input = nonNegativeNumber(data.tokens.input);
+    const cached = nonNegativeNumber(data.tokens.cacheRead);
+    const output = nonNegativeNumber(data.tokens.output);
+    if (input !== undefined) stats.inputTokens = input;
+    if (cached !== undefined) stats.cachedInputTokens = cached;
+    if (output !== undefined) stats.outputTokens = output;
+  }
+  const cost = nonNegativeNumber(data.cost);
+  if (cost !== undefined) stats.totalCostUsd = cost;
+  if (isRecord(data.contextUsage)) {
+    const window = positiveNumber(data.contextUsage.contextWindow);
+    if (window !== undefined) stats.contextWindow = window;
+    const tokens = data.contextUsage.tokens;
+    if (tokens === null) stats.usedTokens = null;
+    else {
+      const used = nonNegativeNumber(tokens);
+      if (used !== undefined) stats.usedTokens = used;
+    }
+  }
+  return stats;
+}
+
 function buildCompanionSettings(state: CompanionState | undefined, modelContextWindow?: number): ProviderSetting[] {
   const tier = state?.settings.tier ?? "default";
   const longContext = state?.settings.longContext ?? false;
@@ -393,6 +440,7 @@ export class SuperpiSession {
   private revertTokensUnavailable = false;
   private compactionInFlight = false;
   private notificationCounter = 0;
+  private lastContextUsageKey: string | null = null;
   private extensionCommands = new Set<string>();
 
   private activeTurnId: string | undefined;
@@ -555,6 +603,7 @@ export class SuperpiSession {
       }
       this.state = "ready";
       await this.enqueueOperation(() => this.applyDeferredSettings());
+      await this.publishContextUsage();
       this.emit({ type: "session.ready", requestId, sessionId: this.sessionId });
     } catch (error) {
       this.state = "failed";
@@ -702,6 +751,9 @@ export class SuperpiSession {
         return;
       }
       await rpc.request({ type: "compact", ...(args ? { customInstructions: args } : {}) }, 0);
+      // Compaction rewrites consumption (possibly to unknown until the next
+      // turn); re-report so the meter does not show a stale pre-compact value.
+      await this.publishContextUsage();
       this.emit({
         type: "session.prompt_result",
         sessionId: this.sessionId,
@@ -837,6 +889,9 @@ export class SuperpiSession {
     }
     const config = await this.readConfigState();
     this.emit({ type: "session.config", sessionId: this.sessionId, config });
+    // Model and budget changes move the effective window; re-report it so the
+    // composer meter tracks the newly applied capacity.
+    await this.publishContextUsage();
   }
 
   private resolveTierSelection(value: string): string | undefined {
@@ -1138,6 +1193,10 @@ export class SuperpiSession {
     } catch (error) {
       persistenceError = toProviderError(error);
     }
+    // Context usage is reported separately from persistence: Pi's per-message
+    // usage carries no context capacity, so the composer meter only learns
+    // the window from this stats-based emission.
+    await this.publishContextUsage(this.activeTurnId);
     const state = this.resolveTerminalState();
     const turnId = this.activeTurnId;
     this.pendingStopReason = undefined;
@@ -1153,6 +1212,73 @@ export class SuperpiSession {
           description: persistenceError.message,
         },
       });
+    }
+  }
+
+  /**
+   * Publish `session.usage` with context window capacity and consumption.
+   *
+   * Pi's streaming/message usage carries only input/output/cost; context
+   * capacity and live consumption live in `get_session_stats`, and the
+   * effective session budget is the companion-cloned model window (Plexus
+   * short budget vs maximum) mirrored on companion state. Paseo's composer
+   * meter reads `lastUsage.contextWindowMaxTokens/UsedTokens`, so without
+   * this emission the meter stays empty even though the budget is known.
+   *
+   * Best effort and idempotent: a stats failure keeps prior usage instead of
+   * failing the turn, unknown consumption (e.g. right after compaction) omits
+   * the used field rather than reporting a stale value, and unchanged values
+   * are not re-emitted. Never throws.
+   */
+  private async publishContextUsage(turnId?: string): Promise<void> {
+    const rpc = this.rpc;
+    if (!rpc || this.state === "closed" || this.state === "failed") return;
+    try {
+      const [stateData, statsData] = await Promise.all([
+        rpc.request({ type: "get_state" }).catch(() => undefined),
+        rpc.request({ type: "get_session_stats" }).catch(() => undefined),
+      ]);
+      // A stats transport failure means consumption is unknown; keep the
+      // host's prior usage rather than replacing it with a max-only report.
+      if (statsData === undefined) return;
+      const stats = parseSessionStats(statsData);
+      const modelWindow = isRecord(stateData) && isRecord(stateData.model)
+        && typeof stateData.model.contextWindow === "number"
+        && Number.isFinite(stateData.model.contextWindow)
+        && stateData.model.contextWindow > 0
+        ? stateData.model.contextWindow
+        : undefined;
+      const companionWindow = this.companionState?.contextWindow;
+      const statsWindow = stats.contextWindow;
+      const maxTokens = companionWindow ?? modelWindow ?? statsWindow;
+      if (maxTokens === undefined) return;
+      const fallback = this.timeline.usage() ?? undefined;
+      const usage: ProviderUsage = {
+        ...(stats.inputTokens !== undefined || stats.cachedInputTokens !== undefined
+        || stats.outputTokens !== undefined || stats.totalCostUsd !== undefined
+          ? {
+            ...(stats.inputTokens !== undefined ? { inputTokens: stats.inputTokens } : {}),
+            ...(stats.cachedInputTokens !== undefined ? { cachedInputTokens: stats.cachedInputTokens } : {}),
+            ...(stats.outputTokens !== undefined ? { outputTokens: stats.outputTokens } : {}),
+            ...(stats.totalCostUsd !== undefined ? { totalCostUsd: stats.totalCostUsd } : {}),
+          }
+          : (fallback ? { ...fallback } : {})),
+        contextWindowMaxTokens: maxTokens,
+        ...(stats.usedTokens !== undefined && stats.usedTokens !== null
+          ? { contextWindowUsedTokens: stats.usedTokens }
+          : {}),
+      };
+      const key = JSON.stringify({ ...usage, turnId });
+      if (key === this.lastContextUsageKey) return;
+      this.lastContextUsageKey = key;
+      this.emit({
+        type: "session.usage",
+        sessionId: this.sessionId,
+        ...(turnId ? { turnId } : {}),
+        usage,
+      });
+    } catch {
+      // Context reporting must never break session progress.
     }
   }
 
@@ -1599,6 +1725,8 @@ export class SuperpiSession {
       sessionId: this.sessionId,
       persistence: store.persistence,
     });
+    // The rewound branch carries different consumption; re-report it.
+    await this.publishContextUsage();
   }
 
   private async failIndeterminateRewind(requestId: string, error: unknown): Promise<void> {

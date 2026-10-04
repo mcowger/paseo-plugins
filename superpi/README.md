@@ -21,6 +21,9 @@ that pin is not a claim that newer hosts are unsupported.
   Models without a short budget retain Pi's declared limit and have no context
   selector.
   Settings apply to subsequent requests without interrupting a response.
+- Context usage and the effective budget are reported through provider usage
+  events (`get_session_stats` consumption plus the companion-applied window),
+  so Paseo's composer context meter reflects live SuperPi sessions.
   Backend errors are surfaced, not hidden behind an eligibility matrix.
   Legacy Fast selections migrate to advertised `priority`; unsupported saved
   tiers use `auto` or `standard` while retaining the user's choice for compatible
