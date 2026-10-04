@@ -112,6 +112,87 @@ describe("createTimeline streaming", () => {
     });
   });
 
+  test("prefers protocol content over the legacy thinking field on thinking_end", () => {
+    const { timeline } = harness();
+
+    timeline.accept({
+      type: "message_start",
+      message: { role: "assistant", responseId: "resp-4", content: [] },
+    });
+    timeline.accept({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_start", contentIndex: 0 },
+    });
+    timeline.accept({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "thinking_end",
+        contentIndex: 0,
+        thinking: "legacy channel",
+        content: "protocol channel",
+      },
+    });
+
+    expect(findItem(timeline.items(), "reasoning:resp-4:0")).toMatchObject({
+      type: "reasoning",
+      text: "protocol channel",
+    });
+  });
+
+  test("uses the signature summary as canonical thinking text over a merged block", () => {
+    const { timeline } = harness();
+    const timestamp = 1791004280000;
+
+    timeline.accept({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        timestamp,
+        content: [
+          {
+            type: "thinking",
+            thinking: "Tracing service tier mapping.\n\nTraces service tier mapping.",
+            thinkingSignature: JSON.stringify({
+              type: "reasoning",
+              summary: [{ text: "Tracing service tier mapping." }],
+              content: [{ text: "Traces service tier mapping." }],
+            }),
+          },
+        ],
+      },
+    });
+
+    expect(findItem(timeline.items(), `reasoning:${timestamp}:0`)).toMatchObject({
+      type: "reasoning",
+      text: "Tracing service tier mapping.",
+    });
+  });
+
+  test("falls back to block thinking when the signature has no display text", () => {
+    const { timeline } = harness();
+    const timestamp = 1791004280001;
+
+    timeline.accept({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        timestamp,
+        content: [
+          {
+            type: "thinking",
+            thinking: "plain thought",
+            thinkingSignature: JSON.stringify({ type: "reasoning" }),
+          },
+        ],
+      },
+    });
+
+    expect(findItem(timeline.items(), `reasoning:${timestamp}:0`)).toMatchObject({
+      type: "reasoning",
+      text: "plain thought",
+    });
+  });
+
   test("carries the active turn id onto usage events", () => {
     const { timeline, usageEvents } = harness();
 

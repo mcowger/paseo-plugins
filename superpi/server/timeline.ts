@@ -161,7 +161,10 @@ export function createTimeline(input: {
         emitReasoning(index);
         break;
       case "thinking_end":
-        stream.thinking.set(index, asText(event.thinking ?? event.content));
+        // Canonical field is the protocol `content`; `thinking` is a legacy
+        // SuperPi-test alias. When both are present, `content` wins so a
+        // merged summary+content pair is never concatenated here.
+        stream.thinking.set(index, asText(event.content ?? event.thinking));
         emitReasoning(index);
         break;
       case "toolcall_start": {
@@ -259,7 +262,7 @@ export function createTimeline(input: {
           emittedText = true;
         }
       } else if (block.type === "thinking") {
-        const thinking = asText(block.thinking ?? block.text);
+        const thinking = canonicalThinkingText(block);
         if (thinking.length > 0) {
           upsert(
             {
@@ -658,6 +661,48 @@ function tryParseJson(text: string): unknown {
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/** Join display text from a Responses reasoning item's summary/content array. */
+function joinReasoningTexts(value: unknown): string {
+  if (!Array.isArray(value)) return "";
+  const parts: string[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    if (typeof entry.text === "string" && entry.text.length > 0) parts.push(entry.text);
+  }
+  return parts.join("\n\n");
+}
+
+/**
+ * Canonical display text for a final thinking block.
+ *
+ * Pi merges provider reasoning channels before SuperPi sees them, so a final
+ * block's `thinking` string can hold a summary+content duplication for
+ * Responses-style models. When the block carries the structured Responses
+ * reasoning item in `thinkingSignature`, prefer its `summary` array (the
+ * provider's display channel), then `content`. The signature itself is replay
+ * metadata and is left untouched. Anything else falls back to the block's own
+ * `thinking`/`text` field.
+ */
+function canonicalThinkingText(block: Record<string, unknown>): string {
+  const fallback = asText(block.thinking ?? block.text);
+  const signature = block.thinkingSignature;
+  if (typeof signature !== "string" || signature.length === 0 || signature.length > 262144) {
+    return fallback;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(signature);
+  } catch {
+    return fallback;
+  }
+  if (!isRecord(parsed)) return fallback;
+  const summaryText = joinReasoningTexts(parsed.summary);
+  if (summaryText.length > 0) return summaryText;
+  const contentText = joinReasoningTexts(parsed.content);
+  if (contentText.length > 0) return contentText;
+  return fallback;
 }
 
 function idText(value: unknown): string {
