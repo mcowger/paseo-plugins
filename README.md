@@ -12,8 +12,6 @@ when contributing changes.
 - [Colorful agent activity](./colorful-agent-activity/README.md)
 - [Skill picker](./skill-picker/README.md)
 - [Super tasks](./super-tasks/README.md)
-- [OpenCodeReview](./ocr/README.md)
-- [Plexus service tier](./plexus-service-tier/README.md)
 - [Superpi](./superpi/README.md): Pi subprocess provider with native child views,
   durable history, and Plexus-discovered context/service-tier controls.
   [Superpi companion](./superpi-companion/README.md) is its required Pi extension,
