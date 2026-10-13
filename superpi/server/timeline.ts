@@ -262,7 +262,7 @@ export function createTimeline(input: {
           emittedText = true;
         }
       } else if (block.type === "thinking") {
-        const thinking = canonicalThinkingText(block);
+        const thinking = normalizeThinkingSnapshot(canonicalThinkingText(block));
         if (thinking.length > 0) {
           upsert(
             {
@@ -315,7 +315,7 @@ export function createTimeline(input: {
 
   function emitReasoning(index: number): void {
     if (!stream) return;
-    const text = stream.thinking.get(index) ?? "";
+    const text = normalizeThinkingSnapshot(stream.thinking.get(index) ?? "");
     if (text.length === 0) return;
     upsert(
       { type: "reasoning", id: reasoningItemId(stream.nativeKey, index), text },
@@ -661,6 +661,22 @@ function tryParseJson(text: string): unknown {
 
 function asText(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * Strip trailing whitespace from an emitted thinking snapshot.
+ *
+ * Pi appends `"\n\n"` to the streaming thinking block for every Responses
+ * summary part (`response.reasoning_summary_part.done`), but the final
+ * `output_item.done` overwrite joins summary parts with no trailing
+ * separator. The host diffs provider snapshots by prefix and concatenates
+ * adjacent reasoning rows, so a final snapshot shorter than the streamed one
+ * is appended as a second row and renders the same paragraph twice.
+ * Trimming trailing whitespace keeps every snapshot prefix-monotonic so the
+ * final collapses onto the streamed rows instead of duplicating them.
+ */
+function normalizeThinkingSnapshot(text: string): string {
+  return text.replace(/\s+$/, "");
 }
 
 /** Join display text from a Responses reasoning item's summary/content array. */

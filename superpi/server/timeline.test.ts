@@ -193,6 +193,107 @@ describe("createTimeline streaming", () => {
     });
   });
 
+  test("keeps thinking snapshots prefix-monotonic across summary part separators", () => {
+    const { timeline, snapshots } = harness();
+    const timestamp = 1791004280010;
+    const text = "Diagnosing remote Docker host networking and container exec issues.";
+
+    timeline.accept({
+      type: "message_start",
+      message: { role: "assistant", timestamp, content: [] },
+    });
+    timeline.accept({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_start", contentIndex: 0 },
+    });
+    timeline.accept({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: text },
+    });
+    // Pi appends "\n\n" for response.reasoning_summary_part.done, while the
+    // final output_item.done overwrite joins summary parts with no trailing
+    // separator. The host diffs provider snapshots by prefix and concatenates
+    // adjacent reasoning rows, so a trailing separator here used to render
+    // the same paragraph twice.
+    timeline.accept({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "\n\n" },
+    });
+    timeline.accept({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_end", contentIndex: 0, content: text },
+    });
+    timeline.accept({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        timestamp,
+        content: [
+          {
+            type: "thinking",
+            thinking: text,
+            thinkingSignature: JSON.stringify({
+              type: "reasoning",
+              summary: [{ text }],
+            }),
+          },
+        ],
+      },
+    });
+
+    const reasoning = snapshots().filter((item) => item.type === "reasoning");
+    expect(reasoning.length).toBeGreaterThan(0);
+    for (const item of reasoning) {
+      expect(item.type === "reasoning" && /\s$/.test(item.text)).toBe(false);
+    }
+    for (let index = 1; index < reasoning.length; index += 1) {
+      const prev = reasoning[index - 1];
+      const next = reasoning[index];
+      expect(
+        prev.type === "reasoning" && next.type === "reasoning" && next.text.startsWith(prev.text),
+      ).toBe(true);
+    }
+    // Simulate the host: strip the previous snapshot prefix per emit, keep
+    // the remainder as a row, and concatenate adjacent reasoning rows. The
+    // merged text must be the single paragraph, not a duplicated pair.
+    let merged = "";
+    let previous = "";
+    for (const item of reasoning) {
+      if (item.type !== "reasoning") continue;
+      merged += item.text.startsWith(previous) ? item.text.slice(previous.length) : item.text;
+      previous = item.text;
+    }
+    expect(merged).toBe(text);
+  });
+
+  test("drops whitespace-only thinking snapshots", () => {
+    const { timeline } = harness();
+    const timestamp = 1791004280011;
+
+    timeline.accept({
+      type: "message_start",
+      message: { role: "assistant", timestamp, content: [] },
+    });
+    timeline.accept({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_start", contentIndex: 0 },
+    });
+    timeline.accept({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "\n\n" },
+    });
+    timeline.accept({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        timestamp,
+        content: [{ type: "thinking", thinking: "\n\n" }],
+      },
+    });
+
+    expect(timeline.items().filter((item) => item.type === "reasoning")).toHaveLength(0);
+  });
+
   test("carries the active turn id onto usage events", () => {
     const { timeline, usageEvents } = harness();
 
