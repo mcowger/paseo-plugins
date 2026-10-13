@@ -146,6 +146,8 @@ describe("session open", () => {
     await session.open("open-1");
     expect(ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({ value: null, options: [{ label: "priority", value: "priority" }, { label: "flex", value: "flex" }] });
     expect(fake.companionSettings.tier).toBe("default");
+    await session.configure("choose-default", { settings: { tier: "default" } });
+    expect(ofType(events, "request.failed").at(-1)?.error.message).toContain("not advertised");
     await session.close();
   });
 
@@ -169,11 +171,11 @@ describe("session open", () => {
     expect(fake.companionSettings).toEqual({ tier: "priority", longContext: true });
     await session.close();
   });
-  it("shows exactly discovered tier names and removes the selector when support disappears", async () => {
+  it("groups default tier aliases and removes the selector when support disappears", async () => {
     const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "priority", longContext: false }, tiers: ["auto", "standard", "flex", "priority"] } });
     const { session, events, getLaunch } = harness({ fake });
     await session.open("open-1");
-    expect(ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({ value: "priority", options: ["auto", "standard", "flex", "priority"].map((value) => ({ label: value, value })) });
+    expect(ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({ value: "priority", options: ["default", "flex", "priority"].map((value) => ({ label: value, value })) });
     await session.configure("unsupported", { settings: { tier: "ultrafast" } });
     expect(ofType(events, "request.failed").at(-1)?.error.message).toContain("not advertised");
     fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY, state: { capabilities: [], settings: { tier: "default", longContext: false }, tiers: [] } }) });
@@ -181,6 +183,57 @@ describe("session open", () => {
     expect(ofType(events, "session.config").at(-1)?.config.settings).toEqual([]);
     await session.close();
   });
+  it.each([
+    { tiers: ["default", "auto", "standard", "priority"], advertisedDefault: "default" },
+    { tiers: ["auto", "standard", "priority"], advertisedDefault: "auto" },
+    { tiers: ["standard", "priority"], advertisedDefault: "standard" },
+  ])("maps the default UI choice to advertised $advertisedDefault", async ({ tiers, advertisedDefault }) => {
+    let fake: FakePiRpc;
+    fake = new FakePiRpc({
+      helloData: { capabilities: [], settings: { tier: "priority", longContext: false }, tiers },
+      companionStateProvider: () => ({ capabilities: [], settings: { ...fake.companionSettings }, tiers }),
+    });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    await session.configure("choose-default", { settings: { tier: "default" } });
+    expect(ofType(events, "request.failed")).toHaveLength(0);
+    expect(fake.companionSettings.tier).toBe(advertisedDefault);
+    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({
+      value: "default", options: [{ label: "default", value: "default" }, { label: "priority", value: "priority" }],
+    });
+    await session.close();
+  });
+
+  it("restores a saved standard selection as default without rewriting the companion tier", async () => {
+    const tiers = ["auto", "standard", "flex"];
+    let fake: FakePiRpc;
+    fake = new FakePiRpc({
+      helloData: { capabilities: [], settings: { tier: "standard", longContext: false }, tiers },
+      companionStateProvider: () => ({ capabilities: [], settings: { ...fake.companionSettings }, tiers }),
+    });
+    const { session, events } = harness({ fake, config: baseConfig({ settings: { tier: "standard" } }) });
+    await session.open("open-1");
+    expect(fake.companionSettings.tier).toBe("standard");
+    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({ value: "default" });
+    await session.close();
+  });
+
+  it("updates the default group when live tier metadata changes", async () => {
+    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "auto", longContext: false }, tiers: ["auto", "standard", "priority"] } });
+    const { session, events, getLaunch } = harness({ fake });
+    await session.open("open-1");
+    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "tier")?.value).toBe("default");
+    fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({
+      version: 1, sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY,
+      state: { capabilities: [], settings: { tier: "standard", longContext: false }, tiers: ["standard", "flex", "priority"] },
+    }) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({
+      value: "default", options: ["default", "flex", "priority"].map((value) => ({ label: value, value })),
+    });
+    await session.close();
+  });
+
   it("migrates old fast input to advertised priority and defers saved selections until metadata arrives", async () => {
     const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "default", longContext: false }, tiers: [] } });
     const { session, events, getLaunch } = harness({ fake, config: baseConfig({ settings: { tier: "fast" } }) });

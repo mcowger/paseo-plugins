@@ -29,6 +29,7 @@ import {
   parseSubpiChildEnvelope,
   type SubpiChildEnvelope,
 } from "../shared/subagents.js";
+import { tierSettingPresentation } from "../shared/tiers.js";
 import { buildPiPrompt } from "./attachments.js";
 import { createDialogBridge, type DialogBridge, type DialogRegistry } from "./dialogs.js";
 import {
@@ -292,7 +293,7 @@ function parseSessionStats(data: unknown): ParsedSessionStats {
 }
 
 function buildCompanionSettings(state: CompanionState | undefined, modelContextWindow?: number): ProviderSetting[] {
-  const tier = state?.settings.tier ?? "default";
+  const tier = tierSettingPresentation(state?.tiers ?? [], state?.settings.tier ?? "default");
   const longContext = state?.settings.longContext ?? false;
   const context = contextSettingPresentation(state, modelContextWindow);
   return [
@@ -301,8 +302,8 @@ function buildCompanionSettings(state: CompanionState | undefined, modelContextW
       id: "tier",
       label: "Service tier",
       description: "Companion tier applied to the next provider request",
-      value: state.tiers.includes(tier) ? tier : null,
-      options: state.tiers.map((value) => ({ label: value, value })),
+      value: tier.value,
+      options: tier.options,
     } as const] : []),
     ...(state?.longContextAvailable === true ? [{
       type: "select",

@@ -256,8 +256,10 @@ revision-aware lifecycle used for context policies applies. Both startup
 requests run concurrently. Broadcasts and model changes update the selector
 through the existing companion state notification.
 
-Names are preserved as advertised (for example `auto`, `standard`, `flex`,
-`priority`, `ultrafast`), not renamed to Fast/Default. Saved legacy `fast` maps to
+The companion preserves advertised wire names (for example `auto`, `standard`,
+`flex`, `priority`, `ultrafast`). The Superpi composer groups `default`, `auto`,
+and `standard` into one `default` choice, resolving it to an advertised name
+before sending `configure`; the companion protocol is unchanged. Saved legacy `fast` maps to
 `priority` when available. Legacy `default`, removed selections, and unsupported
 selections after a model switch use `auto`, then `standard`; if neither is
 advertised, no tier is injected until the user chooses one. A premium-only list

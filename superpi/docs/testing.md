@@ -155,8 +155,9 @@ loaded, run `/plexus refresh` while idle, and select an actual `plexus/<model>`
 from its catalog. Use a key authorized for that model before doing inference.
 Catalog/state discovery alone isn't an upstream tier-acceptance or billing test.
 
-Check the actual composer after refresh/model changes: advertised tier names
-appear unchanged, models with no tiers have no tier selector, and distinct
+Check the actual composer after refresh/model changes: advertised `default`,
+`auto`, and `standard` tiers appear as one `default` choice; other tier names
+stay unchanged. Models with no tiers have no tier selector, and distinct
 short/max budgets show token-length options. Saved selections should restore
 and live policy broadcasts should update the controls without a model turn.
 At the latest live check, Luna advertised `auto`, `standard`, `flex`, `priority`

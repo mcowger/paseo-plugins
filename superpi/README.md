@@ -12,7 +12,9 @@ that pin is not a claim that newer hosts are unsupported.
 ## Implemented
 
 - Model/thinking selection and service-tier choices discovered per model from
-  `plexus-pi`, preserving advertised names. Models without tier support have no
+  `plexus-pi`. Advertised `default`, `auto`, and `standard` tiers share one
+  `default` choice in the composer; other names stay unchanged. Selection still
+  sends an advertised tier to Plexus. Models without tier support have no
   service-tier selector. Catalog refreshes and model changes update it live.
   A context-length selector shows rounded budgets such as `272K` and `1M` on
   the button itself, with short/max choices. It appears only for models with

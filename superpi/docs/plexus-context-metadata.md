@@ -100,8 +100,13 @@ There is no duplicate settings database or manual per-model override in Superpi.
 The same consumer lifecycle handles complete snapshots on
 `plexus:service-tiers:snapshot:v1`, requested through
 `plexus:service-tiers:request:v1`. Context/tier requests run concurrently at
-startup. Per-model advertised names become the exact selector labels/values;
-no policy means no tier selector or root injection.
+startup. The composer groups advertised `default`, `auto`, and `standard`
+names into one `default` choice. It appears only when at least one of those
+names is advertised; all other tiers keep their names. Selecting `default`
+sends advertised `default`, then `auto`, then `standard`, in that preference
+order. Existing advertised alias selections display as `default` without
+rewriting the companion's stored tier. No policy means no tier selector or
+root injection.
 
 The companion injects the selected advertised spelling as `service_tier` for
 the `plexus` provider, including OpenAI Completions and Anthropic-compatible
