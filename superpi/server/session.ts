@@ -66,6 +66,7 @@ export const SUPERPI_SESSION_CAPABILITIES = [
   "prompt.message",
   "prompt.command",
   "prompt.image",
+  "prompt.steer",
   "session.persistence",
   "session.configure",
   "session.subsession",
@@ -397,6 +398,11 @@ export interface SuperpiSessionOptions {
 interface Admission {
   clientMessageId: string;
   turnId: string;
+  steering: boolean;
+  /** Set at the native write, so clear_queue cannot discard local waiting work. */
+  sent?: boolean;
+  /** Plain-text echo match; omitted for Pi-expanded commands/templates. */
+  message?: string;
 }
 
 /** Active-branch history plus the rewind-token index derived from it. */
@@ -451,6 +457,7 @@ export class SuperpiSession {
    */
   private lastContextWindow: { maxTokens?: number; usedTokens?: number } = {};
   private extensionCommands = new Set<string>();
+  private steerableCommands = new Set<string>();
 
   private activeTurnId: string | undefined;
   private readonly terminalizedTurns = new Set<string>();
@@ -592,6 +599,10 @@ export class SuperpiSession {
       const nativeCommands = extractArray(await rpc.request({ type: "get_commands" }), "commands");
       const commands = mapPiCommands(nativeCommands);
       this.extensionCommands = new Set(nativeCommands.flatMap((command) => isRecord(command) && asString(command.name) && command.name !== "superpi-control" ? [String(command.name)] : []));
+      this.steerableCommands = new Set(nativeCommands.flatMap((command) =>
+        isRecord(command) && asString(command.name) && (command.source === "prompt" || command.source === "skill")
+          ? [String(command.name)] : [],
+      ));
 
       this.emit({
         type: "session.opened",
@@ -690,15 +701,23 @@ export class SuperpiSession {
     if (this.compactionInFlight) {
       throw new Error("Superpi session is compacting");
     }
-    if (prompt.delivery === "steer") {
-      throw new Error("Superpi does not support steering yet");
+    const steering = prompt.delivery === "steer";
+    const steeringTurnId = steering ? this.activeTurnId : undefined;
+    if (steering && !this.isSteerableTurn(steeringTurnId)) {
+      this.emit({
+        type: "session.prompt_result",
+        sessionId: this.sessionId,
+        clientMessageId: prompt.clientMessageId,
+        result: { type: "failed", error: { message: "Superpi has no active turn available for steering" } },
+      });
+      return;
     }
     const text = prompt.input.type === "message" && prompt.input.content.every((part) => part.type === "text")
       ? prompt.input.content.map((part) => part.type === "text" ? part.text : "").join("\n").trim()
       : undefined;
     const typedCommand = text ? /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(text) : null;
     const command = prompt.input.type === "command" ? prompt.input : typedCommand ? { name: typedCommand[1]!, arguments: typedCommand[2] ?? "" } : undefined;
-    if (command && !this.extensionCommands.has(command.name)) {
+    if (!steering && command && !this.extensionCommands.has(command.name)) {
       if (command.name === "compact") {
         await this.runCompactCommand(prompt, command.arguments);
         return;
@@ -712,26 +731,55 @@ export class SuperpiSession {
     // Admit synchronously, before any await (prompt building, manifest write),
     // so an exclusive rewind observes this prompt and cannot navigate between
     // validation and the native write.
-    const turnId = `${this.sessionId}:turn:${++this.turnCounter}`;
-    const admission: Admission = { clientMessageId: prompt.clientMessageId, turnId };
-    this.pendingStopReason = undefined;
+    const turnId = steeringTurnId ?? `${this.sessionId}:turn:${++this.turnCounter}`;
+    const admission: Admission = { clientMessageId: prompt.clientMessageId, turnId, steering };
+    // Steering must not erase an error/abort already reported by the active run.
+    if (!steering) this.pendingStopReason = undefined;
     this.pendingResults.set(prompt.clientMessageId, admission);
     this.userQueue.push(admission);
     try {
       const built = await buildPiPrompt(prompt, this.modelSupportsImages);
-      const commandName = /^\/([^\s]+)(?:\s|$)/.exec(built.message)?.[1];
-      const admissionTimeout = commandName && this.extensionCommands.has(commandName) ? 0 : undefined;
-      const result = await this.enqueueOperation(async () => {
+      const commandName = /^\/([^\s]+)(?:\s|$)/.exec(built.message.trimStart())?.[1];
+      if (steering && commandName && (
+        PI_RPC_COMMANDS.some((entry) => entry.name === commandName) ||
+        PI_TUI_COMMANDS.has(commandName) || commandName === "superpi-control" ||
+        (this.extensionCommands.has(commandName) && !this.steerableCommands.has(commandName))
+      )) {
+        throw new Error("Pi extension and native commands are unavailable while steering; run them while idle");
+      }
+      admission.message = commandName ? undefined : built.message;
+      const admissionTimeout = !steering && commandName && this.extensionCommands.has(commandName) ? 0 : undefined;
+      // A replacement prompt must not overtake end-of-turn queue cleanup.
+      // Await outside the operation barrier: finalization may itself own it.
+      if (!steering && this.settlePromise) await this.settlePromise;
+      await this.enqueueOperation(async () => {
+        if (this.state !== "ready" || this.rpc !== rpc || !this.pendingResults.has(prompt.clientMessageId)) {
+          throw new Error("Superpi session closed before the prompt was sent");
+        }
+        if (steering) {
+          if (prompt.clearPendingPermissions) await this.dialogBridge?.cancelAll();
+          // Building attachments, configuration, or denying a dialog may have
+          // allowed the run to settle. Never leave a steer parked in idle Pi.
+          if (!this.isSteerableTurn(admission.turnId)) {
+            throw new Error("The active Pi turn ended before the steer was sent");
+          }
+        }
         if (this.store) {
           await this.store.save({ interrupted: true });
         }
-        return rpc.request({
-          type: "prompt",
+        if (steering && !this.isSteerableTurn(admission.turnId)) {
+          throw new Error("The active Pi turn ended before the steer was sent");
+        }
+        admission.sent = true;
+        const result = await rpc.request({
+          type: steering ? "steer" : "prompt",
           message: built.message,
           ...(built.images ? { images: built.images } : {}),
         }, admissionTimeout);
+        // Keep admission and any rejected-steer queue cleanup inside the
+        // barrier, before a later prompt can start another run.
+        await this.handleDisposition(prompt.clientMessageId, result);
       });
-      await this.handleDisposition(prompt.clientMessageId, result);
     } catch (error) {
       if (this.pendingResults.delete(prompt.clientMessageId)) {
         this.dropQueuedUser(prompt.clientMessageId);
@@ -946,11 +994,25 @@ export class SuperpiSession {
     }
   }
 
+  private isSteerableTurn(turnId: string | undefined): boolean {
+    return turnId !== undefined && this.activeTurnId === turnId && this.state === "ready" &&
+      !this.settlePromise && !this.cancelIntent && !this.revertInFlight && !this.compactionInFlight;
+  }
+
   private async handleDisposition(clientMessageId: string, result: unknown): Promise<void> {
     const admission = this.pendingResults.get(clientMessageId);
     if (!admission) return;
-    this.pendingResults.delete(clientMessageId);
     const disposition = isRecord(result) ? asString(result.disposition) : undefined;
+    if (admission.steering && disposition === "queued" && !this.isSteerableTurn(admission.turnId)) {
+      // Pi accepts steer even while idle. If settlement/Stop beat its reply,
+      // discard leftovers before Paseo falls back to a replacement prompt.
+      await this.discardQueuedSteering(admission.turnId);
+      throw new Error("The active Pi turn ended before the steer was accepted");
+    }
+    if (admission.steering && disposition !== "queued" && disposition !== "handled") {
+      throw new Error(`Unsupported Pi steer disposition: ${String(disposition)}`);
+    }
+    this.pendingResults.delete(clientMessageId);
     switch (disposition) {
       case "started":
         this.activeTurnId = admission.turnId;
@@ -1020,7 +1082,20 @@ export class SuperpiSession {
     }
     const userRole = isUserMessageRecord(record);
     if (userRole) {
-      if (!this.boundUser) this.boundUser = this.userQueue.shift();
+      // Each queued steer is a new user message in the same Pi run. Keep its
+      // start/end snapshots bound together, but rebind at the next user start.
+      if (record.type === "message_start" || !this.boundUser) {
+        const next = this.userQueue[0];
+        const message = isRecord(record.message) ? record.message : undefined;
+        const text = typeof message?.content === "string" ? message.content :
+          Array.isArray(message?.content) ? message.content.flatMap((part) =>
+            isRecord(part) && part.type === "text" && typeof part.text === "string" ? [part.text] : [],
+          ).join("") : undefined;
+        // Extensions can inject their own user messages between host steers.
+        // Don't let a distinguishable native message steal a waiting host ID.
+        this.boundUser = next?.sent && (next.message === undefined || next.message === text)
+          ? this.userQueue.shift() : undefined;
+      }
       const context: TimelineContext = this.boundUser
         ? { clientMessageId: this.boundUser.clientMessageId, turnId: this.boundUser.turnId }
         : this.activeTurnId
@@ -1203,7 +1278,17 @@ export class SuperpiSession {
   private finalizeActiveTurn(): Promise<void> {
     if (this.settlePromise) return this.settlePromise;
     if (!this.activeTurnId) return Promise.resolve();
-    const promise = this.runFinalizeTurn();
+    const turnId = this.activeTurnId;
+    // Extensions can abort/compact, or await an agent_settled hook after Pi is
+    // already idle. An acknowledged steer may never be echoed in either case.
+    // Queue cleanup synchronously behind in-flight admissions, ahead of the
+    // next native prompt. Fast original-prompt settlement needs no barrier.
+    const promise = this.hasUndeliveredSteers(turnId)
+      ? this.enqueueOperation(async () => {
+        if (this.hasUndeliveredSteers(turnId)) await this.discardQueuedSteering(turnId);
+        await this.runFinalizeTurn();
+      }).catch(() => undefined) // discard failure already invalidated the runtime
+      : this.runFinalizeTurn();
     this.settlePromise = promise;
     void promise.finally(() => {
       if (this.settlePromise === promise) this.settlePromise = null;
@@ -1429,17 +1514,39 @@ export class SuperpiSession {
     });
   }
 
-  /** Purge queued admissions that a successful `clear_queue` discarded. */
-  private purgeQueuedAdmissions(): void {
-    const activeTurnId = this.activeTurnId;
-    if (activeTurnId === undefined) {
-      this.userQueue.length = 0;
-    } else {
-      for (let index = this.userQueue.length - 1; index >= 0; index -= 1) {
-        if (this.userQueue[index]?.turnId !== activeTurnId) this.userQueue.splice(index, 1);
-      }
+  private hasUndeliveredSteers(turnId: string): boolean {
+    return this.userQueue.some((entry) => entry.sent && entry.steering && entry.turnId === turnId &&
+      !this.pendingResults.has(entry.clientMessageId));
+  }
+
+  private async discardQueuedSteering(turnId: string): Promise<void> {
+    const undelivered = this.hasUndeliveredSteers(turnId);
+    try {
+      if (!this.rpc) throw new Error("Superpi session transport is not available");
+      await this.rpc.request({ type: "clear_queue" });
+      this.purgeQueuedAdmissions();
+    } catch (error) {
+      // Starting another prompt with an unknown native queue risks replaying
+      // discarded input under the wrong host message identity.
+      this.invalidateRuntime(error instanceof Error ? error : new Error(String(error)));
+      throw error;
     }
-    if (this.boundUser && this.boundUser.turnId !== activeTurnId) this.boundUser = undefined;
+    if (undelivered) this.emit({
+      type: "session.notice", sessionId: this.sessionId,
+      notice: { id: `undelivered-steering-${turnId}`, severity: "warning",
+        title: "Queued steering was discarded",
+        description: "The Pi turn ended before delivering queued steering. Resend the instruction if it is still needed." },
+    });
+  }
+
+  /** Purge only native admissions that a successful `clear_queue` discarded. */
+  private purgeQueuedAdmissions(): void {
+    // Queued steers share the active turn's id. Local work waiting behind the
+    // operation barrier has not reached Pi and must retain its host identity.
+    for (let index = this.userQueue.length - 1; index >= 0; index -= 1) {
+      if (this.userQueue[index]?.sent) this.userQueue.splice(index, 1);
+    }
+    if (this.boundUser && this.boundUser.turnId !== this.activeTurnId) this.boundUser = undefined;
   }
 
   /** Ask the dialog helper to cancel pending native dialogs without closing it. */

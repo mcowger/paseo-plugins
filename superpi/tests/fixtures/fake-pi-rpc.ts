@@ -37,6 +37,8 @@ export interface FakePiRpcOptions {
   /** Per-command disposition; takes precedence over `promptDisposition`. */
   promptDispositionProvider?: (command: PiRecord) => "started" | "queued" | "handled";
   onPrompt?: (command: PiRecord) => void;
+  steerDisposition?: "queued" | "handled";
+  onSteer?: (command: PiRecord) => void;
   /** Invoked before default handling; may be async to hold a request open. */
   onRequest?: (command: PiRecord, fake: FakePiRpc) => void | Promise<void>;
   /** Companion `hello` data; defaults to a valid root state. */
@@ -141,6 +143,9 @@ export class FakePiRpc implements PiRpc {
             "started",
         };
       }
+      case "steer":
+        this.options.onSteer?.(command);
+        return { disposition: this.options.steerDisposition ?? "queued" };
       case "clear_queue":
         return this.options.clearQueue ?? { steering: [], followUp: [] };
       default:

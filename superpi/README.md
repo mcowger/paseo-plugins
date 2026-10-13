@@ -46,6 +46,13 @@ that pin is not a claim that newer hosts are unsupported.
   Run slash commands while idle: Paseo may interrupt an active turn before
   dispatching them. `/autocompact` changes Pi's global preference, not just this
   conversation; project overrides may still take precedence.
+- Active-turn steering through native Pi RPC, without interrupting tools or
+  starting another turn. Steering accepts the same image/text/file inputs as
+  ordinary prompts and honors requested pending-dialog cancellation. Idle
+  steering and native/extension commands are refused; skills and prompt
+  templates still expand in Pi. Stop clears queued steering before aborting.
+  If a turn ends without consuming an accepted steer, Superpi discards it and
+  reports a warning rather than carrying it into the next turn.
 - Image/text/file inputs, native blocking dialogs, and an editor-prefill screen.
   Open **Pi dialogs** from the command center (`Ctrl+K` on Linux).
 - Read-only native child views, ordered live activity, terminal outcomes, and
@@ -71,8 +78,8 @@ Child journals retain activity beyond the host's cached-preview limits. A
 synthetic 520-row, multi-megabyte history reached row 259 in the native view;
 this does not establish every recovery/display path on every host version.
 
-Direct steering, arbitrary TUI widgets, and MCP configuration/tool-policy
-translation are not implemented. Nonempty MCP and exact preapproval requests
+Arbitrary TUI widgets and MCP configuration/tool-policy translation are not
+implemented. Nonempty MCP and exact preapproval requests
 fail explicitly. Pi-managed retry defaults are left alone; `/autocompact`
 controls automatic compaction and manual compaction is idle-only.
 

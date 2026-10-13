@@ -348,6 +348,7 @@ describe("session open", () => {
       "prompt.message",
       "prompt.command",
       "prompt.image",
+      "prompt.steer",
       "session.persistence",
       "session.configure",
       "session.subsession",

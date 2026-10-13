@@ -62,7 +62,7 @@ function ofType<T extends ProviderEvent["type"]>(
 }
 
 describe("capability negotiation", () => {
-  it("advertises only the tested stage 1 capabilities", async () => {
+  it("advertises the supported capabilities including steering", async () => {
     const provider = createSuperpiProvider({
       companionPath: "/companions/superpi-extension.js",
       stateDirectory,
@@ -77,11 +77,37 @@ describe("capability negotiation", () => {
       "prompt.message",
       "prompt.command",
       "prompt.image",
+      "prompt.steer",
       "session.persistence",
       "session.revert.conversation",
       "session.configure",
     ]);
     await provider.close();
+  });
+
+  it("routes negotiated steering to the existing session and returns its active turn ID", async () => {
+    const fake = new FakePiRpc();
+    const provider = createSuperpiProvider({
+      companionPath: "/companions/superpi-extension.js", stateDirectory,
+      createPiRpc: async () => fake,
+    });
+    try {
+      const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+      const { events, listener } = collect();
+      connection.onEvent(listener);
+      await connection.send({ type: "session.open", requestId: "open", sessionId: "steering", config: sessionConfig(), history: "skip" });
+      expect(ofType(events, "session.opened")[0]?.capabilities).toContain("prompt.steer");
+      await connection.send({ type: "session.prompt", sessionId: "steering", prompt: {
+        clientMessageId: "original", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "original" }] },
+      } });
+      const turnId = ofType(events, "session.turn")[0]?.turnId;
+      await connection.send({ type: "session.prompt", sessionId: "steering", prompt: {
+        clientMessageId: "steered", delivery: "steer", input: { type: "message", content: [{ type: "text", text: "change direction" }] },
+      } });
+      expect(ofType(events, "session.prompt_result").at(-1)?.result).toEqual({ type: "steer", turnId });
+      expect(fake.requestsOfType("steer")).toEqual([{ type: "steer", message: "change direction" }]);
+      expect(ofType(events, "session.turn")).toHaveLength(1);
+    } finally { await provider.close(); }
   });
 
   it("publishes only the negotiated capabilities on session.opened", async () => {

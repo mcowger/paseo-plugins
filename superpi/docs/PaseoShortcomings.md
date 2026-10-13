@@ -105,9 +105,10 @@ settings screen preserves it through a plugin RPC and native text input.
   plugin must advertise and dispatch the RPC-supported ones explicitly.
 - Long Context's old fixed target was Superpi policy, not a host defect. It is
   now replaced by [Plexus policy metadata](plexus-context-metadata.md).
-- Direct steering, MCP translation, arbitrary Pi TUI widgets, and Windows
-  descendant cleanup remain Superpi implementation limits unless a specific
-  missing host contract is demonstrated.
+- MCP translation, arbitrary Pi TUI widgets, and Windows descendant cleanup
+  remain Superpi implementation limits unless a specific missing host contract
+  is demonstrated. Direct steering now uses Pi's native RPC and the public
+  `prompt.steer` capability; it does not need a host workaround.
 - Reload worked in the user's test. The earlier `ERR_IPC_CHANNEL_CLOSED` during
   worker shutdown is recorded, but not enough by itself to claim a persistent
   reload failure.

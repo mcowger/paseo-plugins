@@ -503,8 +503,16 @@ Transport limits/deadlines and cleanup grace periods are named constants in
 Superpi does not choose a fixed expansion or provider-specific translation.
 Minimal plugin UI consists of the Pi dialogs screen and resume-command action.
 
-Remaining limits are host visible-history replacement, direct steering, arbitrary
-TUI widgets, MCP/tool-policy translation, and Windows descendant cleanup. Mobile
+Direct steering uses the public `prompt.steer` capability and native Pi `steer`
+RPC. Admissions retain the active turn ID, rebind each native user echo, and
+refuse idle or ended turns. Requested permission clearing cancels native dialogs;
+Stop clears queued input before aborting. End-of-turn cleanup discards accepted
+but undelivered steering with a warning, before another prompt can start. Native
+and extension commands remain idle-only, while skills and prompt templates
+expand through Pi.
+
+Remaining limits are host visible-history replacement, arbitrary TUI widgets,
+MCP/tool-policy translation, and Windows descendant cleanup. Mobile
 smoke passed on iOS (2026-10-04); Android remains unverified. Continue through
 [the SuperPi development workflow](../README.md#developing-through-superpi), using
 an isolated daemon instead of reloading the provider running the work session.

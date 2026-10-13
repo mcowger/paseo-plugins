@@ -164,6 +164,31 @@ At the latest live check, Luna advertised `auto`, `standard`, `flex`, `priority`
 and 272,000 / 1,050,000 tokens (`272K` / `1M`). Astra discovery and `flex`
 selection also passed. These are observed catalog values, not fixed policy.
 
+## Steering checks
+
+`server/steering.test.ts` covers active-turn IDs, distinct user echo bindings,
+images, slash-command refusal, skill/template expansion, requested permission
+clearing, Stop/close, transport timeout, settlement before send/admission,
+undelivered-steer cleanup, extension-owned user echoes, and replacement prompts
+waiting behind cleanup.
+`server/provider.test.ts` covers capability negotiation and connection routing.
+
+The 2026-10-13 isolated check used the actual npm beta host and copied Pi with a
+disposable no-network model extension. Its first response called `bash` with a
+15-second sleep. Sending another message with `activeTurnBehavior: "steer"`
+during that tool kept the same turn ID, let the tool finish, and produced the
+assistant response requested by the steer. The host history contained two user
+rows, one started/completed turn, and no cancellation or duplicate native echo.
+`agent-browser` also opened the completed conversation and checked its displayed
+history, including both user prompts, the shell tool, and the assistant response.
+The fixture, captured timeline, and screenshot are in ignored test storage. This
+checks the Pi/Paseo lifecycle and desktop history rendering, not upstream model
+behavior or mobile UI.
+
+The dedicated staging inference credential returned HTTP 401 during this check.
+Real upstream inference needs a renewed staging credential; no production key
+was used.
+
 ## Browser checks
 
 Use `agent-browser` directly, with a named session. No custom browser framework
