@@ -14,7 +14,7 @@ vi.mock("../server/auth-snapshot.js", () => ({ prepareAuthSnapshot: () => undefi
 import type { PiRpcOptions } from "../server/pi-rpc.js";
 import { PiRpcTimeoutError } from "../server/pi-rpc.js";
 import { SessionStore } from "../server/persistence.js";
-import { createSuperpiSession, type SuperpiSessionOptions } from "../server/session.js";
+import { CONTEXT_USAGE_POLL_INTERVAL_MS, createSuperpiSession, type SuperpiSessionOptions } from "../server/session.js";
 import { SUBPI_CHILD_CHANNEL_PREFIX } from "../shared/subagents.js";
 import { companionStatePrefix } from "../shared/companion.js";
 import { FakePiRpc } from "../tests/fixtures/fake-pi-rpc.js";
@@ -1852,6 +1852,272 @@ describe("context usage reporting", () => {
       contextWindowUsedTokens: 1000,
     });
     await session.close();
+  });
+
+  it("recovers unknown post-compaction consumption after an assistant response while tools are still running", async () => {
+    let used: number | null = null;
+    const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    expect(ofType(events, "session.usage").at(-1)?.usage).not.toHaveProperty("contextWindowUsedTokens");
+    await session.prompt({ clientMessageId: "context-live", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+    await flush();
+    used = 42000;
+    fake.emit({ type: "message_end", message: { role: "assistant", timestamp: 1, content: [], stopReason: "toolUse", usage: { input: 41000, output: 1000, cost: { total: 0.02 } } } });
+    fake.emit({ type: "tool_execution_start", toolCallId: "long-tool", toolName: "bash", args: { command: "sleep 30" } });
+    await vi.waitFor(() => expect(ofType(events, "session.usage").at(-1)).toMatchObject({
+      turnId: ofType(events, "session.turn")[0]?.turnId,
+      usage: { contextWindowMaxTokens: 1000, contextWindowUsedTokens: 42000 },
+    }));
+    expect(ofType(events, "session.turn").map((turn) => turn.state)).toEqual(["started"]);
+    // The next streaming update retains the newly recovered measurement.
+    fake.emit({ type: "message_update", usage: { input: 2, output: 1, cost: { total: 0.001 } }, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "x" } });
+    expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(42000);
+    await session.close();
+  });
+
+  it("updates consumption at successive assistant completions rather than freezing it until turn end", async () => {
+    let used = 1000;
+    const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    await session.prompt({ clientMessageId: "context-live", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+    await flush();
+    for (const measurement of [2000, 3000]) {
+      used = measurement;
+      fake.emit({ type: "message_end", message: { role: "assistant", timestamp: measurement, content: [], stopReason: "toolUse" } });
+      await vi.waitFor(() => expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(measurement));
+    }
+    expect(ofType(events, "session.turn").map((turn) => turn.state)).toEqual(["started"]);
+    await session.close();
+  });
+
+  it("invalidates consumption on successful live compaction and recovers without ending the turn", async () => {
+    let used: number | null = 1000;
+    const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    await session.prompt({ clientMessageId: "context-compact", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+    await flush();
+    used = null;
+    fake.emit({ type: "compaction_end", result: { summary: "compacted" }, aborted: false });
+    expect(ofType(events, "session.usage").at(-1)?.usage).not.toHaveProperty("contextWindowUsedTokens");
+    await flush();
+    used = 2000;
+    fake.emit({ type: "message_end", message: { role: "assistant", timestamp: 2, content: [], stopReason: "toolUse" } });
+    await vi.waitFor(() => expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(2000));
+    expect(ofType(events, "session.turn")).toHaveLength(1);
+    await session.close();
+  });
+
+  it("does not invalidate valid consumption when compaction fails", async () => {
+    const fake = new FakePiRpc({ sessionStats: statsPayload(1000, 1000) });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    fake.emit({ type: "compaction_end", aborted: false, errorMessage: "compaction failed" });
+    fake.emit({ type: "message_end", message: { role: "assistant", timestamp: 2, content: [], usage: { input: 100, output: 1 } } });
+    expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(1000);
+    await session.close();
+  });
+
+  it("refetches only while active and recovers from a stats failure without waiting for another message", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let used: number | null = null;
+    let unavailable = false;
+    const fake = new FakePiRpc({ sessionStatsProvider: () => {
+      if (unavailable) throw new Error("stats temporarily unavailable");
+      return statsPayload(used, 1000);
+    } });
+    const { session, events } = harness({ fake });
+    try {
+      await session.open("open-1");
+      const idleCalls = fake.requestsOfType("get_session_stats").length;
+      await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS * 2);
+      expect(fake.requestsOfType("get_session_stats")).toHaveLength(idleCalls);
+      unavailable = true;
+      await session.prompt({ clientMessageId: "context-retry", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+      await vi.advanceTimersByTimeAsync(0);
+      used = 2000;
+      unavailable = false;
+      await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS);
+      expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(2000);
+      expect(ofType(events, "session.turn")).toHaveLength(1);
+      await session.interrupt("stop");
+      const stoppedCalls = fake.requestsOfType("get_session_stats").length;
+      await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS * 2);
+      expect(fake.requestsOfType("get_session_stats")).toHaveLength(stoppedCalls);
+    } finally { await session.close(); vi.useRealTimers(); }
+  });
+
+  it("ignores a late live snapshot after a newer configuration refresh", async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const fake = new FakePiRpc({ sessionStats: statsPayload(5000, 1000) });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    const request = fake.request.bind(fake);
+    let held = false;
+    vi.spyOn(fake, "request").mockImplementation(async (command) => {
+      if (command.type === "get_session_stats" && !held) {
+        held = true; entered(); await gate; return statsPayload(1000, 1000);
+      }
+      return request(command);
+    });
+    await session.prompt({ clientMessageId: "context-stale", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+    await started;
+    await session.configure("newer-stats", { thinkingOption: "high" });
+    const usageCount = ofType(events, "session.usage").length;
+    release();
+    await flush();
+    expect(ofType(events, "session.usage")).toHaveLength(usageCount);
+    expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(5000);
+    await session.close();
+  });
+
+  it("rejects pre-compaction stats already in flight and recovers on the active-turn backstop", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let used: number | null = 1000;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
+    const { session, events } = harness({ fake });
+    try {
+      await session.open("open-1");
+      const request = fake.request.bind(fake);
+      let held = false;
+      vi.spyOn(fake, "request").mockImplementation(async (command) => {
+        if (command.type === "get_session_stats" && !held) {
+          held = true; await gate; return statsPayload(6000, 1000);
+        }
+        return request(command);
+      });
+      await session.prompt({ clientMessageId: "context-compact-stale", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+      used = null;
+      fake.emit({ type: "compaction_end", result: { summary: "compacted" }, aborted: false });
+      const usageCount = ofType(events, "session.usage").length;
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      // The compaction event coalesced one fresh follow-up. The rejected old
+      // reply must never restore its 6000-token pre-compaction measurement.
+      expect(ofType(events, "session.usage")).toHaveLength(usageCount + 1);
+      expect(ofType(events, "session.usage").at(-1)?.usage).not.toHaveProperty("contextWindowUsedTokens");
+      used = 2500;
+      await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS);
+      expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(2500);
+    } finally { release(); await session.close(); vi.useRealTimers(); }
+  });
+
+  it("coalesces live event refreshes rather than overlapping slow stats requests", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const fake = new FakePiRpc();
+    const { session } = harness({ fake });
+    try {
+      await session.open("open-1");
+      const request = fake.request.bind(fake);
+      let statsCalls = 0;
+      vi.spyOn(fake, "request").mockImplementation(async (command) => {
+        if (command.type === "get_session_stats") { statsCalls += 1; await gate; }
+        return request(command);
+      });
+      await session.prompt({ clientMessageId: "context-slow", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+      for (let timestamp = 1; timestamp <= 3; timestamp += 1) {
+        fake.emit({ type: "message_end", message: { role: "assistant", timestamp, content: [], stopReason: "toolUse" } });
+      }
+      await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS * 2);
+      expect(statsCalls).toBe(1);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      // Coalesced message completions request one immediate follow-up, then
+      // the normal backstop resumes. Neither overlaps the held first request.
+      expect(statsCalls).toBe(2);
+      await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS);
+      expect(statsCalls).toBe(3);
+    } finally { release(); await session.close(); vi.useRealTimers(); }
+  });
+
+  it("starts a new turn's refresh even when the previous turn's live stats reply is still pending", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let used: number | null = null;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
+    const { session, events } = harness({ fake, config: baseConfig({ persist: false }) });
+    try {
+      await session.open("open-1");
+      const request = fake.request.bind(fake);
+      let held = false;
+      vi.spyOn(fake, "request").mockImplementation(async (command) => {
+        if (command.type === "get_session_stats" && !held) {
+          held = true; await gate; return statsPayload(1000, 1000);
+        }
+        return request(command);
+      });
+      const input = (clientMessageId: string) => ({ clientMessageId, delivery: "auto" as const,
+        input: { type: "message" as const, content: [{ type: "text" as const, text: "work" }] } });
+      await session.prompt(input("turn-a"));
+      fake.emit({ type: "agent_settled" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(ofType(events, "session.turn").at(-1)?.state).toBe("completed");
+      used = 2500;
+      await session.prompt(input("turn-b"));
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(ofType(events, "session.usage").at(-1)).toMatchObject({
+        turnId: ofType(events, "session.turn").at(-1)?.turnId,
+        usage: { contextWindowUsedTokens: 2500 },
+      });
+      const calls = fake.requestsOfType("get_session_stats").length;
+      await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS);
+      expect(fake.requestsOfType("get_session_stats")).toHaveLength(calls + 1);
+    } finally { release(); await session.close(); vi.useRealTimers(); }
+  });
+
+  it("refreshes context without replacing in-flight message usage with session token/cost totals", async () => {
+    let used = 1000;
+    const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    await session.prompt({ clientMessageId: "context-accounting", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+    await flush();
+    used = 2000;
+    fake.emit({ type: "message_end", message: { role: "assistant", timestamp: 1, content: [], stopReason: "toolUse",
+      usage: { input: 100, output: 12, cacheRead: 7, cost: { total: 0.001 } } } });
+    await vi.waitFor(() => expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(2000));
+    expect(ofType(events, "session.usage").at(-1)?.usage).toMatchObject({
+      inputTokens: 100, outputTokens: 12, cachedInputTokens: 7, totalCostUsd: 0.001,
+    });
+    await session.close();
+  });
+
+  it("does not republish a live snapshot or restart polling after close", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const fake = new FakePiRpc();
+    const { session, events } = harness({ fake });
+    try {
+      await session.open("open-1");
+      const request = fake.request.bind(fake);
+      vi.spyOn(fake, "request").mockImplementation(async (command) => {
+        if (command.type === "get_session_stats") { entered(); await gate; return statsPayload(1000, 1000); }
+        return request(command);
+      });
+      await session.prompt({ clientMessageId: "context-closed", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+      await started;
+      await session.close();
+      const usageCount = ofType(events, "session.usage").length;
+      const requestCount = fake.requests.length;
+      release();
+      await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS * 2);
+      expect(ofType(events, "session.usage")).toHaveLength(usageCount);
+      expect(fake.requests).toHaveLength(requestCount);
+    } finally { release(); await session.close(); vi.useRealTimers(); }
   });
 
   it("omits used tokens when Pi reports unknown consumption", async () => {

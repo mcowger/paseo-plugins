@@ -164,6 +164,24 @@ At the latest live check, Luna advertised `auto`, `standard`, `flex`, `priority`
 and 272,000 / 1,050,000 tokens (`272K` / `1M`). Astra discovery and `flex`
 selection also passed. These are observed catalog values, not fixed policy.
 
+## Active-turn context checks
+
+`server/session.test.ts` covers unknown consumption after compaction, recovery
+after an assistant response while tools remain active, successive consumption
+updates, active-only polling and stats-error recovery, coalesced slow requests,
+new turns overtaking old requests, stale snapshots across compaction/configuration,
+per-message token/cost preservation, and Stop/close cleanup.
+
+The 2026-10-13 isolated check used the actual npm beta host and copied Pi with a
+disposable no-network model and custom native compaction summary. After `/compact`,
+the host snapshot correctly omitted consumed tokens. The next assistant response
+started a 45-second bash call; during that call, the host reported 4,032 / 128,000
+tokens. `agent-browser` opened the context details while **Stop agent** was still
+visible and showed **3% used**, **4k / 128k tokens**. The final snapshot advanced
+to 6,032 consumed tokens after the tool finished. This checks the actual
+post-compaction lifecycle and desktop UI, not upstream inference or iOS/Android.
+The fixture, active/final snapshots, and screenshot are in ignored test storage.
+
 ## Steering checks
 
 `server/steering.test.ts` covers active-turn IDs, distinct user echo bindings,

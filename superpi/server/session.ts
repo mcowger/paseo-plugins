@@ -75,6 +75,7 @@ export const SUPERPI_SESSION_CAPABILITIES = [
 ] as const;
 
 const DEFAULT_PI_THINKING_LEVEL = "medium";
+export const CONTEXT_USAGE_POLL_INTERVAL_MS = 2_000;
 
 const PI_THINKING_OPTIONS: ReadonlyArray<{
   id: string;
@@ -449,6 +450,11 @@ export class SuperpiSession {
   private compactionInFlight = false;
   private notificationCounter = 0;
   private lastContextUsageKey: string | null = null;
+  private lastReportedUsage: ProviderUsage = {};
+  private contextUsageTimer: ReturnType<typeof setTimeout> | null = null;
+  private contextUsageRefresh: Promise<void> | null = null;
+  private contextUsageRefreshPending = false;
+  private contextUsageSequence = 0;
   /**
    * Last effective context capacity/consumption, mirrored onto per-message
    * usage events. Pi's streaming usage carries only token/cost deltas, so
@@ -488,6 +494,7 @@ export class SuperpiSession {
       if (usage.contextWindowUsedTokens === undefined && this.lastContextWindow.usedTokens !== undefined) {
         usage.contextWindowUsedTokens = this.lastContextWindow.usedTokens;
       }
+      this.lastReportedUsage = usage;
       event = { ...event, usage };
     }
     if (event.type === "timeline.item" && event.item.type === "user_message") {
@@ -1031,6 +1038,8 @@ export class SuperpiSession {
         // Pi may settle a fast run before its admission response is read.
         if (this.settledBeforeAdmission.delete(clientMessageId)) {
           await this.finalizeActiveTurn();
+        } else {
+          this.refreshActiveContextUsage();
         }
         return;
       case "queued":
@@ -1112,7 +1121,24 @@ export class SuperpiSession {
         if (stopReason === "error") this.pendingStopReason = "error";
         else if (stopReason === "aborted") this.pendingStopReason = "aborted";
         else if (stopReason) this.pendingStopReason = undefined;
+        if (message.role === "assistant") this.refreshActiveContextUsage();
       }
+    }
+    if ((record.type === "compaction_end" || record.type === "auto_compaction_end") && isRecord(record.result)) {
+      // A successful compaction invalidates pre-compaction consumption, even
+      // if an older stats request is still in flight. Pi reports null until a
+      // fresh assistant response establishes a new context measurement.
+      this.contextUsageSequence += 1;
+      this.lastContextWindow = { maxTokens: this.lastContextWindow.maxTokens };
+      this.lastContextUsageKey = null;
+      if (this.lastContextWindow.maxTokens !== undefined) {
+        const usage = { ...this.lastReportedUsage };
+        delete usage.contextWindowUsedTokens;
+        this.emit({ type: "session.usage", sessionId: this.sessionId,
+          ...(this.activeTurnId ? { turnId: this.activeTurnId } : {}), usage });
+      }
+      if (this.activeTurnId) this.refreshActiveContextUsage();
+      else if (this.state === "ready") void this.publishContextUsage();
     }
     if (record.type === "agent_settled") {
       const settled = this.boundUser;
@@ -1276,6 +1302,7 @@ export class SuperpiSession {
   }
 
   private finalizeActiveTurn(): Promise<void> {
+    this.stopContextUsagePolling();
     if (this.settlePromise) return this.settlePromise;
     if (!this.activeTurnId) return Promise.resolve();
     const turnId = this.activeTurnId;
@@ -1326,6 +1353,41 @@ export class SuperpiSession {
     }
   }
 
+  private stopContextUsagePolling(): void {
+    if (this.contextUsageTimer) clearTimeout(this.contextUsageTimer);
+    this.contextUsageTimer = null;
+    this.contextUsageRefreshPending = false;
+  }
+
+  private refreshActiveContextUsage(): void {
+    const turnId = this.activeTurnId;
+    if (!turnId || this.state !== "ready" || this.settlePromise) return;
+    if (this.contextUsageRefresh) {
+      this.contextUsageRefreshPending = true;
+      return;
+    }
+    this.stopContextUsagePolling();
+    const refresh = this.publishContextUsage(turnId, true);
+    this.contextUsageRefresh = refresh;
+    void refresh.finally(() => {
+      if (this.contextUsageRefresh === refresh) this.contextUsageRefresh = null;
+      if (!this.activeTurnId || this.state !== "ready" || this.settlePromise) return;
+      if (this.activeTurnId !== turnId || this.contextUsageRefreshPending) {
+        // Don't lose a new turn's admission or an assistant completion that
+        // arrived while the previous snapshot was waiting on Pi.
+        this.refreshActiveContextUsage();
+        return;
+      }
+      // Event-driven refreshes handle assistant/tool boundaries. Retain a
+      // bounded backstop during long streaming/tool waits and stats failures.
+      this.contextUsageTimer = setTimeout(() => {
+        this.contextUsageTimer = null;
+        this.refreshActiveContextUsage();
+      }, CONTEXT_USAGE_POLL_INTERVAL_MS);
+      this.contextUsageTimer.unref?.();
+    });
+  }
+
   /**
    * Publish `session.usage` with context window capacity and consumption.
    *
@@ -1335,20 +1397,28 @@ export class SuperpiSession {
    * short budget vs maximum) mirrored on companion state. Paseo's composer
    * meter reads `lastUsage.contextWindowMaxTokens/UsedTokens`, so without
    * this emission the meter stays empty even though the budget is known.
+   * Assistant completions refresh it within a live turn, with polling as a
+   * recovery backstop; retaining a cache alone cannot recover from compaction.
    *
    * Best effort and idempotent: a stats failure keeps prior usage instead of
    * failing the turn, unknown consumption (e.g. right after compaction) omits
    * the used field rather than reporting a stale value, and unchanged values
    * are not re-emitted. Never throws.
    */
-  private async publishContextUsage(turnId?: string): Promise<void> {
+  private async publishContextUsage(turnId?: string, preserveReportedUsage = false): Promise<void> {
     const rpc = this.rpc;
-    if (!rpc || this.state === "closed" || this.state === "failed") return;
+    if (!rpc || this.state === "closing" || this.state === "closed" || this.state === "failed") return;
+    const sequence = ++this.contextUsageSequence;
+    const activeTurnId = this.activeTurnId;
     try {
       const [stateData, statsData] = await Promise.all([
         rpc.request({ type: "get_state" }).catch(() => undefined),
         rpc.request({ type: "get_session_stats" }).catch(() => undefined),
       ]);
+      // A newer refresh, compaction, turn change, or close makes this response
+      // stale. Never let a late snapshot overwrite the current context cache.
+      if (sequence !== this.contextUsageSequence || this.activeTurnId !== activeTurnId ||
+        this.rpc !== rpc || this.currentState === "closing" || this.currentState === "closed" || this.currentState === "failed") return;
       // A stats transport failure means consumption is unknown; keep the
       // host's prior usage rather than replacing it with a max-only report.
       if (statsData === undefined) return;
@@ -1365,7 +1435,8 @@ export class SuperpiSession {
       if (maxTokens === undefined) return;
       const fallback = this.timeline.usage() ?? undefined;
       const usage: ProviderUsage = {
-        ...(stats.inputTokens !== undefined || stats.cachedInputTokens !== undefined
+        ...(preserveReportedUsage ? this.lastReportedUsage :
+          stats.inputTokens !== undefined || stats.cachedInputTokens !== undefined
         || stats.outputTokens !== undefined || stats.totalCostUsd !== undefined
           ? {
             ...(stats.inputTokens !== undefined ? { inputTokens: stats.inputTokens } : {}),
@@ -1375,10 +1446,14 @@ export class SuperpiSession {
           }
           : (fallback ? { ...fallback } : {})),
         contextWindowMaxTokens: maxTokens,
-        ...(stats.usedTokens !== undefined && stats.usedTokens !== null
-          ? { contextWindowUsedTokens: stats.usedTokens }
-          : {}),
       };
+      // In-flight refreshes update context, not token/cost accounting: the
+      // timeline reports per-message usage while stats contains session totals.
+      // Never carry consumed tokens from that preserved payload across null.
+      delete usage.contextWindowUsedTokens;
+      if (stats.usedTokens !== undefined && stats.usedTokens !== null) {
+        usage.contextWindowUsedTokens = stats.usedTokens;
+      }
       const key = JSON.stringify({ ...usage, turnId });
       if (key === this.lastContextUsageKey) return;
       this.lastContextUsageKey = key;
@@ -1582,6 +1657,7 @@ export class SuperpiSession {
   private endTurn(state: "completed" | "failed" | "canceled", error?: ProviderError): void {
     const turnId = this.activeTurnId;
     if (!turnId) return;
+    this.stopContextUsagePolling();
     this.activeTurnId = undefined;
     if (this.terminalizedTurns.has(turnId)) return;
     this.terminalizedTurns.add(turnId);
@@ -1916,6 +1992,7 @@ export class SuperpiSession {
       if (this.state === "closed") return;
       const failed = failure !== undefined || this.state === "failed";
       this.state = "closing";
+      this.stopContextUsagePolling();
       this.endTurn(failed ? "failed" : "canceled", failed ? toProviderError(failure ?? new Error("Superpi session failed")) : undefined);
       this.failPendingPrompts(
         failure ?? new Error("Superpi session closed before the prompt settled"),

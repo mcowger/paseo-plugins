@@ -24,8 +24,11 @@ that pin is not a claim that newer hosts are unsupported.
   selector.
   Settings apply to subsequent requests without interrupting a response.
 - Context usage and the effective budget are reported through provider usage
-  events (`get_session_stats` consumption plus the companion-applied window),
-  so Paseo's composer context meter reflects live SuperPi sessions.
+  events (`get_session_stats` consumption plus the companion-applied window).
+  Consumption refreshes after assistant responses, with a two-second refetch
+  backstop while a turn is active, including tool waits. After compaction, consumption stays
+  unknown until Pi has a fresh measurement; it then recovers before the whole
+  turn ends. Late snapshots cannot restore pre-compaction or closed-turn data.
   Backend errors are surfaced, not hidden behind an eligibility matrix.
   Legacy Fast selections migrate to advertised `priority`; unsupported saved
   tiers use `auto` or `standard` while retaining the user's choice for compatible
