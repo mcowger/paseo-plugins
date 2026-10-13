@@ -6,7 +6,10 @@ import {
   type ProviderEvent,
   type ProviderSessionConfig,
 } from "@getpaseo/plugin/server/provider";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Keep the auth snapshot out of tests: it reads the real agent dir and writes to the shared temp dir.
+vi.mock("./auth-snapshot.js", () => ({ prepareAuthSnapshot: () => undefined }));
 import type { PiRpcOptions } from "../server/pi-rpc.js";
 import { createSuperpiProvider, discoverCatalog } from "../server/provider.js";
 import { FakePiRpc } from "../tests/fixtures/fake-pi-rpc.js";

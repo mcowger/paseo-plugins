@@ -7,6 +7,10 @@ import {
   type ProviderSessionConfig,
 } from "@getpaseo/plugin/server/provider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The auth snapshot reads the real agent dir and writes to the shared temp dir;
+// session tests must not touch either.
+vi.mock("../server/auth-snapshot.js", () => ({ prepareAuthSnapshot: () => undefined }));
 import type { PiRpcOptions } from "../server/pi-rpc.js";
 import { PiRpcTimeoutError } from "../server/pi-rpc.js";
 import { SessionStore } from "../server/persistence.js";

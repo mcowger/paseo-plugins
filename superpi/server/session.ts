@@ -42,6 +42,7 @@ import {
   type RewindToken,
 } from "./native-history.js";
 import { createCompanionChannel } from "./companion-channel.js";
+import { prepareAuthSnapshot } from "./auth-snapshot.js";
 import { PiRpcTimeoutError, PiRpcTransportError, createPiRpc, type PiRecord, type PiRpc, type PiRpcOptions } from "./pi-rpc.js";
 import { SessionStore } from "./persistence.js";
 import { createSubagentObserver, type SubagentObserver } from "./subagents.js";
@@ -518,6 +519,9 @@ export class SuperpiSession {
       const sessionKey = randomUUID();
       this.sessionKey = sessionKey;
       const createRpc = this.options.createPiRpc ?? createPiRpc;
+      const authDirectory = prepareAuthSnapshot({
+        env: { ...process.env, ...this.options.config.env },
+      });
       const rpc = await createRpc({
         command: this.options.command,
         args: buildLaunchArgs({
@@ -527,7 +531,11 @@ export class SuperpiSession {
           transcript,
         }),
         cwd: this.options.config.cwd,
-        env: { ...this.options.config.env, SUPERPI_SESSION_KEY: sessionKey },
+        env: {
+          ...this.options.config.env,
+          ...(authDirectory ? { PI_CODING_AGENT_DIR: authDirectory } : {}),
+          SUPERPI_SESSION_KEY: sessionKey,
+        },
       });
       this.rpc = rpc;
       this.removeRecord = rpc.onRecord((record) => this.handleRecord(record));
