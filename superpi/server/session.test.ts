@@ -1753,6 +1753,49 @@ describe("context usage reporting", () => {
     await session.close();
   });
 
+  it("keeps the context window on per-message usage during an active turn", async () => {
+    const fake = new FakePiRpc({
+      promptDisposition: "started",
+      sessionStats: statsPayload(1000, 1000),
+      onPrompt: (command) => {
+        // The companion control channel also prompts Pi during open; only the
+        // user turn should inject the streaming usage under test.
+        if (String(command.message).startsWith("/superpi-control ")) return;
+        fake.emit({ type: "message_start", message: { role: "assistant", id: "a1" } });
+        fake.emit({
+          type: "message_end",
+          message: {
+            role: "assistant",
+            id: "a1",
+            content: [{ type: "text", text: "done" }],
+            usage: { input: 100, output: 12, cacheRead: 7, cost: { total: 0.001 } },
+          },
+        });
+      },
+    });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    events.length = 0;
+
+    await session.prompt({
+      clientMessageId: "client-1",
+      delivery: "auto",
+      input: { type: "message", content: [{ type: "text", text: "hello" }] },
+    });
+
+    // Pi's streaming per-message usage carries only token/cost deltas. The
+    // emitted event must retain the effective window and last known
+    // consumption so Paseo's context meter does not go blank mid-turn.
+    expect(
+      ofType(events, "session.usage").find((event) => event.usage.inputTokens === 100)?.usage,
+    ).toMatchObject({
+      outputTokens: 12,
+      contextWindowMaxTokens: 1000,
+      contextWindowUsedTokens: 1000,
+    });
+    await session.close();
+  });
+
   it("omits used tokens when Pi reports unknown consumption", async () => {
     const fake = new FakePiRpc({ sessionStats: statsPayload(null) });
     const { session, events } = harness({ fake });

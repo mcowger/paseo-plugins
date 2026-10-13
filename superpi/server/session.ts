@@ -441,6 +441,13 @@ export class SuperpiSession {
   private compactionInFlight = false;
   private notificationCounter = 0;
   private lastContextUsageKey: string | null = null;
+  /**
+   * Last effective context capacity/consumption, mirrored onto per-message
+   * usage events. Pi's streaming usage carries only token/cost deltas, so
+   * without this the host replaces `lastUsage` and the composer context meter
+   * goes blank mid-turn until the next `get_session_stats` emission.
+   */
+  private lastContextWindow: { maxTokens?: number; usedTokens?: number } = {};
   private extensionCommands = new Set<string>();
 
   private activeTurnId: string | undefined;
@@ -464,6 +471,16 @@ export class SuperpiSession {
   }
 
   private emit(event: ProviderEvent): void {
+    if (event.type === "session.usage") {
+      const usage = { ...event.usage };
+      if (usage.contextWindowMaxTokens === undefined && this.lastContextWindow.maxTokens !== undefined) {
+        usage.contextWindowMaxTokens = this.lastContextWindow.maxTokens;
+      }
+      if (usage.contextWindowUsedTokens === undefined && this.lastContextWindow.usedTokens !== undefined) {
+        usage.contextWindowUsedTokens = this.lastContextWindow.usedTokens;
+      }
+      event = { ...event, usage };
+    }
     if (event.type === "timeline.item" && event.item.type === "user_message") {
       const token = this.userRevertTokens.get(event.item.id);
       if (token) {
@@ -1271,6 +1288,12 @@ export class SuperpiSession {
       const key = JSON.stringify({ ...usage, turnId });
       if (key === this.lastContextUsageKey) return;
       this.lastContextUsageKey = key;
+      this.lastContextWindow = {
+        maxTokens,
+        ...(stats.usedTokens !== undefined && stats.usedTokens !== null
+          ? { usedTokens: stats.usedTokens }
+          : {}),
+      };
       this.emit({
         type: "session.usage",
         sessionId: this.sessionId,
