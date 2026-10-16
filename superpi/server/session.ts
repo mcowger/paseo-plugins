@@ -76,6 +76,10 @@ export const SUPERPI_SESSION_CAPABILITIES = [
 
 const DEFAULT_PI_THINKING_LEVEL = "medium";
 export const CONTEXT_USAGE_POLL_INTERVAL_MS = 2_000;
+/** Bounded budget for confirming a companion reload before reporting success. */
+export const RELOAD_CONFIRM_TIMEOUT_MS = 10_000;
+/** Delay between reload confirmation read attempts. */
+export const RELOAD_CONFIRM_RETRY_MS = 200;
 
 const PI_THINKING_OPTIONS: ReadonlyArray<{
   id: string;
@@ -178,6 +182,7 @@ export function mapPiThinkingLevels(levels: readonly string[]): ProviderThinking
 
 const PI_RPC_COMMANDS: readonly ProviderCommand[] = [
   { name: "compact", description: "Manually compact the session context", argumentHint: "[instructions]" },
+  { name: "reload", description: "Reload extensions, skills, prompts, themes, and context files" },
   { name: "autocompact", description: "Toggle automatic context compaction", argumentHint: "[on|off|toggle]" },
   { name: "model", description: "Set model (or use the composer picker)", argumentHint: "<provider/model>" },
   { name: "thinking", description: "Set thinking level", argumentHint: "<level>" },
@@ -187,7 +192,7 @@ const PI_RPC_COMMANDS: readonly ProviderCommand[] = [
 
 const PI_TUI_COMMANDS = new Set([
   "settings", "tree", "scoped-models", "export", "import", "share", "bug", "copy",
-  "changelog", "hotkeys", "fork", "clone", "trust", "login", "logout", "new", "resume", "reload", "quit",
+  "changelog", "hotkeys", "fork", "clone", "trust", "login", "logout", "new", "resume", "quit",
 ]);
 
 export function mapPiCommands(commands: readonly unknown[]): ProviderCommand[] {
@@ -448,6 +453,7 @@ export class SuperpiSession {
   private revertInFlight = false;
   private revertTokensUnavailable = false;
   private compactionInFlight = false;
+  private reloadInFlight = false;
   private notificationCounter = 0;
   private lastContextUsageKey: string | null = null;
   private lastReportedUsage: ProviderUsage = {};
@@ -708,6 +714,9 @@ export class SuperpiSession {
     if (this.compactionInFlight) {
       throw new Error("Superpi session is compacting");
     }
+    if (this.reloadInFlight) {
+      throw new Error("Superpi session is reloading");
+    }
     const steering = prompt.delivery === "steer";
     const steeringTurnId = steering ? this.activeTurnId : undefined;
     if (steering && !this.isSteerableTurn(steeringTurnId)) {
@@ -727,6 +736,10 @@ export class SuperpiSession {
     if (!steering && command && !this.extensionCommands.has(command.name)) {
       if (command.name === "compact") {
         await this.runCompactCommand(prompt, command.arguments);
+        return;
+      }
+      if (command.name === "reload") {
+        await this.runReloadCommand(prompt);
         return;
       }
       if (PI_RPC_COMMANDS.some((entry) => entry.name === command.name) || PI_TUI_COMMANDS.has(command.name) || command.name === "superpi-control") {
@@ -850,6 +863,104 @@ export class SuperpiSession {
       });
     } finally {
       this.compactionInFlight = false;
+    }
+  }
+
+  /**
+   * Companion-mediated resource reload (`/reload`).
+   *
+   * Pi's RPC wire has no reload command, so the companion calls
+   * `ctx.reload()` from inside the process. Its ok reply is emitted before
+   * reloading (the old command context is stale afterward), so ok means the
+   * reload started: this method confirms completion by re-reading config and
+   * commands with bounded retries before reporting success. Reload re-reads
+   * settings, extensions, skills, prompts, themes, and context files without
+   * touching the session history.
+   */
+  private async runReloadCommand(prompt: ProviderPrompt): Promise<void> {
+    const rpc = this.rpc;
+    if (!rpc) throw new Error("Superpi session is not ready for prompts");
+    if (this.reloadInFlight) {
+      this.emit({
+        type: "session.prompt_result",
+        sessionId: this.sessionId,
+        clientMessageId: prompt.clientMessageId,
+        result: { type: "failed", error: { message: "Superpi reload is already in progress" } },
+      });
+      return;
+    }
+    // Hold the guard before any await; prompts, steering, rewind, compaction,
+    // and interrupts are all refused while it is held.
+    this.reloadInFlight = true;
+    try {
+      const state = await rpc.request({ type: "get_state" });
+      if (isRecord(state) && (state.isStreaming === true || state.isCompacting === true)) {
+        this.emit({
+          type: "session.prompt_result",
+          sessionId: this.sessionId,
+          clientMessageId: prompt.clientMessageId,
+          result: { type: "failed", error: { message: "Cannot reload while the session is busy" } },
+        });
+        return;
+      }
+      if ((this.dialogBridge?.list().length ?? 0) > 0) {
+        this.emit({
+          type: "session.prompt_result",
+          sessionId: this.sessionId,
+          clientMessageId: prompt.clientMessageId,
+          result: { type: "failed", error: { message: "Cannot reload while a dialog is pending" } },
+        });
+        return;
+      }
+      await this.enqueueOperation(async () => {
+        if (!this.companion) throw new Error("Superpi companion channel is not available");
+        await this.companion.request("reload");
+        // The companion replies before reloading, so the new extension
+        // runner may still be rebuilding. Retry the confirmation reads until
+        // they answer from the reloaded session or the budget runs out.
+        const deadline = Date.now() + RELOAD_CONFIRM_TIMEOUT_MS;
+        let config: ProviderConfigState | undefined;
+        let commands: ProviderCommand[] | undefined;
+        let lastError: unknown;
+        while (Date.now() < deadline) {
+          try {
+            config = await this.readConfigState();
+            const nativeCommands = extractArray(await rpc.request({ type: "get_commands" }), "commands");
+            commands = mapPiCommands(nativeCommands);
+            this.extensionCommands = new Set(nativeCommands.flatMap((command) => isRecord(command) && asString(command.name) && command.name !== "superpi-control" ? [String(command.name)] : []));
+            this.steerableCommands = new Set(nativeCommands.flatMap((command) =>
+              isRecord(command) && asString(command.name) && (command.source === "prompt" || command.source === "skill")
+                ? [String(command.name)] : [],
+            ));
+            lastError = undefined;
+            break;
+          } catch (error) {
+            lastError = error;
+            await new Promise((resolve) => setTimeout(resolve, RELOAD_CONFIRM_RETRY_MS));
+          }
+        }
+        if (!config || !commands) {
+          throw lastError instanceof Error ? lastError : new Error("Pi did not confirm the reload; it may still be in progress, try /reload again");
+        }
+        this.emit({ type: "session.config", sessionId: this.sessionId, config });
+        this.emit({ type: "session.commands", sessionId: this.sessionId, commands });
+        await this.publishContextUsage();
+      });
+      this.emit({
+        type: "session.prompt_result",
+        sessionId: this.sessionId,
+        clientMessageId: prompt.clientMessageId,
+        result: { type: "completed" },
+      });
+    } catch (error) {
+      this.emit({
+        type: "session.prompt_result",
+        sessionId: this.sessionId,
+        clientMessageId: prompt.clientMessageId,
+        result: { type: "failed", error: toProviderError(error) },
+      });
+    } finally {
+      this.reloadInFlight = false;
     }
   }
 
@@ -1003,7 +1114,7 @@ export class SuperpiSession {
 
   private isSteerableTurn(turnId: string | undefined): boolean {
     return turnId !== undefined && this.activeTurnId === turnId && this.state === "ready" &&
-      !this.settlePromise && !this.cancelIntent && !this.revertInFlight && !this.compactionInFlight;
+      !this.settlePromise && !this.cancelIntent && !this.revertInFlight && !this.compactionInFlight && !this.reloadInFlight;
   }
 
   private async handleDisposition(clientMessageId: string, result: unknown): Promise<void> {
@@ -1679,6 +1790,14 @@ export class SuperpiSession {
       });
       return;
     }
+    if (this.reloadInFlight) {
+      this.emit({
+        type: "request.failed",
+        requestId,
+        error: { message: "Superpi session reload is in progress" },
+      });
+      return;
+    }
     if (!this.rpc || this.state === "closed" || this.state === "failed") {
       this.emit({
         type: "request.failed",
@@ -1759,6 +1878,7 @@ export class SuperpiSession {
       this.settlePromise ||
       this.cancelIntent ||
       this.compactionInFlight ||
+      this.reloadInFlight ||
       this.pendingResults.size > 0 ||
       (this.dialogBridge?.list().length ?? 0) > 0
     ) {

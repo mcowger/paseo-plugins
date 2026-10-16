@@ -41,7 +41,7 @@ export const companionReplySchema = z.object({
   version: z.literal(1),
   sessionKey: z.string(),
   requestId: z.string(),
-  operation: z.enum(["hello", "get-state", "configure", "rewind", "compact"]),
+  operation: z.enum(["hello", "get-state", "configure", "rewind", "compact", "reload"]),
   ok: z.boolean(),
   data: z.unknown().optional(),
   error: z.string().optional(),

@@ -46,7 +46,7 @@ export const SuperpiSettingsSchema = z.strictObject({
   longContext: z.boolean(),
 });
 
-export const OperationSchema = z.enum(["hello", "get-state", "configure", "rewind", "compact"]);
+export const OperationSchema = z.enum(["hello", "get-state", "configure", "rewind", "compact", "reload"]);
 export type Operation = z.infer<typeof OperationSchema>;
 
 export const OriginSchema = z.enum(["root", "child"]);

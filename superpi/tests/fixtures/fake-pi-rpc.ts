@@ -16,6 +16,8 @@ export interface FakePiRpcOptions {
   models?: unknown[];
   levels?: string[];
   commands?: unknown[];
+  /** Dynamic replacement for `get_commands`, invoked per call. */
+  commandsProvider?: () => unknown[];
   messages?: unknown[];
   /** Dynamic replacement for `get_messages`, invoked per call. */
   messagesProvider?: () => unknown[];
@@ -30,6 +32,9 @@ export interface FakePiRpcOptions {
   clearQueue?: unknown;
   /** Custom companion `rewind` reply data; defaults to a successful no-op. */
   rewindData?: unknown;
+  /** Custom companion `reload` reply error; when set, the companion replies `ok: false`. */
+  reloadError?: string;
+  onReload?: () => void;
   /** When set, the companion replies `ok: false` for a rewind with this error. */
   rewindError?: string;
   onRewind?: () => void;
@@ -101,7 +106,9 @@ export class FakePiRpc implements PiRpc {
         return { levels: this.options.levels ?? ["off", "medium", "high"] };
       case "get_commands":
         return {
-          commands: this.options.commands ?? [{ name: "superpi-control", description: "Superpi companion" }],
+          commands: this.options.commandsProvider
+            ? this.options.commandsProvider()
+            : (this.options.commands ?? [{ name: "superpi-control", description: "Superpi companion" }]),
         };
       case "get_messages":
         return {
@@ -252,6 +259,26 @@ export class FakePiRpc implements PiRpc {
           settings: { ...this.companionSettings },
           activeChildren: 0,
         };
+    } else if (request.operation === "reload") {
+      this.options.onReload?.();
+      if (this.options.reloadError !== undefined) {
+        this.emit({
+          type: "extension_ui_request",
+          method: "notify",
+          message:
+            companionPrefix +
+            JSON.stringify({
+              version: 1,
+              sessionKey: request.sessionKey,
+              requestId: request.requestId,
+              operation: request.operation,
+              ok: false,
+              error: this.options.reloadError,
+            }),
+        });
+        return;
+      }
+      data = {};
     } else {
       data = {};
     }

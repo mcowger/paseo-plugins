@@ -43,9 +43,12 @@ that pin is not a claim that newer hosts are unsupported.
 - **Superpi: Copy Pi resume command (stop session first)** in the agent command
   center copies a terminal command for the saved native transcript. Stop/detach
   the Paseo session before running it to avoid concurrent transcript writers.
-- Native `/compact`, `/autocompact`, `/model`, `/thinking`, `/name`, and `/session`
+- Native `/compact`, `/reload`, `/autocompact`, `/model`, `/thinking`, `/name`, and `/session`
   commands are listed and dispatched without sending them to the model.
-  Terminal-only built-ins fail explicitly; extension commands keep precedence.
+  `/reload` re-reads extensions, skills, prompts, themes, and context files
+  (for example, skills that landed in the workspace after the session started)
+  and republishes the command catalog; it runs only while idle and never
+  touches the session history. Terminal-only built-ins fail explicitly; extension commands keep precedence.
   Run slash commands while idle: Paseo may interrupt an active turn before
   dispatching them. `/autocompact` changes Pi's global preference, not just this
   conversation; project overrides may still take precedence.

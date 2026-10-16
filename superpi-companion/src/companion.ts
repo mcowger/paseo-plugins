@@ -66,6 +66,7 @@ export const COMPANION_CAPABILITIES: readonly string[] = [
   "configure",
   "rewind",
   "compact",
+  "reload",
 ];
 
 const COMPANION_LIMITATIONS: readonly string[] = [
@@ -73,6 +74,8 @@ const COMPANION_LIMITATIONS: readonly string[] = [
   "rewind is rejected while the root agent is busy, while a compaction is in progress, or while owned children are active",
   "the provider must clear its own queued input before asking the companion to navigate",
   "compact completion is awaited via Pi's documented callbacks/events; the companion never reports completion early",
+  "reload is accepted while idle and the ok reply is emitted before reloading, so ok means started rather than finished; the provider confirms completion by re-reading state and commands",
+  "reload re-reads settings, extensions, skills, prompts, themes, and context files without touching the session history; files that arrive after reload starts are not picked up",
   "host history replacement after rewind is the provider's supported-adapter concern, not a companion-invented reset event",
   "active owned children are counted from the pi-subagents bridge; children not bridged are not visible",
   "advertised service tiers describe Plexus capabilities, not a routing or backend acceptance guarantee",
@@ -585,6 +588,44 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     }
   }
 
+  async function handleReload(request: SuperpiRequest, ctx: ExtensionCommandContext): Promise<void> {
+    if (!ctx.isIdle()) {
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        data: buildState(ctx),
+        error: "reload is unavailable while the agent is busy",
+      });
+      return;
+    }
+    if (compactionActive) {
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        data: buildState(ctx),
+        error: "reload is unavailable while a compaction is in progress",
+      });
+      return;
+    }
+    const activeChildren = bridgeTracker.activeChildren();
+    if (activeChildren > 0) {
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        data: buildState(ctx),
+        error: `reload is unavailable while ${activeChildren} owned child session(s) are active`,
+      });
+      return;
+    }
+    // `ctx.reload()` invalidates this extension runner, so the old command
+    // context must not be used afterward. The ok reply is emitted before
+    // reloading: ok means the reload started, and the provider confirms
+    // completion by re-reading state and commands. A reload failure after
+    // the ok reply surfaces as a provider-side confirmation failure.
+    emit(ctx, { ...base(request), ok: true, data: buildState(ctx) });
+    await ctx.reload();
+  }
+
   async function handleArgs(args: string, ctx: ExtensionCommandContext): Promise<void> {
     const parsed = parseRequestArg(args);
     if (!parsed.ok) {
@@ -641,6 +682,9 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
         return;
       case "compact":
         await handleCompact(request, ctx);
+        return;
+      case "reload":
+        await handleReload(request, ctx);
         return;
     }
   }

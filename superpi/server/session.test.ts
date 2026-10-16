@@ -1109,6 +1109,83 @@ describe("stage 2 configuration", () => {
     await session.close();
   });
 
+  it("reloads resources and republishes config and commands without a model turn", async () => {
+    let reloaded = false;
+    const fake = new FakePiRpc({
+      commandsProvider: () => reloaded
+        ? [{ name: "superpi-control" }, { name: "skill:late-skill", description: "Arrived after launch" }]
+        : [{ name: "superpi-control" }],
+      onReload: () => { reloaded = true; },
+    });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    events.length = 0;
+    await session.prompt({
+      clientMessageId: "r1",
+      delivery: "auto",
+      input: { type: "command", name: "reload", arguments: "" },
+    });
+    expect(reloaded).toBe(true);
+    expect(ofType(events, "session.prompt_result").at(-1)?.result.type).toBe("completed");
+    const commands = ofType(events, "session.commands").at(-1)?.commands ?? [];
+    expect(commands.map((command) => command.name)).toContain("reload");
+    expect(commands.map((command) => command.name)).toContain("skill:late-skill");
+    expect(ofType(events, "session.config")).not.toHaveLength(0);
+    expect(ofType(events, "session.turn")).toHaveLength(0);
+    expect(fake.requestsOfType("prompt").filter((entry) => !String(entry.message).startsWith("/superpi-control "))).toHaveLength(0);
+    await session.close();
+  });
+
+  it("dispatches typed /reload without sending it to the model or opening a turn", async () => {
+    const { session, fake, events } = harness();
+    await session.open("open-1");
+    await session.prompt({ clientMessageId: "r1", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "/reload" }] } });
+    expect(fake.requestsOfType("prompt").some((entry) => entry.message === "/reload")).toBe(false);
+    expect(ofType(events, "session.turn")).toHaveLength(0);
+    expect(ofType(events, "session.prompt_result").at(-1)?.result.type).toBe("completed");
+    await session.close();
+  });
+
+  it("rejects reload while busy and reports companion failures", async () => {
+    let streaming = true;
+    let reloads = 0;
+    const fake = new FakePiRpc({
+      stateProvider: () => ({
+        sessionId: "pi-session-1",
+        isStreaming: streaming,
+        model: { provider: "test", id: "model", name: "Model", reasoning: true, contextWindow: 1000 },
+        thinkingLevel: "medium",
+      }),
+      onReload: () => { reloads += 1; },
+    });
+    const { session, events } = harness({ fake });
+    await session.open("open-1");
+    events.length = 0;
+    await session.prompt({
+      clientMessageId: "r1",
+      delivery: "auto",
+      input: { type: "command", name: "reload", arguments: "" },
+    });
+    expect(ofType(events, "session.prompt_result").at(-1)?.result.type).toBe("failed");
+    expect(reloads).toBe(0);
+
+    streaming = false;
+    const failing = new FakePiRpc({ reloadError: "extensions unavailable" });
+    const retry = harness({ fake: failing });
+    await retry.session.open("open-1");
+    await retry.session.prompt({
+      clientMessageId: "r2",
+      delivery: "auto",
+      input: { type: "command", name: "reload", arguments: "" },
+    });
+    expect(ofType(retry.events, "session.prompt_result").at(-1)?.result).toMatchObject({
+      type: "failed",
+      error: { message: "extensions unavailable" },
+    });
+    await retry.session.close();
+    await session.close();
+  });
+
   it("dispatches native controls and rejects unavailable TUI commands without model work", async () => {
     let autoCompactionEnabled = false;
     const fake = new FakePiRpc({

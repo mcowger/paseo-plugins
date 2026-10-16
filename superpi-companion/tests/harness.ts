@@ -164,6 +164,7 @@ export interface FakeContextSeed {
   leafId?: string;
   compactAuto?: boolean;
   compactError?: string;
+  reloadThrows?: string;
 }
 
 export interface FakeContext {
@@ -171,12 +172,14 @@ export interface FakeContext {
   notifies: FakeNotify[];
   navigations: Array<{ targetId: string; options?: unknown }>;
   compactions: Array<{ options?: unknown }>;
+  reloads: Array<{ notifies: number }>;
 }
 
 export function createFakeContext(seed: FakeContextSeed = {}): FakeContext {
   const notifies: FakeNotify[] = [];
   const navigations: Array<{ targetId: string; options?: unknown }> = [];
   const compactions: Array<{ options?: unknown }> = [];
+  const reloads: Array<{ notifies: number }> = [];
   let leafId = seed.leafId ?? (seed.branch?.at(-1)?.id as string | undefined) ?? null;
   const pi = seed.pi;
   if (pi && seed.model !== undefined) pi.sessionModel = seed.model;
@@ -205,6 +208,12 @@ export function createFakeContext(seed: FakeContextSeed = {}): FakeContext {
       if (seed.compactError !== undefined) options?.onError?.(new Error(seed.compactError));
       else options?.onComplete?.({});
     },
+    reload: async () => {
+      // Record how many notifications were already emitted: the companion
+      // must reply ok before reloading, never after.
+      reloads.push({ notifies: notifies.length });
+      if (seed.reloadThrows !== undefined) throw new Error(seed.reloadThrows);
+    },
     modelRegistry: {
       find: (provider: string | undefined, modelId: string) =>
         pi ? pi.findModel(provider, modelId) : undefined,
@@ -218,7 +227,7 @@ export function createFakeContext(seed: FakeContextSeed = {}): FakeContext {
     get: () => (pi ? pi.sessionModel : seed.model),
   });
 
-  return { ctx: ctx as unknown as ExtensionCommandContext, notifies, navigations, compactions };
+  return { ctx: ctx as unknown as ExtensionCommandContext, notifies, navigations, compactions, reloads };
 }
 
 export function readReply(notifies: FakeNotify[]): SuperpiReply {
