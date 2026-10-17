@@ -1,106 +1,112 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { useSettings } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/react-native";
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, TextInput, type TextStyle, View, type ViewStyle } from "react-native";
-import type { RepoConfig, UberProject } from "../shared/config";
+import {
+  SettingsAction,
+  SettingsCard,
+  SettingsInput,
+  SettingsRow,
+  SettingsSection,
+} from "@getpaseo/plugin/client/ui";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, Text, type TextStyle, View, type ViewStyle } from "react-native";
+import type { UberProject } from "../shared/config";
 import { polyrepoSettings } from "../shared/settings";
+import {
+  DEFAULT_BRANCH_TEMPLATE,
+  DEFAULT_REPO_DIR_TEMPLATE,
+  DEFAULT_ROOT_DIR_TEMPLATE,
+  emptyProjectDraft,
+  emptyRepoDraft,
+  hasProjectErrors,
+  PREVIEW_FEATURE,
+  type ProjectDraft,
+  previewProjectDraft,
+  projectDraftFrom,
+  projectFromDraft,
+  type RepoDraft,
+  validateProjectDraft,
+} from "../shared/settings-form";
 
 interface SettingsStyles {
-  readonly container: ViewStyle;
-  readonly heading: TextStyle;
-  readonly label: TextStyle;
-  readonly input: TextStyle;
-  readonly multiline: TextStyle;
-  readonly row: ViewStyle;
-  readonly name: TextStyle;
-  readonly meta: TextStyle;
-  readonly error: TextStyle;
-  readonly hint: TextStyle;
-  readonly actions: ViewStyle;
+  readonly rowActions: ViewStyle;
   readonly button: ViewStyle;
   readonly buttonText: TextStyle;
+  readonly dangerButtonText: TextStyle;
+  readonly preview: ViewStyle;
+  readonly previewLine: ViewStyle;
+  readonly previewLabel: TextStyle;
+  readonly previewValue: TextStyle;
 }
 
 function createStyles(theme: PluginTheme, compact: boolean): SettingsStyles {
-  const fontSize = compact ? 12 : 13;
   const small = compact ? 10 : 11;
-  const input: TextStyle = {
-    color: theme.colors.foreground,
-    fontSize,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  };
   return {
-    container: { gap: 10 },
-    heading: { color: theme.colors.foreground, fontSize: fontSize + 3, fontWeight: "700" },
-    label: { color: theme.colors.foregroundMuted, fontSize: small, fontWeight: "600" },
-    input,
-    multiline: { ...input, minHeight: 90, textAlignVertical: "top" },
-    row: { gap: 2, paddingVertical: 6, borderTopWidth: 1, borderTopColor: theme.colors.border },
-    name: { color: theme.colors.foreground, fontSize, fontWeight: "600" },
-    meta: { color: theme.colors.foregroundMuted, fontSize: small },
-    error: { color: theme.colors.statusDanger, fontSize: small },
-    hint: { color: theme.colors.foregroundMuted, fontSize: small },
-    actions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+    rowActions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
     button: {
-      paddingVertical: 7,
+      paddingVertical: 6,
       paddingHorizontal: 12,
       borderRadius: 6,
       backgroundColor: theme.colors.surface2,
     },
     buttonText: { color: theme.colors.foreground, fontSize: small, fontWeight: "600" },
+    dangerButtonText: { color: theme.colors.statusDanger, fontSize: small, fontWeight: "600" },
+    preview: { gap: 2, minWidth: 180 },
+    previewLine: { flexDirection: "row", gap: 8 },
+    previewLabel: { color: theme.colors.foregroundMuted, fontSize: small, minWidth: 64 },
+    previewValue: { color: theme.colors.foreground, fontSize: small, flexShrink: 1 },
   };
-}
-
-function reposToText(repos: readonly RepoConfig[]): string {
-  return repos
-    .map((repo) => [repo.id, repo.sourcePath, repo.dirTemplate, repo.baseBranch ?? ""].join("|"))
-    .join("\n");
-}
-
-function parseRepos(text: string): { repos: RepoConfig[]; error: string | null } {
-  const repos: RepoConfig[] = [];
-  const seen = new Set<string>();
-  for (const [index, line] of text
-    .split("\n")
-    .map((entry) => entry.trim())
-    .entries()) {
-    if (line.length === 0) continue;
-    const parts = line.split("|").map((part) => part.trim());
-    const [id, sourcePath, dirTemplate, baseBranch] = parts;
-    if (!id || !sourcePath) {
-      return { repos: [], error: `line ${index + 1}: need at least id|sourcePath` };
-    }
-    if (!/^[a-z][a-z0-9-]*$/.test(id)) {
-      return { repos: [], error: `line ${index + 1}: bad repo id ${id}` };
-    }
-    if (seen.has(id)) return { repos: [], error: `line ${index + 1}: duplicate repo id ${id}` };
-    seen.add(id);
-    repos.push({
-      id,
-      sourcePath,
-      dirTemplate: dirTemplate && dirTemplate.length > 0 ? dirTemplate : "{repo}_{branch}",
-      ...(baseBranch && baseBranch.length > 0 ? { baseBranch } : {}),
-    });
-  }
-  return { repos, error: null };
 }
 
 const EMPTY_PROJECTS: readonly UberProject[] = [];
 
-const EMPTY_FORM = {
-  id: "",
-  displayName: "",
-  branchTemplate: "{feature}",
-  rootDirTemplate: "{uberProject}-{feature}",
-  agentsTemplatePath: "",
-  virtualRootBase: "",
-  reposText: "",
-};
+const ROOT_BASE_HINT =
+  "Absolute folder that holds every virtual workspace. Leave empty for $PASEO_HOME/poly-workspaces. " +
+  "It cannot live inside Paseo's worktrees folder.";
+
+const REPO_FIELDS = [
+  {
+    field: "id",
+    suffix: "id",
+    hint: "Short name used by this repo's folder template ({repo}). Lowercase letters, numbers, hyphens.",
+    placeholder: "frontend",
+  },
+  {
+    field: "sourcePath",
+    suffix: "source path",
+    hint: "Absolute path to the repo's main checkout. Worktrees are created from it; the checkout itself is never modified.",
+    placeholder: "/home/me/src/frontend",
+  },
+  {
+    field: "dirTemplate",
+    suffix: "folder template",
+    hint: `Folder name inside the workspace. Tokens: {repo}, {uberProject}, {feature}, {branch}. Leave empty for ${DEFAULT_REPO_DIR_TEMPLATE}.`,
+    placeholder: DEFAULT_REPO_DIR_TEMPLATE,
+  },
+  {
+    field: "baseBranch",
+    suffix: "base branch",
+    hint: "Branch the new worktree is cut from. Leave empty to use the repo's origin/HEAD.",
+    placeholder: "main",
+  },
+] as const;
+
+function PreviewLine({
+  styles,
+  label,
+  value,
+}: {
+  styles: SettingsStyles;
+  label: string;
+  value: string;
+}): ReactElement {
+  return (
+    <View style={styles.previewLine}>
+      <Text style={styles.previewLabel}>{label}</Text>
+      <Text style={styles.previewValue}>{value}</Text>
+    </View>
+  );
+}
 
 export function PolyRepoSettingsScreen({
   theme,
@@ -113,74 +119,96 @@ export function PolyRepoSettingsScreen({
   const toast = useToast();
   const settings = useSettings(polyrepoSettings);
 
-  const [rootBase, setRootBase] = useState("");
-  const [loadedRevision, setLoadedRevision] = useState<string | null>(null);
-  const [form, setForm] = useState(EMPTY_FORM);
+  // `SettingsInput` reads `initialValue` only when it mounts, so the draft has to be
+  // seeded from the stored settings before that input renders. `null` means "not seeded".
+  const [rootBase, setRootBase] = useState<string | null>(null);
+  const [form, setForm] = useState<ProjectDraft>(() => emptyProjectDraft());
+  const [formVersion, setFormVersion] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const repoKeySeq = useRef(0);
 
   useEffect(() => {
-    if (settings.status === "ready" && settings.revision !== loadedRevision) {
-      setRootBase(settings.values.virtualRootBase ?? "");
-      setLoadedRevision(settings.revision);
-    }
-  }, [settings, loadedRevision]);
+    if (settings.status !== "ready" || rootBase !== null) return;
+    setRootBase(settings.values.virtualRootBase ?? "");
+  }, [settings, rootBase]);
 
   const projects: readonly UberProject[] = useMemo(
     () => (settings.status === "ready" ? settings.values.uberProjects : EMPTY_PROJECTS),
     [settings],
   );
 
-  const patch = useCallback((update: Partial<typeof EMPTY_FORM>) => {
+  const errors = useMemo(() => {
+    const takenIds = projects.filter((project) => project.id !== editingId).map((p) => p.id);
+    return validateProjectDraft(form, takenIds);
+  }, [form, projects, editingId]);
+
+  const preview = useMemo(() => previewProjectDraft(form, PREVIEW_FEATURE), [form]);
+
+  const patchForm = useCallback((update: Partial<ProjectDraft>) => {
     setForm((prev) => ({ ...prev, ...update }));
+    setSaveError(null);
   }, []);
 
-  const setId = useCallback((value: string) => patch({ id: value }), [patch]);
-  const setDisplayName = useCallback((value: string) => patch({ displayName: value }), [patch]);
-  const setBranchTemplate = useCallback(
-    (value: string) => patch({ branchTemplate: value }),
-    [patch],
-  );
-  const setRootDirTemplate = useCallback(
-    (value: string) => patch({ rootDirTemplate: value }),
-    [patch],
-  );
-  const setAgentsTemplatePath = useCallback(
-    (value: string) => patch({ agentsTemplatePath: value }),
-    [patch],
-  );
-  const setProjectRootBase = useCallback(
-    (value: string) => patch({ virtualRootBase: value }),
-    [patch],
-  );
-  const setReposText = useCallback((value: string) => patch({ reposText: value }), [patch]);
+  const patchRepo = useCallback((key: string, update: Partial<RepoDraft>) => {
+    setForm((prev) => ({
+      ...prev,
+      repos: prev.repos.map((repo) => (repo.key === key ? { ...repo, ...update } : repo)),
+    }));
+    setSaveError(null);
+  }, []);
+
+  const addRepo = useCallback(() => {
+    repoKeySeq.current += 1;
+    const key = `new-${repoKeySeq.current}`;
+    setForm((prev) => ({ ...prev, repos: [...prev.repos, emptyRepoDraft(key)] }));
+  }, []);
+
+  const removeRepo = useCallback((key: string) => {
+    setForm((prev) => ({ ...prev, repos: prev.repos.filter((repo) => repo.key !== key) }));
+    setSaveError(null);
+  }, []);
+
+  const resetForm = useCallback(() => {
+    setEditingId(null);
+    setForm(emptyProjectDraft());
+    setAttempted(false);
+    setSaveError(null);
+    setFormVersion((version) => version + 1);
+    setFormOpen(false);
+  }, []);
+
+  const startCreate = useCallback(() => {
+    setEditingId(null);
+    setForm(emptyProjectDraft());
+    setAttempted(false);
+    setSaveError(null);
+    setConfirmDeleteId(null);
+    setFormVersion((version) => version + 1);
+    setFormOpen(true);
+  }, []);
 
   const startEdit = useCallback((project: UberProject) => {
+    repoKeySeq.current += 1;
     setEditingId(project.id);
-    setForm({
-      id: project.id,
-      displayName: project.displayName,
-      branchTemplate: project.branchTemplate,
-      rootDirTemplate: project.rootDirTemplate,
-      agentsTemplatePath: project.agentsTemplatePath,
-      virtualRootBase: project.virtualRootBase ?? "",
-      reposText: reposToText(project.repos),
-    });
-    setFormError(null);
-  }, []);
-
-  const cancelEdit = useCallback(() => {
-    setEditingId(null);
-    setForm(EMPTY_FORM);
-    setFormError(null);
+    setForm(projectDraftFrom(project, `edit-${project.id}-${repoKeySeq.current}`));
+    setAttempted(false);
+    setSaveError(null);
+    setConfirmDeleteId(null);
+    setFormVersion((version) => version + 1);
+    setFormOpen(true);
   }, []);
 
   const saveAll = useCallback(
-    async (nextProjects: UberProject[], nextRootBase: string) => {
+    async (nextProjects: UberProject[], nextRootBase: string | null) => {
       if (settings.status !== "ready") return false;
+      const trimmedRoot = nextRootBase?.trim() ?? "";
       return settings.save(
         {
-          virtualRootBase: nextRootBase.trim().length > 0 ? nextRootBase.trim() : undefined,
+          virtualRootBase: trimmedRoot.length > 0 ? trimmedRoot : undefined,
           uberProjects: nextProjects,
         },
         settings.revision,
@@ -189,258 +217,376 @@ export function PolyRepoSettingsScreen({
     [settings],
   );
 
-  const handleSaveRootBase = useCallback(async () => {
-    const ok = await saveAll([...projects], rootBase);
-    if (ok) toast.show("Default root saved");
-    else toast.error(settings.saveError ?? "Save failed; reload and retry");
+  const handleSaveRootBase = useCallback(() => {
+    void (async () => {
+      const ok = await saveAll([...projects], rootBase);
+      if (ok) toast.show("Default virtual root saved");
+      else toast.error(settings.saveError ?? "Save failed; reload and retry");
+    })();
   }, [saveAll, projects, rootBase, toast, settings.saveError]);
 
-  const handleSaveProject = useCallback(async () => {
-    const id = form.id.trim();
-    if (!/^[a-z][a-z0-9-]*$/.test(id)) {
-      setFormError("id must be lowercase letters, numbers, hyphens, starting with a letter");
-      return;
-    }
-    if (form.displayName.trim().length === 0) {
-      setFormError("display name is required");
-      return;
-    }
-    if (form.agentsTemplatePath.trim().length === 0) {
-      setFormError("agents template path is required");
-      return;
-    }
-    const parsed = parseRepos(form.reposText);
-    if (parsed.error || parsed.repos.length === 0) {
-      setFormError(parsed.error ?? "at least one repo is required");
-      return;
-    }
-    const project: UberProject = {
-      id,
-      displayName: form.displayName.trim(),
-      branchTemplate: form.branchTemplate.trim() || "{feature}",
-      rootDirTemplate: form.rootDirTemplate.trim() || "{uberProject}-{feature}",
-      agentsTemplatePath: form.agentsTemplatePath.trim(),
-      repos: parsed.repos,
-      ...(form.virtualRootBase.trim().length > 0
-        ? { virtualRootBase: form.virtualRootBase.trim() }
-        : {}),
-    };
-    const next = editingId
-      ? projects.map((entry) => (entry.id === editingId ? project : entry))
-      : [...projects.filter((entry) => entry.id !== id), project];
-    const ok = await saveAll(next, rootBase);
-    if (ok) {
-      toast.show(editingId ? "Uber-project updated" : "Uber-project added");
-      cancelEdit();
-    } else {
-      setFormError(settings.saveError ?? "Save failed; reload and retry");
-    }
-  }, [form, editingId, projects, rootBase, saveAll, cancelEdit, toast, settings.saveError]);
+  const handleSaveProject = useCallback(() => {
+    void (async () => {
+      setAttempted(true);
+      setSaveError(null);
+      if (hasProjectErrors(errors)) {
+        setSaveError("Fix the highlighted fields before saving.");
+        return;
+      }
+      const project = projectFromDraft(form);
+      const next = editingId
+        ? projects.map((entry) => (entry.id === editingId ? project : entry))
+        : [...projects, project];
+      const ok = await saveAll(next, rootBase);
+      if (ok) {
+        toast.show(editingId ? `Saved ${project.displayName}` : `Added ${project.displayName}`);
+        resetForm();
+      } else {
+        setSaveError(settings.saveError ?? "Save failed; reload and retry.");
+      }
+    })();
+  }, [errors, form, editingId, projects, rootBase, saveAll, resetForm, toast, settings.saveError]);
 
-  const deleteHandlers = useMemo(
-    () =>
-      new Map(
-        projects.map((project) => [
-          project.id,
-          async () => {
-            const ok = await saveAll(
-              projects.filter((entry) => entry.id !== project.id),
-              rootBase,
-            );
-            if (ok) toast.show(`Removed ${project.id}`);
-            else toast.error(settings.saveError ?? "Delete failed");
-          },
-        ]),
-      ),
-    [projects, rootBase, saveAll, toast, settings.saveError],
-  );
-
-  const editHandlers = useMemo(
-    () => new Map(projects.map((project) => [project.id, () => startEdit(project)])),
-    [projects, startEdit],
-  );
-
-  const handleSaveRootBasePress = useCallback(() => {
-    void handleSaveRootBase();
-  }, [handleSaveRootBase]);
-
-  const handleSaveProjectPress = useCallback(() => {
-    void handleSaveProject();
-  }, [handleSaveProject]);
-
-  const deletePressHandlers = useMemo(
-    () =>
-      new Map(
-        projects.map((project) => [
-          project.id,
-          () => {
-            void deleteHandlers.get(project.id)?.();
-          },
-        ]),
-      ),
-    [deleteHandlers, projects],
+  const handleDeleteProject = useCallback(
+    (project: UberProject) => {
+      void (async () => {
+        const ok = await saveAll(
+          projects.filter((entry) => entry.id !== project.id),
+          rootBase,
+        );
+        setConfirmDeleteId(null);
+        if (ok) {
+          if (editingId === project.id) resetForm();
+          toast.show(`Removed ${project.displayName}`);
+        } else {
+          toast.error(settings.saveError ?? "Delete failed");
+        }
+      })();
+    },
+    [saveAll, projects, rootBase, editingId, resetForm, toast, settings.saveError],
   );
 
   if (settings.status === "loading") {
     return (
-      <View style={styles.container}>
-        <Text style={styles.hint}>Loading settings...</Text>
-      </View>
+      <SettingsSection title="Poly-repo">
+        <SettingsCard>
+          <SettingsRow label="Loading settings…" />
+        </SettingsCard>
+      </SettingsSection>
     );
   }
   if (settings.status === "error" || settings.status === "invalid") {
     return (
-      <View style={styles.container}>
-        <Text style={styles.error}>
-          {settings.status === "error"
-            ? settings.error
-            : `Stored settings are invalid: ${settings.error}`}
-        </Text>
-      </View>
+      <SettingsSection title="Poly-repo">
+        <SettingsCard>
+          <SettingsRow
+            label="Stored settings could not be read"
+            error={
+              settings.status === "error"
+                ? settings.error
+                : `Invalid stored settings: ${settings.error}`
+            }
+          />
+          <SettingsAction
+            label="Try again"
+            actionLabel="Reload"
+            onPress={() => {
+              void settings.reload();
+            }}
+          />
+          {settings.status === "invalid" ? (
+            <SettingsAction
+              label="Replace the stored settings with defaults"
+              actionLabel="Reset"
+              onPress={() => {
+                void settings.reset();
+              }}
+            />
+          ) : null}
+        </SettingsCard>
+      </SettingsSection>
     );
   }
 
+  if (rootBase === null) {
+    return (
+      <SettingsSection title="Poly-repo">
+        <SettingsCard>
+          <SettingsRow label="Loading settings…" />
+        </SettingsCard>
+      </SettingsSection>
+    );
+  }
+
+  const showError = (message: string | undefined): string | null | undefined =>
+    attempted ? message : null;
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>Poly-repo settings</Text>
+    <View>
+      <SettingsSection
+        title="Virtual workspace storage"
+        info="Each virtual workspace is one folder holding a git worktree per repo. This is where those folders are created."
+      >
+        <SettingsCard>
+          <SettingsInput
+            label="Default virtual root"
+            hint={ROOT_BASE_HINT}
+            initialValue={rootBase}
+            onChangeText={setRootBase}
+            placeholder="$PASEO_HOME/poly-workspaces"
+          />
+          <SettingsAction
+            label="Default root changes"
+            hint="Only affects workspaces created from now on. Existing workspaces stay where they are."
+            actionLabel="Save default root"
+            onPress={handleSaveRootBase}
+          />
+        </SettingsCard>
+      </SettingsSection>
 
-      <Text style={styles.label}>DEFAULT VIRTUAL ROOT</Text>
-      <TextInput
-        accessibilityLabel="Default virtual root base"
-        placeholder="empty for $PASEO_HOME/poly-workspaces"
-        value={rootBase}
-        onChangeText={setRootBase}
-        style={styles.input}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <View style={styles.actions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Save default root"
-          onPress={handleSaveRootBasePress}
-          style={styles.button}
+      {formOpen ? null : (
+        <SettingsSection
+          title="Uber-projects"
+          info="An uber-project groups repos that ship together: where each checkout lives, and how branch and folder names are built when you create a workspace from it."
         >
-          <Text style={styles.buttonText}>Save default root</Text>
-        </Pressable>
-      </View>
+          <SettingsCard>
+            {projects.length === 0 ? (
+              <SettingsRow
+                label="No uber-projects yet"
+                hint="An uber-project lists the repos you work on together. Add one below."
+              />
+            ) : (
+              projects.map((project) => (
+                <SettingsRow
+                  key={project.id}
+                  label={project.displayName}
+                  hint={
+                    confirmDeleteId === project.id
+                      ? `Delete ${project.id}? Its ${project.repos.length} repo entries are removed from this config. Existing workspaces are not touched.`
+                      : `${project.id} · ${project.repos.length} repo${project.repos.length === 1 ? "" : "s"}: ${
+                          project.repos.map((repo) => repo.id).join(", ") || "none yet"
+                        }${editingId === project.id ? " · editing below" : ""}`
+                  }
+                  error={confirmDeleteId === project.id ? "This cannot be undone." : null}
+                >
+                  <View style={styles.rowActions}>
+                    {confirmDeleteId === project.id ? (
+                      <>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Confirm delete ${project.id}`}
+                          onPress={() => handleDeleteProject(project)}
+                          style={styles.button}
+                        >
+                          <Text style={styles.dangerButtonText}>Delete</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Keep ${project.id}`}
+                          onPress={() => setConfirmDeleteId(null)}
+                          style={styles.button}
+                        >
+                          <Text style={styles.buttonText}>Keep</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Edit ${project.id}`}
+                          onPress={() => startEdit(project)}
+                          style={styles.button}
+                        >
+                          <Text style={styles.buttonText}>Edit</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete ${project.id}`}
+                          onPress={() => {
+                            setConfirmDeleteId(project.id);
+                          }}
+                          style={styles.button}
+                        >
+                          <Text style={styles.dangerButtonText}>Delete</Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+                </SettingsRow>
+              ))
+            )}
+          </SettingsCard>
 
-      <Text style={styles.label}>UBER-PROJECTS</Text>
-      {projects.map((project) => (
-        <View key={project.id} style={styles.row}>
-          <Text style={styles.name}>{project.displayName}</Text>
-          <Text style={styles.meta}>
-            {project.id} · {project.repos.length} repos
-          </Text>
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Edit ${project.id}`}
-              onPress={editHandlers.get(project.id)}
-              style={styles.button}
-            >
-              <Text style={styles.buttonText}>Edit</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Delete ${project.id}`}
-              onPress={deletePressHandlers.get(project.id)}
-              style={styles.button}
-            >
-              <Text style={styles.buttonText}>Delete</Text>
-            </Pressable>
-          </View>
-        </View>
-      ))}
+          <SettingsCard>
+            <SettingsAction
+              label="Add uber-project"
+              hint="Opens the uber-project form. Repositories are added after the basic fields."
+              actionLabel="Add uber-project"
+              onPress={startCreate}
+            />
+          </SettingsCard>
+        </SettingsSection>
+      )}
 
-      <Text style={styles.label}>{editingId ? `EDIT ${editingId}` : "NEW UBER-PROJECT"}</Text>
-      <TextInput
-        accessibilityLabel="Project id"
-        placeholder="id"
-        value={form.id}
-        onChangeText={setId}
-        style={styles.input}
-        autoCapitalize="none"
-        autoCorrect={false}
-        editable={editingId === null}
-      />
-      <TextInput
-        accessibilityLabel="Display name"
-        placeholder="Display name"
-        value={form.displayName}
-        onChangeText={setDisplayName}
-        style={styles.input}
-      />
-      <TextInput
-        accessibilityLabel="Branch template"
-        placeholder="{feature}"
-        value={form.branchTemplate}
-        onChangeText={setBranchTemplate}
-        style={styles.input}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <TextInput
-        accessibilityLabel="Root dir template"
-        placeholder="{uberProject}-{feature}"
-        value={form.rootDirTemplate}
-        onChangeText={setRootDirTemplate}
-        style={styles.input}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <TextInput
-        accessibilityLabel="Agents template path"
-        placeholder="/abs/path/to/agents-template.md"
-        value={form.agentsTemplatePath}
-        onChangeText={setAgentsTemplatePath}
-        style={styles.input}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <TextInput
-        accessibilityLabel="Per-project root override"
-        placeholder="optional absolute path"
-        value={form.virtualRootBase}
-        onChangeText={setProjectRootBase}
-        style={styles.input}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <Text style={styles.hint}>
-        Repos, one per line: id|sourcePath|dirTemplate|baseBranch (last two optional)
-      </Text>
-      <TextInput
-        accessibilityLabel="Repos"
-        placeholder={"frontend|/src/frontend\napp|/src/app||main"}
-        value={form.reposText}
-        onChangeText={setReposText}
-        style={styles.multiline}
-        multiline
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      {formError ? <Text style={styles.error}>{formError}</Text> : null}
-      <View style={styles.actions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={editingId ? "Save project" : "Add project"}
-          onPress={handleSaveProjectPress}
-          style={styles.button}
-        >
-          <Text style={styles.buttonText}>{editingId ? "Save" : "Add"}</Text>
-        </Pressable>
-        {editingId ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Cancel editing"
-            onPress={cancelEdit}
-            style={styles.button}
+      {formOpen ? (
+        <>
+          <SettingsSection
+            title={editingId ? `Edit ${editingId}` : "New uber-project"}
+            info="Every repo listed here becomes its own worktree inside the workspace. Nothing is written to the source checkouts."
           >
-            <Text style={styles.buttonText}>Cancel</Text>
-          </Pressable>
-        ) : null}
-      </View>
+            <SettingsCard key={`details-${formVersion}`}>
+              <SettingsInput
+                label="Id"
+                hint="Short identifier used inside folder and branch templates. Lowercase letters, numbers, hyphens. It cannot be changed later."
+                initialValue={form.id}
+                onChangeText={(value) => patchForm({ id: value })}
+                placeholder="checkout"
+                disabled={editingId !== null}
+                error={showError(errors.id)}
+              />
+              <SettingsInput
+                label="Display name"
+                hint="Shown in Paseo's workspace lists and used as the workspace title."
+                initialValue={form.displayName}
+                onChangeText={(value) => patchForm({ displayName: value })}
+                placeholder="Checkout"
+                error={showError(errors.displayName)}
+              />
+              <SettingsInput
+                label="Branch template"
+                hint={`Branch created in every repo. {feature} is the feature name typed at creation time. Leave empty for ${DEFAULT_BRANCH_TEMPLATE}.`}
+                initialValue={form.branchTemplate}
+                onChangeText={(value) => patchForm({ branchTemplate: value })}
+                placeholder={DEFAULT_BRANCH_TEMPLATE}
+              />
+              <SettingsInput
+                label="Workspace folder template"
+                hint={`Folder name of the virtual workspace, created under the virtual root. Tokens: {uberProject}, {feature}, {branch}. Leave empty for ${DEFAULT_ROOT_DIR_TEMPLATE}.`}
+                initialValue={form.rootDirTemplate}
+                onChangeText={(value) => patchForm({ rootDirTemplate: value })}
+                placeholder={DEFAULT_ROOT_DIR_TEMPLATE}
+              />
+              <SettingsInput
+                label="AGENTS.md template"
+                hint="Absolute path to a Markdown file copied into each workspace root as AGENTS.md. Tokens: {{feature}}, {{branch}}, {{uberProject}}, {{repos}}."
+                initialValue={form.agentsTemplatePath}
+                onChangeText={(value) => patchForm({ agentsTemplatePath: value })}
+                placeholder="/home/me/AGENTS.template.md"
+                error={showError(errors.agentsTemplatePath)}
+              />
+              <SettingsInput
+                label="Root override"
+                hint="Optional absolute path used for this uber-project only. Overrides the default virtual root above."
+                initialValue={form.virtualRootBase}
+                onChangeText={(value) => patchForm({ virtualRootBase: value })}
+                placeholder="Uses the default virtual root"
+                error={showError(errors.virtualRootBase)}
+              />
+            </SettingsCard>
+          </SettingsSection>
+
+          <SettingsSection
+            title="Repositories"
+            info="Each repo gets one git worktree inside the workspace. The order here is the order worktrees are created in."
+          >
+            {form.repos.length === 0 ? (
+              <SettingsCard>
+                <SettingsRow
+                  label="No repositories yet"
+                  hint="An uber-project needs the repos it spans. Add them one at a time."
+                />
+              </SettingsCard>
+            ) : null}
+            {form.repos.map((repo, index) => {
+              const repoErrors = attempted ? errors.repoErrors[repo.key] : undefined;
+              const name = repo.id.trim().length > 0 ? repo.id.trim() : `Repository ${index + 1}`;
+              return (
+                <SettingsCard key={`${formVersion}-${repo.key}`}>
+                  {REPO_FIELDS.map((spec) => (
+                    <SettingsInput
+                      key={spec.field}
+                      label={`${name} ${spec.suffix}`}
+                      hint={spec.hint}
+                      initialValue={repo[spec.field]}
+                      onChangeText={(value) => patchRepo(repo.key, { [spec.field]: value })}
+                      placeholder={spec.placeholder}
+                      error={
+                        spec.field === "id"
+                          ? (repoErrors?.id ?? null)
+                          : spec.field === "sourcePath"
+                            ? (repoErrors?.sourcePath ?? null)
+                            : null
+                      }
+                    />
+                  ))}
+                  <SettingsAction
+                    label={`Remove ${name}`}
+                    hint={
+                      form.repos.length <= 1
+                        ? "An uber-project needs at least one repository."
+                        : undefined
+                    }
+                    actionLabel="Remove"
+                    disabled={form.repos.length <= 1}
+                    onPress={() => removeRepo(repo.key)}
+                  />
+                </SettingsCard>
+              );
+            })}
+            <SettingsCard>
+              {attempted && errors.repos ? (
+                <SettingsRow label="Repositories" error={errors.repos} />
+              ) : null}
+              <SettingsAction
+                label="Add repository"
+                hint="Adds one repo to this uber-project. Repeat for each repo it spans."
+                actionLabel="Add repository"
+                onPress={addRepo}
+              />
+            </SettingsCard>
+          </SettingsSection>
+
+          <SettingsSection
+            title="Preview"
+            info="How the templates resolve. Existing workspaces keep the folder names recorded when they were created."
+          >
+            <SettingsCard key={`preview-${formVersion}`}>
+              <SettingsRow
+                label="Workspace names"
+                hint={`A workspace created with the feature "${PREVIEW_FEATURE}" gets these.`}
+              >
+                <View style={styles.preview}>
+                  <PreviewLine styles={styles} label="branch" value={preview.branch} />
+                  <PreviewLine styles={styles} label="folder" value={`${preview.rootDir}/`} />
+                  {preview.repos.map((entry) => (
+                    <PreviewLine
+                      key={entry.id}
+                      styles={styles}
+                      label={entry.id}
+                      value={`  ${entry.dir}/`}
+                    />
+                  ))}
+                </View>
+              </SettingsRow>
+            </SettingsCard>
+          </SettingsSection>
+
+          <SettingsCard>
+            {saveError ? <SettingsRow label="Cannot save" error={saveError} /> : null}
+            <SettingsAction
+              label={editingId ? "Save your changes" : "Add this uber-project"}
+              hint="Saved on this host only."
+              actionLabel={editingId ? "Save uber-project" : "Add uber-project"}
+              onPress={handleSaveProject}
+            />
+            <SettingsAction
+              label="Discard and return to the list"
+              actionLabel="Cancel"
+              onPress={resetForm}
+            />
+          </SettingsCard>
+        </>
+      ) : null}
     </View>
   );
 }
