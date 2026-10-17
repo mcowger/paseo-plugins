@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
 import type { ProviderContent, ProviderPrompt } from "@getpaseo/plugin/server/provider";
+import { describe, expect, test } from "vitest";
 import {
   buildPiPrompt,
   MAX_PROMPT_IMAGE_BYTES,
@@ -32,7 +32,13 @@ describe("buildPiPrompt images", () => {
 
   test("normalizes whitespace in base64 without corrupting it", async () => {
     const result = await buildPiPrompt(
-      messagePrompt([{ type: "image", data: `${PNG_BASE64.slice(0, 4)}\n${PNG_BASE64.slice(4)}`, mimeType: "image/png" }]),
+      messagePrompt([
+        {
+          type: "image",
+          data: `${PNG_BASE64.slice(0, 4)}\n${PNG_BASE64.slice(4)}`,
+          mimeType: "image/png",
+        },
+      ]),
       true,
     );
     expect(result.images?.[0]?.data).toBe(PNG_BASE64);
@@ -50,20 +56,29 @@ describe("buildPiPrompt images", () => {
 
   test("rejects malformed base64", async () => {
     await expect(
-      buildPiPrompt(messagePrompt([{ type: "image", data: "not base64 !!", mimeType: "image/png" }]), true),
+      buildPiPrompt(
+        messagePrompt([{ type: "image", data: "not base64 !!", mimeType: "image/png" }]),
+        true,
+      ),
     ).rejects.toThrow(/malformed base64/);
   });
 
   test("rejects unsupported MIME types", async () => {
     await expect(
-      buildPiPrompt(messagePrompt([{ type: "image", data: PNG_BASE64, mimeType: "image/svg+xml" }]), true),
+      buildPiPrompt(
+        messagePrompt([{ type: "image", data: PNG_BASE64, mimeType: "image/svg+xml" }]),
+        true,
+      ),
     ).rejects.toThrow(/unsupported image MIME/);
   });
 
   test("rejects decoded images above the size cap", async () => {
     const oversized = Buffer.alloc(MAX_PROMPT_IMAGE_BYTES + 1).toString("base64");
     await expect(
-      buildPiPrompt(messagePrompt([{ type: "image", data: oversized, mimeType: "image/png" }]), true),
+      buildPiPrompt(
+        messagePrompt([{ type: "image", data: oversized, mimeType: "image/png" }]),
+        true,
+      ),
     ).rejects.toThrow(/above the/);
   });
 });
@@ -154,7 +169,12 @@ describe("buildPiPrompt readable attachments", () => {
               body: "nit",
               context: {
                 hunkHeader: "@@ -1,2 +1,2 @@",
-                targetLine: { oldLineNumber: null, newLineNumber: 2, type: "add", content: "new line" },
+                targetLine: {
+                  oldLineNumber: null,
+                  newLineNumber: 2,
+                  type: "add",
+                  content: "new line",
+                },
                 lines: [
                   { oldLineNumber: 1, newLineNumber: 1, type: "context", content: "old line" },
                   { oldLineNumber: null, newLineNumber: 2, type: "add", content: "new line" },
@@ -226,7 +246,10 @@ describe("buildPiPrompt forked chat history", () => {
 
   test("forwards Paseo fork history ahead of the new instruction", async () => {
     const result = await buildPiPrompt(
-      messagePrompt([forkSummary("[User] hello\n[Assistant] hi"), { type: "text", text: "continue from here" }]),
+      messagePrompt([
+        forkSummary("[User] hello\n[Assistant] hi"),
+        { type: "text", text: "continue from here" },
+      ]),
       true,
     );
     expect(result.message).toContain("<chat-history-summary>");
@@ -238,7 +261,9 @@ describe("buildPiPrompt forked chat history", () => {
 
   test("detects fork history by marker even without contextKind", async () => {
     const result = await buildPiPrompt(
-      messagePrompt([{ type: "text", text: "<chat-history-summary>\nold stuff\n</chat-history-summary>" }]),
+      messagePrompt([
+        { type: "text", text: "<chat-history-summary>\nold stuff\n</chat-history-summary>" },
+      ]),
       true,
     );
     expect(result.message).toContain("old stuff");

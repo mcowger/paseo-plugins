@@ -1,16 +1,16 @@
 import type { ProviderEvent } from "@getpaseo/plugin/server/provider";
 import {
-  SUBPI_SUBSESSION_CAPABILITY,
   childOutcomeToTurnState,
   childSessionIdForRun,
   childTurnIdForRun,
-  subpiActivityRecordSchema,
-  subpiBridgeRecordSchema,
+  SUBPI_SUBSESSION_CAPABILITY,
   type SubpiActivityRecord,
   type SubpiBridgeOutcome,
   type SubpiBridgeRecord,
+  subpiActivityRecordSchema,
+  subpiBridgeRecordSchema,
 } from "../shared/subagents.js";
-import { openChildJournal, type ChildJournal } from "./child-journal.js";
+import { type ChildJournal, openChildJournal } from "./child-journal.js";
 import { createTimeline, type Timeline } from "./timeline.js";
 
 /**
@@ -141,10 +141,7 @@ class SubagentObserverImpl implements SubagentObserver {
   private readonly emit: (event: ProviderEvent) => void;
   private closed = false;
 
-  constructor(
-    options: CreateSubagentObserverOptions,
-    journal: ChildJournal,
-  ) {
+  constructor(options: CreateSubagentObserverOptions, journal: ChildJournal) {
     this.rootSessionId = options.rootSessionId;
     this.rootCwd = options.rootCwd;
     this.emit = options.emit;
@@ -205,9 +202,7 @@ class SubagentObserverImpl implements SubagentObserver {
   }
 
   private parentSessionFor(record: SubpiBridgeRecord): string {
-    return record.parentRunId
-      ? childSessionIdForRun(record.parentRunId)
-      : this.rootSessionId;
+    return record.parentRunId ? childSessionIdForRun(record.parentRunId) : this.rootSessionId;
   }
 
   private cwdFor(record: SubpiBridgeRecord): string {
@@ -351,8 +346,7 @@ class SubagentObserverImpl implements SubagentObserver {
       sessionId: state.sessionId,
       notice: {
         id: `child-terminal:${state.runId}`,
-        severity:
-          outcome === "failed" ? "error" : outcome === "canceled" ? "warning" : "info",
+        severity: outcome === "failed" ? "error" : outcome === "canceled" ? "warning" : "info",
         title: terminalNoticeTitle(outcome),
         description,
       },

@@ -18,20 +18,31 @@ export const companionStateSchema = z.object({
   sessionId: z.string().optional(),
 });
 export type CompanionState = z.infer<typeof companionStateSchema>;
-export const companionStateUpdateSchema = z.object({ version: z.literal(1), sessionKey: z.string(), state: companionStateSchema });
+export const companionStateUpdateSchema = z.object({
+  version: z.literal(1),
+  sessionKey: z.string(),
+  state: companionStateSchema,
+});
 
 export function formatContextLength(budget: number | undefined): string {
   if (budget === undefined) return "Unknown";
   const roundedThousands = Math.round(budget / 1000);
-  return roundedThousands >= 1000 ? `${Math.round(budget / 1_000_000)}M`
-    : budget >= 1000 ? `${roundedThousands}K` : String(Math.round(budget));
+  return roundedThousands >= 1000
+    ? `${Math.round(budget / 1_000_000)}M`
+    : budget >= 1000
+      ? `${roundedThousands}K`
+      : String(Math.round(budget));
 }
 
-export function contextSettingPresentation(state: CompanionState | undefined, modelContextWindow?: number): { label: string; description: string } {
+export function contextSettingPresentation(
+  state: CompanionState | undefined,
+  modelContextWindow?: number,
+): { label: string; description: string } {
   const budget = modelContextWindow ?? state?.contextWindow;
   const target = state?.longContextTarget;
   const shortBudget = state?.shortContextBudgetTokens;
-  const tokens = (value: number | undefined) => value === undefined ? "unknown" : `${value.toLocaleString("en-US")} tokens`;
+  const tokens = (value: number | undefined) =>
+    value === undefined ? "unknown" : `${value.toLocaleString("en-US")} tokens`;
   return {
     label: formatContextLength(budget),
     description: `Current Pi budget: ${tokens(budget)}. Short budget: ${tokens(shortBudget)}. Maximum: ${tokens(target)}. Limits supplied by Plexus.${state?.pricingThresholdInputTokens !== undefined ? ` Input pricing threshold: ${tokens(state.pricingThresholdInputTokens)}.` : ""}`,

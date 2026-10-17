@@ -2,14 +2,15 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  ProviderEventSchema,
   type ProviderEvent,
+  ProviderEventSchema,
   type ProviderSessionConfig,
 } from "@getpaseo/plugin/server/provider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Keep the auth snapshot out of tests: it reads the real agent dir and writes to the shared temp dir.
 vi.mock("./auth-snapshot.js", () => ({ prepareAuthSnapshot: () => undefined }));
+
 import type { PiRpcOptions } from "../server/pi-rpc.js";
 import { createSuperpiProvider, discoverCatalog } from "../server/provider.js";
 import { FakePiRpc } from "../tests/fixtures/fake-pi-rpc.js";
@@ -58,7 +59,9 @@ function ofType<T extends ProviderEvent["type"]>(
   events: readonly ProviderEvent[],
   type: T,
 ): Array<Extract<ProviderEvent, { type: T }>> {
-  return events.filter((event): event is Extract<ProviderEvent, { type: T }> => event.type === type);
+  return events.filter(
+    (event): event is Extract<ProviderEvent, { type: T }> => event.type === type,
+  );
 }
 
 describe("capability negotiation", () => {
@@ -88,26 +91,55 @@ describe("capability negotiation", () => {
   it("routes negotiated steering to the existing session and returns its active turn ID", async () => {
     const fake = new FakePiRpc();
     const provider = createSuperpiProvider({
-      companionPath: "/companions/superpi-extension.js", stateDirectory,
+      companionPath: "/companions/superpi-extension.js",
+      stateDirectory,
       createPiRpc: async () => fake,
     });
     try {
-      const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+      const connection = await provider.registration.connect({
+        versions: [1],
+        capabilities: OFFERED,
+      });
       const { events, listener } = collect();
       connection.onEvent(listener);
-      await connection.send({ type: "session.open", requestId: "open", sessionId: "steering", config: sessionConfig(), history: "skip" });
+      await connection.send({
+        type: "session.open",
+        requestId: "open",
+        sessionId: "steering",
+        config: sessionConfig(),
+        history: "skip",
+      });
       expect(ofType(events, "session.opened")[0]?.capabilities).toContain("prompt.steer");
-      await connection.send({ type: "session.prompt", sessionId: "steering", prompt: {
-        clientMessageId: "original", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "original" }] },
-      } });
+      await connection.send({
+        type: "session.prompt",
+        sessionId: "steering",
+        prompt: {
+          clientMessageId: "original",
+          delivery: "auto",
+          input: { type: "message", content: [{ type: "text", text: "original" }] },
+        },
+      });
       const turnId = ofType(events, "session.turn")[0]?.turnId;
-      await connection.send({ type: "session.prompt", sessionId: "steering", prompt: {
-        clientMessageId: "steered", delivery: "steer", input: { type: "message", content: [{ type: "text", text: "change direction" }] },
-      } });
-      expect(ofType(events, "session.prompt_result").at(-1)?.result).toEqual({ type: "steer", turnId });
-      expect(fake.requestsOfType("steer")).toEqual([{ type: "steer", message: "change direction" }]);
+      await connection.send({
+        type: "session.prompt",
+        sessionId: "steering",
+        prompt: {
+          clientMessageId: "steered",
+          delivery: "steer",
+          input: { type: "message", content: [{ type: "text", text: "change direction" }] },
+        },
+      });
+      expect(ofType(events, "session.prompt_result").at(-1)?.result).toEqual({
+        type: "steer",
+        turnId,
+      });
+      expect(fake.requestsOfType("steer")).toEqual([
+        { type: "steer", message: "change direction" },
+      ]);
       expect(ofType(events, "session.turn")).toHaveLength(1);
-    } finally { await provider.close(); }
+    } finally {
+      await provider.close();
+    }
   });
 
   it("publishes only the negotiated capabilities on session.opened", async () => {
@@ -139,11 +171,23 @@ describe("catalog discovery", () => {
   it("runs a temporary no-session process, maps models, and closes it", async () => {
     const fake = new FakePiRpc({
       state: {
-        model: { provider: "test", id: "reasoner", name: "Reasoner", reasoning: true, contextWindow: 2000 },
+        model: {
+          provider: "test",
+          id: "reasoner",
+          name: "Reasoner",
+          reasoning: true,
+          contextWindow: 2000,
+        },
         thinkingLevel: "medium",
       },
       models: [
-        { provider: "test", id: "reasoner", name: "Reasoner", reasoning: true, contextWindow: 2000 },
+        {
+          provider: "test",
+          id: "reasoner",
+          name: "Reasoner",
+          reasoning: true,
+          contextWindow: 2000,
+        },
         { provider: "test", id: "plain", name: "Plain", reasoning: false, contextWindow: 1000 },
       ],
       levels: ["off", "medium", "high"],
@@ -157,7 +201,10 @@ describe("catalog discovery", () => {
         return fake;
       },
     });
-    const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+    const connection = await provider.registration.connect({
+      versions: [1],
+      capabilities: OFFERED,
+    });
     const { events, listener } = collect();
     connection.onEvent(listener);
 
@@ -179,7 +226,9 @@ describe("catalog discovery", () => {
   });
 
   it("discovers directly without a companion handshake and reports failures", async () => {
-    const fake = new FakePiRpc({ models: [{ provider: "test", id: "m", name: "M", reasoning: false }] });
+    const fake = new FakePiRpc({
+      models: [{ provider: "test", id: "m", name: "M", reasoning: false }],
+    });
     const catalog = await discoverCatalog({
       command: "pi",
       cwd,
@@ -201,7 +250,9 @@ describe("catalog discovery", () => {
   });
 
   it("propagates unconfirmed cleanup when discovery itself succeeded", async () => {
-    const fake = new FakePiRpc({ models: [{ provider: "test", id: "m", name: "M", reasoning: false }] });
+    const fake = new FakePiRpc({
+      models: [{ provider: "test", id: "m", name: "M", reasoning: false }],
+    });
     fake.close = async () => {
       throw new Error("close unconfirmed");
     };
@@ -218,15 +269,42 @@ describe("input handling", () => {
       stateDirectory,
       createPiRpc: async () => new FakePiRpc(),
     });
-    const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+    const connection = await provider.registration.connect({
+      versions: [1],
+      capabilities: OFFERED,
+    });
     const { events, listener } = collect();
     connection.onEvent(listener);
 
-    await connection.send({ type: "session.configure", requestId: "cfg-1", sessionId: "s", changes: {} });
-    await connection.send({ type: "session.revert", requestId: "rev-1", sessionId: "s", token: null, scope: "conversation" });
-    await connection.send({ type: "session.archive", requestId: "arc-1", persistence: { version: 1, data: {} } });
-    await connection.send({ type: "session.unarchive", requestId: "una-1", persistence: { version: 1, data: {} } });
-    await connection.send({ type: "session.permission", sessionId: "s", permissionId: "p", response: { behavior: "deny" } });
+    await connection.send({
+      type: "session.configure",
+      requestId: "cfg-1",
+      sessionId: "s",
+      changes: {},
+    });
+    await connection.send({
+      type: "session.revert",
+      requestId: "rev-1",
+      sessionId: "s",
+      token: null,
+      scope: "conversation",
+    });
+    await connection.send({
+      type: "session.archive",
+      requestId: "arc-1",
+      persistence: { version: 1, data: {} },
+    });
+    await connection.send({
+      type: "session.unarchive",
+      requestId: "una-1",
+      persistence: { version: 1, data: {} },
+    });
+    await connection.send({
+      type: "session.permission",
+      sessionId: "s",
+      permissionId: "p",
+      response: { behavior: "deny" },
+    });
 
     expect(ofType(events, "request.failed").map((event) => event.requestId)).toEqual([
       "cfg-1",
@@ -244,7 +322,10 @@ describe("input handling", () => {
       stateDirectory,
       createPiRpc: async () => fake,
     });
-    const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+    const connection = await provider.registration.connect({
+      versions: [1],
+      capabilities: OFFERED,
+    });
     const { events, listener } = collect();
     connection.onEvent(listener);
 
@@ -283,7 +364,10 @@ describe("input handling", () => {
       stateDirectory,
       createPiRpc: async () => new FakePiRpc(),
     });
-    const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+    const connection = await provider.registration.connect({
+      versions: [1],
+      capabilities: OFFERED,
+    });
     const { events, listener } = collect();
     connection.onEvent(listener);
 
@@ -300,7 +384,10 @@ describe("input handling", () => {
       stateDirectory,
       createPiRpc: async () => fake,
     });
-    const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+    const connection = await provider.registration.connect({
+      versions: [1],
+      capabilities: OFFERED,
+    });
     const { events, listener } = collect();
     connection.onEvent(listener);
 
@@ -330,7 +417,10 @@ describe("input handling", () => {
       stateDirectory,
       createPiRpc: async () => fake,
     });
-    const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+    const connection = await provider.registration.connect({
+      versions: [1],
+      capabilities: OFFERED,
+    });
     const { events, listener } = collect();
     connection.onEvent(listener);
 
@@ -365,7 +455,10 @@ describe("dialog registry and permissions", () => {
     });
     expect(provider.dialogs.list()).toEqual([]);
 
-    const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+    const connection = await provider.registration.connect({
+      versions: [1],
+      capabilities: OFFERED,
+    });
     const { events, listener } = collect();
     connection.onEvent(listener);
     await connection.send({
@@ -408,7 +501,10 @@ describe("dialog registry and permissions", () => {
       stateDirectory,
       createPiRpc: async () => fake,
     });
-    const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+    const connection = await provider.registration.connect({
+      versions: [1],
+      capabilities: OFFERED,
+    });
     await connection.send({
       type: "session.open",
       requestId: "open-1",
@@ -448,7 +544,10 @@ describe("session map cleanup", () => {
       stateDirectory,
       createPiRpc: async () => (++call === 1 ? bad : good),
     });
-    const connection = await provider.registration.connect({ versions: [1], capabilities: OFFERED });
+    const connection = await provider.registration.connect({
+      versions: [1],
+      capabilities: OFFERED,
+    });
     const { events, listener } = collect();
     connection.onEvent(listener);
 

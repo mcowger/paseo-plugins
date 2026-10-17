@@ -65,12 +65,7 @@ export const subpiActivityRecordSchema = z
   })
   .strip();
 
-export const subpiOutcomeSchema = z.enum([
-  "completed",
-  "steered",
-  "canceled",
-  "failed",
-]);
+export const subpiOutcomeSchema = z.enum(["completed", "steered", "canceled", "failed"]);
 
 /**
  * One versioned bridge record. `omitted`/`omittedBytes` mark a payload that

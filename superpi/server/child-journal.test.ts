@@ -2,12 +2,12 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { SubpiBridgeRecord } from "../shared/subagents.js";
 import {
   CHILD_JOURNAL_FILE,
   CHILD_JOURNAL_MAX_RECORD_BYTES,
   openChildJournal,
 } from "./child-journal.js";
-import type { SubpiBridgeRecord } from "../shared/subagents.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -113,9 +113,7 @@ describe("child journal", () => {
     const journal = await openChildJournal(directory);
     const text = "y".repeat(12 * 1024);
     for (let sequence = 1; sequence <= 240; sequence += 1) {
-      await journal.append(
-        activity("run-4", sequence, { text, sequence }),
-      );
+      await journal.append(activity("run-4", sequence, { text, sequence }));
     }
     await journal.close();
     expect((await fs.stat(path.join(directory, CHILD_JOURNAL_FILE))).size).toBeGreaterThan(

@@ -48,7 +48,10 @@ interface MockProviderHarness {
   session: {
     id: string | null;
     capabilities: { supportsRewindConversation: boolean };
-    streamHistory(): AsyncGenerator<{ type: string; item?: { type: string; text?: string; messageId?: string } }>;
+    streamHistory(): AsyncGenerator<{
+      type: string;
+      item?: { type: string; text?: string; messageId?: string };
+    }>;
     revertConversation(input: { messageId: string }): Promise<void>;
   };
   received: ProviderInput[];
@@ -59,11 +62,16 @@ interface MockProviderHarness {
 
 async function createHarness(): Promise<MockProviderHarness> {
   const mod = (await import(/* @vite-ignore */ pathToFileURL(adapterEntry).href)) as {
-    PluginAgentClientRegistry: new (logger: unknown) => {
+    PluginAgentClientRegistry: new (
+      logger: unknown,
+    ) => {
       replace(registrations: unknown[]): void;
-      clients(): Record<string, {
-        createSession(config: unknown): Promise<MockProviderHarness["session"]>;
-      }>;
+      clients(): Record<
+        string,
+        {
+          createSession(config: unknown): Promise<MockProviderHarness["session"]>;
+        }
+      >;
       shutdown(): Promise<void>;
     };
   };

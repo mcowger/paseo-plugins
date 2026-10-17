@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
 import type { ProviderEvent, ProviderTimelineItem } from "@getpaseo/plugin/server/provider";
+import { describe, expect, test } from "vitest";
 import { createTimeline, mapToolDetail, mapUsage } from "./timeline";
 
 function harness() {
@@ -320,7 +320,12 @@ describe("createTimeline tools", () => {
     });
     timeline.accept({
       type: "message_update",
-      assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, id: "call-1", toolName: "read" },
+      assistantMessageEvent: {
+        type: "toolcall_start",
+        contentIndex: 0,
+        id: "call-1",
+        toolName: "read",
+      },
     });
     timeline.accept({
       type: "message_update",
@@ -335,7 +340,12 @@ describe("createTimeline tools", () => {
       assistantMessageEvent: {
         type: "toolcall_end",
         contentIndex: 0,
-        toolCall: { type: "toolCall", id: "call-1", name: "read", arguments: { path: "fixture.txt" } },
+        toolCall: {
+          type: "toolCall",
+          id: "call-1",
+          name: "read",
+          arguments: { path: "fixture.txt" },
+        },
       },
     });
     timeline.accept({
@@ -751,14 +761,16 @@ describe("mapToolDetail and mapUsage", () => {
   });
 
   test("passes through reported context window fields", () => {
-    expect(mapUsage({
-      input: 5,
-      output: 1,
-      cacheRead: 0,
-      cost: { total: 0 },
-      contextWindowMaxTokens: 200000,
-      contextWindowUsedTokens: 175,
-    })).toEqual({
+    expect(
+      mapUsage({
+        input: 5,
+        output: 1,
+        cacheRead: 0,
+        cost: { total: 0 },
+        contextWindowMaxTokens: 200000,
+        contextWindowUsedTokens: 175,
+      }),
+    ).toEqual({
       inputTokens: 5,
       cachedInputTokens: 0,
       outputTokens: 1,

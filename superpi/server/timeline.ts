@@ -1,10 +1,10 @@
-import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import type {
   ProviderEvent,
   ProviderTimelineItem,
   ProviderToolCallDetail,
   ProviderUsage,
 } from "@getpaseo/plugin/server/provider";
+import type { JsonValue } from "@getpaseo/protocol/agent-types";
 
 /**
  * Pi RPC JSONL record folded into canonical Paseo timeline snapshots.
@@ -135,9 +135,7 @@ export function createTimeline(input: {
 
   function acceptMessageUpdate(record: Record<string, unknown>): void {
     emitUsage(record.usage);
-    const event = isRecord(record.assistantMessageEvent)
-      ? record.assistantMessageEvent
-      : undefined;
+    const event = isRecord(record.assistantMessageEvent) ? record.assistantMessageEvent : undefined;
     if (!event || !stream) return;
     const index = typeof event.contentIndex === "number" ? event.contentIndex : 0;
     const kind = typeof event.type === "string" ? event.type : "";
@@ -208,7 +206,11 @@ export function createTimeline(input: {
     applyMessage(message, context);
   }
 
-  function applyMessage(message: unknown, context: TimelineContext = {}, emitUsageEvents = true): void {
+  function applyMessage(
+    message: unknown,
+    context: TimelineContext = {},
+    emitUsageEvents = true,
+  ): void {
     if (!isRecord(message)) return;
     if (emitUsageEvents) emitUsage(message.usage);
     switch (message.role) {
@@ -276,7 +278,15 @@ export function createTimeline(input: {
       } else if (block.type === "toolCall") {
         const callId = asText(block.id);
         if (!callId) continue;
-        upsertTool(callId, asText(block.name), block.arguments, undefined, undefined, "running", message.timestamp);
+        upsertTool(
+          callId,
+          asText(block.name),
+          block.arguments,
+          undefined,
+          undefined,
+          "running",
+          message.timestamp,
+        );
       }
     }
     if (stream && stream.nativeKey !== nativeKey) {
@@ -317,10 +327,7 @@ export function createTimeline(input: {
     if (!stream) return;
     const text = normalizeThinkingSnapshot(stream.thinking.get(index) ?? "");
     if (text.length === 0) return;
-    upsert(
-      { type: "reasoning", id: reasoningItemId(stream.nativeKey, index), text },
-      undefined,
-    );
+    upsert({ type: "reasoning", id: reasoningItemId(stream.nativeKey, index), text }, undefined);
   }
 
   function emitTool(index: number): void {
@@ -376,7 +383,15 @@ export function createTimeline(input: {
   function acceptToolExecutionStart(record: Record<string, unknown>): void {
     const callId = asText(record.toolCallId);
     if (!callId) return;
-    upsertTool(callId, asText(record.toolName), record.args, undefined, undefined, "running", undefined);
+    upsertTool(
+      callId,
+      asText(record.toolName),
+      record.args,
+      undefined,
+      undefined,
+      "running",
+      undefined,
+    );
   }
 
   function acceptToolExecutionUpdate(record: Record<string, unknown>): void {
@@ -428,7 +443,8 @@ export function createTimeline(input: {
     sessionId,
     accept,
     replay,
-    items: () => order.map((id) => byId.get(id)).filter((item): item is ProviderTimelineItem => Boolean(item)),
+    items: () =>
+      order.map((id) => byId.get(id)).filter((item): item is ProviderTimelineItem => Boolean(item)),
     usage: () => (lastUsage ? { ...lastUsage } : null),
     size: () => order.length,
     reset,
@@ -565,8 +581,7 @@ export function mapToolDetail(
     tool === "web_search" ||
     tool === "find"
   ) {
-    const toolName =
-      tool === "grep" || tool === "glob" || tool === "web_search" ? tool : "search";
+    const toolName = tool === "grep" || tool === "glob" || tool === "web_search" ? tool : "search";
     return {
       type: "search",
       query: asText(record.pattern) || asText(record.query) || asText(record.glob),

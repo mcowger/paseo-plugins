@@ -1,5 +1,5 @@
-import { companionPrefix } from "../../shared/companion.js";
 import type { PiExitListener, PiRecord, PiRecordListener, PiRpc } from "../../server/pi-rpc.js";
+import { companionPrefix } from "../../shared/companion.js";
 
 /**
  * Test-only `PiRpc` double.
@@ -108,7 +108,9 @@ export class FakePiRpc implements PiRpc {
         return {
           commands: this.options.commandsProvider
             ? this.options.commandsProvider()
-            : (this.options.commands ?? [{ name: "superpi-control", description: "Superpi companion" }]),
+            : (this.options.commands ?? [
+                { name: "superpi-control", description: "Superpi companion" },
+              ]),
         };
       case "get_messages":
         return {
@@ -124,18 +126,20 @@ export class FakePiRpc implements PiRpc {
         };
       case "get_session_stats":
         if (this.options.sessionStatsProvider) return this.options.sessionStatsProvider();
-        return this.options.sessionStats ?? {
-          sessionId: "pi-session-1",
-          sessionFile: undefined,
-          userMessages: 0,
-          assistantMessages: 0,
-          toolCalls: 0,
-          toolResults: 0,
-          totalMessages: 0,
-          tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-          cost: 0,
-          contextUsage: { tokens: 0, contextWindow: 1000, percent: 0 },
-        };
+        return (
+          this.options.sessionStats ?? {
+            sessionId: "pi-session-1",
+            sessionFile: undefined,
+            userMessages: 0,
+            assistantMessages: 0,
+            toolCalls: 0,
+            toolResults: 0,
+            totalMessages: 0,
+            tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            cost: 0,
+            contextUsage: { tokens: 0, contextWindow: 1000, percent: 0 },
+          }
+        );
       case "prompt": {
         this.options.onPrompt?.(command);
         const message = String(command.message ?? "");
@@ -204,14 +208,13 @@ export class FakePiRpc implements PiRpc {
           }
         }
       }
-      data =
-        hello ?? {
-          capabilities: ["tier", "context"],
-          tiers: ["default", "fast", "flex", "ultrafast"],
-          longContextAvailable: true,
-          settings: { ...this.companionSettings },
-          sessionId: "pi-session-1",
-        };
+      data = hello ?? {
+        capabilities: ["tier", "context"],
+        tiers: ["default", "fast", "flex", "ultrafast"],
+        longContextAvailable: true,
+        settings: { ...this.companionSettings },
+        sessionId: "pi-session-1",
+      };
     } else if (request.operation === "configure" || request.operation === "get-state") {
       const requested = request.data;
       if (requested !== null && typeof requested === "object" && !Array.isArray(requested)) {
@@ -252,13 +255,12 @@ export class FakePiRpc implements PiRpc {
         requested !== null && typeof requested === "object" && !Array.isArray(requested)
           ? String((requested as Record<string, unknown>).targetEntryId ?? "")
           : "";
-      data =
-        this.options.rewindData ?? {
-          cancelled: false,
-          targetEntryId,
-          settings: { ...this.companionSettings },
-          activeChildren: 0,
-        };
+      data = this.options.rewindData ?? {
+        cancelled: false,
+        targetEntryId,
+        settings: { ...this.companionSettings },
+        activeChildren: 0,
+      };
     } else if (request.operation === "reload") {
       this.options.onReload?.();
       if (this.options.reloadError !== undefined) {

@@ -6,27 +6,29 @@ vi.mock("node:child_process", () => ({ spawn: spawnMock }));
 
 import {
   CLOSE_GRACE_MS,
+  createPiRpc,
   GROUP_SWEEP_GRACE_MS,
   MAX_FRAME_BYTES,
   MAX_PENDING_REQUESTS,
+  type PiRecord,
   PiRpcClosedError,
   PiRpcCommandError,
   PiRpcExitError,
+  type PiRpcOptions,
   PiRpcTimeoutError,
   PiRpcTransportError,
-  SIGTERM_GRACE_MS,
   SIGKILL_GRACE_MS,
+  SIGTERM_GRACE_MS,
   STDERR_TAIL_BYTES,
-  createPiRpc,
-  type PiRecord,
-  type PiRpcOptions,
 } from "../server/pi-rpc";
 
 function sentRecords(child: FakeChild): PiRecord[] {
   return child.control.chunks.map((chunk) => JSON.parse(chunk) as PiRecord);
 }
 
-async function startRpc(options: Partial<PiRpcOptions> = {}): Promise<{ rpc: Awaited<ReturnType<typeof createPiRpc>>; child: FakeChild }> {
+async function startRpc(
+  options: Partial<PiRpcOptions> = {},
+): Promise<{ rpc: Awaited<ReturnType<typeof createPiRpc>>; child: FakeChild }> {
   const child = createFakeChild();
   spawnMock.mockReturnValueOnce(child);
   const promise = createPiRpc({
@@ -52,7 +54,11 @@ describe("launch and environment", () => {
     try {
       const { rpc, child } = await startRpc({ env: { SUPERPI_TEST_OVERLAY: "explicit" } });
       expect(spawnMock).toHaveBeenCalledTimes(1);
-      const [command, args, rawOptions] = spawnMock.mock.calls[0] as [string, string[], { cwd: string; env: NodeJS.ProcessEnv }];
+      const [command, args, rawOptions] = spawnMock.mock.calls[0] as [
+        string,
+        string[],
+        { cwd: string; env: NodeJS.ProcessEnv },
+      ];
       expect(command).toBe("pi");
       expect(args).toEqual(["--mode", "rpc"]);
       expect(rawOptions.cwd).toBe("/tmp/superpi");
@@ -122,8 +128,20 @@ describe("correlation", () => {
     const sent = sentRecords(child);
     expect(sent).toHaveLength(2);
 
-    emitRecord(child, { type: "response", id: sent[1]?.id, command: "beta", success: true, data: { n: 2 } });
-    emitRecord(child, { type: "response", id: sent[0]?.id, command: "alpha", success: true, data: { n: 1 } });
+    emitRecord(child, {
+      type: "response",
+      id: sent[1]?.id,
+      command: "beta",
+      success: true,
+      data: { n: 2 },
+    });
+    emitRecord(child, {
+      type: "response",
+      id: sent[0]?.id,
+      command: "alpha",
+      success: true,
+      data: { n: 1 },
+    });
 
     expect(await first).toEqual({ n: 1 });
     expect(await second).toEqual({ n: 2 });
@@ -139,7 +157,13 @@ describe("correlation", () => {
     const id = sentRecords(child)[0]?.id;
 
     emitRecord(child, { type: "agent_start" });
-    emitRecord(child, { type: "response", id, command: "get_state", success: true, data: { ok: true } });
+    emitRecord(child, {
+      type: "response",
+      id,
+      command: "get_state",
+      success: true,
+      data: { ok: true },
+    });
 
     expect(await pending).toEqual({ ok: true });
     expect(seen).toEqual(["agent_start", "response"]);
@@ -151,7 +175,13 @@ describe("correlation", () => {
     const { rpc, child } = await startRpc();
     const pending = rpc.request({ type: "set_model" });
     const id = sentRecords(child)[0]?.id;
-    emitRecord(child, { type: "response", id, command: "set_model", success: false, error: "Model not found" });
+    emitRecord(child, {
+      type: "response",
+      id,
+      command: "set_model",
+      success: false,
+      error: "Model not found",
+    });
 
     const error = await pending.then(
       () => undefined,
@@ -174,7 +204,13 @@ describe("correlation", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await rejected;
 
-    emitRecord(child, { type: "response", id, command: "slow", success: true, data: { late: true } });
+    emitRecord(child, {
+      type: "response",
+      id,
+      command: "slow",
+      success: true,
+      data: { late: true },
+    });
     expect(failures).not.toHaveBeenCalled();
     child.exit(0, null);
     await rpc.close();
@@ -230,7 +266,7 @@ describe("diagnostics", () => {
     const failure = rpc.request({ type: "get_state" }).catch((error: unknown) => error);
     child.stderr.write(`Missing extension configuration: ${secret}\n`);
     child.exit(1, null);
-    const error = await failure as Error;
+    const error = (await failure) as Error;
     expect(error.message).toContain("Missing extension configuration");
     expect(error.message).not.toContain(secret);
     expect(error.message).toContain("[redacted]");
@@ -256,10 +292,13 @@ describe("exit and shutdown", () => {
     vi.useFakeTimers();
     const { rpc } = await startRpc();
     vi.spyOn(process, "kill").mockReturnValue(true);
-    const outcome = rpc.close().then(() => undefined, (error: unknown) => error);
+    const outcome = rpc.close().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
     await vi.advanceTimersByTimeAsync(CLOSE_GRACE_MS + SIGTERM_GRACE_MS + SIGKILL_GRACE_MS);
     expect(await outcome).toBeInstanceOf(PiRpcTransportError);
-    expect((await outcome as Error).message).toContain("could not be confirmed");
+    expect(((await outcome) as Error).message).toContain("could not be confirmed");
   });
   it("rejects pending requests and reports failure on unexpected exit", async () => {
     const { rpc, child } = await startRpc();

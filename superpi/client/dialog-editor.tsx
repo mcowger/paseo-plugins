@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { useRpc } from "@getpaseo/plugin/client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import {
+  type DialogAnswer,
+  type DialogView,
   initialDialogDraft,
   listPendingDialogsRpc,
   respondDialogRpc,
-  type DialogAnswer,
-  type DialogView,
 } from "../shared/dialogs";
 
 /**
@@ -247,7 +247,9 @@ export function DialogEditorScreen({ theme, layout }: PluginSurfaceProps) {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.heading}>Pi dialogs</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        {loading ? <ActivityIndicator color={theme.colors.accent} accessibilityLabel="Loading Pi dialogs" /> : null}
+        {loading ? (
+          <ActivityIndicator color={theme.colors.accent} accessibilityLabel="Loading Pi dialogs" />
+        ) : null}
         {!loading && !error && dialogs.length === 0 ? (
           <Text style={styles.empty}>No pending Pi dialogs.</Text>
         ) : null}

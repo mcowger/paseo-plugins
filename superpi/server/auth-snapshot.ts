@@ -1,5 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir, userInfo } from "node:os";
 import path from "node:path";
 
@@ -7,7 +17,8 @@ const AUTH_FILE = "auth.json";
 
 function sourceAgentDirectory(env: NodeJS.ProcessEnv): string {
   const configured = env.PI_CODING_AGENT_DIR;
-  if (configured) return configured.startsWith("~/") ? path.join(homedir(), configured.slice(2)) : configured;
+  if (configured)
+    return configured.startsWith("~/") ? path.join(homedir(), configured.slice(2)) : configured;
   return path.join(homedir(), ".pi", "agent");
 }
 
@@ -42,7 +53,9 @@ export function prepareAuthSnapshot(input: {
 
   const target = path.join(input.root ?? snapshotRoot(input.env), "agent-dir");
   mkdirSync(target, { recursive: true, mode: 0o700 });
-  const linked = new Set(readdirSync(source).filter((entry) => entry !== AUTH_FILE && !entry.endsWith(".lock")));
+  const linked = new Set(
+    readdirSync(source).filter((entry) => entry !== AUTH_FILE && !entry.endsWith(".lock")),
+  );
   for (const entry of readdirSync(target)) {
     if (linked.has(entry) || entry === AUTH_FILE) continue;
     if (isSymlink(path.join(target, entry))) rmSync(path.join(target, entry));

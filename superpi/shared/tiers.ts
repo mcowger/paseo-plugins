@@ -3,7 +3,10 @@ function displayTier(tier: string): string {
 }
 
 /** Group default aliases in the UI without changing the companion's advertised tiers. */
-export function tierSettingPresentation(choices: readonly string[], selected: string): {
+export function tierSettingPresentation(
+  choices: readonly string[],
+  selected: string,
+): {
   value: string | null;
   options: Array<{ label: string; value: string }>;
 } {

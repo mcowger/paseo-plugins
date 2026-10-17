@@ -1,11 +1,8 @@
 import { createReadStream } from "node:fs";
-import * as fs from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import path from "node:path";
-import {
-  subpiBridgeRecordSchema,
-  type SubpiBridgeRecord,
-} from "../shared/subagents.js";
+import { type SubpiBridgeRecord, subpiBridgeRecordSchema } from "../shared/subagents.js";
 
 /**
  * Durable, append-only child journal.

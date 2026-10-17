@@ -1,11 +1,15 @@
 import * as fs from "node:fs/promises";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { SessionStore } from "./persistence.js";
 
 const directories: string[] = [];
-afterEach(async () => { await Promise.all(directories.splice(0).map((directory) => fs.rm(directory, { recursive: true, force: true }))); });
+afterEach(async () => {
+  await Promise.all(
+    directories.splice(0).map((directory) => fs.rm(directory, { recursive: true, force: true })),
+  );
+});
 async function fixture() {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "superpi-persistence-"));
   directories.push(directory);
@@ -52,21 +56,30 @@ describe("session persistence", () => {
 
   it("rejects traversal, wrong cwd, and external transcript links", async () => {
     const { cwd, root } = await fixture();
-    await expect(SessionStore.open(root, cwd, { version: 1, data: { id: "../../outside" } })).rejects.toThrow();
+    await expect(
+      SessionStore.open(root, cwd, { version: 1, data: { id: "../../outside" } }),
+    ).rejects.toThrow();
     const store = await SessionStore.open(root, cwd);
     const outside = path.join(cwd, "outside.jsonl");
     await fs.writeFile(outside, "{}\n");
     await fs.symlink(outside, path.join(store.sessionDirectory, "bad.jsonl"));
-    await expect(store.recordNative("id", path.join(store.sessionDirectory, "bad.jsonl"))).rejects.toThrow("outside");
+    await expect(
+      store.recordNative("id", path.join(store.sessionDirectory, "bad.jsonl")),
+    ).rejects.toThrow("outside");
     await store.release();
     await fs.mkdir(path.join(cwd, "other"));
-    await expect(SessionStore.open(root, path.join(cwd, "other"), store.persistence)).rejects.toThrow("workspace");
+    await expect(
+      SessionStore.open(root, path.join(cwd, "other"), store.persistence),
+    ).rejects.toThrow("workspace");
   });
 
   it("serializes changes and preserves interrupted state", async () => {
     const { cwd, root } = await fixture();
     const store = await SessionStore.open(root, cwd);
-    await Promise.all([store.save({ nativeSessionId: "first" }), store.save({ interrupted: true })]);
+    await Promise.all([
+      store.save({ nativeSessionId: "first" }),
+      store.save({ interrupted: true }),
+    ]);
     expect(store.data).toMatchObject({ nativeSessionId: "first", interrupted: true });
     await store.release();
     await expect(store.save({})).rejects.toThrow("released");
