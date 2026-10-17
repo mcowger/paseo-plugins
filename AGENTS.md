@@ -33,6 +33,13 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
   grouped by the techniques they demonstrate (surfaces, panels, timeline transformers, pills,
   lifecycle hooks, telemetry) with direct GitHub and paseo.cafe links.
 
+## Working agreements
+
+- A question is not a change request. Answer it and stop; do not edit files, run formatters, or make
+  "while I'm here" fixes unless the user asks for a change in that turn. When the answer exposes
+  something stale or wrong (docs, comments, tests), report it and offer the edit instead of
+  applying it unasked.
+
 ## Development reminders
 
 - The Paseo 0.10 plugin API is stable.
