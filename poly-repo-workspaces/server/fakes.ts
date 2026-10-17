@@ -128,6 +128,7 @@ export function createFakeGit(script: FakeGitScript = {}): GitPort & { script: F
         return Promise.resolve({ stdout: "", stderr: "" });
       }
       if (head === "worktree" && (rest[0] === "remove" || rest[0] === "prune")) {
+        if (rest[0] === "prune") script.worktreeBranches = [];
         return Promise.resolve({ stdout: "", stderr: "" });
       }
       if (head === "branch" && rest[0] === "--show-current") {
@@ -169,15 +170,18 @@ export function createFakeWorkspaces(): WorkspacesPort & {
   created: Array<{ path: string; title: string }>;
   archived: string[];
   terminals: Array<{ workspaceId: string; cwd?: string; name?: string }>;
+  hostWorkspaces: Array<{ id: string; cwd: string }>;
 } {
   const created: Array<{ path: string; title: string }> = [];
   const archived: string[] = [];
   const terminals: Array<{ workspaceId: string; cwd?: string; name?: string }> = [];
+  const hostWorkspaces: Array<{ id: string; cwd: string }> = [];
   let counter = 0;
   return {
     created,
     archived,
     terminals,
+    hostWorkspaces,
     createDirectoryWorkspace: (input: { path: string; title: string }) => {
       created.push(input);
       counter += 1;
@@ -187,6 +191,7 @@ export function createFakeWorkspaces(): WorkspacesPort & {
       archived.push(workspaceId);
       return Promise.resolve();
     },
+    listWorkspaces: () => Promise.resolve([...hostWorkspaces]),
     createTerminal: (workspaceId: string, input: { cwd?: string; name?: string }) => {
       terminals.push({ workspaceId, ...input });
       return Promise.resolve();

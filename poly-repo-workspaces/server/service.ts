@@ -12,7 +12,18 @@ import {
   renderAgentsTemplate,
   truncateFragment,
 } from "../shared/repomap";
-import type { PreflightIssue, RepoStatus, VirtualWorkspaceSummary } from "../shared/rpc";
+import type {
+  PreflightIssue,
+  ReconcileReport,
+  RepoStatus,
+  VirtualWorkspaceSummary,
+} from "../shared/rpc";
+import {
+  emptyReconcileReport,
+  isMissingWorktreeError,
+  MISSING_WORKTREE_ERROR,
+  REMOVED_WORKTREE_ERROR,
+} from "../shared/rpc";
 import {
   aheadBehind,
   currentBranch,
@@ -28,6 +39,7 @@ import { isSameOrInside, joinSegments, normalizeAbsolute } from "./paths";
 import { type FsPort, type GitPort, isGitFailure, type WorkspacesPort } from "./ports";
 import {
   emptyIndex,
+  type IndexEntry,
   loadIndex,
   readManifest,
   saveIndex,
@@ -44,6 +56,15 @@ export interface ServiceDeps {
   fs: FsPort;
   git: GitPort;
   workspaces: WorkspacesPort;
+  settings: { snapshot(): Promise<SettingsSnapshot> };
+  paseoHome: string;
+  now(): string;
+  withIndexLock(): Promise<() => void>;
+}
+
+export interface ReconcileDeps {
+  fs: FsPort;
+  git: GitPort;
   settings: { snapshot(): Promise<SettingsSnapshot> };
   paseoHome: string;
   now(): string;
@@ -72,7 +93,6 @@ export interface ArchiveResult {
   blocked: RepoStatus[];
 }
 
-const MISSING_WORKTREE = "worktree missing";
 const FRAGMENT_CHARS = 4000;
 
 function gitMessage(error: unknown): string {
@@ -90,7 +110,7 @@ function sanitizeVirtualId(uberProjectId: string, feature: string): string {
 }
 
 async function updateIndex(
-  deps: ServiceDeps,
+  deps: ReconcileDeps,
   mutate: (index: WorkspaceIndex) => void,
 ): Promise<WorkspaceIndex> {
   const release = await deps.withIndexLock();
@@ -146,6 +166,7 @@ export async function listVirtualWorkspaces(deps: ServiceDeps): Promise<VirtualW
         rootPath: entry.rootPath,
         workspaceId: entry.workspaceId,
         state: "orphaned",
+        rootExists: isDir,
         constituents: [],
         dirtyRepos: 0,
         aheadRepos: 0,
@@ -161,6 +182,7 @@ export async function listVirtualWorkspaces(deps: ServiceDeps): Promise<VirtualW
       rootPath: manifest.rootPath,
       workspaceId: manifest.workspaceId,
       state: manifest.state,
+      rootExists: true,
       constituents: manifest.constituents,
       dirtyRepos: 0,
       aheadRepos: 0,
@@ -522,7 +544,7 @@ async function buildRepomapContent(
 }
 
 export async function collectStatuses(
-  deps: ServiceDeps,
+  deps: ReconcileDeps,
   manifest: VirtualWorkspaceManifest,
 ): Promise<RepoStatus[]> {
   const statuses: RepoStatus[] = [];
@@ -538,7 +560,7 @@ export async function collectStatuses(
         ahead: null,
         behind: null,
         upstreamRef: null,
-        error: constituent.state === "removed" ? "worktree removed" : MISSING_WORKTREE,
+        error: constituent.state === "removed" ? REMOVED_WORKTREE_ERROR : MISSING_WORKTREE_ERROR,
       });
       continue;
     }
@@ -631,7 +653,7 @@ function isMissingWorkspace(error: unknown): boolean {
 }
 
 async function finalizeRemoval(
-  deps: ServiceDeps,
+  deps: ReconcileDeps,
   manifest: VirtualWorkspaceManifest,
 ): Promise<void> {
   await deps.fs.removeRecursive(manifest.rootPath).catch(() => {});
@@ -645,7 +667,7 @@ export interface TeardownResult {
 }
 
 export async function teardownConstituents(
-  deps: ServiceDeps,
+  deps: ReconcileDeps,
   manifest: VirtualWorkspaceManifest,
   forceRepoIds: Set<string>,
 ): Promise<TeardownResult> {
@@ -658,7 +680,7 @@ export async function teardownConstituents(
     const status = statuses.find((s) => s.repoId === constituent.repoId);
     if (!status) continue;
     sources.add(constituent.sourcePath);
-    if (status.error === MISSING_WORKTREE || status.error === "worktree removed") {
+    if (isMissingWorktreeError(status.error)) {
       constituent.state = "removed";
       continue;
     }
@@ -727,7 +749,7 @@ export async function archiveVirtualWorkspace(
   const forced = new Set(input.forceRepoIds ?? []);
   const statuses = await collectStatuses(deps, current);
   const blocked = statuses.filter((status) => {
-    if (status.error === MISSING_WORKTREE || status.error === "worktree removed") return false;
+    if (isMissingWorktreeError(status.error)) return false;
     if (forced.has(status.repoId)) return false;
     return status.error !== null || status.dirty || (status.ahead ?? 0) > 0;
   });
@@ -813,6 +835,302 @@ export async function handleWorkspaceArchived(
   await finalizeRemoval(deps, manifest);
 }
 
+export async function reconcileOnLoad(
+  deps: ReconcileDeps,
+): Promise<{ adopted: string[]; finalized: string[] }> {
+  const snapshot = await deps.settings.snapshot();
+  const index = await loadIndex(deps.fs, deps.paseoHome);
+  const adopted = await adoptFromScan(deps, snapshot, new Set(Object.keys(index.virtual)));
+  const finalized: string[] = [];
+  const fresh = await loadIndex(deps.fs, deps.paseoHome);
+  for (const [virtualId, entry] of Object.entries(fresh.virtual)) {
+    if (!(await deps.fs.isDirectory(entry.rootPath))) continue;
+    const manifest = await readManifest(deps.fs, entry.rootPath);
+    if (manifest?.state !== "archived") continue;
+    await finalizeRemoval(deps, manifest);
+    finalized.push(virtualId);
+  }
+  return { adopted, finalized };
+}
+
+function candidateRootBases(snapshot: SettingsSnapshot, paseoHome: string): string[] {
+  const bases = new Set<string>([
+    resolveRootBase({ hostSetting: snapshot.virtualRootBase, paseoHome }),
+  ]);
+  for (const project of snapshot.uberProjects) {
+    bases.add(
+      resolveRootBase({
+        perProject: project.virtualRootBase,
+        hostSetting: snapshot.virtualRootBase,
+        paseoHome,
+      }),
+    );
+  }
+  return [...bases];
+}
+
+async function adoptFromScan(
+  deps: ReconcileDeps,
+  snapshot: SettingsSnapshot,
+  known: Set<string>,
+): Promise<string[]> {
+  const adopted: string[] = [];
+  const additions: Array<{ virtualId: string; entry: IndexEntry }> = [];
+  for (const base of candidateRootBases(snapshot, deps.paseoHome)) {
+    const entries = (await deps.fs.readdir(base)) ?? [];
+    for (const name of entries) {
+      if (name.startsWith(".")) continue;
+      const dirPath = normalizeAbsolute(joinSegments(base, name));
+      if (!(await deps.fs.isDirectory(dirPath))) continue;
+      const manifest = await readManifest(deps.fs, dirPath);
+      if (!manifest) continue;
+      if (known.has(manifest.virtualId)) continue;
+      // A manifest whose recorded root differs from where it was found means
+      // the directory was moved; constituent paths would be stale, so skip.
+      if (normalizeAbsolute(manifest.rootPath) !== dirPath) continue;
+      if (manifest.state === "archived") continue;
+      known.add(manifest.virtualId);
+      additions.push({
+        virtualId: manifest.virtualId,
+        entry: {
+          rootPath: dirPath,
+          workspaceId: manifest.workspaceId,
+          uberProjectId: manifest.uberProjectId,
+          feature: manifest.feature,
+          branch: manifest.branch,
+          updatedAt: deps.now(),
+        },
+      });
+      adopted.push(manifest.virtualId);
+    }
+  }
+  if (additions.length > 0) {
+    await updateIndex(deps, (index) => {
+      for (const addition of additions) {
+        index.virtual[addition.virtualId] = addition.entry;
+      }
+    });
+  }
+  return adopted;
+}
+
+async function finishArchivingCascade(
+  deps: ReconcileDeps,
+  manifest: VirtualWorkspaceManifest,
+): Promise<{ finished: boolean }> {
+  const teardown = await teardownConstituents(deps, manifest, new Set());
+  if (teardown.blocked.length > 0) {
+    manifest.state = "teardown-blocked";
+    manifest.updatedAt = deps.now();
+    await writeManifest(deps.fs, manifest);
+    return { finished: false };
+  }
+  manifest.state = "archived";
+  await finalizeRemoval(deps, manifest);
+  return { finished: true };
+}
+
+export async function reconcileVirtualWorkspaces(deps: ServiceDeps): Promise<{
+  ok: boolean;
+  error: string | null;
+  report: ReconcileReport;
+}> {
+  const report = emptyReconcileReport();
+  const snapshot = await deps.settings.snapshot();
+  let host: Array<{ id: string; cwd: string }>;
+  try {
+    host = await deps.workspaces.listWorkspaces();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    return { ok: false, error: `cannot list host workspaces: ${message}`, report };
+  }
+  const hostById = new Map(host.map((entry) => [entry.id, normalizeAbsolute(entry.cwd)]));
+  const hostByCwd = new Map(host.map((entry) => [normalizeAbsolute(entry.cwd), entry.id]));
+
+  const index = await loadIndex(deps.fs, deps.paseoHome);
+  report.adopted.push(
+    ...(await adoptFromScan(deps, snapshot, new Set(Object.keys(index.virtual)))),
+  );
+  const fresh = await loadIndex(deps.fs, deps.paseoHome);
+
+  for (const [virtualId, entry] of Object.entries(fresh.virtual)) {
+    if (!(await deps.fs.isDirectory(entry.rootPath))) {
+      report.orphaned.push(virtualId);
+      continue;
+    }
+    const raw = await readManifest(deps.fs, entry.rootPath);
+    const manifest = raw ? normalizeManifest(raw) : null;
+    if (!manifest) {
+      report.invalid.push(virtualId);
+      continue;
+    }
+    if (manifest.state === "archived") {
+      await finalizeRemoval(deps, manifest);
+      report.finishedTeardown.push(virtualId);
+      continue;
+    }
+    if (manifest.state === "archiving") {
+      // Crash window: the host-side archive may or may not have happened.
+      // Re-issuing it is safe; the archived hook skips manifests already marked archiving.
+      if (manifest.workspaceId && hostById.has(manifest.workspaceId)) {
+        try {
+          await deps.workspaces.archiveWorkspace(manifest.workspaceId);
+        } catch {
+          // Fall through to the teardown; a missing workspace just means the host is done.
+        }
+      }
+      const done = await finishArchivingCascade(deps, manifest);
+      if (done.finished) report.finishedTeardown.push(virtualId);
+      continue;
+    }
+    if (manifest.workspaceId && !hostById.has(manifest.workspaceId)) {
+      manifest.workspaceId = null;
+      manifest.updatedAt = deps.now();
+      await writeManifest(deps.fs, manifest);
+      await updateIndex(deps, (next) => {
+        const record = next.virtual[virtualId];
+        if (record) {
+          record.workspaceId = null;
+          record.updatedAt = deps.now();
+        }
+      });
+      report.workspaceCleared.push(virtualId);
+    }
+    if (!manifest.workspaceId) {
+      const hostId = hostByCwd.get(normalizeAbsolute(manifest.rootPath));
+      if (hostId) {
+        manifest.workspaceId = hostId;
+        manifest.updatedAt = deps.now();
+        await writeManifest(deps.fs, manifest);
+        await updateIndex(deps, (next) => {
+          const record = next.virtual[virtualId];
+          if (record) {
+            record.workspaceId = hostId;
+            record.updatedAt = deps.now();
+          }
+        });
+        report.relinked.push(virtualId);
+      }
+    }
+  }
+  return { ok: true, error: null, report };
+}
+
+export async function forgetVirtualWorkspace(
+  deps: ServiceDeps,
+  virtualId: string,
+): Promise<{ ok: boolean; error: string | null }> {
+  const index = await loadIndex(deps.fs, deps.paseoHome);
+  const entry = index.virtual[virtualId];
+  if (!entry) return { ok: false, error: `unknown virtual workspace: ${virtualId}` };
+  if (await deps.fs.isDirectory(entry.rootPath)) {
+    const manifest = await readManifest(deps.fs, entry.rootPath);
+    if (manifest && normalizeManifest(manifest)) {
+      return {
+        ok: false,
+        error: `workspace has a live manifest at ${entry.rootPath}; archive it instead of forgetting`,
+      };
+    }
+  }
+  await updateIndex(deps, (next) => {
+    delete next.virtual[virtualId];
+  });
+  return { ok: true, error: null };
+}
+
+export async function cleanupVirtualWorkspace(
+  deps: ServiceDeps,
+  virtualId: string,
+): Promise<{ ok: boolean; error: string | null }> {
+  const index = await loadIndex(deps.fs, deps.paseoHome);
+  const entry = index.virtual[virtualId];
+  if (!entry) return { ok: false, error: `unknown virtual workspace: ${virtualId}` };
+  if (await deps.fs.isDirectory(entry.rootPath)) {
+    const manifest = await readManifest(deps.fs, entry.rootPath);
+    if (manifest && normalizeManifest(manifest)) {
+      return {
+        ok: false,
+        error: `workspace has a live manifest at ${entry.rootPath}; archive it instead of cleaning up`,
+      };
+    }
+    try {
+      await deps.fs.removeRecursive(entry.rootPath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      return { ok: false, error: `failed to remove ${entry.rootPath}: ${message}` };
+    }
+  }
+  await updateIndex(deps, (next) => {
+    delete next.virtual[virtualId];
+  });
+  return { ok: true, error: null };
+}
+
+export async function repairConstituent(
+  deps: ServiceDeps,
+  virtualId: string,
+  repoId: string,
+): Promise<{ ok: boolean; error: string | null }> {
+  const index = await loadIndex(deps.fs, deps.paseoHome);
+  const entry = index.virtual[virtualId];
+  if (!entry) return { ok: false, error: `unknown virtual workspace: ${virtualId}` };
+  const raw = await readManifest(deps.fs, entry.rootPath);
+  const manifest = raw ? normalizeManifest(raw) : null;
+  if (!manifest) return { ok: false, error: `manifest missing at ${entry.rootPath}` };
+  const constituent = manifest.constituents.find((item) => item.repoId === repoId);
+  if (!constituent) return { ok: false, error: `unknown repo: ${repoId}` };
+  if (constituent.state === "removed") {
+    return { ok: false, error: `${repoId} was removed by archive and cannot be repaired` };
+  }
+  if (await deps.fs.isDirectory(constituent.worktreePath)) {
+    return { ok: false, error: `${repoId} worktree is already present; nothing to repair` };
+  }
+  if (!(await deps.fs.isDirectory(constituent.sourcePath))) {
+    return { ok: false, error: `source is not a directory: ${constituent.sourcePath}` };
+  }
+  if (!(await isGitRepo(deps.git, constituent.sourcePath))) {
+    return { ok: false, error: `source is not a git repo: ${constituent.sourcePath}` };
+  }
+  if (!(await localBranchExists(deps.git, constituent.sourcePath, constituent.branch))) {
+    return {
+      ok: false,
+      error: `branch ${constituent.branch} no longer exists in ${repoId}; recreate it first`,
+    };
+  }
+  // A worktree directory deleted by hand leaves stale admin metadata behind,
+  // which makes git report the branch as still checked out. Pruning drops
+  // entries whose directories are gone; anything still genuinely checked out
+  // elsewhere is reported below.
+  try {
+    await deps.git.run(["worktree", "prune"], constituent.sourcePath);
+  } catch {
+    // Pruning is best-effort; the checked-out guard below still applies.
+  }
+  const checkedOut = await listWorktreeBranches(deps.git, constituent.sourcePath);
+  if (checkedOut.includes(constituent.branch)) {
+    return {
+      ok: false,
+      error: `branch ${constituent.branch} is already checked out in ${repoId}; remove that worktree first`,
+    };
+  }
+  if (await deps.fs.exists(constituent.worktreePath)) {
+    return { ok: false, error: `target path already exists: ${constituent.worktreePath}` };
+  }
+  try {
+    // Checkout mode: the branch already exists, so no -b flag.
+    await deps.git.run(
+      ["worktree", "add", constituent.worktreePath, constituent.branch],
+      constituent.sourcePath,
+    );
+  } catch (error) {
+    return { ok: false, error: `git worktree add failed for ${repoId}: ${gitMessage(error)}` };
+  }
+  constituent.state = "created";
+  manifest.updatedAt = deps.now();
+  await writeManifest(deps.fs, manifest);
+  return { ok: true, error: null };
+}
+
 export function emptySettingsSnapshot(): SettingsSnapshot {
   return { uberProjects: [] };
 }
@@ -829,6 +1147,9 @@ export function newTestDeps(overrides: Partial<ServiceDeps> & { fs: FsPort }): S
         throw new Error("workspaces not stubbed");
       },
       archiveWorkspace: () => {
+        throw new Error("workspaces not stubbed");
+      },
+      listWorkspaces: () => {
         throw new Error("workspaces not stubbed");
       },
       createTerminal: () => Promise.resolve(),

@@ -1,8 +1,16 @@
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { listVirtualWorkspaces, type VirtualWorkspaceSummary } from "../shared/rpc";
 
+const TRANSITIONAL_STATES: ReadonlySet<string> = new Set([
+  "creating",
+  "archiving",
+  "teardown-blocked",
+]);
+const TRANSITIONAL_POLL_MS = 5000;
+
 export interface VirtualWorkspacesResult {
+  readonly transitional: boolean;
   readonly items: readonly VirtualWorkspaceSummary[];
   readonly loading: boolean;
   readonly error: string | null;
@@ -16,6 +24,10 @@ export function useVirtualWorkspaces(): VirtualWorkspacesResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const transitional = useMemo(
+    () => items.some((item) => TRANSITIONAL_STATES.has(item.state)),
+    [items],
+  );
 
   const refresh = useCallback(() => {
     setRevision((value) => value + 1);
@@ -51,5 +63,13 @@ export function useVirtualWorkspaces(): VirtualWorkspacesResult {
     return unsubscribe;
   }, [paseo, refresh]);
 
-  return { items, loading, error, refresh };
+  // Recovery backstop: while anything is mid-transition, poll slowly in case
+  // a subscription event was missed. Steady states never poll.
+  useEffect(() => {
+    if (!transitional) return;
+    const timer = setInterval(refresh, TRANSITIONAL_POLL_MS);
+    return () => clearInterval(timer);
+  }, [refresh, transitional]);
+
+  return { items, loading, error, refresh, transitional };
 }

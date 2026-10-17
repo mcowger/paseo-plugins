@@ -7,22 +7,31 @@ import { createGitPort } from "./server/git";
 import type { WorkspacesPort } from "./server/ports";
 import {
   archiveVirtualWorkspace,
+  cleanupVirtualWorkspace,
   createVirtualWorkspace,
+  forgetVirtualWorkspace,
   getRepoStatuses,
   handleWorkspaceArchived,
   listVirtualWorkspaces,
+  reconcileOnLoad,
+  reconcileVirtualWorkspaces,
   regenerateRepomap,
+  repairConstituent,
   type ServiceDeps,
 } from "./server/service";
 import { createMutex } from "./server/store";
 import {
   archiveVirtualWorkspace as archiveVirtualWorkspaceRpc,
+  cleanupVirtualWorkspace as cleanupVirtualWorkspaceRpc,
   createVirtualWorkspace as createVirtualWorkspaceRpc,
+  forgetVirtualWorkspace as forgetVirtualWorkspaceRpc,
   getRepoStatuses as getRepoStatusesRpc,
   getSettingsSnapshot,
   listUberProjects,
   listVirtualWorkspaces as listVirtualWorkspacesRpc,
+  reconcileVirtualWorkspaces as reconcileVirtualWorkspacesRpc,
   regenerateRepomap as regenerateRepomapRpc,
+  repairConstituent as repairConstituentRpc,
 } from "./shared/rpc";
 import { polyrepoSettings } from "./shared/settings";
 
@@ -43,6 +52,13 @@ function createWorkspacesPort(paseo: PaseoApi): WorkspacesPort {
     },
     async archiveWorkspace(workspaceId: string): Promise<void> {
       await paseo.workspaces.archive(workspaceId);
+    },
+    async listWorkspaces(): Promise<Array<{ id: string; cwd: string }>> {
+      const listed = await paseo.workspaces.list();
+      return listed.entries.map((entry) => ({
+        id: entry.id,
+        cwd: entry.workspaceDirectory ?? entry.projectRootPath,
+      }));
     },
     async createTerminal(
       workspaceId: string,
@@ -123,6 +139,22 @@ export default function contribute(server: PluginServerContext) {
     return regenerateRepomap(depsFor(context), input.virtualId);
   });
 
+  server.handle(reconcileVirtualWorkspacesRpc, async (_input, context) => {
+    return reconcileVirtualWorkspaces(depsFor(context));
+  });
+
+  server.handle(forgetVirtualWorkspaceRpc, async (input, context) => {
+    return forgetVirtualWorkspace(depsFor(context), input.virtualId);
+  });
+
+  server.handle(cleanupVirtualWorkspaceRpc, async (input, context) => {
+    return cleanupVirtualWorkspace(depsFor(context), input.virtualId);
+  });
+
+  server.handle(repairConstituentRpc, async (input, context) => {
+    return repairConstituent(depsFor(context), input.virtualId, input.repoId);
+  });
+
   server.on("workspace.archived", async (event, context) => {
     const hookDeps: ServiceDeps = {
       ...depsFor(context),
@@ -130,6 +162,42 @@ export default function contribute(server: PluginServerContext) {
     };
     await handleWorkspaceArchived(hookDeps, { id: event.workspace.id, cwd: event.workspace.cwd });
   });
+
+  // No startup lifecycle event exists, so reconcile when the plugin loads
+  // (daemon start and every reload). reconcileOnLoad only touches the
+  // filesystem and the index; host-workspace liveness is left to the
+  // reconcile RPC, which runs with handler credentials.
+  const loadDeps = {
+    fs,
+    git,
+    settings: {
+      async snapshot() {
+        const state = await settings.read();
+        if (state.status !== "ready") return { uberProjects: [] };
+        return {
+          virtualRootBase: state.values.virtualRootBase,
+          uberProjects: state.values.uberProjects,
+        };
+      },
+    },
+    paseoHome,
+    now: () => new Date().toISOString(),
+    withIndexLock,
+  };
+  void reconcileOnLoad(loadDeps).then(
+    (summary) => {
+      if (summary.adopted.length > 0 || summary.finalized.length > 0) {
+        console.info(
+          `[poly-repo-workspaces] load reconcile: adopted ${summary.adopted.length}, ` +
+            `finalized ${summary.finalized.length}`,
+        );
+      }
+    },
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : "unknown error";
+      console.warn(`[poly-repo-workspaces] load reconcile failed: ${message}`);
+    },
+  );
 
   return () => {};
 }

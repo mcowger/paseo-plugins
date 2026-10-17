@@ -34,9 +34,15 @@ export interface GitPort {
   run(args: string[], cwd: string): Promise<GitRunResult>;
 }
 
+export interface HostWorkspaceRef {
+  id: string;
+  cwd: string;
+}
+
 export interface WorkspacesPort {
   createDirectoryWorkspace(input: { path: string; title: string }): Promise<string>;
   archiveWorkspace(workspaceId: string): Promise<void>;
+  listWorkspaces(): Promise<HostWorkspaceRef[]>;
   createTerminal(workspaceId: string, input: { cwd?: string; name?: string }): Promise<void>;
 }
 

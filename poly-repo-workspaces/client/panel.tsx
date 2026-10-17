@@ -7,6 +7,8 @@ import { Pressable, Text, type TextStyle, View, type ViewStyle } from "react-nat
 import {
   archiveVirtualWorkspace,
   getRepoStatuses,
+  isMissingWorktreeError,
+  repairConstituent,
   type RepoStatus,
   regenerateRepomap,
   type VirtualWorkspaceSummary,
@@ -105,6 +107,7 @@ export function PolyRepoPanel({
   const callStatuses = useRpc(getRepoStatuses);
   const callArchive = useRpc(archiveVirtualWorkspace);
   const callRepomap = useRpc(regenerateRepomap);
+  const callRepair = useRpc(repairConstituent);
   const [statuses, setStatuses] = useState<readonly RepoStatus[]>([]);
   const [blocked, setBlocked] = useState<readonly RepoStatus[]>([]);
   const [busy, setBusy] = useState(false);
@@ -190,6 +193,41 @@ export function PolyRepoPanel({
       setBusy(false);
     }
   }, [busy, callRepomap, match, toast]);
+
+  const handleRepair = useCallback(
+    async (repoId: string) => {
+      if (!match || busy) return;
+      setBusy(true);
+      try {
+        const result = await callRepair({ virtualId: match.virtualId, repoId });
+        if (result.ok) {
+          toast.show(`${repoId} worktree restored`);
+          await loadStatuses();
+          refresh();
+        } else {
+          toast.error(result.error ?? "Repair failed");
+        }
+      } catch (unknownError) {
+        toast.error(unknownError instanceof Error ? unknownError.message : "Repair failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, callRepair, loadStatuses, match, refresh, toast],
+  );
+
+  const repairPressHandlers = useMemo(
+    () =>
+      new Map(
+        (match?.constituents ?? []).map((constituent) => [
+          constituent.repoId,
+          () => {
+            void handleRepair(constituent.repoId);
+          },
+        ]),
+      ),
+    [handleRepair, match],
+  );
 
   const handleRefreshPress = useCallback(() => {
     void loadStatuses();
@@ -321,6 +359,17 @@ export function PolyRepoPanel({
             {status?.error ? <Text style={styles.repoError}>{status.error}</Text> : null}
             {status?.diffStat ? <Text style={styles.repoDetail}>{status.diffStat}</Text> : null}
             <View style={styles.repoActions}>
+              {status && isMissingWorktreeError(status.error) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Restore missing ${constituent.repoId} worktree`}
+                  onPress={repairPressHandlers.get(constituent.repoId)}
+                  style={styles.miniButton}
+                  disabled={busy}
+                >
+                  <Text style={styles.miniButtonText}>Repair</Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Open terminal in ${constituent.repoId}`}

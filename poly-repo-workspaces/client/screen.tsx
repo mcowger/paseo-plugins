@@ -7,9 +7,12 @@ import { Pressable, Text, TextInput, type TextStyle, View, type ViewStyle } from
 import type { UberProject } from "../shared/config";
 import {
   archiveVirtualWorkspace,
+  cleanupVirtualWorkspace,
   createVirtualWorkspace,
+  forgetVirtualWorkspace,
   listUberProjects,
   type PreflightIssue,
+  reconcileVirtualWorkspaces,
   type VirtualWorkspaceSummary,
 } from "../shared/rpc";
 import { useVirtualWorkspaces } from "./use-virtual-workspaces";
@@ -73,10 +76,13 @@ function stateLabel(item: VirtualWorkspaceSummary): string {
   if (item.state === "ready") {
     const dirty = item.dirtyRepos > 0 ? ` · ${item.dirtyRepos} dirty` : "";
     const ahead = item.aheadRepos > 0 ? ` · ${item.aheadRepos} ahead` : "";
-    return `${item.constituents.length} repos · ready${dirty}${ahead}`;
+    const detached = item.workspaceId ? "" : " · workspace closed";
+    return `${item.constituents.length} repos · ready${dirty}${ahead}${detached}`;
   }
   if (item.state === "teardown-blocked") return "teardown blocked · clean up the root, then retry";
-  if (item.state === "orphaned") return "orphaned · root is gone";
+  if (item.state === "orphaned") {
+    return item.rootExists ? "orphaned · root has no manifest" : "orphaned · root is gone";
+  }
   return item.state;
 }
 
@@ -92,6 +98,9 @@ export function PolyRepoScreen({
   const callProjects = useRpc(listUberProjects);
   const callCreate = useRpc(createVirtualWorkspace);
   const callArchive = useRpc(archiveVirtualWorkspace);
+  const callReconcile = useRpc(reconcileVirtualWorkspaces);
+  const callForget = useRpc(forgetVirtualWorkspace);
+  const callCleanup = useRpc(cleanupVirtualWorkspace);
 
   const paseo = usePaseo();
   const [projects, setProjects] = useState<readonly UberProject[]>([]);
@@ -209,6 +218,76 @@ export function PolyRepoScreen({
     [busy, navigation, paseo, refresh, toast],
   );
 
+  const doResync = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await callReconcile({});
+      if (!result.ok) {
+        toast.error(result.error ?? "Resync failed");
+        return;
+      }
+      const { report } = result;
+      const parts: string[] = [];
+      if (report.adopted.length > 0) parts.push(`adopted ${report.adopted.length}`);
+      if (report.finishedTeardown.length > 0)
+        parts.push(`finished ${report.finishedTeardown.length}`);
+      if (report.relinked.length > 0) parts.push(`relinked ${report.relinked.length}`);
+      if (report.workspaceCleared.length > 0)
+        parts.push(`detached ${report.workspaceCleared.length}`);
+      if (report.orphaned.length > 0) parts.push(`${report.orphaned.length} orphaned`);
+      if (report.invalid.length > 0) parts.push(`${report.invalid.length} invalid`);
+      toast.show(parts.length > 0 ? `Resync: ${parts.join(", ")}` : "Resync: nothing to fix");
+      refresh();
+    } catch (unknownError) {
+      toast.error(unknownError instanceof Error ? unknownError.message : "Resync failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, callReconcile, refresh, toast]);
+
+  const doForget = useCallback(
+    async (virtualId: string) => {
+      if (busy) return;
+      setBusy(true);
+      try {
+        const result = await callForget({ virtualId });
+        if (result.ok) {
+          toast.show("Forgotten");
+          refresh();
+        } else {
+          toast.error(result.error ?? "Forget failed");
+        }
+      } catch (unknownError) {
+        toast.error(unknownError instanceof Error ? unknownError.message : "Forget failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, callForget, refresh, toast],
+  );
+
+  const doCleanup = useCallback(
+    async (virtualId: string) => {
+      if (busy) return;
+      setBusy(true);
+      try {
+        const result = await callCleanup({ virtualId });
+        if (result.ok) {
+          toast.show("Cleaned up");
+          refresh();
+        } else {
+          toast.error(result.error ?? "Clean up failed");
+        }
+      } catch (unknownError) {
+        toast.error(unknownError instanceof Error ? unknownError.message : "Clean up failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, callCleanup, refresh, toast],
+  );
+
   const resumePressHandlers = useMemo(
     () =>
       new Map(
@@ -233,6 +312,36 @@ export function PolyRepoScreen({
         ]),
       ),
     [doReopen, items],
+  );
+
+  const handleResyncPress = useCallback(() => {
+    void doResync();
+  }, [doResync]);
+
+  const forgetPressHandlers = useMemo(
+    () =>
+      new Map(
+        items.map((item) => [
+          item.virtualId,
+          () => {
+            void doForget(item.virtualId);
+          },
+        ]),
+      ),
+    [doForget, items],
+  );
+
+  const cleanupPressHandlers = useMemo(
+    () =>
+      new Map(
+        items.map((item) => [
+          item.virtualId,
+          () => {
+            void doCleanup(item.virtualId);
+          },
+        ]),
+      ),
+    [doCleanup, items],
   );
 
   const doArchive = useCallback(
@@ -361,6 +470,17 @@ export function PolyRepoScreen({
 
       <View style={styles.section}>
         <Text style={styles.label}>MANAGED WORKSPACES</Text>
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Resync with the filesystem and host"
+            onPress={handleResyncPress}
+            style={styles.button}
+            disabled={busy}
+          >
+            <Text style={styles.buttonText}>Resync</Text>
+          </Pressable>
+        </View>
         {loading && items.length === 0 ? <Text style={styles.empty}>Loading...</Text> : null}
         {error ? <Text style={styles.issue}>{error}</Text> : null}
         {items.map((item) => (
@@ -395,7 +515,18 @@ export function PolyRepoScreen({
                   <Text style={styles.buttonText}>Resume</Text>
                 </Pressable>
               ) : null}
-              {item.state === "orphaned" ? (
+              {item.state === "creating" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Discard partially created ${item.feature}`}
+                  onPress={archiveHandlers.get(item.virtualId)}
+                  style={styles.button}
+                  disabled={busy}
+                >
+                  <Text style={styles.buttonText}>Discard</Text>
+                </Pressable>
+              ) : null}
+              {!item.workspaceId && item.rootExists ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Reopen ${item.feature} root as a workspace`}
@@ -406,15 +537,39 @@ export function PolyRepoScreen({
                   <Text style={styles.buttonText}>Reopen</Text>
                 </Pressable>
               ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Archive ${item.feature}`}
-                onPress={archiveHandlers.get(item.virtualId)}
-                style={styles.button}
-                disabled={busy}
-              >
-                <Text style={styles.buttonText}>Archive</Text>
-              </Pressable>
+              {item.state === "orphaned" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Forget ${item.feature}`}
+                  onPress={forgetPressHandlers.get(item.virtualId)}
+                  style={styles.button}
+                  disabled={busy}
+                >
+                  <Text style={styles.buttonText}>Forget</Text>
+                </Pressable>
+              ) : null}
+              {item.state === "orphaned" && item.rootExists ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete ${item.feature} root and forget`}
+                  onPress={cleanupPressHandlers.get(item.virtualId)}
+                  style={styles.button}
+                  disabled={busy}
+                >
+                  <Text style={styles.buttonText}>Clean up</Text>
+                </Pressable>
+              ) : null}
+              {item.state === "creating" || item.state === "orphaned" ? null : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Archive ${item.feature}`}
+                  onPress={archiveHandlers.get(item.virtualId)}
+                  style={styles.button}
+                  disabled={busy}
+                >
+                  <Text style={styles.buttonText}>Archive</Text>
+                </Pressable>
+              )}
             </View>
           </View>
         ))}

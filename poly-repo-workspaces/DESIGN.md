@@ -543,19 +543,51 @@ from the plugin UI. Branches survive archive.
 - Command center items. First-agent/per-repo-terminal options on create.
 - REPOMAP regenerate action.
 
-### Phase 3: robustness
+### Phase 3: robustness (built)
 
-- Startup reconciliation and orphan handling.
-- Resume/teardown for failed creates.
-- Periodic resync backstop. Missing-constituent repair.
+- Load-time reconcile (`reconcileOnLoad`, fired from `contribute` since
+  there is no startup lifecycle event): adopts manifest directories
+  missing from the index and finalizes leftover `archived` manifests.
+  Host-workspace liveness is deliberately left out here — no `PaseoApi`
+  exists at load time — and handled by the reconcile RPC instead.
+- Reconcile RPC (`polyrepo.virtual-workspaces.reconcile`, exposed as the
+  Resync button): verifies each manifest against the filesystem and
+  `workspaces.list()`; finishes crash-window `archiving` cascades
+  (re-issuing the host archive is safe — the archived hook skips
+  manifests already marked archiving); finalizes `archived` leftovers;
+  clears dead workspace ids; relinks natively reopened workspaces by cwd;
+  adopts unknown manifest dirs; reports orphaned roots and invalid
+  manifests. Returns a report the client toasts.
+- Forget (`forget`) drops index entries with no live manifest; refuses
+  live ones. Clean up (`cleanup`) deletes the root dir for invalid
+  manifests and drops the index; refuses live ones. List summaries carry
+  `rootExists` so the screen shows Forget always and Clean up / Reopen
+  only when the root is present.
+- Failed creates need no new RPC: `archive` already finalizes `creating`
+  manifests (pending constituents are skipped by teardown). The screen
+  labels the action Discard for creating rows and hides Archive there
+  and on orphaned rows.
+- Missing-constituent repair (`repair-constituent`, Repair button in the
+  panel): prunes stale worktree metadata first (hand-deleted dirs leave
+  the branch "checked out"), then re-adds the existing branch in
+  checkout mode. Refuses removed constituents, present worktrees,
+  missing branches, and genuinely checked-out branches.
+- Transitional polling: `useVirtualWorkspaces` polls every 5s while any
+  item is creating/archiving/teardown-blocked; steady states never poll.
 
-### Phase 4: optional extras
+Exit (all verified E2E on the isolated 0.11.4 daemon plus UI clicks):
+repair a hand-deleted worktree from the panel, forget an orphaned root,
+clean up a corrupted manifest, discard a preflight-stuck create, resync
+to a no-op report.
 
-- Web-only sidebar grouping via DOM injection (clusters technique), off by
-  default, clearly marked as fragile.
-- Per-repo PR status via `gh`.
-- "Make this a poly-repo workspace" interception via
-  `before("workspace.create")`.
+### Phase 4: dropped
+
+The candidate extras were cut: web-only DOM sidebar grouping is
+fragile and would never work on mobile, per-repo `gh` PR status is not
+needed yet, and `before("workspace.create")` interception was rejected
+— hooks cannot prompt, so it would silently rewrite global workspace
+creation, while reconcile adoption already covers the "opened a virtual
+root natively" case honestly. The plugin is complete without this phase.
 
 ## Testing plan
 
