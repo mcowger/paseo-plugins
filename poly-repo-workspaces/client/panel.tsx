@@ -8,9 +8,9 @@ import {
   archiveVirtualWorkspace,
   getRepoStatuses,
   isMissingWorktreeError,
-  repairConstituent,
   type RepoStatus,
   regenerateRepomap,
+  repairConstituent,
   type VirtualWorkspaceSummary,
 } from "../shared/rpc";
 import { useVirtualWorkspaces } from "./use-virtual-workspaces";
