@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
-import type { NativeSyntheticEvent, TextInputKeyPressEventData } from "react-native";
-import {
-  usePaseo,
-  useSettings,
-  type PluginButtonContentProps,
-} from "@getpaseo/plugin/client";
+import { type PluginButtonContentProps, usePaseo, useSettings } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/react-native";
-import { filterSkills, toSkillDisplayName, toSkillInvocation, type SkillCommand } from "../shared/skills";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { NativeSyntheticEvent, TextInputKeyPressEventData } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
+import {
+  filterSkills,
+  type SkillCommand,
+  toSkillDisplayName,
+  toSkillInvocation,
+} from "../shared/skills";
 import { recordSkillUsage, skillUsageSettings, sortSkillsByUsage } from "../shared/usage";
 
 export function SkillPickerContent(props: PluginButtonContentProps) {
@@ -35,6 +36,7 @@ export function SkillPickerContent(props: PluginButtonContentProps) {
     return () => clearTimeout(timer);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: nonce intentionally retriggers reloads
   useEffect(() => {
     if (!agentId) {
       setLoading(false);
@@ -75,6 +77,7 @@ export function SkillPickerContent(props: PluginButtonContentProps) {
     return sortSkillsByUsage(filtered, usage.values);
   }, [commands, query, usage]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset highlight when filter inputs change
   useEffect(() => {
     setHighlighted(0);
   }, [query, commands]);
@@ -179,9 +182,17 @@ export function SkillPickerContent(props: PluginButtonContentProps) {
               accessibilityState={{ disabled: busy, busy: active, selected: isHighlighted }}
               disabled={busy}
               onPress={() => void handleSelect(skill.name)}
-              style={[styles.row, isHighlighted ? styles.rowHighlighted : null, busy ? styles.rowBusy : null]}
+              style={[
+                styles.row,
+                isHighlighted ? styles.rowHighlighted : null,
+                busy ? styles.rowBusy : null,
+              ]}
             >
-              <Text style={styles.rowName}>{active ? `Sending /${toSkillDisplayName(skill.name)}…` : `/${toSkillDisplayName(skill.name)}`}</Text>
+              <Text style={styles.rowName}>
+                {active
+                  ? `Sending /${toSkillDisplayName(skill.name)}…`
+                  : `/${toSkillDisplayName(skill.name)}`}
+              </Text>
               {skill.description ? (
                 <Text style={styles.rowDetail} numberOfLines={2}>
                   {skill.description}

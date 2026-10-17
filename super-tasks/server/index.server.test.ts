@@ -1,6 +1,6 @@
+import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { describe, expect, test, vi } from "vitest";
 import contributeServer from "../index.server";
-import type { PluginServerContext } from "@getpaseo/plugin/server";
 
 describe("index.server v0.8 entry point", () => {
   test("registers all RPC contracts", () => {

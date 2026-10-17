@@ -1,6 +1,5 @@
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { z } from "zod";
-import type { ExpansionMode } from "./settings";
 import {
   formatError,
   formatReasoningText,
@@ -9,6 +8,7 @@ import {
   toJsonValue,
   withMetadataEditDiff,
 } from "./presentation";
+import type { ExpansionMode } from "./settings";
 
 export const REASONING_RENDERER_KIND = "colorful-reasoning";
 export const TOOL_CALL_RENDERER_KIND = "colorful-tool-call";
@@ -28,15 +28,7 @@ export const diffStatsSchema = z.object({
 });
 
 export const toolCallPresentationSchema = z.object({
-  category: z.enum([
-    "shell",
-    "file",
-    "search",
-    "agent",
-    "plan",
-    "communication",
-    "unknown",
-  ]),
+  category: z.enum(["shell", "file", "search", "agent", "plan", "communication", "unknown"]),
   icon: z.string(),
   label: z.string(),
   summary: z.string().optional(),
@@ -68,7 +60,11 @@ export type ReasoningItemData = z.output<typeof reasoningItemDataSchema>;
 export type ToolCallItemData = z.output<typeof toolCallItemDataSchema>;
 export type TodoItemData = z.output<typeof todoItemDataSchema>;
 
-export function resolveExpansion(mode: ExpansionMode, isLatest: boolean, userExpanded: boolean | null): boolean {
+export function resolveExpansion(
+  mode: ExpansionMode,
+  isLatest: boolean,
+  userExpanded: boolean | null,
+): boolean {
   if (userExpanded !== null) return userExpanded;
   if (mode === "always") return true;
   if (mode === "never") return false;
@@ -92,7 +88,7 @@ export function resolveTaskUpdateExpansion(
 ): boolean {
   const userExpanded =
     mode !== "latest" || userOverride?.latestTimestamp === latestTimestamp
-      ? userOverride?.expanded ?? null
+      ? (userOverride?.expanded ?? null)
       : null;
   return resolveExpansion(mode, isLatest, userExpanded);
 }

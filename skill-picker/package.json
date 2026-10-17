@@ -5,18 +5,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint": "oxlint",
+    "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@getpaseo/client": "0.10.0",
     "@getpaseo/plugin": "0.10.0",
     "@getpaseo/protocol": "0.10.0",
     "@types/node": "^20.9.0",
     "@types/react": "~19.2.0",
     "esbuild": "^0.25.0",
-    "oxlint": "1.61.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "typescript": "^5.9.3",

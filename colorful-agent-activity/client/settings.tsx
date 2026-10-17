@@ -1,10 +1,4 @@
-import { useMemo } from "react";
-import { Text } from "react-native";
-import {
-  useSettings,
-  type PluginSurfaceProps,
-  type SettingsState,
-} from "@getpaseo/plugin/client";
+import { type PluginSurfaceProps, type SettingsState, useSettings } from "@getpaseo/plugin/client";
 import {
   SettingsAction,
   SettingsCard,
@@ -12,8 +6,16 @@ import {
   SettingsSection,
   SettingsSelect,
 } from "@getpaseo/plugin/client/ui";
-import { activitySettings, DEFAULT_EXPANSION, EXPANSION_TARGETS, expansionModeSchema, paletteModeSchema } from "../shared/settings";
+import { useMemo } from "react";
+import { Text } from "react-native";
 import type { ExpansionMode, ExpansionTarget } from "../shared/settings";
+import {
+  activitySettings,
+  DEFAULT_EXPANSION,
+  EXPANSION_TARGETS,
+  expansionModeSchema,
+  paletteModeSchema,
+} from "../shared/settings";
 
 type ReadySettings = Extract<SettingsState<typeof activitySettings.schema>, { status: "ready" }>;
 
@@ -48,7 +50,13 @@ function expansionDescription(target: ExpansionTarget, mode: ExpansionMode): str
   return "The newest task update starts expanded; a later task update collapses earlier cards.";
 }
 
-function ExpansionControls({ settings, theme }: { settings: ReadySettings; theme: PluginSurfaceProps["theme"] }) {
+function ExpansionControls({
+  settings,
+  theme,
+}: {
+  settings: ReadySettings;
+  theme: PluginSurfaceProps["theme"];
+}) {
   const descriptionStyle = useMemo(
     () => ({ color: theme.colors.foregroundMuted, fontSize: 13, lineHeight: 18 }),
     [theme.colors.foregroundMuted],
@@ -58,7 +66,10 @@ function ExpansionControls({ settings, theme }: { settings: ReadySettings; theme
     if (!parsed.success) return;
     const mode: ExpansionMode = parsed.data;
     void settings.save(
-      { ...settings.values, expansion: { ...DEFAULT_EXPANSION, ...settings.values.expansion, [target]: mode } },
+      {
+        ...settings.values,
+        expansion: { ...DEFAULT_EXPANSION, ...settings.values.expansion, [target]: mode },
+      },
       settings.revision,
     );
   };
@@ -82,18 +93,25 @@ function ExpansionControls({ settings, theme }: { settings: ReadySettings; theme
       </SettingsCard>
       <SettingsRow label="Behavior">
         <Text style={descriptionStyle}>
-          Always rows start expanded, Latest rows expand only while they are the newest row of any kind, and Never rows
-          start collapsed even while running. In Latest mode, Tasks compares task updates only. A newer task update
-          collapses older cards and clears their manual toggles. Saved Tasks settings are preserved, so choose Latest
-          if Tasks is currently set to Always. Paseo runs plugin transformers before its Overview grouping, so each call
-          reaches the plugin separately in either tool call detail mode.
+          Always rows start expanded, Latest rows expand only while they are the newest row of any
+          kind, and Never rows start collapsed even while running. In Latest mode, Tasks compares
+          task updates only. A newer task update collapses older cards and clears their manual
+          toggles. Saved Tasks settings are preserved, so choose Latest if Tasks is currently set to
+          Always. Paseo runs plugin transformers before its Overview grouping, so each call reaches
+          the plugin separately in either tool call detail mode.
         </Text>
       </SettingsRow>
     </SettingsSection>
   );
 }
 
-function ReadyControls({ settings, theme }: { settings: ReadySettings; theme: PluginSurfaceProps["theme"] }) {
+function ReadyControls({
+  settings,
+  theme,
+}: {
+  settings: ReadySettings;
+  theme: PluginSurfaceProps["theme"];
+}) {
   const descriptionStyle = useMemo(
     () => ({ color: theme.colors.foregroundMuted, fontSize: 13, lineHeight: 18 }),
     [theme.colors.foregroundMuted],
@@ -121,11 +139,15 @@ function ReadyControls({ settings, theme }: { settings: ReadySettings; theme: Pl
       </SettingsCard>
       <SettingsRow label="Behavior">
         <Text style={descriptionStyle}>
-          Rows render with category accents and monospace technical metadata. Use Row expansion below to control which
-          rows start open.
+          Rows render with category accents and monospace technical metadata. Use Row expansion
+          below to control which rows start open.
         </Text>
       </SettingsRow>
-      {settings.saveError ? <Text accessibilityRole="alert" style={errorStyle}>{settings.saveError}</Text> : null}
+      {settings.saveError ? (
+        <Text accessibilityRole="alert" style={errorStyle}>
+          {settings.saveError}
+        </Text>
+      ) : null}
     </SettingsSection>
   );
 }

@@ -29,7 +29,9 @@ describe("codemode tool parsing", () => {
   });
 
   it("parses namespaced tool calls with queries", () => {
-    const parsed = parseCodeModeCalls('const r = await exa.web_search_exa({query: "hi"});\nreturn r;');
+    const parsed = parseCodeModeCalls(
+      'const r = await exa.web_search_exa({query: "hi"});\nreturn r;',
+    );
     expect(parsed.calls).toHaveLength(1);
     expect(parsed.calls[0]?.path).toBe("exa.web_search_exa");
     expect(parsed.calls[0]?.query).toBe("hi");
@@ -46,7 +48,11 @@ describe("codemode tool parsing", () => {
   it("parses the catalog output shape", () => {
     const output = {
       items: [
-        { path: "tools.exa.web_search_exa", description: "Search", signature: "tools.exa.web_search_exa()" },
+        {
+          path: "tools.exa.web_search_exa",
+          description: "Search",
+          signature: "tools.exa.web_search_exa()",
+        },
         { path: "tools.exa.web_fetch_exa", description: "Fetch" },
       ],
       remaining: 51,

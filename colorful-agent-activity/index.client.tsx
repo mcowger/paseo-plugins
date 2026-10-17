@@ -1,17 +1,17 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
+import { ColorfulReasoning, ColorfulTodo, ColorfulToolCall } from "./client/activity";
 import { ActivitySettings } from "./client/settings";
 import { AgentSummaryPanel } from "./client/summary/panel";
-import { ColorfulReasoning, ColorfulTodo, ColorfulToolCall } from "./client/activity";
 import { transformReasoning, transformTodo, transformToolCall } from "./client/transform";
 import { installColorfulFonts } from "./client/web";
 import {
   REASONING_RENDERER_KIND,
+  REASONING_RENDERER_VERSION,
+  reasoningItemDataSchema,
   TODO_RENDERER_KIND,
   TODO_RENDERER_VERSION,
   TOOL_CALL_RENDERER_KIND,
-  REASONING_RENDERER_VERSION,
   TOOL_CALL_RENDERER_VERSION,
-  reasoningItemDataSchema,
   todoItemDataSchema,
   toolCallItemDataSchema,
 } from "./shared/timeline";

@@ -4,16 +4,13 @@ import { Icon } from "@getpaseo/plugin/client/react-native";
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import React, { useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
-import type { ActivityStyles } from "./activity";
+import { childTimelineEntryKey, recentChildTimelineEntries } from "../shared/child-agent";
 import {
-  childTimelineEntryKey,
-  recentChildTimelineEntries,
-} from "../shared/child-agent";
-import {
+  type ActivityPalette,
   formatReasoningText,
   resolveToolCallPresentation,
-  type ActivityPalette,
 } from "../shared/presentation";
+import type { ActivityStyles } from "./activity";
 
 const CHILD_TIMELINE_PAGE_SIZE = 100;
 const MAX_VISIBLE_CHILD_ACTIVITY_ENTRIES = 3;
@@ -181,9 +178,7 @@ function ChildTimelineRow({
         </Text>
       ) : null}
       {row.status ? (
-        <Text style={[styles.childTimelineItemMeta, { color: row.statusColor }]}>
-          {row.status}
-        </Text>
+        <Text style={[styles.childTimelineItemMeta, { color: row.statusColor }]}>{row.status}</Text>
       ) : null}
     </View>
   );
@@ -254,7 +249,10 @@ function childTimelineRow(
         icon: "Bell",
         title: item.level,
         summary: compactText(item.message),
-        color: item.level === "error" ? palette.statusColors.failed : palette.categoryColors.communication,
+        color:
+          item.level === "error"
+            ? palette.statusColors.failed
+            : palette.categoryColors.communication,
       };
     case "compaction":
       return {
@@ -294,10 +292,7 @@ function toolStatusColor(
   }
 }
 
-function childStatusColor(
-  status: PaseoAgent["status"],
-  palette: ActivityPalette,
-): string {
+function childStatusColor(status: PaseoAgent["status"], palette: ActivityPalette): string {
   switch (status) {
     case "running":
     case "initializing":

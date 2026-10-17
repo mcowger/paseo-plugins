@@ -1,4 +1,4 @@
-import { useCallback, type ReactElement } from "react";
+import { type ReactElement, useCallback } from "react";
 import { Pressable, type PressableProps } from "react-native";
 
 type TooltipPressableProps = PressableProps & {

@@ -1,7 +1,4 @@
-import type {
-  PluginButtonRegistration,
-  PluginClientContext,
-} from "@getpaseo/plugin/client";
+import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { SkillPickerContent } from "./client/skill-picker";
 
 export default function contribute(client: PluginClientContext) {

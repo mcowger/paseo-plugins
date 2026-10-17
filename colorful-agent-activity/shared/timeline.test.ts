@@ -20,7 +20,15 @@ function v2EditItem(overrides: Record<string, unknown> = {}) {
     error: null,
     detail: { type: "edit" as const, filePath: "/tmp/a.txt" },
     metadata: {
-      files: [{ file: "/tmp/a.txt", patch: V2_EDIT_PATCH, status: "modified", additions: 3, deletions: 2 }],
+      files: [
+        {
+          file: "/tmp/a.txt",
+          patch: V2_EDIT_PATCH,
+          status: "modified",
+          additions: 3,
+          deletions: 2,
+        },
+      ],
       truncated: false,
     },
     ...overrides,
@@ -41,7 +49,9 @@ describe("opencode v2 edit metadata", () => {
 
   it("prefers a unifiedDiff the daemon already put on the detail", () => {
     const data = createToolCallData(
-      v2EditItem({ detail: { type: "edit", filePath: "/tmp/a.txt", unifiedDiff: "@@ -1 +1 @@\n-a\n+b" } }),
+      v2EditItem({
+        detail: { type: "edit", filePath: "/tmp/a.txt", unifiedDiff: "@@ -1 +1 @@\n-a\n+b" },
+      }),
     );
     expect(data.detail).toMatchObject({ unifiedDiff: "@@ -1 +1 @@\n-a\n+b" });
     expect(data.presentation.diffStats).toEqual({ additions: 1, deletions: 1 });
@@ -49,7 +59,9 @@ describe("opencode v2 edit metadata", () => {
 
   it("reads filediff.patch and diff metadata from earlier opencode shapes", () => {
     const filediff = createToolCallData(
-      v2EditItem({ metadata: { filediff: { patch: "@@ -1 +1 @@\n-a\n+b" }, diff: "@@ -1 +1 @@\n-x\n+y" } }),
+      v2EditItem({
+        metadata: { filediff: { patch: "@@ -1 +1 @@\n-a\n+b" }, diff: "@@ -1 +1 @@\n-x\n+y" },
+      }),
     );
     expect(filediff.detail).toMatchObject({ unifiedDiff: "@@ -1 +1 @@\n-a\n+b" });
     const diff = createToolCallData(v2EditItem({ metadata: { diff: "@@ -1 +1 @@\n-x\n+y" } }));
@@ -63,7 +75,12 @@ describe("opencode v2 edit metadata", () => {
         metadata: { truncated: false },
       }),
     );
-    expect(data.detail).toEqual({ type: "edit", filePath: "/tmp/a.txt", oldString: "a\n", newString: "b\n" });
+    expect(data.detail).toEqual({
+      type: "edit",
+      filePath: "/tmp/a.txt",
+      oldString: "a\n",
+      newString: "b\n",
+    });
     expect(data.presentation.diffStats).toEqual({ additions: 1, deletions: 1 });
   });
 
@@ -85,13 +102,21 @@ describe("opencode v2 edit metadata", () => {
       }),
     );
     expect(other.presentation.diffStats).toBeUndefined();
-    const noHunks = createToolCallData(v2EditItem({ metadata: { files: [{ file: "/tmp/a.txt", patch: "Index: x\n" }] } }));
+    const noHunks = createToolCallData(
+      v2EditItem({ metadata: { files: [{ file: "/tmp/a.txt", patch: "Index: x\n" }] } }),
+    );
     expect(noHunks.presentation.diffStats).toBeUndefined();
   });
 
   it("drops no-newline markers from the patch body", () => {
     const data = createToolCallData(
-      v2EditItem({ metadata: { files: [{ file: "/tmp/a.txt", patch: "@@ -1 +1 @@\n-a\n\\ No newline at end of file\n+b\n" }] } }),
+      v2EditItem({
+        metadata: {
+          files: [
+            { file: "/tmp/a.txt", patch: "@@ -1 +1 @@\n-a\n\\ No newline at end of file\n+b\n" },
+          ],
+        },
+      }),
     );
     expect(data.detail).toMatchObject({ unifiedDiff: "@@ -1 +1 @@\n-a\n+b" });
   });
@@ -108,12 +133,15 @@ describe("Pi read normalization", () => {
       detail: {
         type: "unknown",
         input: { path: "/tmp/screenshot.png", offset: null, limit: null },
-        output: status === "completed" ? {
-          content: [
-            { type: "text", text: "Read image file [image/png]" },
-            { type: "image", data: "base64-image-data", mimeType: "image/png" },
-          ],
-        } : undefined,
+        output:
+          status === "completed"
+            ? {
+                content: [
+                  { type: "text", text: "Read image file [image/png]" },
+                  { type: "image", data: "base64-image-data", mimeType: "image/png" },
+                ],
+              }
+            : undefined,
       },
     });
 
@@ -122,7 +150,11 @@ describe("Pi read normalization", () => {
       filePath: "/tmp/screenshot.png",
       ...(status === "completed" ? { content: "Read image file [image/png]" } : {}),
     });
-    expect(data.presentation).toMatchObject({ category: "file", label: "Read", filePath: "/tmp/screenshot.png" });
+    expect(data.presentation).toMatchObject({
+      category: "file",
+      label: "Read",
+      filePath: "/tmp/screenshot.png",
+    });
   });
 });
 
@@ -169,9 +201,9 @@ describe("task update expansion", () => {
 
   it("expires a manual toggle in Latest mode when another task update arrives", () => {
     const override = { expanded: true, latestTimestamp: 200 };
-    expect(resolveTaskUpdateExpansion("latest", true, 200, { expanded: false, latestTimestamp: 200 })).toBe(
-      false,
-    );
+    expect(
+      resolveTaskUpdateExpansion("latest", true, 200, { expanded: false, latestTimestamp: 200 }),
+    ).toBe(false);
     expect(resolveTaskUpdateExpansion("latest", false, 200, override)).toBe(true);
     expect(resolveTaskUpdateExpansion("latest", false, 300, override)).toBe(false);
   });

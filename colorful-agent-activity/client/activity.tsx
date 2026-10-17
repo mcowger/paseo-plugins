@@ -1,8 +1,15 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useAgent, useRpc, useSettings } from "@getpaseo/plugin/client";
-import { Icon, ScrollView, copyText, useRevealedText, useToast } from "@getpaseo/plugin/client/react-native";
+import {
+  copyText,
+  Icon,
+  ScrollView,
+  useRevealedText,
+  useToast,
+} from "@getpaseo/plugin/client/react-native";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import React, {
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -10,49 +17,44 @@ import React, {
   useRef,
   useState,
   useSyncExternalStore,
-  type ReactNode,
 } from "react";
 import {
   ActivityIndicator,
   Image,
-  Pressable,
-  Text,
-  View,
   type NativeScrollEvent,
   type ScrollView as NativeScrollView,
   type NativeSyntheticEvent,
+  Pressable,
+  Text,
   type TextStyle,
+  View,
   type ViewStyle,
 } from "react-native";
 import type { z } from "zod";
-import { useHighlightTokens, type HighlightToken } from "./highlight";
+import { extractCodeModeCode, isCodeModeTool } from "../shared/codemode";
+import { exaToolKind } from "../shared/exa";
+import { githubToolKind } from "../shared/github";
 import {
-  cmonoTextEscape,
-  cmonoViewEscape,
-  cuiTextEscape,
-  cuiViewEscape,
-  pmonoViewEscape,
-} from "./web";
-import { GithubToolDetail } from "./github";
-import { ExaToolDetail, PaseoToolDetail } from "./paseo";
-import { CodeModeToolDetail } from "./codemode";
-import { BgWaitToolDetail, PiSubagentLifecycleSummary, PiSubagentToolDetail, SupervisorToolDetail } from "./pi-subagents";
+  parseInlineMarkdown,
+  parseReasoningMarkdown,
+  type ReasoningMarkdownBlock,
+} from "../shared/markdown";
+import { isOmpFindTool } from "../shared/omp-find";
 import { parsePiSubagentCall, piSubagentOperation } from "../shared/pi-subagents";
-import { OmpWaitToolDetail } from "./omp-wait";
-import { OmpFindToolDetail } from "./omp-find";
-import { OpencodeSubagentToolDetail } from "./opencode-subagent";
-import { TodoToolDetail } from "./todo";
 import {
+  type ActivityPalette,
+  type ActivityThemeColors,
   compactText,
+  type DiffLine,
   diffLinesForDetail,
   editDiffContentSize,
   effectiveUnifiedDiff,
   estimateReasoningTokens,
+  expansionTargetForToolCall,
   extractCodeInput,
   fileIconForPath,
   formatReasoningMeta,
   formatUnknownValue,
-  expansionTargetForToolCall,
   hasMeaningfulToolCallDetail,
   hasMeaningfulUnknownValue,
   isBgWaitTool,
@@ -61,51 +63,64 @@ import {
   isSkillTool,
   isSubagentSupervisorTool,
   isTodoTool,
-  todoTaskLabel,
-  paseoToolLeafName,
-  parseOpencodeSearchContent,
-  parsePiLsOutput,
-  resolveSearchCounts,
+  MAX_DIFF_CHARS,
   MAX_VISIBLE_SUBAGENT_ACTIONS,
   notInHeader,
-  subAgentLogFullyShown,
-  toolCallHasBody,
+  PREVIEW_LINES,
+  parseOpencodeSearchContent,
+  parsePiLsOutput,
   parseSubAgentActionLog,
+  paseoToolLeafName,
   previewText,
   readErrorMessage,
   relativeToRoot,
   resolveActivityPalette,
+  resolveSearchCounts,
   resolveSubAgentActionPresentation,
   skillNameForDetail,
   splitFileDisplay,
   splitReasoningSteps,
   stripLeadingCwdCd,
+  subAgentLogFullyShown,
+  todoTaskLabel,
+  toolCallHasBody,
   truncateDirFront,
-  MAX_DIFF_CHARS,
-  PREVIEW_LINES,
-  type ActivityPalette,
-  type ActivityThemeColors,
-  type DiffLine,
 } from "../shared/presentation";
-import { isOmpFindTool } from "../shared/omp-find";
-import { extractCodeModeCode, isCodeModeTool } from "../shared/codemode";
-import { parseInlineMarkdown, parseReasoningMarkdown, type ReasoningMarkdownBlock } from "../shared/markdown";
 import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
-import { exaToolKind } from "../shared/exa";
-import { githubToolKind } from "../shared/github";
-import { activitySettings, DEFAULT_EXPANSION, DEFAULT_PALETTE_MODE } from "../shared/settings";
 import type { ExpansionMode, ExpansionTarget } from "../shared/settings";
+import { activitySettings, DEFAULT_EXPANSION, DEFAULT_PALETTE_MODE } from "../shared/settings";
 import {
   isLatestTaskUpdate,
+  type ReasoningItemData,
+  type reasoningItemDataSchema,
   resolveExpansion,
   resolveTaskUpdateExpansion,
-  reasoningItemDataSchema,
-  toolCallItemDataSchema,
-  type ReasoningItemData,
   type TaskUpdateExpansionOverride,
   type TodoItemData,
   type ToolCallItemData,
+  type toolCallItemDataSchema,
 } from "../shared/timeline";
+import { CodeModeToolDetail } from "./codemode";
+import { GithubToolDetail } from "./github";
+import { type HighlightToken, useHighlightTokens } from "./highlight";
+import { OmpFindToolDetail } from "./omp-find";
+import { OmpWaitToolDetail } from "./omp-wait";
+import { OpencodeSubagentToolDetail } from "./opencode-subagent";
+import { ExaToolDetail, PaseoToolDetail } from "./paseo";
+import {
+  BgWaitToolDetail,
+  PiSubagentLifecycleSummary,
+  PiSubagentToolDetail,
+  SupervisorToolDetail,
+} from "./pi-subagents";
+import { TodoToolDetail } from "./todo";
+import {
+  cmonoTextEscape,
+  cmonoViewEscape,
+  cuiTextEscape,
+  cuiViewEscape,
+  pmonoViewEscape,
+} from "./web";
 
 const MAX_DETAIL_HEIGHT = 420;
 
@@ -194,7 +209,11 @@ function subscribeLatestTaskUpdate(listener: () => void): () => void {
   return () => latestTaskUpdateListeners.delete(listener);
 }
 
-function useLatestTaskUpdateTimestamp(agentId: string, timestamp: Date, isTaskUpdate: boolean): number {
+function useLatestTaskUpdateTimestamp(
+  agentId: string,
+  timestamp: Date,
+  isTaskUpdate: boolean,
+): number {
   const itemTime = timestamp.getTime();
   const subscribe = useCallback(
     (listener: () => void) => (isTaskUpdate ? subscribeLatestTaskUpdate(listener) : () => {}),
@@ -204,11 +223,7 @@ function useLatestTaskUpdateTimestamp(agentId: string, timestamp: Date, isTaskUp
     () => (isTaskUpdate ? (latestTaskUpdateTimestamps.get(agentId) ?? 0) : 0),
     [agentId, isTaskUpdate],
   );
-  const latestTimestamp = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    getEmptyTaskUpdateTimestamp,
-  );
+  const latestTimestamp = useSyncExternalStore(subscribe, getSnapshot, getEmptyTaskUpdateTimestamp);
   useLayoutEffect(() => {
     if (isTaskUpdate) updateLatestTaskUpdateTimestamp(agentId, itemTime);
   }, [agentId, isTaskUpdate, itemTime]);
@@ -240,15 +255,14 @@ function useIsLiveTail(
     () => 0,
   );
   return (
-    active &&
-    platform !== "web" &&
-    timestamp.getTime() >= Math.max(reasoningLatest, toolCallLatest)
+    active && platform !== "web" && timestamp.getTime() >= Math.max(reasoningLatest, toolCallLatest)
   );
 }
 
 function useExpansionMode(target: ExpansionTarget): ExpansionMode {
   const settings = useSettings(activitySettings);
-  if (settings.status === "ready") return settings.values.expansion[target] ?? DEFAULT_EXPANSION[target];
+  if (settings.status === "ready")
+    return settings.values.expansion[target] ?? DEFAULT_EXPANSION[target];
   return DEFAULT_EXPANSION[target];
 }
 
@@ -1123,7 +1137,14 @@ function DiffBlock({
           {displayLines.length === 0 ? (
             <Text style={styles.empty}>Diff unavailable.</Text>
           ) : (
-            displayLines.map((line, index) => <DiffRow key={`${line.kind}-${index}`} line={line} palette={palette} styles={styles} />)
+            displayLines.map((line, index) => (
+              <DiffRow
+                key={`${line.kind}-${index}`}
+                line={line}
+                palette={palette}
+                styles={styles}
+              />
+            ))
           )}
         </View>
       </ScrollView>
@@ -1159,7 +1180,8 @@ function DiffRow({
         : line.kind === "meta"
           ? styles.diffMeta
           : undefined;
-  const marker = line.kind === "add" ? "+" : line.kind === "remove" ? "-" : line.kind === "meta" ? "" : " ";
+  const marker =
+    line.kind === "add" ? "+" : line.kind === "remove" ? "-" : line.kind === "meta" ? "" : " ";
   const markerColor =
     line.kind === "add"
       ? palette.statusColors.completed
@@ -1171,7 +1193,13 @@ function DiffRow({
   return (
     <View style={[styles.diffLine, rowStyle]}>
       <Text style={[styles.diffMarker, { color: markerColor }]}>{marker}</Text>
-      <Text selectable style={[styles.diffText, { color: line.kind === "meta" ? markerColor : styles.codeLine.color }]}>
+      <Text
+        selectable
+        style={[
+          styles.diffText,
+          { color: line.kind === "meta" ? markerColor : styles.codeLine.color },
+        ]}
+      >
         {line.text || " "}
       </Text>
     </View>
@@ -1255,18 +1283,29 @@ function SearchDetail({
             />
           ))}
           {detail.content && matchCount !== 0 ? (
-            <HighlightedCodeBlock code={detail.content} language="text" styles={styles} theme={theme} />
+            <HighlightedCodeBlock
+              code={detail.content}
+              language="text"
+              styles={styles}
+              theme={theme}
+            />
           ) : null}
         </>
       )}
       {detail.webResults?.map((result) => (
         <View key={result.url} style={styles.section}>
-          <Text selectable style={styles.detailText}>{result.title}</Text>
-          <Text selectable style={styles.mutedText}>{result.url}</Text>
+          <Text selectable style={styles.detailText}>
+            {result.title}
+          </Text>
+          <Text selectable style={styles.mutedText}>
+            {result.url}
+          </Text>
         </View>
       ))}
       {detail.annotations?.map((annotation, index) => (
-        <Text key={`${annotation}-${index}`} selectable style={styles.mutedText}>{annotation}</Text>
+        <Text key={`${annotation}-${index}`} selectable style={styles.mutedText}>
+          {annotation}
+        </Text>
       ))}
     </>
   );
@@ -1334,12 +1373,22 @@ function DetailBody({
     }
     case "read":
       if (readErrorMessage(detail.content) && data.errorText) {
-        return <PathRow icon={data.presentation.fileIcon ?? "Eye"} path={detail.filePath} styles={styles} />;
+        return (
+          <PathRow
+            icon={data.presentation.fileIcon ?? "Eye"}
+            path={detail.filePath}
+            styles={styles}
+          />
+        );
       }
       if (!shouldAttemptImageLoad(detail.filePath, detail.content)) {
         return (
           <>
-            <PathRow icon={data.presentation.fileIcon ?? "Eye"} path={detail.filePath} styles={styles} />
+            <PathRow
+              icon={data.presentation.fileIcon ?? "Eye"}
+              path={detail.filePath}
+              styles={styles}
+            />
             {detail.content ? (
               <HighlightedCodeBlock
                 code={detail.content}
@@ -1354,7 +1403,11 @@ function DetailBody({
       }
       return (
         <>
-          <PathRow icon={data.presentation.fileIcon ?? "Eye"} path={detail.filePath} styles={styles} />
+          <PathRow
+            icon={data.presentation.fileIcon ?? "Eye"}
+            path={detail.filePath}
+            styles={styles}
+          />
           <ReadImageBlock
             filePath={detail.filePath}
             agentId={agentId}
@@ -1376,7 +1429,11 @@ function DetailBody({
     case "write":
       return (
         <>
-          <PathRow icon={data.presentation.fileIcon ?? "Pencil"} path={detail.filePath} styles={styles} />
+          <PathRow
+            icon={data.presentation.fileIcon ?? "Pencil"}
+            path={detail.filePath}
+            styles={styles}
+          />
           {detail.content ? (
             <HighlightedCodeBlock
               code={detail.content}
@@ -1394,7 +1451,11 @@ function DetailBody({
       if (isOversized && effectiveUnifiedDiff(detail) === undefined) {
         return (
           <>
-            <PathRow icon={data.presentation.fileIcon ?? "Pencil"} path={detail.filePath} styles={styles} />
+            <PathRow
+              icon={data.presentation.fileIcon ?? "Pencil"}
+              path={detail.filePath}
+              styles={styles}
+            />
             {detail.oldString ? (
               <HighlightedCodeBlock
                 code={detail.oldString}
@@ -1419,7 +1480,11 @@ function DetailBody({
 
       return (
         <>
-          <PathRow icon={data.presentation.fileIcon ?? "Pencil"} path={detail.filePath} styles={styles} />
+          <PathRow
+            icon={data.presentation.fileIcon ?? "Pencil"}
+            path={detail.filePath}
+            styles={styles}
+          />
           <DiffBlock detail={detail} palette={palette} styles={styles} />
         </>
       );
@@ -1438,10 +1503,24 @@ function DetailBody({
       return (
         <>
           {notInHeader(detail.url, data.presentation.summary) ? (
-            <Text selectable style={styles.detailText}>{detail.url}</Text>
+            <Text selectable style={styles.detailText}>
+              {detail.url}
+            </Text>
           ) : null}
-          {detail.result ? <HighlightedCodeBlock code={detail.result} language="text" label="Result" styles={styles} theme={theme} /> : null}
-          {detail.code !== undefined ? <Text style={styles.mutedText}>HTTP {detail.code} {detail.codeText ?? ""}</Text> : null}
+          {detail.result ? (
+            <HighlightedCodeBlock
+              code={detail.result}
+              language="text"
+              label="Result"
+              styles={styles}
+              theme={theme}
+            />
+          ) : null}
+          {detail.code !== undefined ? (
+            <Text style={styles.mutedText}>
+              HTTP {detail.code} {detail.codeText ?? ""}
+            </Text>
+          ) : null}
         </>
       );
     case "worktree_setup":
@@ -1449,31 +1528,79 @@ function DetailBody({
         <>
           <Text style={styles.detailText}>Branch: {detail.branchName}</Text>
           <Text style={styles.mutedText}>Path: {detail.worktreePath}</Text>
-          {detail.log ? <HighlightedCodeBlock code={detail.log} language="ansi" label="Setup log" styles={styles} theme={theme} /> : null}
+          {detail.log ? (
+            <HighlightedCodeBlock
+              code={detail.log}
+              language="ansi"
+              label="Setup log"
+              styles={styles}
+              theme={theme}
+            />
+          ) : null}
         </>
       );
     case "sub_agent":
       if (piSubagentOperation(data.name) && parsePiSubagentCall(undefined, detail.log).lifecycle) {
-        return <PiSubagentToolDetail toolName={data.name} input={undefined} output={detail.log}
-          agentType={detail.subAgentType} description={detail.description} childSessionId={detail.childSessionId}
-          theme={theme} palette={palette} styles={styles} />;
+        return (
+          <PiSubagentToolDetail
+            toolName={data.name}
+            input={undefined}
+            output={detail.log}
+            agentType={detail.subAgentType}
+            description={detail.description}
+            childSessionId={detail.childSessionId}
+            theme={theme}
+            palette={palette}
+            styles={styles}
+          />
+        );
       }
       return (
         <>
-          {notInHeader(detail.subAgentType, data.presentation.summary) ? <Text style={styles.detailText}>{detail.subAgentType}</Text> : null}
-          {notInHeader(detail.description, data.presentation.summary) ? <Text style={styles.mutedText}>{detail.description}</Text> : null}
-          {detail.childSessionId ? <Text style={styles.mutedText}>Session {detail.childSessionId}</Text> : null}
-          {detail.log && !subAgentLogFullyShown(detail) ? <HighlightedCodeBlock code={detail.log} language="ansi" label="Activity log" styles={styles} theme={theme} /> : null}
+          {notInHeader(detail.subAgentType, data.presentation.summary) ? (
+            <Text style={styles.detailText}>{detail.subAgentType}</Text>
+          ) : null}
+          {notInHeader(detail.description, data.presentation.summary) ? (
+            <Text style={styles.mutedText}>{detail.description}</Text>
+          ) : null}
+          {detail.childSessionId ? (
+            <Text style={styles.mutedText}>Session {detail.childSessionId}</Text>
+          ) : null}
+          {detail.log && !subAgentLogFullyShown(detail) ? (
+            <HighlightedCodeBlock
+              code={detail.log}
+              language="ansi"
+              label="Activity log"
+              styles={styles}
+              theme={theme}
+            />
+          ) : null}
         </>
       );
     case "plain_text":
-      return <Text selectable style={styles.detailText}>{detail.text ?? ""}</Text>;
+      return (
+        <Text selectable style={styles.detailText}>
+          {detail.text ?? ""}
+        </Text>
+      );
     case "plan":
-      return <Text selectable style={styles.detailText}>{detail.text}</Text>;
+      return (
+        <Text selectable style={styles.detailText}>
+          {detail.text}
+        </Text>
+      );
     case "unknown": {
       if (piSubagentOperation(data.name)) {
-        return <PiSubagentToolDetail toolName={data.name} input={detail.input} output={detail.output}
-          theme={theme} palette={palette} styles={styles} />;
+        return (
+          <PiSubagentToolDetail
+            toolName={data.name}
+            input={detail.input}
+            output={detail.output}
+            theme={theme}
+            palette={palette}
+            styles={styles}
+          />
+        );
       }
       if (isOpencodeSubagentTool(data.name)) {
         return (
@@ -1490,7 +1617,9 @@ function DetailBody({
       if (isCodeModeTool(data.name)) {
         const code = extractCodeModeCode(detail.input);
         if (code) {
-          return <CodeModeToolDetail code={code} output={detail.output} theme={theme} styles={styles} />;
+          return (
+            <CodeModeToolDetail code={code} output={detail.output} theme={theme} styles={styles} />
+          );
         }
       }
       if (data.name.trim().toLowerCase() === "ls") {
@@ -1552,13 +1681,7 @@ function DetailBody({
         );
       }
       if (isOmpFindTool(data.name)) {
-        return (
-          <OmpFindToolDetail
-            input={detail.input}
-            output={detail.output}
-            styles={styles}
-          />
-        );
+        return <OmpFindToolDetail input={detail.input} output={detail.output} styles={styles} />;
       }
       if (isTodoTool(data.name)) {
         return (
@@ -1670,13 +1793,18 @@ function SubAgentProgress({
   toolName: string;
 }) {
   const actions = useMemo(() => {
-    const explicitActions = [...(detail.actions ?? [])].sort((left, right) => left.index - right.index);
+    const explicitActions = [...(detail.actions ?? [])].sort(
+      (left, right) => left.index - right.index,
+    );
     return explicitActions.length > 0 ? explicitActions : parseSubAgentActionLog(detail.log);
   }, [detail.actions, detail.log]);
   const hiddenActionCount = Math.max(0, actions.length - MAX_VISIBLE_SUBAGENT_ACTIONS);
   const visibleActions = actions.slice(hiddenActionCount);
-  const thinking = (actions.length > 0 && !(detail.actions?.length ?? 0)) || (piSubagentOperation(toolName) && parsePiSubagentCall(undefined, detail.log).lifecycle)
-    ? null : detail.log?.replace(/\s+/g, " ").trim();
+  const thinking =
+    (actions.length > 0 && !(detail.actions?.length ?? 0)) ||
+    (piSubagentOperation(toolName) && parsePiSubagentCall(undefined, detail.log).lifecycle)
+      ? null
+      : detail.log?.replace(/\s+/g, " ").trim();
 
   if (!thinking && actions.length === 0) return null;
 
@@ -1695,7 +1823,9 @@ function SubAgentProgress({
           </Text>
         </View>
       ) : null}
-      {hiddenActionCount > 0 ? <Text style={styles.subAgentMore}>+{hiddenActionCount} more…</Text> : null}
+      {hiddenActionCount > 0 ? (
+        <Text style={styles.subAgentMore}>+{hiddenActionCount} more…</Text>
+      ) : null}
       {visibleActions.map((action) => {
         const presentation = resolveSubAgentActionPresentation(action.toolName, action.summary);
         return (
@@ -1707,7 +1837,11 @@ function SubAgentProgress({
               {presentation.label}
             </Text>
             {presentation.summaryIcon && action.summary ? (
-              <Icon name={presentation.summaryIcon} color={styles.subAgentActionSummary.color} size={11} />
+              <Icon
+                name={presentation.summaryIcon}
+                color={styles.subAgentActionSummary.color}
+                size={11}
+              />
             ) : null}
             {action.summary ? (
               <Text numberOfLines={1} style={styles.subAgentActionSummary}>
@@ -1721,7 +1855,10 @@ function SubAgentProgress({
   );
 }
 
-function renderInlineReasoning(text: string, styles: ReturnType<typeof useActivityStyles>): ReactNode[] {
+function renderInlineReasoning(
+  text: string,
+  styles: ReturnType<typeof useActivityStyles>,
+): ReactNode[] {
   return parseInlineMarkdown(text).map((part, index) => {
     if (part.type === "text") return part.text;
     const style =
@@ -1973,7 +2110,9 @@ function ActivityHeader({
       <View style={styles.iconBadge}>
         <Icon name={icon} color={iconColor} size={12} />
       </View>
-      <Text {...cuiTextEscape} numberOfLines={1} style={styles.title}>{title}</Text>
+      <Text {...cuiTextEscape} numberOfLines={1} style={styles.title}>
+        {title}
+      </Text>
       {fileDisplay ? (
         <View style={styles.filePath}>
           {fileDisplay.dir ? (
@@ -2002,7 +2141,11 @@ function ActivityHeader({
         </View>
       ) : null}
       {expandable ? (
-        <Icon name={expanded ? "ChevronDown" : "ChevronRight"} color={styles.summary.color} size={12} />
+        <Icon
+          name={expanded ? "ChevronDown" : "ChevronRight"}
+          color={styles.summary.color}
+          size={12}
+        />
       ) : (
         <Icon name="ChevronRight" color="transparent" size={12} />
       )}
@@ -2061,7 +2204,13 @@ export function ColorfulReasoning({
       />
       {expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
-          <ReasoningText text={item.data.text} phase={item.data.phase} theme={theme} palette={palette} styles={styles} />
+          <ReasoningText
+            text={item.data.text}
+            phase={item.data.phase}
+            theme={theme}
+            palette={palette}
+            styles={styles}
+          />
         </View>
       ) : null}
     </View>
@@ -2086,12 +2235,21 @@ export function ColorfulToolCall({
   const latestTaskUpdateTimestamp = useLatestTaskUpdateTimestamp(agentId, timestamp, isTaskUpdate);
   const isLatestTaskCard = isLatestTaskUpdate(itemTimestamp, latestTaskUpdateTimestamp);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
-  const [taskUpdateOverride, setTaskUpdateOverride] = useState<TaskUpdateExpansionOverride | null>(null);
+  const [taskUpdateOverride, setTaskUpdateOverride] = useState<TaskUpdateExpansionOverride | null>(
+    null,
+  );
   const categoryColor = palette.categoryColors[item.data.presentation.category];
   const statusColor = palette.statusColors[item.data.status];
-  const expansionMode = useExpansionMode(expansionTargetForToolCall(item.data.name, detail?.type ?? "unknown"));
+  const expansionMode = useExpansionMode(
+    expansionTargetForToolCall(item.data.name, detail?.type ?? "unknown"),
+  );
   const baseExpanded = isTaskUpdate
-    ? resolveTaskUpdateExpansion(expansionMode, isLatestTaskCard, latestTaskUpdateTimestamp, taskUpdateOverride)
+    ? resolveTaskUpdateExpansion(
+        expansionMode,
+        isLatestTaskCard,
+        latestTaskUpdateTimestamp,
+        taskUpdateOverride,
+      )
     : resolveExpansion(expansionMode, isLatest, userExpanded);
   const hasDetails = detail ? hasMeaningfulToolCallDetail(detail) : true;
   const hasBody = toolCallHasBody(item.data.name, detail, item.data.presentation.summary);
@@ -2133,20 +2291,48 @@ export function ColorfulToolCall({
         expandable={expandable}
         styles={styles}
       />
-      {operation && detail ? <PiSubagentLifecycleSummary toolName={item.data.name} input={undefined}
-        output={detail.type === "sub_agent" ? detail.log : detail.type === "unknown" ? detail.output : undefined}
-        theme={theme} palette={palette} styles={styles} /> : null}
-      {hasDetails && subAgentDetail ? <SubAgentProgress detail={subAgentDetail} toolName={item.data.name} styles={styles} /> : null}
+      {operation && detail ? (
+        <PiSubagentLifecycleSummary
+          toolName={item.data.name}
+          input={undefined}
+          output={
+            detail.type === "sub_agent"
+              ? detail.log
+              : detail.type === "unknown"
+                ? detail.output
+                : undefined
+          }
+          theme={theme}
+          palette={palette}
+          styles={styles}
+        />
+      ) : null}
+      {hasDetails && subAgentDetail ? (
+        <SubAgentProgress detail={subAgentDetail} toolName={item.data.name} styles={styles} />
+      ) : null}
       {expandable && expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
-          <ScrollView style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} nestedScrollEnabled showsVerticalScrollIndicator>
+          <ScrollView
+            style={styles.detailsScroll}
+            contentContainerStyle={styles.detailsContent}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+          >
             {hasBody ? (
-              <DetailBody data={item.data} agentId={agentId} theme={theme} palette={palette} styles={styles} />
+              <DetailBody
+                data={item.data}
+                agentId={agentId}
+                theme={theme}
+                palette={palette}
+                styles={styles}
+              />
             ) : null}
             {item.data.errorText ? (
               <View style={styles.section}>
                 <DetailLabel style={styles.detailLabel}>Error</DetailLabel>
-                <Text selectable style={{ ...styles.detailText, color: theme.colors.statusDanger }}>{item.data.errorText}</Text>
+                <Text selectable style={{ ...styles.detailText, color: theme.colors.statusDanger }}>
+                  {item.data.errorText}
+                </Text>
               </View>
             ) : null}
           </ScrollView>

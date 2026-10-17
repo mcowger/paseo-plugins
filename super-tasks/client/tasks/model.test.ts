@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { formatTaskSidebarLabel, type AgentTaskCounts } from "./model";
+import { type AgentTaskCounts, formatTaskSidebarLabel } from "./model";
 
 const counts: AgentTaskCounts = {
   total: 1,

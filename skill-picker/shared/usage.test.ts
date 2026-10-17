@@ -3,8 +3,8 @@ import {
   MAX_TRACKED_SKILLS,
   normalizeUsageName,
   recordSkillUsage,
-  sortSkillsByUsage,
   type SkillUsage,
+  sortSkillsByUsage,
 } from "./usage";
 
 describe("normalizeUsageName", () => {
@@ -53,7 +53,7 @@ describe("recordSkillUsage", () => {
     }
     const next = recordSkillUsage({ skills }, "fresh", "2026-03-01T00:00:00.000Z");
     expect(Object.keys(next.skills)).toHaveLength(MAX_TRACKED_SKILLS);
-    expect(next.skills["fresh"]).toEqual({ count: 1, lastUsedAt: "2026-03-01T00:00:00.000Z" });
+    expect(next.skills.fresh).toEqual({ count: 1, lastUsedAt: "2026-03-01T00:00:00.000Z" });
     expect(next.skills["skill-0"]).toBeUndefined();
   });
 });

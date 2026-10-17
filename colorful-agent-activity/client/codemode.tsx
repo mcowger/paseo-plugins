@@ -1,10 +1,10 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import type { ActivityStyles } from "./activity";
-import { PaseoCodeBlock, Section } from "./paseo";
 import { parseCodeModeCatalog } from "../shared/codemode";
 import { compactText, formatUnknownValue } from "../shared/presentation";
+import type { ActivityStyles } from "./activity";
+import { PaseoCodeBlock, Section } from "./paseo";
 
 type Theme = PluginTimelineItemProps["theme"];
 
@@ -37,13 +37,21 @@ export function CodeModeToolDetail({
 }) {
   const catalog = useMemo(() => parseCodeModeCatalog(output), [output]);
   const [showAll, setShowAll] = useState(false);
-  const visibleItems = catalog && !showAll ? catalog.items.slice(0, VISIBLE_CATALOG_ITEMS) : catalog?.items;
+  const visibleItems =
+    catalog && !showAll ? catalog.items.slice(0, VISIBLE_CATALOG_ITEMS) : catalog?.items;
   const hiddenCount = catalog ? catalog.items.length - (visibleItems?.length ?? 0) : 0;
-  const totalHint = catalog?.remaining !== undefined ? ` · ${catalog.remaining} more in catalog` : "";
+  const totalHint =
+    catalog?.remaining !== undefined ? ` · ${catalog.remaining} more in catalog` : "";
 
   return (
     <View style={styles.paseoStack}>
-      <PaseoCodeBlock code={code} language="javascript" label="Script" theme={theme} styles={styles} />
+      <PaseoCodeBlock
+        code={code}
+        language="javascript"
+        label="Script"
+        theme={theme}
+        styles={styles}
+      />
       {catalog && visibleItems ? (
         <Section title={`Tools (${catalog.items.length}${totalHint})`} styles={styles}>
           <View style={styles.paseoList}>

@@ -1,15 +1,15 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import React from "react";
 import { Text, View } from "react-native";
-import type { ActivityStyles } from "./activity";
-import { FieldsSection, PaseoCodeBlock, Section } from "./paseo";
 import {
+  type ActivityPalette,
   notInHeader,
   opencodeSubagentSummary,
   parseOpencodeSubagentInput,
   parseOpencodeSubagentOutput,
-  type ActivityPalette,
 } from "../shared/presentation";
+import type { ActivityStyles } from "./activity";
+import { FieldsSection, PaseoCodeBlock, Section } from "./paseo";
 
 type Theme = PluginTimelineItemProps["theme"];
 
@@ -40,7 +40,12 @@ export function OpencodeSubagentToolDetail({ input, output, theme, palette, styl
           ["Model", parsedInput.model],
           ["Status", status],
           ["Session", sessionID],
-          ["Continue", parsedInput.sessionID && parsedInput.sessionID !== sessionID ? parsedInput.sessionID : undefined],
+          [
+            "Continue",
+            parsedInput.sessionID && parsedInput.sessionID !== sessionID
+              ? parsedInput.sessionID
+              : undefined,
+          ],
           ["Background", parsedInput.background],
         ]}
         palette={palette}

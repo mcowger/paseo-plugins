@@ -20,8 +20,10 @@ Prism.languages.bash = {
   comment: { pattern: /(^|[\t ])#.*/m, lookbehind: true, greedy: true },
   string: { pattern: /"(?:\\[\s\S]|[^"\\])*"|'[^']*'/, greedy: true },
   variable: /\$(?:\w+|\{[^}\r\n]*\}|[?$!#@*-])/,
-  keyword: /\b(?:if|then|else|elif|fi|for|while|until|do|done|case|esac|in|function|select|return|export|local)\b/,
-  builtin: /\b(?:test|echo|cd|pwd|ls|cat|mkdir|rm|cp|mv|touch|grep|find|sed|awk|curl|git|node|npm|bun|deno)\b/,
+  keyword:
+    /\b(?:if|then|else|elif|fi|for|while|until|do|done|case|esac|in|function|select|return|export|local)\b/,
+  builtin:
+    /\b(?:test|echo|cd|pwd|ls|cat|mkdir|rm|cp|mv|touch|grep|find|sed|awk|curl|git|node|npm|bun|deno)\b/,
   operator: /&&|\|\||[|&;<>]/,
   punctuation: /[(){}[\]]/,
 };
@@ -231,7 +233,11 @@ function resolveTokenColor(type: string, colors: ThemeSyntaxColors): string {
   }
 }
 
-function tokenizeToLines(code: string, grammar: Prism.Grammar, colors: ThemeSyntaxColors): HighlightToken[][] {
+function tokenizeToLines(
+  code: string,
+  grammar: Prism.Grammar,
+  colors: ThemeSyntaxColors,
+): HighlightToken[][] {
   const rawTokens = Prism.tokenize(code, grammar);
   const lines: HighlightToken[][] = [[]];
 
@@ -333,14 +339,10 @@ export function isDarkSurface(color: string): boolean {
   if (!rgb) return true;
   const channels = rgb.map((channel) => {
     const normalized = channel / 255;
-    return normalized <= 0.03928
-      ? normalized / 12.92
-      : ((normalized + 0.055) / 1.055) ** 2.4;
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
   });
   const luminance =
-    0.2126 * (channels[0] ?? 0) +
-    0.7152 * (channels[1] ?? 0) +
-    0.0722 * (channels[2] ?? 0);
+    0.2126 * (channels[0] ?? 0) + 0.7152 * (channels[1] ?? 0) + 0.0722 * (channels[2] ?? 0);
   return luminance < 0.5;
 }
 
@@ -442,7 +444,11 @@ export function useHighlightTokens(
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [code, language, typeof colorsInput === "boolean" ? colorsInput : colorsKey(resolveSyntaxColors(colorsInput))]);
+  }, [
+    code,
+    language,
+    typeof colorsInput === "boolean" ? colorsInput : colorsKey(resolveSyntaxColors(colorsInput)),
+  ]);
 
   return tokens;
 }

@@ -1,27 +1,22 @@
+import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import React, { type ReactNode } from "react";
 import { Text, View } from "react-native";
-import type { ActivityStyles } from "./activity";
 import {
-  PaseoCodeBlock,
-  PaseoFields,
-  Section,
-  StatusPill,
-} from "./paseo";
-import {
+  type GithubToolKind,
   githubOutputText,
   githubOutputValue,
   githubToolKind,
   githubToolSummary,
-  type GithubToolKind,
 } from "../shared/github";
 import {
+  type ActivityPalette,
   formatUnknownValue,
   languageForFilePath,
   notInHeader,
-  type ActivityPalette,
 } from "../shared/presentation";
-import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
+import type { ActivityStyles } from "./activity";
+import { PaseoCodeBlock, PaseoFields, Section, StatusPill } from "./paseo";
 
 type Theme = PluginTimelineItemProps["theme"];
 type JsonRecord = Record<string, unknown>;
@@ -228,14 +223,23 @@ function PullRequestDetail({
   theme,
   palette,
   styles,
-}: Omit<GithubToolProps, "toolName" | "output"> & { result: unknown; headerSummary: string | undefined }) {
+}: Omit<GithubToolProps, "toolName" | "output"> & {
+  result: unknown;
+  headerSummary: string | undefined;
+}) {
   const inputRecord = asRecord(input);
   const resultRecord = asRecord(result);
   const method = fieldString(inputRecord, "method") ?? "get";
   if (Array.isArray(result)) {
     return (
       <GithubList
-        title={method === "get_files" ? "Changed files" : method === "get_commits" ? "Commits" : "Pull request results"}
+        title={
+          method === "get_files"
+            ? "Changed files"
+            : method === "get_commits"
+              ? "Commits"
+              : "Pull request results"
+        }
         items={result}
         styles={styles}
         renderItem={(item) => <RecordFields record={item} palette={palette} styles={styles} />}
@@ -243,20 +247,41 @@ function PullRequestDetail({
     );
   }
   if (typeof result === "string") {
-    return <PaseoCodeBlock code={result} language={method === "get_diff" ? "diff" : "markdown"} label="Output" theme={theme} styles={styles} />;
+    return (
+      <PaseoCodeBlock
+        code={result}
+        language={method === "get_diff" ? "diff" : "markdown"}
+        label="Output"
+        theme={theme}
+        styles={styles}
+      />
+    );
   }
   return (
     <View style={styles.paseoStack}>
       <PaseoFields
         fields={[
           ["Repository", notInHeader(repositoryName(inputRecord), headerSummary)],
-          ["Pull request", notInHeader(scalarField(inputRecord, "pullNumber", "pull_number"), headerSummary)],
+          [
+            "Pull request",
+            notInHeader(scalarField(inputRecord, "pullNumber", "pull_number"), headerSummary),
+          ],
           ["Method", method],
           ["Title", fieldString(resultRecord, "title")],
           ["State", fieldString(resultRecord, "state")],
-          ["Author", fieldString(asRecord(resultRecord?.user), "login") ?? fieldString(resultRecord, "author")],
-          ["Base", fieldString(asRecord(resultRecord?.base), "ref") ?? fieldString(resultRecord, "base")],
-          ["Head", fieldString(asRecord(resultRecord?.head), "ref") ?? fieldString(resultRecord, "head")],
+          [
+            "Author",
+            fieldString(asRecord(resultRecord?.user), "login") ??
+              fieldString(resultRecord, "author"),
+          ],
+          [
+            "Base",
+            fieldString(asRecord(resultRecord?.base), "ref") ?? fieldString(resultRecord, "base"),
+          ],
+          [
+            "Head",
+            fieldString(asRecord(resultRecord?.head), "ref") ?? fieldString(resultRecord, "head"),
+          ],
           ["Changed files", fieldValue(resultRecord, "changed_files", "changedFiles")],
           ["Additions", fieldValue(resultRecord, "additions")],
           ["Deletions", fieldValue(resultRecord, "deletions")],
@@ -265,7 +290,15 @@ function PullRequestDetail({
         palette={palette}
         styles={styles}
       />
-      {fieldString(resultRecord, "body") ? <PaseoCodeBlock code={fieldString(resultRecord, "body")!} language="markdown" label="Description" theme={theme} styles={styles} /> : null}
+      {fieldString(resultRecord, "body") ? (
+        <PaseoCodeBlock
+          code={fieldString(resultRecord, "body")!}
+          language="markdown"
+          label="Description"
+          theme={theme}
+          styles={styles}
+        />
+      ) : null}
       {method === "get_reviews" || method === "get_review_comments" || method === "get_comments" ? (
         <RecordFields record={resultRecord} excluded={["body"]} palette={palette} styles={styles} />
       ) : null}
@@ -296,11 +329,19 @@ function ActionsDetail({
     return (
       <View style={styles.paseoStack}>
         <PaseoFields
-          fields={[["Repository", repositoryName(inputRecord)], ["Job", notInHeader(scalarField(inputRecord, "jobId", "job_id"), headerSummary)], ["Resource", notInHeader(scalarField(inputRecord, "resource_id"), headerSummary)]]}
+          fields={[
+            ["Repository", repositoryName(inputRecord)],
+            ["Job", notInHeader(scalarField(inputRecord, "jobId", "job_id"), headerSummary)],
+            ["Resource", notInHeader(scalarField(inputRecord, "resource_id"), headerSummary)],
+          ]}
           palette={palette}
           styles={styles}
         />
-        {logs ? <PaseoCodeBlock code={logs} language="ansi" label="Logs" theme={theme} styles={styles} /> : <RecordFields record={asRecord(result)} palette={palette} styles={styles} />}
+        {logs ? (
+          <PaseoCodeBlock code={logs} language="ansi" label="Logs" theme={theme} styles={styles} />
+        ) : (
+          <RecordFields record={asRecord(result)} palette={palette} styles={styles} />
+        )}
       </View>
     );
   }
@@ -310,7 +351,13 @@ function ActionsDetail({
         <PaseoFields
           fields={[
             ["Repository", repositoryName(inputRecord)],
-            ["Workflow", notInHeader(scalarField(inputRecord, "workflowId", "workflow_id", "workflow", "resource_id"), headerSummary)],
+            [
+              "Workflow",
+              notInHeader(
+                scalarField(inputRecord, "workflowId", "workflow_id", "workflow", "resource_id"),
+                headerSummary,
+              ),
+            ],
             ["Ref", fieldString(inputRecord, "ref")],
             ["Inputs", fieldValue(inputRecord, "inputs")],
           ]}
@@ -325,18 +372,23 @@ function ActionsDetail({
   const items = Array.isArray(result)
     ? result
     : fieldArray(record, "workflows", "workflow_runs", "workflowRuns", "jobs", "artifacts", "runs");
-  const title = fieldValue(record, "workflows") !== undefined
-    ? "Workflows"
-    : fieldValue(record, "workflow_runs", "workflowRuns", "runs") !== undefined
-      ? "Workflow runs"
-      : fieldValue(record, "jobs") !== undefined
-        ? "Jobs"
-        : fieldValue(record, "artifacts") !== undefined
-          ? "Artifacts"
-          : kind === "actions-get" ? "Action details" : "Action results";
+  const title =
+    fieldValue(record, "workflows") !== undefined
+      ? "Workflows"
+      : fieldValue(record, "workflow_runs", "workflowRuns", "runs") !== undefined
+        ? "Workflow runs"
+        : fieldValue(record, "jobs") !== undefined
+          ? "Jobs"
+          : fieldValue(record, "artifacts") !== undefined
+            ? "Artifacts"
+            : kind === "actions-get"
+              ? "Action details"
+              : "Action results";
   return (
     <View style={styles.paseoStack}>
-      {record && !items.length ? <RecordFields record={record} palette={palette} styles={styles} /> : null}
+      {record && !items.length ? (
+        <RecordFields record={record} palette={palette} styles={styles} />
+      ) : null}
       {items.length ? (
         <GithubList
           title={title}
@@ -346,12 +398,26 @@ function ActionsDetail({
             <>
               <View style={styles.paseoListItemHeader}>
                 <Text selectable numberOfLines={1} style={styles.paseoListItemTitle}>
-                  {fieldString(item, "name", "display_title", "displayTitle", "path", "id") ?? "GitHub Actions item"}
+                  {fieldString(item, "name", "display_title", "displayTitle", "path", "id") ??
+                    "GitHub Actions item"}
                 </Text>
-                {fieldString(item, "status", "conclusion", "state") ? <StatusPill value={fieldString(item, "status", "conclusion", "state")!} palette={palette} styles={styles} /> : null}
+                {fieldString(item, "status", "conclusion", "state") ? (
+                  <StatusPill
+                    value={fieldString(item, "status", "conclusion", "state")!}
+                    palette={palette}
+                    styles={styles}
+                  />
+                ) : null}
               </View>
               <Text style={styles.paseoListItemMeta}>
-                {[fieldString(item, "head_branch", "headBranch", "branch"), fieldString(item, "event"), fieldString(item, "actor") ?? fieldString(asRecord(item?.actor), "login"), fieldString(item, "html_url", "htmlUrl", "url")].filter(Boolean).join(" · ")}
+                {[
+                  fieldString(item, "head_branch", "headBranch", "branch"),
+                  fieldString(item, "event"),
+                  fieldString(item, "actor") ?? fieldString(asRecord(item?.actor), "login"),
+                  fieldString(item, "html_url", "htmlUrl", "url"),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </Text>
             </>
           )}
@@ -378,7 +444,14 @@ export function GithubToolDetail({
     const record = asRecord(result);
     return (
       <View style={styles.paseoStack}>
-        <PaseoFields fields={[["Query", notInHeader(fieldString(inputRecord, "query"), headerSummary)], ["Total", fieldValue(record, "total_count", "totalCount")]]} palette={palette} styles={styles} />
+        <PaseoFields
+          fields={[
+            ["Query", notInHeader(fieldString(inputRecord, "query"), headerSummary)],
+            ["Total", fieldValue(record, "total_count", "totalCount")],
+          ]}
+          palette={palette}
+          styles={styles}
+        />
         <RepositoryList items={fieldArray(record, "items", "repositories")} styles={styles} />
       </View>
     );
@@ -387,7 +460,14 @@ export function GithubToolDetail({
     const record = asRecord(result);
     return (
       <View style={styles.paseoStack}>
-        <PaseoFields fields={[["Query", notInHeader(fieldString(inputRecord, "query"), headerSummary)], ["Total", fieldValue(record, "total_count", "totalCount")]]} palette={palette} styles={styles} />
+        <PaseoFields
+          fields={[
+            ["Query", notInHeader(fieldString(inputRecord, "query"), headerSummary)],
+            ["Total", fieldValue(record, "total_count", "totalCount")],
+          ]}
+          palette={palette}
+          styles={styles}
+        />
         <CodeResultList items={fieldArray(record, "items", "results")} styles={styles} />
       </View>
     );
@@ -395,16 +475,58 @@ export function GithubToolDetail({
   if (kind === "file") {
     const record = asRecord(result);
     const path = fieldString(record, "path", "name") ?? fieldString(inputRecord, "path");
-    const content = fieldString(record, "content") ?? (typeof result === "string" ? result : githubOutputText(output));
+    const content =
+      fieldString(record, "content") ??
+      (typeof result === "string" ? result : githubOutputText(output));
     return (
       <View style={styles.paseoStack}>
-        <PaseoFields fields={[["Repository", repositoryName(inputRecord)], ["Path", notInHeader(path, headerSummary)], ["Size", fieldValue(record, "size")], ["SHA", fieldString(record, "sha")], ["Encoding", fieldString(record, "encoding")], ["URL", fieldString(record, "html_url", "htmlUrl", "download_url", "downloadUrl")]]} palette={palette} styles={styles} />
-        {content ? <PaseoCodeBlock code={content} language={languageForFilePath(path) ?? "text"} label="Contents" theme={theme} styles={styles} /> : <RecordFields record={record} palette={palette} styles={styles} />}
+        <PaseoFields
+          fields={[
+            ["Repository", repositoryName(inputRecord)],
+            ["Path", notInHeader(path, headerSummary)],
+            ["Size", fieldValue(record, "size")],
+            ["SHA", fieldString(record, "sha")],
+            ["Encoding", fieldString(record, "encoding")],
+            ["URL", fieldString(record, "html_url", "htmlUrl", "download_url", "downloadUrl")],
+          ]}
+          palette={palette}
+          styles={styles}
+        />
+        {content ? (
+          <PaseoCodeBlock
+            code={content}
+            language={languageForFilePath(path) ?? "text"}
+            label="Contents"
+            theme={theme}
+            styles={styles}
+          />
+        ) : (
+          <RecordFields record={record} palette={palette} styles={styles} />
+        )}
       </View>
     );
   }
   if (kind === "pull-request") {
-    return <PullRequestDetail input={input} result={result} headerSummary={headerSummary} theme={theme} palette={palette} styles={styles} />;
+    return (
+      <PullRequestDetail
+        input={input}
+        result={result}
+        headerSummary={headerSummary}
+        theme={theme}
+        palette={palette}
+        styles={styles}
+      />
+    );
   }
-  return <ActionsDetail kind={kind} input={input} result={result} headerSummary={headerSummary} theme={theme} palette={palette} styles={styles} />;
+  return (
+    <ActionsDetail
+      kind={kind}
+      input={input}
+      result={result}
+      headerSummary={headerSummary}
+      theme={theme}
+      palette={palette}
+      styles={styles}
+    />
+  );
 }

@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
-import * as esbuild from "esbuild";
 import { execFileSync } from "node:child_process";
 import { existsSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as esbuild from "esbuild";
+import { describe, expect, it } from "vitest";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const entryPath = path.resolve(__dirname, "../index.client.tsx");

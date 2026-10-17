@@ -1,89 +1,89 @@
 import { describe, expect, it } from "vitest";
-import { shouldAttemptImageLoad } from "./read-image";
 import {
+  bgWaitLabel,
+  bgWaitSummary,
   diffLinesForDetail,
   diffStatsForDetail,
   diffStatsFromStrings,
   diffStatsFromUnifiedDiff,
   editDiffContentSize,
   effectiveUnifiedDiff,
+  estimateReasoningTokens,
+  expansionTargetForToolCall,
+  extractApplyPatchEdits,
+  extractCodeInput,
+  extractPiToolText,
   fileIconForPath,
+  formatError,
+  formatJson,
+  formatReasoningMeta,
   formatReasoningText,
+  formatUnknownValue,
+  formatWaitTimeout,
   hasEditDiffContent,
+  hasMeaningfulToolCallDetail,
+  hasMeaningfulUnknownValue,
+  isApplyPatchTool,
+  isAskTool,
+  isBgWaitTool,
+  isDirectoryRead,
+  isOmpWaitTool,
+  isOpencodeSubagentTool,
+  isSkillTool,
+  isSubagentSupervisorTool,
+  isTodoTool,
   languageForFilePath,
+  MAX_DIFF_CHARS,
+  MAX_FORMAT_CHARS,
+  normalizeToolCallDetail,
+  notInHeader,
+  ompWaitLabel,
+  ompWaitSummary,
+  opencodeSubagentSummary,
+  PASEO_TOOL_ICONS,
+  parseBgWaitInput,
+  parseBgWaitOutput,
+  parseOmpWaitOutput,
+  parseOpencodeSearchContent,
+  parseOpencodeSubagentInput,
+  parseOpencodeSubagentOutput,
+  parsePiLsOutput,
+  parsePiShellResult,
+  parseSkillName,
   parseSubAgentActionLog,
+  parseSubagentSupervisorInput,
+  parseTodoToolInput,
+  parseTodoToolOutput,
   paseoToolCategory,
   paseoToolIcon,
   paseoToolLabel,
   paseoToolLeafName,
-  paseoToolSummary,
   paseoToolResult,
-  parsePiLsOutput,
-  parseBgWaitInput,
-  parseBgWaitOutput,
-  parseSubagentSupervisorInput,
-  bgWaitLabel,
-  bgWaitSummary,
-  ompWaitLabel,
-  ompWaitSummary,
-  parseOmpWaitOutput,
-  extractPiToolText,
-  formatWaitTimeout,
-  isOmpWaitTool,
-  isSkillTool,
-  isTodoTool,
-  parseSkillName,
-  parseTodoToolInput,
-  parseTodoToolOutput,
-  notInHeader,
-  toolCallHasBody,
+  paseoToolSummary,
+  prettyJson,
+  previewText,
+  readErrorMessage,
+  relativeToRoot,
+  resolveActivityPalette,
+  resolveSearchCounts,
+  resolveSubAgentActionPresentation,
+  resolveToolCallPresentation,
+  shortRunId,
+  skillNameForDetail,
+  splitFileDisplay,
+  splitReasoningSteps,
+  stripLeadingCwdCd,
+  subagentSupervisorLabel,
+  subagentSupervisorSummary,
   textAfterHeader,
   todoTaskLabel,
   todoToolDetailModel,
   todoToolSummary,
-  isBgWaitTool,
-  isSubagentSupervisorTool,
-  isOpencodeSubagentTool,
-  parseOpencodeSubagentInput,
-  parseOpencodeSubagentOutput,
-  opencodeSubagentSummary,
-  skillNameForDetail,
-  shortRunId,
-  subagentSupervisorLabel,
-  subagentSupervisorSummary,
-  readErrorMessage,
-  stripLeadingCwdCd,
-  unwrapPaseoToolOutput,
-  parsePiShellResult,
-  normalizeToolCallDetail,
-  resolveActivityPalette,
-  resolveSubAgentActionPresentation,
-  resolveToolCallPresentation,
-  formatJson,
-  isDirectoryRead,
-  formatError,
-  prettyJson,
-  formatUnknownValue,
-  expansionTargetForToolCall,
-  hasMeaningfulToolCallDetail,
-  hasMeaningfulUnknownValue,
-  isAskTool,
-  extractCodeInput,
-  extractApplyPatchEdits,
-  isApplyPatchTool,
-  previewText,
-  parseOpencodeSearchContent,
-  relativeToRoot,
-  resolveSearchCounts,
-  splitFileDisplay,
+  toolCallHasBody,
   truncateDirFront,
-  splitReasoningSteps,
-  estimateReasoningTokens,
-  formatReasoningMeta,
-  MAX_DIFF_CHARS,
-  MAX_FORMAT_CHARS,
-  PASEO_TOOL_ICONS,
+  unwrapPaseoToolOutput,
 } from "./presentation";
+import { shouldAttemptImageLoad } from "./read-image";
 
 const colors = {
   surface0: "#101010",
@@ -144,7 +144,14 @@ describe("colorful activity presentation", () => {
     const before = Array.from({ length: 10 }, (_, index) => `line ${index + 1}`).join("\n");
     const after = before.replace("line 9", "changed line 9");
 
-    expect(diffLinesForDetail({ type: "edit", filePath: "file.txt", oldString: before, newString: after })).toEqual([
+    expect(
+      diffLinesForDetail({
+        type: "edit",
+        filePath: "file.txt",
+        oldString: before,
+        newString: after,
+      }),
+    ).toEqual([
       { kind: "meta", text: "…" },
       { kind: "context", text: "line 6" },
       { kind: "context", text: "line 7" },
@@ -229,16 +236,19 @@ describe("colorful activity presentation", () => {
   });
 
   it("recovers Pi image reads with null pagination without retaining base64 output", () => {
-    const detail = normalizeToolCallDetail({
-      type: "unknown",
-      input: { path: "/tmp/screenshot.png", offset: null, limit: null },
-      output: {
-        content: [
-          { type: "text", text: "Read image file [image/png]" },
-          { type: "image", data: "base64-image-data", mimeType: "image/png" },
-        ],
+    const detail = normalizeToolCallDetail(
+      {
+        type: "unknown",
+        input: { path: "/tmp/screenshot.png", offset: null, limit: null },
+        output: {
+          content: [
+            { type: "text", text: "Read image file [image/png]" },
+            { type: "image", data: "base64-image-data", mimeType: "image/png" },
+          ],
+        },
       },
-    }, "read");
+      "read",
+    );
 
     expect(detail).toEqual({
       type: "read",
@@ -257,11 +267,21 @@ describe("colorful activity presentation", () => {
   });
 
   it("recovers namespaced text reads and preserves numeric pagination", () => {
-    expect(normalizeToolCallDetail({
-      type: "unknown",
-      input: JSON.stringify({ path: "src/index.ts", offset: 10, limit: 20 }),
-      output: { content: [{ type: "text", text: "line one" }, { type: "text", text: "line two" }] },
-    }, "functions.Read")).toEqual({
+    expect(
+      normalizeToolCallDetail(
+        {
+          type: "unknown",
+          input: JSON.stringify({ path: "src/index.ts", offset: 10, limit: 20 }),
+          output: {
+            content: [
+              { type: "text", text: "line one" },
+              { type: "text", text: "line two" },
+            ],
+          },
+        },
+        "functions.Read",
+      ),
+    ).toEqual({
       type: "read",
       filePath: "src/index.ts",
       offset: 10,
@@ -316,8 +336,9 @@ describe("colorful activity presentation", () => {
   });
 
   it("recognizes Pi read errors without treating regular content as an error", () => {
-    expect(readErrorMessage("ENOENT: no such file or directory, access 'missing.ts'"))
-      .toBe("ENOENT: no such file or directory, access 'missing.ts'");
+    expect(readErrorMessage("ENOENT: no such file or directory, access 'missing.ts'")).toBe(
+      "ENOENT: no such file or directory, access 'missing.ts'",
+    );
     expect(readErrorMessage("Error: permission denied")).toBe("Error: permission denied");
     expect(readErrorMessage("Error handling example")).toBeUndefined();
     expect(readErrorMessage("const value = 1;")).toBeUndefined();
@@ -587,7 +608,9 @@ describe("colorful activity presentation", () => {
       code: "console.log('hi');",
       language: "javascript",
     });
-    expect(extractCodeInput("mcp__plugin__mcpscript", JSON.stringify({ code: "const x = 1;" }))).toEqual({
+    expect(
+      extractCodeInput("mcp__plugin__mcpscript", JSON.stringify({ code: "const x = 1;" })),
+    ).toEqual({
       code: "const x = 1;",
       language: "javascript",
     });
@@ -668,10 +691,20 @@ describe("colorful activity presentation", () => {
       ],
     };
 
-    expect(extractApplyPatchEdits({ type: "unknown", input: { patchText: "..." }, output: null }, null, metadata)).toEqual([
+    expect(
+      extractApplyPatchEdits(
+        { type: "unknown", input: { patchText: "..." }, output: null },
+        null,
+        metadata,
+      ),
+    ).toEqual([
       { filePath: "src/index.ts", operation: "update", unifiedDiff: "@@ -1 +1 @@\n-old()\n+new()" },
       { filePath: "docs/notes.md", operation: "add", unifiedDiff: "@@ -0,0 +1 @@\n+Notes" },
-      { filePath: "src/obsolete.ts", operation: "delete", unifiedDiff: "@@ -1,1 +0,0 @@\n-obsolete()" },
+      {
+        filePath: "src/obsolete.ts",
+        operation: "delete",
+        unifiedDiff: "@@ -1,1 +0,0 @@\n-obsolete()",
+      },
     ]);
   });
 
@@ -722,27 +755,38 @@ describe("colorful activity presentation", () => {
       "-obsolete()",
     ].join("\n");
 
-    expect(extractApplyPatchEdits({
-      type: "edit",
-      filePath: "src/index.ts",
-      unifiedDiff,
-    }, undefined)).toEqual([
+    expect(
+      extractApplyPatchEdits(
+        {
+          type: "edit",
+          filePath: "src/index.ts",
+          unifiedDiff,
+        },
+        undefined,
+      ),
+    ).toEqual([
       { filePath: "src/index.ts", operation: "update", unifiedDiff: "@@ -1 +1 @@\n-old()\n+new()" },
-      { filePath: "src/obsolete.ts", operation: "delete", unifiedDiff: "@@ -1 +0,0 @@\n-obsolete()" },
+      {
+        filePath: "src/obsolete.ts",
+        operation: "delete",
+        unifiedDiff: "@@ -1 +0,0 @@\n-obsolete()",
+      },
     ]);
   });
 
   it("uses apply_patch preview files when the result contains them", () => {
-    expect(extractApplyPatchEdits(undefined, {
-      details: {
-        preview: {
-          files: [
-            { filePath: "src/index.ts", operation: "update", diff: "- 1 old\n+ 1 new" },
-            { filePath: "README.md", operation: "add", diff: "+ 1 Notes" },
-          ],
+    expect(
+      extractApplyPatchEdits(undefined, {
+        details: {
+          preview: {
+            files: [
+              { filePath: "src/index.ts", operation: "update", diff: "- 1 old\n+ 1 new" },
+              { filePath: "README.md", operation: "add", diff: "+ 1 Notes" },
+            ],
+          },
         },
-      },
-    })).toEqual([
+      }),
+    ).toEqual([
       { filePath: "src/index.ts", operation: "update", unifiedDiff: "-old\n+new" },
       { filePath: "README.md", operation: "add", unifiedDiff: "+Notes" },
     ]);
@@ -781,9 +825,10 @@ describe("colorful activity presentation", () => {
       { kind: "remove", text: "const oldValue = 1;" },
       { kind: "add", text: "const newValue = 2;" },
     ]);
-    expect(
-      resolveToolCallPresentation({ name: "edit", detail: withBlankDiff }).diffStats,
-    ).toEqual({ additions: 1, deletions: 1 });
+    expect(resolveToolCallPresentation({ name: "edit", detail: withBlankDiff }).diffStats).toEqual({
+      additions: 1,
+      deletions: 1,
+    });
 
     const whitespaceDiff = {
       type: "edit" as const,
@@ -906,8 +951,11 @@ describe("colorful activity presentation", () => {
 
 describe("reasoning steps and header metadata", () => {
   it("splits steps on blank-line runs and drops empties", () => {
-    expect(splitReasoningSteps("first\n\nsecond\n   \n\nthird"))
-      .toEqual(["first", "second", "third"]);
+    expect(splitReasoningSteps("first\n\nsecond\n   \n\nthird")).toEqual([
+      "first",
+      "second",
+      "third",
+    ]);
     expect(splitReasoningSteps("  solo  ")).toEqual(["solo"]);
     expect(splitReasoningSteps("")).toEqual([]);
     expect(splitReasoningSteps("\n\n   \n")).toEqual([]);
@@ -1027,12 +1075,8 @@ describe("reasoning steps and header metadata", () => {
     expect(hasMeaningfulUnknownValue({ path: "src/index.ts" })).toBe(true);
     expect(hasMeaningfulUnknownValue('{"path":"x"}')).toBe(true);
 
-    expect(
-      hasMeaningfulToolCallDetail({ type: "unknown", input: null, output: null }),
-    ).toBe(false);
-    expect(
-      hasMeaningfulToolCallDetail({ type: "unknown", input: {}, output: null }),
-    ).toBe(false);
+    expect(hasMeaningfulToolCallDetail({ type: "unknown", input: null, output: null })).toBe(false);
+    expect(hasMeaningfulToolCallDetail({ type: "unknown", input: {}, output: null })).toBe(false);
     expect(
       hasMeaningfulToolCallDetail({
         type: "unknown",
@@ -1049,15 +1093,13 @@ describe("reasoning steps and header metadata", () => {
     ).toBe(true);
     expect(hasMeaningfulToolCallDetail(undefined)).toBe(false);
     expect(hasMeaningfulToolCallDetail(null)).toBe(false);
-    expect(
-      hasMeaningfulToolCallDetail({ type: "read", filePath: "", content: undefined }),
-    ).toBe(false);
-    expect(
-      hasMeaningfulToolCallDetail({ type: "read", filePath: "src/index.ts" }),
-    ).toBe(true);
-    expect(
-      hasMeaningfulToolCallDetail({ type: "shell", command: "", output: undefined }),
-    ).toBe(true);
+    expect(hasMeaningfulToolCallDetail({ type: "read", filePath: "", content: undefined })).toBe(
+      false,
+    );
+    expect(hasMeaningfulToolCallDetail({ type: "read", filePath: "src/index.ts" })).toBe(true);
+    expect(hasMeaningfulToolCallDetail({ type: "shell", command: "", output: undefined })).toBe(
+      true,
+    );
   });
 });
 
@@ -1168,12 +1210,32 @@ describe("pi-subagents tool presentation", () => {
       details: {
         mode: "management",
         results: [],
-        wait: { reason: "window_elapsed", timedOut: true, activeRunIds: ["run-1"], activeProviderItems: [] },
+        wait: {
+          reason: "window_elapsed",
+          timedOut: true,
+          activeRunIds: ["run-1"],
+          activeProviderItems: [],
+        },
       },
     });
     expect(timedOut?.waitReason).toBe("window_elapsed");
     expect(timedOut?.activeRunIds).toEqual(["run-1"]);
-    expect(bgWaitSummary({ timeoutMs: 300000 }, { content: [{ type: "text", text: "Waiting." }], details: { wait: { reason: "window_elapsed", timedOut: true, activeRunIds: [], activeProviderItems: [] } } })).toContain("timed out");
+    expect(
+      bgWaitSummary(
+        { timeoutMs: 300000 },
+        {
+          content: [{ type: "text", text: "Waiting." }],
+          details: {
+            wait: {
+              reason: "window_elapsed",
+              timedOut: true,
+              activeRunIds: [],
+              activeProviderItems: [],
+            },
+          },
+        },
+      ),
+    ).toContain("timed out");
   });
 });
 describe("omp wait tool presentation", () => {
@@ -1229,7 +1291,9 @@ describe("omp wait tool presentation", () => {
       model: "meta/muse-spark-1.3:high",
     });
     expect(ompWaitLabel(ompWaitOutput)).toBe("Wait for 2 Agents");
-    expect(ompWaitSummary({}, ompWaitOutput)).toBe("2 running · 1m 17s · OAuthCoreReview, PersistenceReview");
+    expect(ompWaitSummary({}, ompWaitOutput)).toBe(
+      "2 running · 1m 17s · OAuthCoreReview, PersistenceReview",
+    );
   });
 
   it("labels a single waited agent and falls back without job output", () => {
@@ -1335,7 +1399,9 @@ describe("pi todo tool presentation", () => {
   });
 
   it("parses update arguments including dependency edits", () => {
-    expect(parseTodoToolInput({ action: "update", id: 9, addBlockedBy: [8], removeBlockedBy: [3] })).toEqual({
+    expect(
+      parseTodoToolInput({ action: "update", id: 9, addBlockedBy: [8], removeBlockedBy: [3] }),
+    ).toEqual({
       action: "update",
       id: 9,
       addBlockedBy: [8],
@@ -1478,7 +1544,7 @@ describe("opencode search content parsing", () => {
       "",
       " Line 1949: export function formatUnknownValue(value: unkno",
       "",
-      " Line 1982:  const text = typeof error === \"string\" ? error : for",
+      ' Line 1982:  const text = typeof error === "string" ? error : for',
     ].join("\n");
     const parsed = parseOpencodeSearchContent(content);
     expect(parsed?.numMatches).toBe(3);
@@ -1528,7 +1594,9 @@ describe("opencode search content parsing", () => {
   });
 
   it("counts parsed match rows when the content has no Found header", () => {
-    const parsed = parseOpencodeSearchContent("src/file.ts:\n  Line 1: todowrite\n  Line 2: todowrite again");
+    const parsed = parseOpencodeSearchContent(
+      "src/file.ts:\n  Line 1: todowrite\n  Line 2: todowrite again",
+    );
     expect(resolveSearchCounts({}, parsed)).toEqual({ matchCount: 2, fileCount: 1 });
   });
 
@@ -1681,43 +1749,85 @@ describe("header de-duplication", () => {
 
 describe("toolCallHasBody", () => {
   it("never expands skills", () => {
-    expect(toolCallHasBody("skill", { type: "unknown", input: { name: "x" }, output: "ok" }, "x")).toBe(false);
+    expect(
+      toolCallHasBody("skill", { type: "unknown", input: { name: "x" }, output: "ok" }, "x"),
+    ).toBe(false);
   });
 
   it("collapses search and fetch when the header already shows everything", () => {
     expect(toolCallHasBody("grep", { type: "search", query: "foo" }, "foo")).toBe(false);
-    expect(toolCallHasBody("grep", { type: "search", query: "foo", content: "a.ts:1:foo" }, "foo")).toBe(true);
-    expect(toolCallHasBody("fetch", { type: "fetch", url: "https://x.dev" }, "https://x.dev")).toBe(false);
-    expect(toolCallHasBody("fetch", { type: "fetch", url: "https://x.dev", result: "body" }, "https://x.dev")).toBe(true);
+    expect(
+      toolCallHasBody("grep", { type: "search", query: "foo", content: "a.ts:1:foo" }, "foo"),
+    ).toBe(true);
+    expect(toolCallHasBody("fetch", { type: "fetch", url: "https://x.dev" }, "https://x.dev")).toBe(
+      false,
+    );
+    expect(
+      toolCallHasBody(
+        "fetch",
+        { type: "fetch", url: "https://x.dev", result: "body" },
+        "https://x.dev",
+      ),
+    ).toBe(true);
   });
 
   it("collapses sub-agents whose progress rows already show the whole log", () => {
-    const detail = { type: "sub_agent" as const, description: "Audit", log: "[read] a.ts\n[grep] foo" };
+    const detail = {
+      type: "sub_agent" as const,
+      description: "Audit",
+      log: "[read] a.ts\n[grep] foo",
+    };
     expect(toolCallHasBody("task", detail, "Audit")).toBe(false);
-    expect(toolCallHasBody("task", { ...detail, log: `${detail.log}\nfree text` }, "Audit")).toBe(true);
+    expect(toolCallHasBody("task", { ...detail, log: `${detail.log}\nfree text` }, "Audit")).toBe(
+      true,
+    );
   });
 
   it("collapses file cards without contents or a diff", () => {
     expect(toolCallHasBody("read", { type: "read", filePath: "a.ts" }, undefined)).toBe(false);
-    expect(toolCallHasBody("read", { type: "read", filePath: "a.ts", content: "x" }, undefined)).toBe(true);
+    expect(
+      toolCallHasBody("read", { type: "read", filePath: "a.ts", content: "x" }, undefined),
+    ).toBe(true);
     expect(toolCallHasBody("read", { type: "read", filePath: "logo.png" }, undefined)).toBe(true);
     expect(toolCallHasBody("edit", { type: "edit", filePath: "a.ts" }, undefined)).toBe(false);
-    expect(toolCallHasBody("edit", { type: "edit", filePath: "a.ts", newString: "y" }, undefined)).toBe(true);
+    expect(
+      toolCallHasBody("edit", { type: "edit", filePath: "a.ts", newString: "y" }, undefined),
+    ).toBe(true);
   });
 
   it("collapses Paseo action tools that only echo the header", () => {
     const cancel = (output: unknown) =>
-      toolCallHasBody("mcp__paseo__cancel_agent", { type: "unknown", input: { agentId: "a1" }, output }, "a1");
+      toolCallHasBody(
+        "mcp__paseo__cancel_agent",
+        { type: "unknown", input: { agentId: "a1" }, output },
+        "a1",
+      );
     expect(cancel({})).toBe(false);
     expect(cancel({ success: true })).toBe(true);
     expect(
-      toolCallHasBody("mcp__paseo__speak", { type: "unknown", input: { text: "hi" }, output: {} }, "hi"),
+      toolCallHasBody(
+        "mcp__paseo__speak",
+        { type: "unknown", input: { text: "hi" }, output: {} },
+        "hi",
+      ),
     ).toBe(false);
   });
 
   it("collapses todo and wait tools with nothing beyond the header", () => {
-    expect(toolCallHasBody("todo", { type: "unknown", input: { action: "clear" }, output: null }, undefined)).toBe(false);
-    expect(toolCallHasBody("wait", { type: "unknown", input: {}, output: { content: [{ type: "text", text: "ok" }] } }, "ok")).toBe(false);
+    expect(
+      toolCallHasBody(
+        "todo",
+        { type: "unknown", input: { action: "clear" }, output: null },
+        undefined,
+      ),
+    ).toBe(false);
+    expect(
+      toolCallHasBody(
+        "wait",
+        { type: "unknown", input: {}, output: { content: [{ type: "text", text: "ok" }] } },
+        "ok",
+      ),
+    ).toBe(false);
     expect(toolCallHasBody("bash", { type: "shell", command: "ls" }, "ls")).toBe(true);
   });
 });

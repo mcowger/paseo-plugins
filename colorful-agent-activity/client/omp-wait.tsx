@@ -1,13 +1,13 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import React from "react";
 import { View } from "react-native";
-import type { ActivityStyles } from "./activity";
-import { PaseoFields, Section } from "./paseo";
 import {
+  type ActivityPalette,
   formatWaitTimeout,
   parseOmpWaitOutput,
-  type ActivityPalette,
 } from "../shared/presentation";
+import type { ActivityStyles } from "./activity";
+import { PaseoFields, Section } from "./paseo";
 
 type Theme = PluginTimelineItemProps["theme"];
 

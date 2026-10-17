@@ -69,7 +69,9 @@ const GLOBAL_NAMESPACES = new Set([
 ]);
 
 function stripComments(code: string): string {
-  return code.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^\S:;{([,=!+\-*/|&?:])\/\/[^\n]*/g, "$1");
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^\S:;{([,=!+\-*/|&?:])\/\/[^\n]*/g, "$1");
 }
 
 function firstStringLiteral(slice: string, key: string): string | undefined {
@@ -99,7 +101,8 @@ function parseSearchQuery(code: string): string | undefined {
 
 function parseDottedCalls(code: string): CodeModeCall[] {
   const cleaned = stripComments(code);
-  const pattern = /(?:^|[^\w$])([A-Za-z][A-Za-z0-9_]*)\.([A-Za-z][A-Za-z0-9_]*)(?:\.([A-Za-z][A-Za-z0-9_]*))?\s*\(/g;
+  const pattern =
+    /(?:^|[^\w$])([A-Za-z][A-Za-z0-9_]*)\.([A-Za-z][A-Za-z0-9_]*)(?:\.([A-Za-z][A-Za-z0-9_]*))?\s*\(/g;
   const calls: CodeModeCall[] = [];
   const seen = new Set<string>();
   let match: RegExpExecArray | null = null;

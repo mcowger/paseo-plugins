@@ -1,9 +1,9 @@
-import { stat, readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import type { PluginHandlerContext } from "@getpaseo/plugin/server";
 import {
-  MAX_READ_IMAGE_BYTES,
   detectImageMimeType,
+  MAX_READ_IMAGE_BYTES,
   type ReadImageResult,
 } from "../shared/read-image.js";
 
@@ -64,7 +64,9 @@ export async function handleReadImage(
     return { status: "not-found" };
   }
 
-  const mimeType = detectImageMimeType(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+  const mimeType = detectImageMimeType(
+    new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+  );
   if (!mimeType) return { status: "not-image", byteSize: bytes.byteLength };
   return { status: "ok", data: bytes.toString("base64"), mimeType, byteSize: bytes.byteLength };
 }

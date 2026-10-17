@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  exaOutputText,
-  exaToolKind,
-  exaToolSummary,
-  parseExaSearchResults,
-} from "./exa";
+import { exaOutputText, exaToolKind, exaToolSummary, parseExaSearchResults } from "./exa";
 
 describe("Exa tool presentation", () => {
   it("recognizes namespaced Exa tools", () => {

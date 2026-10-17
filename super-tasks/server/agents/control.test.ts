@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  cancelWorkspaceAgent,
+  getProviderSubagentTimeline,
+  listWorkspaceProviderSubagents,
+} from "../../shared/agents/control";
+import {
   type AgentControlPort,
   cancelAgentTurn,
   createAgentCanceller,
   createProviderSubagentLister,
   createProviderSubagentTimelineFetcher,
 } from "./control";
-import {
-  cancelWorkspaceAgent,
-  getProviderSubagentTimeline,
-  listWorkspaceProviderSubagents,
-} from "../../shared/agents/control";
 
 interface FakePort extends AgentControlPort {
   readonly sent: string[];

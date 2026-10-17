@@ -1,0 +1,100 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/package-lock.json",
+      "!**/bun.lock",
+      "!**/dist",
+      "!**/coverage",
+      "!**/.test-env",
+      "!**/.pi",
+      "!**/*.log"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "bracketSameLine": false
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "assist": {
+    "enabled": true
+  },
+  "overrides": [
+    {
+      "includes": [
+        "super-tasks/**",
+        "poly-repo-workspaces/**"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noUselessFragments": "error"
+          },
+          "correctness": {
+            "useExhaustiveDependencies": "error"
+          },
+          "suspicious": {
+            "noArrayIndexKey": "error",
+            "noExplicitAny": "error",
+            "noShadow": "error",
+            "noUnusedExpressions": "error"
+          },
+          "style": {
+            "noNonNullAssertion": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "colorful-agent-activity/**",
+        "skill-picker/**",
+        "superpi/**",
+        "superpi-companion/**"
+      ],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useExhaustiveDependencies": "warn"
+          },
+          "suspicious": {
+            "noArrayIndexKey": "warn",
+            "noControlCharactersInRegex": "warn",
+            "noAssignInExpressions": "warn",
+            "noShadowRestrictedNames": "warn",
+            "useIterableCallbackReturn": "warn",
+            "noImplicitAnyLet": "warn"
+          },
+          "complexity": {
+            "noUselessSwitchCase": "warn"
+          }
+        }
+      }
+    }
+  ]
+}

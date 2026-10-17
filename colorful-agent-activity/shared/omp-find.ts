@@ -2,7 +2,11 @@ export interface OmpFindResult {
   query?: string;
   keywords: string[];
   path?: string;
-  hits: { path: string; score?: number; ranges: { start: number; end: number; snippet?: string }[] }[];
+  hits: {
+    path: string;
+    score?: number;
+    ranges: { start: number; end: number; snippet?: string }[];
+  }[];
   listed?: number;
   judged?: number;
   filesRead?: number;
@@ -36,24 +40,36 @@ export function parseOmpFindResult(input: unknown, output: unknown): OmpFindResu
           ? hit.ranges.flatMap((value) => {
               const range = asRecord(value);
               if (typeof range?.start !== "number" || typeof range.end !== "number") return [];
-              return [{
-                start: range.start,
-                end: range.end,
-                ...(typeof range.snippet === "string" ? { snippet: range.snippet } : {}),
-              }];
+              return [
+                {
+                  start: range.start,
+                  end: range.end,
+                  ...(typeof range.snippet === "string" ? { snippet: range.snippet } : {}),
+                },
+              ];
             })
           : [];
-        return [{
-          path,
-          ...(typeof hit?.contentScore === "number" ? { score: hit.contentScore } : {}),
-          ranges,
-        }];
+        return [
+          {
+            path,
+            ...(typeof hit?.contentScore === "number" ? { score: hit.contentScore } : {}),
+            ranges,
+          },
+        ];
       })
     : [];
   return {
-    ...(typeof args?.query === "string" ? { query: args.query } : typeof details?.query === "string" ? { query: details.query } : {}),
+    ...(typeof args?.query === "string"
+      ? { query: args.query }
+      : typeof details?.query === "string"
+        ? { query: details.query }
+        : {}),
     keywords,
-    ...(typeof args?.path === "string" ? { path: args.path } : typeof details?.scopePath === "string" ? { path: details.scopePath } : {}),
+    ...(typeof args?.path === "string"
+      ? { path: args.path }
+      : typeof details?.scopePath === "string"
+        ? { path: details.scopePath }
+        : {}),
     hits,
     ...(typeof details?.listed === "number" ? { listed: details.listed } : {}),
     ...(typeof details?.judged === "number" ? { judged: details.judged } : {}),

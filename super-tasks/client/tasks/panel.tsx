@@ -1,20 +1,20 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { type PluginHostProps, type PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
+import type { PluginHostProps, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { useCallback, useMemo, useState, type ReactElement } from "react";
+import { type ReactElement, useCallback, useMemo, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
   Text,
-  View,
   type TextStyle,
+  View,
   type ViewStyle,
 } from "react-native";
-import { TooltipPressable as Pressable } from "../ui/tooltip";
 import { openAgentInPaseoWorkspace } from "../agents/navigation";
+import { TooltipPressable as Pressable } from "../ui/tooltip";
 import {
-  sumCounts,
   type AgentTasksGroup,
+  sumCounts,
   type TaskItemViewModel,
   type TaskStatusFilter,
 } from "./model";
@@ -479,10 +479,7 @@ export function WorkspaceTasksBody({
   const completedToggleHandlers = useMemo(
     () =>
       new Map(
-        agentGroups.map((group) => [
-          group.agentId,
-          () => toggleCompletedTasks(group.agentId),
-        ]),
+        agentGroups.map((group) => [group.agentId, () => toggleCompletedTasks(group.agentId)]),
       ),
     [agentGroups, toggleCompletedTasks],
   );
@@ -507,18 +504,11 @@ export function WorkspaceTasksBody({
         style={styles.taskRow}
       >
         <View style={styles.statusIconSlot}>
-          <TaskStatusIcon
-            status={task.status}
-            theme={theme}
-            size={layout.compact ? 13 : 15}
-          />
+          <TaskStatusIcon status={task.status} theme={theme} size={layout.compact ? 13 : 15} />
         </View>
         <View style={styles.taskBody}>
           <Text
-            style={[
-              styles.taskText,
-              task.status === "completed" ? styles.taskTextCompleted : null,
-            ]}
+            style={[styles.taskText, task.status === "completed" ? styles.taskTextCompleted : null]}
           >
             {task.text}
           </Text>

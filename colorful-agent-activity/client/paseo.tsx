@@ -1,27 +1,27 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
-import React, { useMemo, useState, type ReactNode } from "react";
-import { Pressable, Text, View, type TextStyle } from "react-native";
-import { ChildAgentTimeline } from "./child-agent";
-import { useHighlightTokens, type HighlightToken } from "./highlight";
-import type { ActivityStyles } from "./activity";
+import React, { type ReactNode, useMemo, useState } from "react";
+import { Pressable, Text, type TextStyle, View } from "react-native";
 import { extractPaseoChildAgentId } from "../shared/child-agent";
 import {
+  type ExaSearchResult,
   exaOutputText,
   exaToolKind,
   exaToolSummary,
   parseExaSearchResults,
-  type ExaSearchResult,
 } from "../shared/exa";
 import {
+  type ActivityPalette,
   formatUnknownValue,
   notInHeader,
   paseoToolLeafName,
-  paseoToolSummary,
   paseoToolResult,
+  paseoToolSummary,
   previewText,
-  type ActivityPalette,
 } from "../shared/presentation";
+import type { ActivityStyles } from "./activity";
+import { ChildAgentTimeline } from "./child-agent";
+import { type HighlightToken, useHighlightTokens } from "./highlight";
 
 type Theme = PluginTimelineItemProps["theme"];
 type JsonRecord = Record<string, unknown>;
@@ -45,25 +45,16 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function fieldString(
-  record: JsonRecord | null,
-  key: string
-): string | undefined {
+function fieldString(record: JsonRecord | null, key: string): string | undefined {
   return stringValue(record?.[key]);
 }
 
-function fieldNumber(
-  record: JsonRecord | null,
-  key: string
-): number | undefined {
+function fieldNumber(record: JsonRecord | null, key: string): number | undefined {
   const value = record?.[key];
   return typeof value === "number" ? value : undefined;
 }
 
-function fieldBoolean(
-  record: JsonRecord | null,
-  key: string
-): boolean | undefined {
+function fieldBoolean(record: JsonRecord | null, key: string): boolean | undefined {
   const value = record?.[key];
   return typeof value === "boolean" ? value : undefined;
 }
@@ -75,15 +66,13 @@ function fieldArray(record: JsonRecord | null, key: string): unknown[] {
 function scalarText(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "string" || typeof value === "number")
-    return String(value);
+  if (typeof value === "string" || typeof value === "number") return String(value);
   return formatUnknownValue(value);
 }
 
 function stableItemKey(value: unknown, prefix: string): string {
   const record = asRecord(value);
-  const identity =
-    record?.id ?? record?.agentId ?? record?.workspaceId ?? record?.browserId;
+  const identity = record?.id ?? record?.agentId ?? record?.workspaceId ?? record?.browserId;
   if (typeof identity === "string" || typeof identity === "number") {
     return `${prefix}-${identity}`;
   }
@@ -94,10 +83,7 @@ function stableItemKey(value: unknown, prefix: string): string {
   }
 }
 
-function statusColor(
-  status: string | undefined,
-  palette: ActivityPalette
-): string {
+function statusColor(status: string | undefined, palette: ActivityPalette): string {
   switch (status?.toLowerCase()) {
     case "running":
     case "initializing":
@@ -176,9 +162,7 @@ function PaseoFieldValue({
     );
   const record = asRecord(value);
   if (record) {
-    const entries = Object.entries(record).filter(
-      ([, child]) => child !== undefined
-    );
+    const entries = Object.entries(record).filter(([, child]) => child !== undefined);
     if (entries.length === 0) return <Text style={styles.paseoValue}>—</Text>;
     return (
       <View style={styles.paseoRows}>
@@ -235,12 +219,7 @@ function PaseoField({
     <View style={styles.paseoRow}>
       <Text style={styles.paseoKey}>{label}</Text>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <PaseoFieldValue
-          value={value}
-          palette={palette}
-          styles={styles}
-          depth={depth}
-        />
+        <PaseoFieldValue value={value} palette={palette} styles={styles} depth={depth} />
       </View>
     </View>
   );
@@ -387,16 +366,16 @@ function PromptBlock({
       {text}
     </Text>
   );
-  return label ? <Section title={label} styles={styles}>{prompt}</Section> : prompt;
+  return label ? (
+    <Section title={label} styles={styles}>
+      {prompt}
+    </Section>
+  ) : (
+    prompt
+  );
 }
 
-function TokenizedLines({
-  lines,
-  styles,
-}: {
-  lines: HighlightToken[][];
-  styles: ActivityStyles;
-}) {
+function TokenizedLines({ lines, styles }: { lines: HighlightToken[][]; styles: ActivityStyles }) {
   return (
     <View>
       {lines.map((line, lineIndex) => (
@@ -406,12 +385,8 @@ function TokenizedLines({
             : line.map((token, tokenIndex) => {
                 const tokenStyle: TextStyle = {
                   color: token.color ?? styles.codeLine.color,
-                  ...(token.fontStyle && token.fontStyle & 1
-                    ? { fontStyle: "italic" }
-                    : {}),
-                  ...(token.fontStyle && token.fontStyle & 2
-                    ? { fontWeight: "700" }
-                    : {}),
+                  ...(token.fontStyle && token.fontStyle & 1 ? { fontStyle: "italic" } : {}),
+                  ...(token.fontStyle && token.fontStyle & 2 ? { fontWeight: "700" } : {}),
                   ...(token.fontStyle && token.fontStyle & 4
                     ? { textDecorationLine: "underline" }
                     : {}),
@@ -444,11 +419,7 @@ export function PaseoCodeBlock({
   const [showAll, setShowAll] = useState(false);
   const preview = useMemo(() => previewText(code), [code]);
   const displayCode = showAll ? code : preview.text;
-  const tokens = useHighlightTokens(
-    displayCode,
-    language,
-    theme.colors,
-  );
+  const tokens = useHighlightTokens(displayCode, language, theme.colors);
   return (
     <Section title={label ?? "Output"} styles={styles}>
       <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
@@ -490,9 +461,7 @@ function OutputFields({
   palette: ActivityPalette;
   styles: ActivityStyles;
 }) {
-  const values = fields.map(
-    ([key, label]) => [label, result?.[key]] as [string, unknown]
-  );
+  const values = fields.map(([key, label]) => [label, result?.[key]] as [string, unknown]);
   if (values.every(([, value]) => value === undefined)) return null;
   return (
     <Section title="Result" styles={styles}>
@@ -521,11 +490,7 @@ function ActionResult({
     <Section title="Result" styles={styles}>
       <View style={styles.paseoRows}>
         {typeof success === "boolean" ? (
-          <StatusPill
-            value={success ? "Success" : "Failed"}
-            palette={palette}
-            styles={styles}
-          />
+          <StatusPill value={success ? "Success" : "Failed"} palette={palette} styles={styles} />
         ) : null}
         <PaseoFields fields={visibleFields} palette={palette} styles={styles} />
       </View>
@@ -560,10 +525,7 @@ function AgentSnapshot({
           ["Working directory", snapshot.cwd],
           ["Workspace", snapshot.workspaceId],
           ["Mode", snapshot.currentModeId],
-          [
-            "Thinking",
-            snapshot.effectiveThinkingOptionId ?? snapshot.thinkingOptionId,
-          ],
+          ["Thinking", snapshot.effectiveThinkingOptionId ?? snapshot.thinkingOptionId],
           ["Attention", snapshot.attentionReason],
           ["Last error", snapshot.lastError],
         ]}
@@ -583,19 +545,10 @@ function AgentSnapshot({
           </View>
         </Section>
       ) : null}
-      {modes.length > 0 ? (
-        <ModeList modes={modes} palette={palette} styles={styles} />
-      ) : null}
+      {modes.length > 0 ? <ModeList modes={modes} palette={palette} styles={styles} /> : null}
       {permissions.length > 0 ? (
-        <Section
-          title={`Pending permissions (${permissions.length})`}
-          styles={styles}
-        >
-          <PermissionList
-            permissions={permissions}
-            palette={palette}
-            styles={styles}
-          />
+        <Section title={`Pending permissions (${permissions.length})`} styles={styles}>
+          <PermissionList permissions={permissions} palette={palette} styles={styles} />
         </Section>
       ) : null}
     </View>
@@ -618,31 +571,19 @@ function ModeList({
         {modes.map((mode) => {
           const record = asRecord(mode);
           return (
-            <View
-              key={stableItemKey(mode, "mode")}
-              style={styles.paseoListItem}
-            >
+            <View key={stableItemKey(mode, "mode")} style={styles.paseoListItem}>
               <View style={styles.paseoListItemHeader}>
                 <Text style={styles.paseoListItemTitle}>
-                  {fieldString(record, "label") ??
-                    fieldString(record, "id") ??
-                    "Mode"}
+                  {fieldString(record, "label") ?? fieldString(record, "id") ?? "Mode"}
                 </Text>
                 {fieldString(record, "id") ? (
-                  <Text
-                    style={[
-                      styles.paseoListItemMeta,
-                      { color: palette.categoryColors.agent },
-                    ]}
-                  >
+                  <Text style={[styles.paseoListItemMeta, { color: palette.categoryColors.agent }]}>
                     {fieldString(record, "id")}
                   </Text>
                 ) : null}
               </View>
               {fieldString(record, "description") ? (
-                <Text style={styles.paseoListItemMeta}>
-                  {fieldString(record, "description")}
-                </Text>
+                <Text style={styles.paseoListItemMeta}>{fieldString(record, "description")}</Text>
               ) : null}
             </View>
           );
@@ -668,10 +609,7 @@ function PermissionList({
         const record = asRecord(permission);
         const actions = fieldArray(record, "actions");
         return (
-          <View
-            key={stableItemKey(permission, "permission")}
-            style={styles.paseoListItem}
-          >
+          <View key={stableItemKey(permission, "permission")} style={styles.paseoListItem}>
             <View style={styles.paseoListItemHeader}>
               <Text style={styles.paseoListItemTitle}>
                 {fieldString(record, "title") ??
@@ -695,10 +633,7 @@ function PermissionList({
               <Text style={styles.paseoListItemMeta}>
                 Actions:{" "}
                 {actions
-                  .map(
-                    (action) =>
-                      fieldString(asRecord(action), "label") ?? "Action"
-                  )
+                  .map((action) => fieldString(asRecord(action), "label") ?? "Action")
                   .join(" · ")}
               </Text>
             ) : null}
@@ -750,11 +685,7 @@ function AgentTool({
             styles={styles}
           />
           {childAgentId ? (
-            <ChildAgentTimeline
-              agentId={childAgentId}
-              palette={palette}
-              styles={styles}
-            />
+            <ChildAgentTimeline agentId={childAgentId} palette={palette} styles={styles} />
           ) : null}
         </View>
       );
@@ -762,10 +693,7 @@ function AgentTool({
     case "send_agent_prompt":
       return (
         <View style={styles.paseoStack}>
-          <PromptBlock
-            text={fieldString(inputRecord, "prompt")}
-            styles={styles}
-          />
+          <PromptBlock text={fieldString(inputRecord, "prompt")} styles={styles} />
           <FieldsSection
             title="Delivery"
             fields={[
@@ -890,11 +818,7 @@ function AgentTool({
             palette={palette}
             styles={styles}
           />
-          <ActionResult
-            result={outputRecord}
-            palette={palette}
-            styles={styles}
-          />
+          <ActionResult result={outputRecord} palette={palette} styles={styles} />
         </View>
       );
     case "cancel_agent":
@@ -909,11 +833,7 @@ function AgentTool({
               styles={styles}
             />
           ) : null}
-          <ActionResult
-            result={outputRecord}
-            palette={palette}
-            styles={styles}
-          />
+          <ActionResult result={outputRecord} palette={palette} styles={styles} />
         </View>
       );
     case "list_pending_permissions":
@@ -938,22 +858,11 @@ function AgentTool({
             palette={palette}
             styles={styles}
           />
-          <ActionResult
-            result={outputRecord}
-            palette={palette}
-            styles={styles}
-          />
+          <ActionResult result={outputRecord} palette={palette} styles={styles} />
         </View>
       );
     default:
-      return (
-        <FallbackPaseo
-          input={input}
-          result={result}
-          palette={palette}
-          styles={styles}
-        />
-      );
+      return <FallbackPaseo input={input} result={result} palette={palette} styles={styles} />;
   }
 }
 
@@ -975,10 +884,7 @@ function AgentList({
           {agents.map((agent) => {
             const record = asRecord(agent);
             return (
-              <View
-                key={stableItemKey(agent, "agent")}
-                style={styles.paseoListItem}
-              >
+              <View key={stableItemKey(agent, "agent")} style={styles.paseoListItem}>
                 <View style={styles.paseoListItemHeader}>
                   <Text numberOfLines={1} style={styles.paseoListItemTitle}>
                     {fieldString(record, "title") ??
@@ -995,10 +901,7 @@ function AgentList({
                   ) : null}
                 </View>
                 <Text numberOfLines={1} style={styles.paseoListItemMeta}>
-                  {[
-                    fieldString(record, "provider"),
-                    fieldString(record, "model"),
-                  ]
+                  {[fieldString(record, "provider"), fieldString(record, "model")]
                     .filter(Boolean)
                     .join(" · ")}
                 </Text>
@@ -1076,11 +979,7 @@ function WorkspaceTool({
               styles={styles}
             />
           </Section>
-          <WorkspaceSummary
-            result={outputRecord}
-            palette={palette}
-            styles={styles}
-          />
+          <WorkspaceSummary result={outputRecord} palette={palette} styles={styles} />
         </View>
       );
     case "list_workspaces":
@@ -1131,14 +1030,7 @@ function WorkspaceTool({
         </View>
       );
     default:
-      return (
-        <FallbackPaseo
-          input={input}
-          result={result}
-          palette={palette}
-          styles={styles}
-        />
-      );
+      return <FallbackPaseo input={input} result={result} palette={palette} styles={styles} />;
   }
 }
 
@@ -1160,10 +1052,7 @@ function WorkspaceList({
         {workspaces.map((workspace) => {
           const record = asRecord(workspace);
           return (
-            <View
-              key={stableItemKey(workspace, "workspace")}
-              style={styles.paseoListItem}
-            >
+            <View key={stableItemKey(workspace, "workspace")} style={styles.paseoListItem}>
               <View style={styles.paseoListItemHeader}>
                 <Text style={styles.paseoListItemTitle}>
                   {fieldString(record, "title") ??
@@ -1181,9 +1070,7 @@ function WorkspaceList({
               <Text numberOfLines={2} style={styles.paseoListItemMeta}>
                 {fieldString(record, "cwd")}
               </Text>
-              <Text style={styles.paseoListItemMeta}>
-                {fieldString(record, "workspaceId")}
-              </Text>
+              <Text style={styles.paseoListItemMeta}>{fieldString(record, "workspaceId")}</Text>
             </View>
           );
         })}
@@ -1210,10 +1097,7 @@ function ScriptList({
         {scripts.map((script) => {
           const record = asRecord(script);
           return (
-            <View
-              key={stableItemKey(script, "script")}
-              style={styles.paseoListItem}
-            >
+            <View key={stableItemKey(script, "script")} style={styles.paseoListItem}>
               <View style={styles.paseoListItemHeader}>
                 <Text style={styles.paseoListItemTitle}>
                   {fieldString(record, "scriptName") ?? "Script"}
@@ -1236,8 +1120,7 @@ function ScriptList({
                   .join(" · ")}
               </Text>
               <Text numberOfLines={1} style={styles.paseoListItemMeta}>
-                {fieldString(record, "proxyUrl") ??
-                  fieldString(record, "localProxyUrl")}
+                {fieldString(record, "proxyUrl") ?? fieldString(record, "localProxyUrl")}
               </Text>
             </View>
           );
@@ -1265,28 +1148,17 @@ function TerminalList({
         {terminals.map((terminal) => {
           const record = asRecord(terminal);
           return (
-            <View
-              key={stableItemKey(terminal, "terminal")}
-              style={styles.paseoListItem}
-            >
+            <View key={stableItemKey(terminal, "terminal")} style={styles.paseoListItem}>
               <View style={styles.paseoListItemHeader}>
                 <Text style={styles.paseoListItemTitle}>
-                  {fieldString(record, "name") ??
-                    fieldString(record, "id") ??
-                    "Terminal"}
+                  {fieldString(record, "name") ?? fieldString(record, "id") ?? "Terminal"}
                 </Text>
-                <Icon
-                  name="SquareTerminal"
-                  color={palette.categoryColors.shell}
-                  size={12}
-                />
+                <Icon name="SquareTerminal" color={palette.categoryColors.shell} size={12} />
               </View>
               <Text numberOfLines={2} style={styles.paseoListItemMeta}>
                 {fieldString(record, "cwd")}
               </Text>
-              <Text style={styles.paseoListItemMeta}>
-                {fieldString(record, "id")}
-              </Text>
+              <Text style={styles.paseoListItemMeta}>{fieldString(record, "id")}</Text>
             </View>
           );
         })}
@@ -1331,11 +1203,7 @@ function TerminalTool({
             />
           ) : (
             <Section title="Script" styles={styles}>
-              <ScriptList
-                scripts={[scriptResult]}
-                palette={palette}
-                styles={styles}
-              />
+              <ScriptList scripts={[scriptResult]} palette={palette} styles={styles} />
             </Section>
           )}
         </View>
@@ -1372,18 +1240,12 @@ function TerminalTool({
             styles={styles}
           />
           <Section title="Terminal" styles={styles}>
-            <TerminalList
-              terminals={[result]}
-              palette={palette}
-              styles={styles}
-            />
+            <TerminalList terminals={[result]} palette={palette} styles={styles} />
           </Section>
         </View>
       );
     case "capture_terminal": {
-      const lines = fieldArray(outputRecord, "lines")
-        .map(scalarText)
-        .join("\n");
+      const lines = fieldArray(outputRecord, "lines").map(scalarText).join("\n");
       return (
         <View style={styles.paseoStack}>
           <PaseoFields
@@ -1422,11 +1284,7 @@ function TerminalTool({
             palette={palette}
             styles={styles}
           />
-          <ActionResult
-            result={outputRecord}
-            palette={palette}
-            styles={styles}
-          />
+          <ActionResult result={outputRecord} palette={palette} styles={styles} />
         </View>
       );
     case "kill_terminal":
@@ -1438,22 +1296,11 @@ function TerminalTool({
             color={palette.categoryColors.shell}
             styles={styles}
           />
-          <ActionResult
-            result={outputRecord}
-            palette={palette}
-            styles={styles}
-          />
+          <ActionResult result={outputRecord} palette={palette} styles={styles} />
         </View>
       );
     default:
-      return (
-        <FallbackPaseo
-          input={input}
-          result={result}
-          palette={palette}
-          styles={styles}
-        />
-      );
+      return <FallbackPaseo input={input} result={result} palette={palette} styles={styles} />;
   }
 }
 
@@ -1482,13 +1329,7 @@ function ScheduleTool({
     return (
       <View style={styles.paseoStack}>
         <PaseoHero
-          icon={
-            leaf.startsWith("delete")
-              ? "Trash2"
-              : leaf === "pause_schedule"
-              ? "Pause"
-              : "Play"
-          }
+          icon={leaf.startsWith("delete") ? "Trash2" : leaf === "pause_schedule" ? "Pause" : "Play"}
           title={fieldString(inputRecord, "id") ?? "Schedule"}
           color={palette.categoryColors.plan}
           styles={styles}
@@ -1507,25 +1348,13 @@ function ScheduleTool({
     );
   if (leaf === "schedule_logs")
     return (
-      <ScheduleRuns
-        runs={fieldArray(outputRecord, "runs")}
-        palette={palette}
-        styles={styles}
-      />
+      <ScheduleRuns runs={fieldArray(outputRecord, "runs")} palette={palette} styles={styles} />
     );
   if (leaf === "inspect_schedule" || leaf === "run_schedule_once")
     return (
       <View style={styles.paseoStack}>
-        <ScheduleSummary
-          schedule={outputRecord}
-          palette={palette}
-          styles={styles}
-        />
-        <ScheduleRuns
-          runs={fieldArray(outputRecord, "runs")}
-          palette={palette}
-          styles={styles}
-        />
+        <ScheduleSummary schedule={outputRecord} palette={palette} styles={styles} />
+        <ScheduleRuns runs={fieldArray(outputRecord, "runs")} palette={palette} styles={styles} />
       </View>
     );
   if (leaf === "create_schedule" || leaf === "create_heartbeat") {
@@ -1589,14 +1418,7 @@ function ScheduleTool({
         />
       </View>
     );
-  return (
-    <FallbackPaseo
-      input={input}
-      result={result}
-      palette={palette}
-      styles={styles}
-    />
-  );
+  return <FallbackPaseo input={input} result={result} palette={palette} styles={styles} />;
 }
 
 function ScheduleSummary({
@@ -1612,8 +1434,7 @@ function ScheduleSummary({
   styles: ActivityStyles;
 }) {
   if (!schedule) return null;
-  const echoed = (key: string) =>
-    input?.[key] !== undefined && input[key] === schedule[key];
+  const echoed = (key: string) => input?.[key] !== undefined && input[key] === schedule[key];
   const cadence = asRecord(schedule.cadence);
   const target = asRecord(schedule.target);
   const targetConfig = asRecord(target?.config);
@@ -1621,15 +1442,17 @@ function ScheduleSummary({
     <View style={styles.paseoStack}>
       <OutputFields
         result={schedule}
-        fields={[
-          ["id", "ID"],
-          ["name", "Name"],
-          ["status", "Status"],
-          ["nextRunAt", "Next run"],
-          ["lastRunAt", "Last run"],
-          ["expiresAt", "Expires"],
-          ["maxRuns", "Maximum runs"],
-        ].filter(([key]) => !echoed(key)) as Array<[string, string]>}
+        fields={
+          [
+            ["id", "ID"],
+            ["name", "Name"],
+            ["status", "Status"],
+            ["nextRunAt", "Next run"],
+            ["lastRunAt", "Last run"],
+            ["expiresAt", "Expires"],
+            ["maxRuns", "Maximum runs"],
+          ].filter(([key]) => !echoed(key)) as Array<[string, string]>
+        }
         palette={palette}
         styles={styles}
       />
@@ -1675,15 +1498,10 @@ function ScheduleList({
         {schedules.map((schedule) => {
           const record = asRecord(schedule);
           return (
-            <View
-              key={stableItemKey(schedule, "schedule")}
-              style={styles.paseoListItem}
-            >
+            <View key={stableItemKey(schedule, "schedule")} style={styles.paseoListItem}>
               <View style={styles.paseoListItemHeader}>
                 <Text style={styles.paseoListItemTitle}>
-                  {fieldString(record, "name") ??
-                    fieldString(record, "id") ??
-                    "Schedule"}
+                  {fieldString(record, "name") ?? fieldString(record, "id") ?? "Schedule"}
                 </Text>
                 {fieldString(record, "status") ? (
                   <StatusPill
@@ -1729,9 +1547,7 @@ function ScheduleRuns({
             <View key={stableItemKey(run, "run")} style={styles.paseoListItem}>
               <View style={styles.paseoListItemHeader}>
                 <Text style={styles.paseoListItemTitle}>
-                  {fieldString(record, "scheduledFor") ??
-                    fieldString(record, "id") ??
-                    "Run"}
+                  {fieldString(record, "scheduledFor") ?? fieldString(record, "id") ?? "Run"}
                 </Text>
                 {fieldString(record, "status") ? (
                   <StatusPill
@@ -1742,10 +1558,7 @@ function ScheduleRuns({
                 ) : null}
               </View>
               <Text style={styles.paseoListItemMeta}>
-                {[
-                  fieldString(record, "agentId"),
-                  fieldString(record, "workspaceId"),
-                ]
+                {[fieldString(record, "agentId"), fieldString(record, "workspaceId")]
                   .filter(Boolean)
                   .join(" · ")}
               </Text>
@@ -1757,10 +1570,7 @@ function ScheduleRuns({
               {fieldString(record, "error") ? (
                 <Text
                   selectable
-                  style={[
-                    styles.paseoListItemMeta,
-                    { color: palette.statusColors.failed },
-                  ]}
+                  style={[styles.paseoListItemMeta, { color: palette.statusColors.failed }]}
                 >
                   {fieldString(record, "error")}
                 </Text>
@@ -1805,11 +1615,7 @@ function ProviderTool({
             styles={styles}
           />
         ) : null}
-        <ModelList
-          models={fieldArray(outputRecord, "models")}
-          palette={palette}
-          styles={styles}
-        />
+        <ModelList models={fieldArray(outputRecord, "models")} palette={palette} styles={styles} />
       </View>
     );
   if (leaf === "list_profiles")
@@ -1835,11 +1641,7 @@ function ProviderTool({
           palette={palette}
           styles={styles}
         />
-        <ModeList
-          modes={fieldArray(outputRecord, "modes")}
-          palette={palette}
-          styles={styles}
-        />
+        <ModeList modes={fieldArray(outputRecord, "modes")} palette={palette} styles={styles} />
         <FeatureList
           features={fieldArray(outputRecord, "features")}
           palette={palette}
@@ -1847,14 +1649,7 @@ function ProviderTool({
         />
       </View>
     );
-  return (
-    <FallbackPaseo
-      input={input}
-      result={result}
-      palette={palette}
-      styles={styles}
-    />
-  );
+  return <FallbackPaseo input={input} result={result} palette={palette} styles={styles} />;
 }
 
 function ProviderList({
@@ -1875,15 +1670,10 @@ function ProviderList({
         {providers.map((provider) => {
           const record = asRecord(provider);
           return (
-            <View
-              key={stableItemKey(provider, "provider")}
-              style={styles.paseoListItem}
-            >
+            <View key={stableItemKey(provider, "provider")} style={styles.paseoListItem}>
               <View style={styles.paseoListItemHeader}>
                 <Text style={styles.paseoListItemTitle}>
-                  {fieldString(record, "label") ??
-                    fieldString(record, "id") ??
-                    "Provider"}
+                  {fieldString(record, "label") ?? fieldString(record, "id") ?? "Provider"}
                 </Text>
                 {fieldString(record, "status") ? (
                   <StatusPill
@@ -1896,9 +1686,7 @@ function ProviderList({
               <Text numberOfLines={2} style={styles.paseoListItemMeta}>
                 {fieldString(record, "description")}
               </Text>
-              <Text style={styles.paseoListItemMeta}>
-                {fieldString(record, "id")}
-              </Text>
+              <Text style={styles.paseoListItemMeta}>{fieldString(record, "id")}</Text>
             </View>
           );
         })}
@@ -1925,31 +1713,18 @@ function ModelList({
         {models.map((model) => {
           const record = asRecord(model);
           return (
-            <View
-              key={stableItemKey(model, "model")}
-              style={styles.paseoListItem}
-            >
+            <View key={stableItemKey(model, "model")} style={styles.paseoListItem}>
               <View style={styles.paseoListItemHeader}>
                 <Text style={styles.paseoListItemTitle}>
-                  {fieldString(record, "label") ??
-                    fieldString(record, "id") ??
-                    "Model"}
+                  {fieldString(record, "label") ?? fieldString(record, "id") ?? "Model"}
                 </Text>
                 {fieldBoolean(record, "isDefault") ? (
-                  <StatusPill
-                    value="Default"
-                    palette={palette}
-                    styles={styles}
-                  />
+                  <StatusPill value="Default" palette={palette} styles={styles} />
                 ) : null}
               </View>
-              <Text style={styles.paseoListItemMeta}>
-                {fieldString(record, "id")}
-              </Text>
+              <Text style={styles.paseoListItemMeta}>{fieldString(record, "id")}</Text>
               {fieldString(record, "description") ? (
-                <Text style={styles.paseoListItemMeta}>
-                  {fieldString(record, "description")}
-                </Text>
+                <Text style={styles.paseoListItemMeta}>{fieldString(record, "description")}</Text>
               ) : null}
             </View>
           );
@@ -1977,15 +1752,10 @@ function ProfileList({
         {profiles.map((profile) => {
           const record = asRecord(profile);
           return (
-            <View
-              key={stableItemKey(profile, "profile")}
-              style={styles.paseoListItem}
-            >
+            <View key={stableItemKey(profile, "profile")} style={styles.paseoListItem}>
               <View style={styles.paseoListItemHeader}>
                 <Text style={styles.paseoListItemTitle}>
-                  {fieldString(record, "name") ??
-                    fieldString(record, "id") ??
-                    "Profile"}
+                  {fieldString(record, "name") ?? fieldString(record, "id") ?? "Profile"}
                 </Text>
               </View>
               <PaseoFields
@@ -2027,27 +1797,16 @@ function FeatureList({
         {features.map((feature) => {
           const record = asRecord(feature);
           return (
-            <View
-              key={stableItemKey(feature, "feature")}
-              style={styles.paseoListItem}
-            >
+            <View key={stableItemKey(feature, "feature")} style={styles.paseoListItem}>
               <View style={styles.paseoListItemHeader}>
                 <Text style={styles.paseoListItemTitle}>
-                  {fieldString(record, "label") ??
-                    fieldString(record, "id") ??
-                    "Feature"}
+                  {fieldString(record, "label") ?? fieldString(record, "id") ?? "Feature"}
                 </Text>
                 {record?.value !== undefined ? (
-                  <StatusPill
-                    value={scalarText(record.value)}
-                    palette={palette}
-                    styles={styles}
-                  />
+                  <StatusPill value={scalarText(record.value)} palette={palette} styles={styles} />
                 ) : null}
               </View>
-              <Text style={styles.paseoListItemMeta}>
-                {fieldString(record, "description")}
-              </Text>
+              <Text style={styles.paseoListItemMeta}>{fieldString(record, "description")}</Text>
             </View>
           );
         })}
@@ -2065,19 +1824,17 @@ function BrowserTool({
   theme,
   palette,
   styles,
-}: Omit<PaseoProps, "toolName"> & { leaf: string;
-  headerSummary: string | undefined; result: unknown }) {
+}: Omit<PaseoProps, "toolName"> & {
+  leaf: string;
+  headerSummary: string | undefined;
+  result: unknown;
+}) {
   const inputRecord = asRecord(input);
   const outputRecord = asRecord(output);
   const resultRecord = asRecord(result);
-  const browserResult =
-    resultRecord?.ok === true ? asRecord(resultRecord.result) : resultRecord;
+  const browserResult = resultRecord?.ok === true ? asRecord(resultRecord.result) : resultRecord;
   const browserFailure =
-    outputRecord?.ok === false
-      ? outputRecord
-      : resultRecord?.ok === false
-        ? resultRecord
-        : null;
+    outputRecord?.ok === false ? outputRecord : resultRecord?.ok === false ? resultRecord : null;
   if (browserFailure) {
     const error = asRecord(browserFailure.error);
     return (
@@ -2216,7 +1973,9 @@ function BrowserTool({
     default: {
       const visible = (fields: Array<[string, unknown]>) =>
         fields
-          .map(([label, value]) => [label, unlessInHeader(value, headerSummary)] as [string, unknown])
+          .map(
+            ([label, value]) => [label, unlessInHeader(value, headerSummary)] as [string, unknown],
+          )
           .filter(([, value]) => value !== undefined);
       const inputFields = visible(browserInputFields(leaf, inputRecord));
       const outputFields = visible(browserOutputFields(leaf, browserResult));
@@ -2230,10 +1989,7 @@ function BrowserTool({
   }
 }
 
-function browserInputFields(
-  leaf: string,
-  input: JsonRecord | null
-): Array<[string, unknown]> {
+function browserInputFields(leaf: string, input: JsonRecord | null): Array<[string, unknown]> {
   if (!input) return [];
   const labels: Record<string, string> = {
     browserId: "Browser tab",
@@ -2260,17 +2016,12 @@ function browserInputFields(
   const excluded = new Set(["browserId"]);
   return Object.entries(input)
     .filter(
-      ([key, value]) =>
-        value !== undefined &&
-        (!excluded.has(key) || leaf === "browser_list_tabs")
+      ([key, value]) => value !== undefined && (!excluded.has(key) || leaf === "browser_list_tabs"),
     )
     .map(([key, value]) => [labels[key] ?? humanizeKey(key), value]);
 }
 
-function browserOutputFields(
-  leaf: string,
-  result: JsonRecord | null
-): Array<[string, unknown]> {
+function browserOutputFields(leaf: string, result: JsonRecord | null): Array<[string, unknown]> {
   if (!result) return [];
   const excluded = new Set([
     "command",
@@ -2309,19 +2060,13 @@ function BrowserTabList({
                   {fieldString(record, "title") ?? "Untitled page"}
                 </Text>
                 {fieldBoolean(record, "isActive") ? (
-                  <StatusPill
-                    value="Active"
-                    palette={palette}
-                    styles={styles}
-                  />
+                  <StatusPill value="Active" palette={palette} styles={styles} />
                 ) : null}
               </View>
               <Text numberOfLines={1} style={styles.paseoListItemMeta}>
                 {fieldString(record, "url")}
               </Text>
-              <Text style={styles.paseoListItemMeta}>
-                {fieldString(record, "browserId")}
-              </Text>
+              <Text style={styles.paseoListItemMeta}>{fieldString(record, "browserId")}</Text>
             </View>
           );
         })}
@@ -2349,15 +2094,12 @@ function BrowserLogs({
             const record = asRecord(entry);
             const level = fieldString(record, "level") ?? "log";
             return (
-              <View
-                key={stableItemKey(entry, "console")}
-                style={styles.paseoListItem}
-              >
+              <View key={stableItemKey(entry, "console")} style={styles.paseoListItem}>
                 <View style={styles.paseoListItemHeader}>
-                  <Text style={[styles.paseoListItemTitle, { color: statusColor(level, palette) }]}>{level}</Text>
-                  <Text style={styles.paseoListItemMeta}>
-                    {fieldString(record, "source")}
+                  <Text style={[styles.paseoListItemTitle, { color: statusColor(level, palette) }]}>
+                    {level}
                   </Text>
+                  <Text style={styles.paseoListItemMeta}>{fieldString(record, "source")}</Text>
                 </View>
                 <Text selectable style={styles.paseoListItemMeta}>
                   {fieldString(record, "message")}
@@ -2372,18 +2114,13 @@ function BrowserLogs({
           {networkEntries.map((entry) => {
             const record = asRecord(entry);
             return (
-              <View
-                key={stableItemKey(entry, "network")}
-                style={styles.paseoListItem}
-              >
+              <View key={stableItemKey(entry, "network")} style={styles.paseoListItem}>
                 <View style={styles.paseoListItemHeader}>
                   <Text numberOfLines={1} style={styles.paseoListItemTitle}>
                     {fieldString(record, "method") ?? "Request"}{" "}
                     {fieldNumber(record, "status") ?? ""}
                   </Text>
-                  <Text style={styles.paseoListItemMeta}>
-                    {fieldNumber(record, "duration")} ms
-                  </Text>
+                  <Text style={styles.paseoListItemMeta}>{fieldNumber(record, "duration")} ms</Text>
                 </View>
                 <Text numberOfLines={2} style={styles.paseoListItemMeta}>
                   {fieldString(record, "url")}
@@ -2547,14 +2284,7 @@ function humanizeKey(key: string): string {
   return `${sentence[0]?.toUpperCase() ?? ""}${sentence.slice(1)}`;
 }
 
-export function PaseoToolDetail({
-  toolName,
-  input,
-  output,
-  theme,
-  palette,
-  styles,
-}: PaseoProps) {
+export function PaseoToolDetail({ toolName, input, output, theme, palette, styles }: PaseoProps) {
   const leaf = paseoToolLeafName(toolName);
   if (!leaf) return null;
   const result = paseoToolResult(output);
@@ -2647,20 +2377,9 @@ export function PaseoToolDetail({
           label="Message"
           styles={styles}
         />
-        <ActionResult
-          result={asRecord(result)}
-          palette={palette}
-          styles={styles}
-        />
+        <ActionResult result={asRecord(result)} palette={palette} styles={styles} />
       </View>
     );
   }
-  return (
-    <FallbackPaseo
-      input={input}
-      result={result}
-      palette={palette}
-      styles={styles}
-    />
-  );
+  return <FallbackPaseo input={input} result={result} palette={palette} styles={styles} />;
 }

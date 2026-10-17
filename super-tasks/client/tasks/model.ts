@@ -102,7 +102,6 @@ export function formatTaskSidebarLabel(
   if (counts.total === 0) return "Super Tasks";
   const progress = `${counts.completed}/${counts.total}`;
   if (!activeLabel) return `${progress} done`;
-  const brief =
-    activeLabel.length > 24 ? `${activeLabel.slice(0, 23).trimEnd()}…` : activeLabel;
+  const brief = activeLabel.length > 24 ? `${activeLabel.slice(0, 23).trimEnd()}…` : activeLabel;
   return `${progress} · ${brief}`;
 }

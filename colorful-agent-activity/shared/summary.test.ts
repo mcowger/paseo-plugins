@@ -2,9 +2,9 @@ import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { describe, expect, it } from "vitest";
 import {
   isExcludedSummaryToolCall,
+  type SummarySourceEntry,
   summarizeAgentActivity,
   summaryFileLabels,
-  type SummarySourceEntry,
 } from "./summary";
 
 const NOW = Date.parse("2026-01-02T03:04:05.000Z");
@@ -33,12 +33,24 @@ describe("summarizeAgentActivity tool grouping", () => {
   it("groups reads, writes, and edits by tool type with distinct file lists", () => {
     const summary = summarizeAgentActivity(
       [
-        entry(toolCall({ callId: "r1", name: "read", detail: { type: "read", filePath: "types.ts" } })),
-        entry(toolCall({ callId: "r2", name: "read", detail: { type: "read", filePath: "types.ts" } })),
-        entry(toolCall({ callId: "r3", name: "read", detail: { type: "read", filePath: "other.ts" } })),
-        entry(toolCall({ callId: "w1", name: "write", detail: { type: "write", filePath: "new.ts" } })),
-        entry(toolCall({ callId: "e1", name: "edit", detail: { type: "edit", filePath: "types.ts" } })),
-        entry(toolCall({ callId: "e2", name: "edit", detail: { type: "edit", filePath: "other.ts" } })),
+        entry(
+          toolCall({ callId: "r1", name: "read", detail: { type: "read", filePath: "types.ts" } }),
+        ),
+        entry(
+          toolCall({ callId: "r2", name: "read", detail: { type: "read", filePath: "types.ts" } }),
+        ),
+        entry(
+          toolCall({ callId: "r3", name: "read", detail: { type: "read", filePath: "other.ts" } }),
+        ),
+        entry(
+          toolCall({ callId: "w1", name: "write", detail: { type: "write", filePath: "new.ts" } }),
+        ),
+        entry(
+          toolCall({ callId: "e1", name: "edit", detail: { type: "edit", filePath: "types.ts" } }),
+        ),
+        entry(
+          toolCall({ callId: "e2", name: "edit", detail: { type: "edit", filePath: "other.ts" } }),
+        ),
         entry(toolCall({ callId: "s1", name: "bash", detail: { type: "shell", command: "ls" } })),
       ],
       { now: NOW },
@@ -64,7 +76,14 @@ describe("summarizeAgentActivity tool grouping", () => {
       "*** End Patch",
     ].join("\n");
     const summary = summarizeAgentActivity(
-      [entry(toolCall({ name: "apply_patch", detail: { type: "unknown", input: patch, output: null } }))],
+      [
+        entry(
+          toolCall({
+            name: "apply_patch",
+            detail: { type: "unknown", input: patch, output: null },
+          }),
+        ),
+      ],
       { now: NOW },
     );
 
@@ -91,7 +110,13 @@ describe("summarizeAgentActivity tool grouping", () => {
             detail: { type: "unknown", input: {}, output: {} },
           }),
         ),
-        entry(toolCall({ callId: "c3", name: "execute", detail: { type: "unknown", input: "1+1", output: "2" } })),
+        entry(
+          toolCall({
+            callId: "c3",
+            name: "execute",
+            detail: { type: "unknown", input: "1+1", output: "2" },
+          }),
+        ),
       ],
       { now: NOW },
     );
@@ -119,7 +144,10 @@ describe("summarizeAgentActivity tool grouping", () => {
     for (const item of excluded) {
       expect(isExcludedSummaryToolCall(item as never)).toBe(true);
     }
-    const summary = summarizeAgentActivity(excluded.map((item) => entry(item)), { now: NOW });
+    const summary = summarizeAgentActivity(
+      excluded.map((item) => entry(item)),
+      { now: NOW },
+    );
     expect(summary.toolCallCount).toBe(0);
     expect(summary.toolGroups).toEqual([]);
   });
@@ -176,8 +204,23 @@ describe("summarizeAgentActivity thinking, output, and status", () => {
   it("marks a group failed when it has failures and no running calls", () => {
     const summary = summarizeAgentActivity(
       [
-        entry(toolCall({ callId: "a", name: "bash", status: "failed", error: "boom", detail: { type: "shell", command: "x" } })),
-        entry(toolCall({ callId: "b", name: "bash", status: "completed", detail: { type: "shell", command: "y" } })),
+        entry(
+          toolCall({
+            callId: "a",
+            name: "bash",
+            status: "failed",
+            error: "boom",
+            detail: { type: "shell", command: "x" },
+          }),
+        ),
+        entry(
+          toolCall({
+            callId: "b",
+            name: "bash",
+            status: "completed",
+            detail: { type: "shell", command: "y" },
+          }),
+        ),
       ],
       { now: NOW },
     );

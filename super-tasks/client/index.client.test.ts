@@ -1,4 +1,3 @@
-import { describe, expect, test, vi } from "vitest";
 import type {
   PluginClientContext,
   PluginClientSlashCommandContribution,
@@ -6,6 +5,7 @@ import type {
   PluginSidebarItemContribution,
   PluginWorkspacePanelContribution,
 } from "@getpaseo/plugin/client";
+import { describe, expect, test, vi } from "vitest";
 
 // The real panel components import `react-native` primitives this suite does not
 // stub. The entry point under test only wires registrations — it never renders
@@ -15,6 +15,7 @@ import type {
 vi.mock("../client/agents/panel", () => ({ WorkspaceSubagentsPanel: () => null }));
 vi.mock("../client/tasks/panel", () => ({ WorkspaceTasksPanel: () => null }));
 vi.mock("../client/tasks/sidebar-item", () => ({ SuperTasksSidebarItem: () => null }));
+
 import contributeClient from "../index.client";
 
 describe("index.client v0.10 entry point", () => {

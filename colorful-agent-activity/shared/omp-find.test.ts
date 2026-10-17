@@ -55,7 +55,9 @@ describe("OMP find presentation", () => {
   });
 
   it("handles an empty result without inventing hits", () => {
-    expect(parseOmpFindResult({ query: "nothing", grep_keywords: [] }, { details: { hits: [] } })).toEqual({
+    expect(
+      parseOmpFindResult({ query: "nothing", grep_keywords: [] }, { details: { hits: [] } }),
+    ).toEqual({
       query: "nothing",
       keywords: [],
       path: undefined,

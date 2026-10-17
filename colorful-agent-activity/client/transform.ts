@@ -1,5 +1,6 @@
 import type { PluginTimelineTransformerContribution } from "@getpaseo/plugin/client";
 import type { ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
+import { extractApplyPatchEdits, isApplyPatchTool } from "../shared/presentation";
 import {
   createReasoningData,
   createToolCallData,
@@ -8,7 +9,6 @@ import {
   TOOL_CALL_RENDERER_KIND,
   TOOL_CALL_RENDERER_VERSION,
 } from "../shared/timeline";
-import { extractApplyPatchEdits, isApplyPatchTool } from "../shared/presentation";
 
 type ReasoningTransformer = PluginTimelineTransformerContribution<"reasoning">["transform"];
 type TodoTransformer = PluginTimelineTransformerContribution<"todo">["transform"];
@@ -49,7 +49,8 @@ function transformApplyPatch(item: Extract<ToolCallTimelineItem, { type: "tool_c
           unifiedDiff: edit.unifiedDiff,
         },
       });
-      const label = edit.operation === "add" ? "Add" : edit.operation === "delete" ? "Delete" : "Edit";
+      const label =
+        edit.operation === "add" ? "Add" : edit.operation === "delete" ? "Delete" : "Edit";
       return {
         type: "plugin" as const,
         id: `${item.callId}:apply-patch:${index}`,

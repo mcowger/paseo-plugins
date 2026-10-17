@@ -1,8 +1,9 @@
-import type { JsonValue, ToolCallDetail, ToolCallTimelineItem } from "@getpaseo/protocol/agent-types";
+import type {
+  JsonValue,
+  ToolCallDetail,
+  ToolCallTimelineItem,
+} from "@getpaseo/protocol/agent-types";
 import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization";
-import type { ExpansionTarget, PaletteMode } from "./settings";
-import { shouldAttemptImageLoad } from "./read-image";
-import { piSubagentOperation, piSubagentPresentation } from "./pi-subagents";
 import {
   extractCodeModeCode,
   isCodeModeTool,
@@ -10,12 +11,10 @@ import {
   parseCodeModeCatalog,
 } from "./codemode";
 import { exaToolIcon, exaToolKind, exaToolLabel, exaToolSummary } from "./exa";
-import {
-  githubToolIcon,
-  githubToolKind,
-  githubToolLabel,
-  githubToolSummary,
-} from "./github";
+import { githubToolIcon, githubToolKind, githubToolLabel, githubToolSummary } from "./github";
+import { piSubagentOperation, piSubagentPresentation } from "./pi-subagents";
+import { shouldAttemptImageLoad } from "./read-image";
+import type { ExpansionTarget, PaletteMode } from "./settings";
 
 export const TOOL_CATEGORIES = [
   "shell",
@@ -211,7 +210,10 @@ function normalizeSpace(value: string): string {
  * Expanded bodies use this so they only repeat header text when the one-line
  * header truncates it (long or multi-line values).
  */
-export function notInHeader<T extends string | number | boolean>(value: T | undefined, headerSummary: string | undefined): T | undefined {
+export function notInHeader<T extends string | number | boolean>(
+  value: T | undefined,
+  headerSummary: string | undefined,
+): T | undefined {
   if (value === undefined || value === null || !headerSummary) return value ?? undefined;
   const text = normalizeSpace(String(value));
   if (!text) return value;
@@ -226,7 +228,10 @@ export function notInHeader<T extends string | number | boolean>(value: T | unde
  * Drops a leading line the card header already shows (header summaries are
  * often the first line of a tool's text result) and returns what's left.
  */
-export function textAfterHeader(text: string | undefined, headerSummary: string | undefined): string | undefined {
+export function textAfterHeader(
+  text: string | undefined,
+  headerSummary: string | undefined,
+): string | undefined {
   const trimmed = text?.trim();
   if (!trimmed) return undefined;
   if (!headerSummary) return trimmed;
@@ -235,7 +240,10 @@ export function textAfterHeader(text: string | undefined, headerSummary: string 
   const first = lines[firstIndex] ?? "";
   const shown = normalizeSpace(headerSummary);
   if (normalizeSpace(first) !== shown || shown.length > HEADER_SUMMARY_FIT) return trimmed;
-  const rest = lines.slice(firstIndex + 1).join("\n").trim();
+  const rest = lines
+    .slice(firstIndex + 1)
+    .join("\n")
+    .trim();
   return rest || undefined;
 }
 
@@ -274,7 +282,8 @@ export function relativeToRoot(filePath: string, root: string | undefined): stri
   if (!filePath || !root) return filePath;
   const normalizedRoot = root.replace(/\/+$/, "");
   if (!normalizedRoot) return filePath;
-  if (normalizedRoot === "/") return filePath.startsWith("/") ? filePath.slice(1) || filePath : filePath;
+  if (normalizedRoot === "/")
+    return filePath.startsWith("/") ? filePath.slice(1) || filePath : filePath;
   if (filePath === normalizedRoot) return filePath.split("/").pop() ?? filePath;
   if (filePath.startsWith(`${normalizedRoot}/`)) return filePath.slice(normalizedRoot.length + 1);
   return filePath;
@@ -555,7 +564,8 @@ export function paseoToolSummary(toolName: string, input: unknown): string | und
     return compactText(prompt);
   }
   if (leafName === "list_models" && provider) return provider;
-  if (leafName === "speak" && stringField(input, "text")) return compactText(stringField(input, "text")!);
+  if (leafName === "speak" && stringField(input, "text"))
+    return compactText(stringField(input, "text")!);
   return undefined;
 }
 
@@ -653,7 +663,12 @@ function opencodeSubagentTextFromValue(value: unknown, depth = 0): string | unde
   if (Array.isArray(value)) {
     const parts = value.flatMap((entry) => {
       if (typeof entry === "string" && entry.trim()) return [entry.trim()];
-      if (isRecord(entry) && entry.type === "text" && typeof entry.text === "string" && entry.text.trim()) {
+      if (
+        isRecord(entry) &&
+        entry.type === "text" &&
+        typeof entry.text === "string" &&
+        entry.text.trim()
+      ) {
         return [entry.text.trim()];
       }
       const nested = opencodeSubagentTextFromValue(entry, depth + 1);
@@ -817,11 +832,21 @@ function decodeToolInput(value: unknown): Record<string, unknown> | undefined {
 
 export function parseSubagentSupervisorInput(input: unknown): SubagentSupervisorInput {
   const record = decodeToolInput(input) ?? {};
-  const action = typeof record.action === "string" && record.action.trim() ? record.action.trim().toLowerCase() : "";
-  const replyTo = typeof record.replyTo === "string" && record.replyTo.trim() ? record.replyTo : undefined;
-  const message = typeof record.message === "string" && record.message.trim() ? record.message : undefined;
+  const action =
+    typeof record.action === "string" && record.action.trim()
+      ? record.action.trim().toLowerCase()
+      : "";
+  const replyTo =
+    typeof record.replyTo === "string" && record.replyTo.trim() ? record.replyTo : undefined;
+  const message =
+    typeof record.message === "string" && record.message.trim() ? record.message : undefined;
   const to = typeof record.to === "string" && record.to.trim() ? record.to : undefined;
-  return { action, ...(replyTo ? { replyTo } : {}), ...(message ? { message } : {}), ...(to ? { to } : {}) };
+  return {
+    action,
+    ...(replyTo ? { replyTo } : {}),
+    ...(message ? { message } : {}),
+    ...(to ? { to } : {}),
+  };
 }
 
 export function parseBgWaitInput(input: unknown): BgWaitInput {
@@ -829,9 +854,21 @@ export function parseBgWaitInput(input: unknown): BgWaitInput {
   const id = typeof record.id === "string" && record.id.trim() ? record.id : undefined;
   const all = typeof record.all === "boolean" ? record.all : undefined;
   const nonBlocking = typeof record.nonBlocking === "boolean" ? record.nonBlocking : undefined;
-  const timeoutMs = typeof record.timeoutMs === "number" && Number.isFinite(record.timeoutMs) && record.timeoutMs > 0 ? record.timeoutMs : undefined;
-  const stopOnAttention = typeof record.stopOnAttention === "boolean" ? record.stopOnAttention : undefined;
-  return { ...(id ? { id } : {}), ...(all !== undefined ? { all } : {}), ...(nonBlocking !== undefined ? { nonBlocking } : {}), ...(timeoutMs !== undefined ? { timeoutMs } : {}), ...(stopOnAttention !== undefined ? { stopOnAttention } : {}) };
+  const timeoutMs =
+    typeof record.timeoutMs === "number" &&
+    Number.isFinite(record.timeoutMs) &&
+    record.timeoutMs > 0
+      ? record.timeoutMs
+      : undefined;
+  const stopOnAttention =
+    typeof record.stopOnAttention === "boolean" ? record.stopOnAttention : undefined;
+  return {
+    ...(id ? { id } : {}),
+    ...(all !== undefined ? { all } : {}),
+    ...(nonBlocking !== undefined ? { nonBlocking } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(stopOnAttention !== undefined ? { stopOnAttention } : {}),
+  };
 }
 
 /** Extract the first text block and details record from a pi tool result envelope. */
@@ -845,9 +882,16 @@ export function extractPiToolText(output: unknown): PiToolTextEnvelope | undefin
     return { text: content, ...(isRecord(output.details) ? { details: output.details } : {}) };
   }
   if (Array.isArray(content)) {
-    const texts = content.flatMap((item) => isRecord(item) && item.type === "text" && typeof item.text === "string" && item.text.trim() ? [item.text] : []);
+    const texts = content.flatMap((item) =>
+      isRecord(item) && item.type === "text" && typeof item.text === "string" && item.text.trim()
+        ? [item.text]
+        : [],
+    );
     if (texts.length > 0) {
-      return { text: texts.join("\n"), ...(isRecord(output.details) ? { details: output.details } : {}) };
+      return {
+        text: texts.join("\n"),
+        ...(isRecord(output.details) ? { details: output.details } : {}),
+      };
     }
   }
   if (isRecord(output.details)) return { text: "", details: output.details };
@@ -894,10 +938,15 @@ export function subagentSupervisorSummary(input: unknown, output: unknown): stri
   if (parsed.action === "reply") {
     const envelope = extractPiToolText(output);
     const details = envelope?.details;
-    const agent = typeof details?.agent === "string" && details.agent.trim() ? details.agent : undefined;
+    const agent =
+      typeof details?.agent === "string" && details.agent.trim() ? details.agent : undefined;
     const messageSummary = parsed.message ? compactText(parsed.message, 120) : undefined;
-    const replyTarget = shortRunId(parsed.replyTo ?? (typeof details?.replyTo === "string" ? details.replyTo : undefined));
-    const parts = [agent, messageSummary ?? (replyTarget ? `→ ${replyTarget}` : undefined)].filter(Boolean);
+    const replyTarget = shortRunId(
+      parsed.replyTo ?? (typeof details?.replyTo === "string" ? details.replyTo : undefined),
+    );
+    const parts = [agent, messageSummary ?? (replyTarget ? `→ ${replyTarget}` : undefined)].filter(
+      Boolean,
+    );
     return parts.length > 0 ? parts.join(" · ") : replyTarget ? `→ ${replyTarget}` : undefined;
   }
   if (parsed.action === "pending" || parsed.action === "list" || parsed.action === "status") {
@@ -926,7 +975,9 @@ export interface BgWaitOutputSummary {
 }
 
 function stringList(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
 }
 
 export function parseBgWaitOutput(output: unknown): BgWaitOutputSummary | undefined {
@@ -938,9 +989,15 @@ export function parseBgWaitOutput(output: unknown): BgWaitOutputSummary | undefi
   const timedOut = typeof wait?.timedOut === "boolean" ? wait.timedOut : undefined;
   const activeRunIds = wait ? stringList(wait.activeRunIds) : [];
   const activeProviderItems = Array.isArray(wait?.activeProviderItems)
-    ? (wait.activeProviderItems as unknown[]).flatMap((item) => isRecord(item) && typeof item.provider === "string" && typeof item.id === "string" ? [{ provider: item.provider, id: item.id }] : [])
+    ? (wait.activeProviderItems as unknown[]).flatMap((item) =>
+        isRecord(item) && typeof item.provider === "string" && typeof item.id === "string"
+          ? [{ provider: item.provider, id: item.id }]
+          : [],
+      )
     : [];
-  const rawCompletions = Array.isArray(details.completions) ? (details.completions as unknown[]) : [];
+  const rawCompletions = Array.isArray(details.completions)
+    ? (details.completions as unknown[])
+    : [];
   const completions: BgWaitCompletionSummary[] = rawCompletions.flatMap((completion) => {
     if (!isRecord(completion) || typeof completion.runId !== "string") return [];
     const runId = completion.runId;
@@ -955,8 +1012,20 @@ export function parseBgWaitOutput(output: unknown): BgWaitOutputSummary | undefi
   });
   const lines = envelope.text.split("\n");
   const headline = lines[0]?.trim() ? lines[0].trim() : undefined;
-  const body = lines.length > 1 && lines.slice(1).join("\n").trim() ? lines.slice(1).join("\n").trim() : undefined;
-  return { text: envelope.text, ...(headline ? { headline } : {}), ...(body ? { body } : {}), ...(waitReason ? { waitReason } : {}), ...(timedOut !== undefined ? { timedOut } : {}), activeRunIds, activeProviderItems, completions };
+  const body =
+    lines.length > 1 && lines.slice(1).join("\n").trim()
+      ? lines.slice(1).join("\n").trim()
+      : undefined;
+  return {
+    text: envelope.text,
+    ...(headline ? { headline } : {}),
+    ...(body ? { body } : {}),
+    ...(waitReason ? { waitReason } : {}),
+    ...(timedOut !== undefined ? { timedOut } : {}),
+    activeRunIds,
+    activeProviderItems,
+    completions,
+  };
 }
 
 export function bgWaitLabel(input: unknown): string {
@@ -1017,7 +1086,9 @@ export function parseOmpWaitOutput(output: unknown): OmpWaitOutputSummary | unde
     if (!isRecord(job) || typeof job.id !== "string" || job.id.trim().length === 0) return [];
     const label = typeof job.label === "string" && job.label.trim() ? job.label.trim() : undefined;
     const status =
-      typeof job.status === "string" && job.status.trim() ? job.status.trim().toLowerCase() : undefined;
+      typeof job.status === "string" && job.status.trim()
+        ? job.status.trim().toLowerCase()
+        : undefined;
     const durationMs =
       typeof job.durationMs === "number" && Number.isFinite(job.durationMs) && job.durationMs >= 0
         ? job.durationMs
@@ -1055,8 +1126,12 @@ export function ompWaitSummary(input: unknown, output: unknown): string | undefi
     return envelope?.text ? compactText(envelope.text, 120) : undefined;
   }
   const running = summary.jobs.filter((job) => job.status === "running").length;
-  const done = summary.jobs.filter((job) => job.status === "completed" || job.status === "done").length;
-  const failed = summary.jobs.filter((job) => job.status === "failed" || job.status === "error").length;
+  const done = summary.jobs.filter(
+    (job) => job.status === "completed" || job.status === "done",
+  ).length;
+  const failed = summary.jobs.filter(
+    (job) => job.status === "failed" || job.status === "error",
+  ).length;
   const state = [
     running > 0 ? `${running} running` : undefined,
     done > 0 ? `${done} done` : undefined,
@@ -1064,10 +1139,13 @@ export function ompWaitSummary(input: unknown, output: unknown): string | undefi
   ].filter(Boolean);
   // Pending/unknown statuses fall back to a plain count so the header never goes blank.
   if (state.length === 0) state.push(`${summary.jobs.length} waiting`);
-  const durations = summary.jobs.flatMap((job) => (job.durationMs !== undefined ? [job.durationMs] : []));
+  const durations = summary.jobs.flatMap((job) =>
+    job.durationMs !== undefined ? [job.durationMs] : [],
+  );
   if (durations.length > 0) state.push(formatWaitTimeout(Math.max(...durations)) ?? "");
   const names = summary.jobs.map((job) => job.label ?? job.id);
-  const shown = names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3} more` : "");
+  const shown =
+    names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3} more` : "");
   return [...state, shown].filter(Boolean).join(" · ");
 }
 
@@ -1114,12 +1192,16 @@ function numberListField(value: unknown, key: string): number[] | undefined {
   if (!isRecord(value)) return undefined;
   const field = value[key];
   if (!Array.isArray(field)) return undefined;
-  const numbers = field.filter((entry): entry is number => typeof entry === "number" && Number.isFinite(entry));
+  const numbers = field.filter(
+    (entry): entry is number => typeof entry === "number" && Number.isFinite(entry),
+  );
   return numbers.length > 0 ? numbers : undefined;
 }
 
 function todoStatus(value: unknown): TodoToolStatus | undefined {
-  return value === "pending" || value === "in_progress" || value === "completed" ? value : undefined;
+  return value === "pending" || value === "in_progress" || value === "completed"
+    ? value
+    : undefined;
 }
 
 /** Parse the arguments of the pi task-list tool (`action`/`id`/`status`/`activeForm`). */
@@ -1153,7 +1235,8 @@ function parseTodoToolTask(value: unknown): TodoToolTask | undefined {
   if (!isRecord(value)) return undefined;
   const id = numberField(value, "id");
   if (id === undefined) return undefined;
-  const subject = stringField(value, "subject") ?? stringField(value, "text") ?? stringField(value, "title");
+  const subject =
+    stringField(value, "subject") ?? stringField(value, "text") ?? stringField(value, "title");
   if (!subject) return undefined;
   const description = stringField(value, "description");
   const activeForm = stringField(value, "activeForm");
@@ -1200,7 +1283,10 @@ export function parseTodoToolOutput(output: unknown): TodoToolOutputSummary | un
 export function todoToolSummary(output: unknown): string | undefined {
   const summary = parseTodoToolOutput(output);
   if (!summary) return undefined;
-  const firstLine = summary.text.split("\n").find((line) => line.trim())?.trim();
+  const firstLine = summary.text
+    .split("\n")
+    .find((line) => line.trim())
+    ?.trim();
   const headline = summary.text.includes("\n") ? undefined : compactText(firstLine ?? "", 90);
   if (headline) return headline;
   if (summary.tasks.length === 0) return undefined;
@@ -1232,7 +1318,9 @@ export function todoToolDetailModel(input: unknown, output: unknown): TodoToolDe
   const resultText = text.includes("\n") ? text : undefined;
   const focusId = summary.task?.id ?? parseTodoToolInput(input).id;
   const focus =
-    focusId !== undefined ? summary.tasks.find((task) => task.id === focusId) ?? summary.task : summary.task;
+    focusId !== undefined
+      ? (summary.tasks.find((task) => task.id === focusId) ?? summary.task)
+      : summary.task;
   return {
     ...(resultText ? { resultText } : {}),
     // Completed tasks are only relevant when just checked off (the focus task).
@@ -1249,9 +1337,7 @@ function parseEmbeddedJson(value: string): unknown {
       if (offset === undefined) continue;
       try {
         return JSON.parse(value.slice(offset)) as unknown;
-      } catch {
-        continue;
-      }
+      } catch {}
     }
     return undefined;
   }
@@ -1260,7 +1346,8 @@ function parseEmbeddedJson(value: string): unknown {
 export function unwrapPaseoToolOutput(value: unknown): unknown {
   const record = isRecord(value) ? value : null;
   if (!record) return value;
-  if (record.structuredContent !== undefined) return unwrapPaseoToolOutput(record.structuredContent);
+  if (record.structuredContent !== undefined)
+    return unwrapPaseoToolOutput(record.structuredContent);
   if (Array.isArray(record.content)) {
     const content = record.content.find((item) => isRecord(item) && item.type === "text");
     if (isRecord(content)) {
@@ -1350,7 +1437,9 @@ export function parsePiShellResult(value: unknown, depth = 0): PiShellResult | u
   };
 }
 
-function shellDetailFromResult(detail: Extract<ToolCallDetail, { type: "shell" }>): ShellToolDetail {
+function shellDetailFromResult(
+  detail: Extract<ToolCallDetail, { type: "shell" }>,
+): ShellToolDetail {
   const parsed = parsePiShellResult(detail.output);
   if (!parsed) return detail;
   const keepExitCode =
@@ -1634,7 +1723,8 @@ function patchInputEdits(input: string): ApplyPatchEdit[] {
         diffLines.push(`+${line.slice(1)}`);
       } else if (operation === "update") {
         if (line.startsWith("@@")) diffLines.push(line);
-        else if (line.startsWith("+") || line.startsWith("-") || line.startsWith(" ")) diffLines.push(line);
+        else if (line.startsWith("+") || line.startsWith("-") || line.startsWith(" "))
+          diffLines.push(line);
       }
       index++;
     }
@@ -1650,7 +1740,9 @@ function patchInputEdits(input: string): ApplyPatchEdit[] {
  * keep treating them as headers.
  */
 function isDiffFileHeader(line: string, index: number, firstHunk: number): boolean {
-  return (line.startsWith("---") || line.startsWith("+++")) && (firstHunk === -1 || index < firstHunk);
+  return (
+    (line.startsWith("---") || line.startsWith("+++")) && (firstHunk === -1 || index < firstHunk)
+  );
 }
 
 /**
@@ -1663,7 +1755,13 @@ function unifiedDiffBody(diff: string): string {
   const firstHunk = lines.findIndex((line) => line.startsWith("@@"));
   return lines
     .filter((line, index) => !isDiffFileHeader(line, index, firstHunk))
-    .filter((line) => line.startsWith("@@") || line.startsWith("+") || line.startsWith("-") || line.startsWith(" "))
+    .filter(
+      (line) =>
+        line.startsWith("@@") ||
+        line.startsWith("+") ||
+        line.startsWith("-") ||
+        line.startsWith(" "),
+    )
     .join("\n");
 }
 
@@ -1676,8 +1774,14 @@ function unifiedDiffEdits(unifiedDiff: string, firstFilePath?: string): ApplyPat
   for (const [index, section] of sections.entries()) {
     const plusHeader = section.match(/^\+\+\+ (?:b\/)?(.+)$/m)?.[1];
     const minusHeader = section.match(/^--- (?:a\/)?(.+)$/m)?.[1];
-    const operation: ApplyPatchOperation = plusHeader === "/dev/null" ? "delete" : minusHeader === "/dev/null" ? "add" : "update";
-    const filePath = index === 0 && firstFilePath ? firstFilePath : operation === "delete" ? minusHeader : plusHeader ?? minusHeader;
+    const operation: ApplyPatchOperation =
+      plusHeader === "/dev/null" ? "delete" : minusHeader === "/dev/null" ? "add" : "update";
+    const filePath =
+      index === 0 && firstFilePath
+        ? firstFilePath
+        : operation === "delete"
+          ? minusHeader
+          : (plusHeader ?? minusHeader);
     if (!filePath || filePath === "/dev/null") continue;
     edits.push({ filePath, operation, unifiedDiff: unifiedDiffBody(section) });
   }
@@ -1724,7 +1828,12 @@ function patchMetadataEdits(value: unknown): ApplyPatchEdit[] {
               : undefined;
       const operation = normalizePatchOperation(file.status) ?? normalizePatchOperation(file.type);
       if (!filePath || !operation) return [];
-      const diff = typeof file.patch === "string" ? file.patch : typeof file.diff === "string" ? file.diff : undefined;
+      const diff =
+        typeof file.patch === "string"
+          ? file.patch
+          : typeof file.diff === "string"
+            ? file.diff
+            : undefined;
       if (diff === undefined) return [];
       return [{ filePath, operation, unifiedDiff: unifiedDiffBody(diff) }];
     });
@@ -1749,7 +1858,10 @@ function patchPreviewEdits(value: unknown): ApplyPatchEdit[] {
   if (!isRecord(value)) return [];
   const nested = [value, value.details, value.result].find((candidate) => {
     if (!isRecord(candidate)) return false;
-    return isRecord(candidate.preview) || (isRecord(candidate.details) && isRecord(candidate.details.preview));
+    return (
+      isRecord(candidate.preview) ||
+      (isRecord(candidate.details) && isRecord(candidate.details.preview))
+    );
   });
   if (!isRecord(nested)) return [];
   const details = isRecord(nested.details) ? nested.details : nested;
@@ -1761,11 +1873,13 @@ function patchPreviewEdits(value: unknown): ApplyPatchEdit[] {
     if (!isRecord(file) || typeof file.filePath !== "string") return [];
     const operation = file.operation;
     if (operation !== "add" && operation !== "delete" && operation !== "update") return [];
-    return [{
-      filePath: file.filePath,
-      operation,
-      unifiedDiff: typeof file.diff === "string" ? previewDiffToUnifiedDiff(file.diff) : "",
-    }];
+    return [
+      {
+        filePath: file.filePath,
+        operation,
+        unifiedDiff: typeof file.diff === "string" ? previewDiffToUnifiedDiff(file.diff) : "",
+      },
+    ];
   });
 }
 
@@ -1779,7 +1893,10 @@ export function extractApplyPatchEdits(
   const outputEdits = patchPreviewEdits(output);
   if (outputEdits.length > 0) return outputEdits;
   if (isRecord(input) && input.type === "edit" && typeof input.unifiedDiff === "string") {
-    return unifiedDiffEdits(input.unifiedDiff, typeof input.filePath === "string" ? input.filePath : undefined);
+    return unifiedDiffEdits(
+      input.unifiedDiff,
+      typeof input.filePath === "string" ? input.filePath : undefined,
+    );
   }
   const inputText = applyPatchInput(input);
   if (inputText) {
@@ -1820,8 +1937,22 @@ function splitDiffLines(text: string): { lines: string[]; hasTrailingNewline: bo
 function computeLineDiff(oldText: string, newText: string): DiffLine[] {
   if (oldText.length + newText.length > MAX_DIFF_CHARS) {
     return [
-      ...(oldText ? [{ kind: "remove" as const, text: `[Previous content: ${oldText.length.toLocaleString()} characters]` }] : []),
-      ...(newText ? [{ kind: "add" as const, text: `[Updated content: ${newText.length.toLocaleString()} characters]` }] : []),
+      ...(oldText
+        ? [
+            {
+              kind: "remove" as const,
+              text: `[Previous content: ${oldText.length.toLocaleString()} characters]`,
+            },
+          ]
+        : []),
+      ...(newText
+        ? [
+            {
+              kind: "add" as const,
+              text: `[Updated content: ${newText.length.toLocaleString()} characters]`,
+            },
+          ]
+        : []),
     ];
   }
 
@@ -1966,7 +2097,9 @@ function focusDiffChanges(lines: DiffLine[], contextLines = DIFF_CONTEXT_LINES):
  * whitespace-only) count as absent so valid old/new strings are used instead.
  * An empty unifiedDiff must never shadow real string content into +0/-0.
  */
-export function effectiveUnifiedDiff(detail: Extract<ToolCallDetail, { type: "edit" }>): string | undefined {
+export function effectiveUnifiedDiff(
+  detail: Extract<ToolCallDetail, { type: "edit" }>,
+): string | undefined {
   const diff = detail.unifiedDiff;
   if (diff === undefined || diff.trim() === "") return undefined;
   return diff;
@@ -1999,7 +2132,8 @@ function opencodeMetadataPatch(metadata: unknown, filePath: string): string | un
   if (!isRecord(metadata)) return undefined;
   if (Array.isArray(metadata.files)) {
     const files = metadata.files.filter(isRecord);
-    const match = files.find((file) => file.file === filePath) ?? (files.length === 1 ? files[0] : undefined);
+    const match =
+      files.find((file) => file.file === filePath) ?? (files.length === 1 ? files[0] : undefined);
     const patch = nonBlankString(match?.patch);
     if (patch) return patch;
   }
@@ -2017,7 +2151,9 @@ function opencodeMetadataPatch(metadata: unknown, filePath: string): string | un
  * A diff already on the detail always wins; anything else is returned as-is so
  * the old/new string fallback and the payload-less handling below still apply.
  */
-export function withMetadataEditDiff<T extends { detail: ToolCallDetail; metadata?: unknown }>(item: T): T {
+export function withMetadataEditDiff<T extends { detail: ToolCallDetail; metadata?: unknown }>(
+  item: T,
+): T {
   const detail = item.detail;
   if (detail.type !== "edit" || effectiveUnifiedDiff(detail) !== undefined) return item;
   const patch = opencodeMetadataPatch(item.metadata, detail.filePath);
@@ -2055,11 +2191,26 @@ export function diffStatsForDetail(detail: Extract<ToolCallDetail, { type: "edit
 
 export function diffLinesForDetail(detail: Extract<ToolCallDetail, { type: "edit" }>): DiffLine[] {
   const unifiedDiff = effectiveUnifiedDiff(detail);
-  const size = unifiedDiff?.length ?? ((detail.oldString?.length ?? 0) + (detail.newString?.length ?? 0));
+  const size =
+    unifiedDiff?.length ?? (detail.oldString?.length ?? 0) + (detail.newString?.length ?? 0);
   if (size > MAX_DIFF_CHARS) {
     return [
-      ...(detail.oldString ? [{ kind: "remove" as const, text: `[Previous content: ${detail.oldString.length.toLocaleString()} characters]` }] : []),
-      ...(detail.newString ? [{ kind: "add" as const, text: `[Updated content: ${detail.newString.length.toLocaleString()} characters]` }] : []),
+      ...(detail.oldString
+        ? [
+            {
+              kind: "remove" as const,
+              text: `[Previous content: ${detail.oldString.length.toLocaleString()} characters]`,
+            },
+          ]
+        : []),
+      ...(detail.newString
+        ? [
+            {
+              kind: "add" as const,
+              text: `[Updated content: ${detail.newString.length.toLocaleString()} characters]`,
+            },
+          ]
+        : []),
     ];
   }
 
@@ -2099,7 +2250,9 @@ export function stripLeadingCwdCd(command: string, cwd?: string | null): string 
   if (!cwd || !command) {
     return command;
   }
-  const match = command.match(/^\s*cd\s+(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(\S+))\s*(?:&&|;)\s*([\s\S]*)$/);
+  const match = command.match(
+    /^\s*cd\s+(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(\S+))\s*(?:&&|;)\s*([\s\S]*)$/,
+  );
   if (!match) {
     return command;
   }
@@ -2125,7 +2278,10 @@ function detailFilePath(detail: ToolCallDetail): string | undefined {
  * The opencode `read` tool returns directory listings with content prefixed
  * by "Read directory ..."; a trailing slash on the path is also a signal.
  */
-export function isDirectoryRead(filePath: string | undefined, content: string | undefined): boolean {
+export function isDirectoryRead(
+  filePath: string | undefined,
+  content: string | undefined,
+): boolean {
   if (filePath && /[/\\]$/.test(filePath.trim())) return true;
   if (content) {
     const normalized = content.trimStart().toLowerCase();
@@ -2166,7 +2322,9 @@ export function resolveCodeModePresentation(input: unknown, output: unknown): To
         category: exaKind === "agent" ? "agent" : "search",
         icon: exaToolIcon(exaKind),
         label: exaToolLabel(exaKind),
-        summary: call.query ? compactText(call.query, 120) : exaToolSummary(exaKind, { query: call.query }),
+        summary: call.query
+          ? compactText(call.query, 120)
+          : exaToolSummary(exaKind, { query: call.query }),
       };
     }
     const githubKind = githubToolKind(call.path);
@@ -2221,7 +2379,10 @@ export function resolveToolCallPresentation(
 ): ToolCallPresentation {
   const name = item.name.trim().toLowerCase();
   const detail = normalizeToolCallDetail(item.detail, item.name);
-  if (piSubagentOperation(item.name) && (detail.type === "unknown" || detail.type === "sub_agent")) {
+  if (
+    piSubagentOperation(item.name) &&
+    (detail.type === "unknown" || detail.type === "sub_agent")
+  ) {
     return piSubagentPresentation(
       item.name,
       detail.type === "unknown" ? detail.input : undefined,
@@ -2288,7 +2449,9 @@ export function resolveToolCallPresentation(
         icon: commonFileFields.fileIcon ?? "Pencil",
         label: "Edit",
         summary: compactText(detail.filePath),
-        ...(hasEditDiffContent(detail) && editSize <= MAX_DIFF_CHARS ? { diffStats: diffStatsForDetail(detail) } : {}),
+        ...(hasEditDiffContent(detail) && editSize <= MAX_DIFF_CHARS
+          ? { diffStats: diffStatsForDetail(detail) }
+          : {}),
         ...commonFileFields,
       };
     }
@@ -2355,7 +2518,11 @@ export function resolveToolCallPresentation(
         };
       }
       if (isAskTool(item.name)) {
-        return { category: "communication", icon: "MessageCircleQuestionMark", label: "Ask Question" };
+        return {
+          category: "communication",
+          icon: "MessageCircleQuestionMark",
+          label: "Ask Question",
+        };
       }
       if (name === "speak") {
         return { category: "communication", icon: "MicVocal", label: "Speak" };
@@ -2395,7 +2562,8 @@ export function resolveToolCallPresentation(
       const githubKind = githubToolKind(item.name);
       if (githubKind) {
         return {
-          category: githubKind === "pull-request" || githubKind === "actions-run" ? "agent" : "search",
+          category:
+            githubKind === "pull-request" || githubKind === "actions-run" ? "agent" : "search",
           icon: githubToolIcon(githubKind),
           label: githubToolLabel(githubKind),
           summary: githubToolSummary(githubKind, detail.input),
@@ -2436,11 +2604,18 @@ export function resolveSubAgentActionPresentation(
     const { icon, label } = piSubagentPresentation(toolName, undefined, undefined);
     return { icon, label };
   }
-  const normalized = toolName.trim().toLowerCase().replace(/[\s.-]+/g, "_");
+  const normalized = toolName
+    .trim()
+    .toLowerCase()
+    .replace(/[\s.-]+/g, "_");
   if (normalized === "ls") {
     return { icon: "List", label: "List" };
   }
-  if (normalized === "read" || normalized.includes("read_file") || normalized.includes("readfile")) {
+  if (
+    normalized === "read" ||
+    normalized.includes("read_file") ||
+    normalized.includes("readfile")
+  ) {
     if (summary && /[/\\]$/.test(summary.trim())) {
       return { icon: "Folder", label: "List", summaryIcon: "Folder" };
     }
@@ -2469,10 +2644,18 @@ export function resolveSubAgentActionPresentation(
   if (normalized === "edit" || normalized.includes("edit_file") || normalized.includes("patch")) {
     return { icon: "Pencil", label: "Edit", summaryIcon: fileIconForPath(summary) };
   }
-  if (normalized === "write" || normalized.includes("write_file") || normalized.includes("writefile")) {
+  if (
+    normalized === "write" ||
+    normalized.includes("write_file") ||
+    normalized.includes("writefile")
+  ) {
     return { icon: "Pencil", label: "Write", summaryIcon: fileIconForPath(summary) };
   }
-  if (normalized === "task" || normalized.includes("sub_agent") || normalized.includes("subagent")) {
+  if (
+    normalized === "task" ||
+    normalized.includes("sub_agent") ||
+    normalized.includes("subagent")
+  ) {
     if (normalized === "subagent_supervisor") {
       return { icon: "Reply", label: "Supervisor Reply" };
     }
@@ -2643,7 +2826,9 @@ function looksLikeSearchFilePath(value: string): boolean {
  * `Line <n>: <snippet>` rows) into per-file matches. Returns undefined when the
  * content does not follow that shape so callers can fall back to raw text.
  */
-export function parseOpencodeSearchContent(content: string | undefined | null): OpencodeSearchContent | undefined {
+export function parseOpencodeSearchContent(
+  content: string | undefined | null,
+): OpencodeSearchContent | undefined {
   if (typeof content !== "string") return undefined;
   const normalized = content.replace(/\r\n?/g, "\n");
   if (!normalized.trim()) return undefined;
@@ -2697,7 +2882,10 @@ export function parseOpencodeSearchContent(content: string | undefined | null): 
     const headerPath = cleanSearchFileHeader(trimmed);
     if (!headerPath) continue;
     const followedByMatch = nextNonEmptyMatchesLine(index);
-    if (followedByMatch || ((current?.matches.length ?? 0) > 0 && looksLikeSearchFilePath(headerPath))) {
+    if (
+      followedByMatch ||
+      ((current?.matches.length ?? 0) > 0 && looksLikeSearchFilePath(headerPath))
+    ) {
       current = { filePath: headerPath, matches: [] };
       files.push(current);
       continue;
@@ -2798,7 +2986,9 @@ function hasMeaningfulWorktreeSetupDetail(
   return Boolean(detail.branchName || detail.worktreePath || detail.log);
 }
 
-function hasMeaningfulSubAgentDetail(detail: Extract<ToolCallDetail, { type: "sub_agent" }>): boolean {
+function hasMeaningfulSubAgentDetail(
+  detail: Extract<ToolCallDetail, { type: "sub_agent" }>,
+): boolean {
   return Boolean(detail.subAgentType || detail.description || detail.log);
 }
 
@@ -2853,11 +3043,15 @@ export const MAX_VISIBLE_SUBAGENT_ACTIONS = 5;
  * True when the progress rows under a sub-agent header already render every
  * line of its log, so a raw "Activity log" block would only repeat them.
  */
-export function subAgentLogFullyShown(detail: Extract<ToolCallDetail, { type: "sub_agent" }>): boolean {
+export function subAgentLogFullyShown(
+  detail: Extract<ToolCallDetail, { type: "sub_agent" }>,
+): boolean {
   if ((detail.actions?.length ?? 0) > 0) return false;
   const lines = (detail.log ?? "").split(/\r?\n/).filter((line) => line.trim()).length;
   const parsed = parseSubAgentActionLog(detail.log ?? "");
-  return parsed.length > 0 && parsed.length === lines && parsed.length <= MAX_VISIBLE_SUBAGENT_ACTIONS;
+  return (
+    parsed.length > 0 && parsed.length === lines && parsed.length <= MAX_VISIBLE_SUBAGENT_ACTIONS
+  );
 }
 
 /**
@@ -2919,7 +3113,9 @@ export function toolCallHasBody(
       );
     case "fetch":
       return Boolean(
-        notInHeader(detail.url || undefined, headerSummary) || detail.result || detail.code !== undefined,
+        notInHeader(detail.url || undefined, headerSummary) ||
+          detail.result ||
+          detail.code !== undefined,
       );
     case "sub_agent":
       return Boolean(
@@ -2935,7 +3131,8 @@ export function toolCallHasBody(
     case "edit":
       return Boolean(detail.unifiedDiff || detail.oldString || detail.newString);
     case "unknown":
-      if (paseoToolLeafName(name)) return paseoToolHasBody(name, detail.input, detail.output, headerSummary);
+      if (paseoToolLeafName(name))
+        return paseoToolHasBody(name, detail.input, detail.output, headerSummary);
       if (isTodoTool(name)) {
         const model = todoToolDetailModel(detail.input, detail.output);
         return Boolean(model.resultText) || model.tasks.length > 0;
@@ -2953,12 +3150,13 @@ export function formatError(error: unknown): string | undefined {
     const content = (error as Record<string, unknown>).content;
     if (Array.isArray(content)) {
       const text = content
-        .filter((part): part is { type: "text"; text: string } =>
-          part !== null &&
-          typeof part === "object" &&
-          !Array.isArray(part) &&
-          (part as Record<string, unknown>).type === "text" &&
-          typeof (part as Record<string, unknown>).text === "string",
+        .filter(
+          (part): part is { type: "text"; text: string } =>
+            part !== null &&
+            typeof part === "object" &&
+            !Array.isArray(part) &&
+            (part as Record<string, unknown>).type === "text" &&
+            typeof (part as Record<string, unknown>).text === "string",
         )
         .map((part) => part.text)
         .join("\n");

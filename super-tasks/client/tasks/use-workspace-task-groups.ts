@@ -2,7 +2,7 @@ import { usePaseo } from "@getpaseo/plugin/client";
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isAgentStream } from "../timeline-events";
-import { countTasks, extractLatestTodoSnapshot, type AgentTasksGroup } from "./model";
+import { type AgentTasksGroup, countTasks, extractLatestTodoSnapshot } from "./model";
 
 const AGENT_LIST_LIMIT = 200;
 const TIMELINE_LIMIT = 200;

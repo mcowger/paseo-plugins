@@ -1,5 +1,5 @@
-import { Platform } from "react-native";
 import type { TextProps, ViewProps } from "react-native";
+import { Platform } from "react-native";
 
 // System font stacks: zero bytes over the wire, resolving to each OS's newest
 // built-in faces (SF Pro/SF Mono on Apple, Segoe UI Variable on Windows 11,

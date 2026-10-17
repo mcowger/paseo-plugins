@@ -51,7 +51,13 @@ function fieldString(record: JsonRecord | null, ...keys: string[]): string | und
 }
 
 function toolLeaf(name: string): string {
-  return name.trim().toLowerCase().split(/__|[.:/]/).at(-1) ?? "";
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .split(/__|[.:/]/)
+      .at(-1) ?? ""
+  );
 }
 
 export function githubToolKind(name: string): GithubToolKind | null {
@@ -126,9 +132,7 @@ function parseEmbeddedJson(value: string): unknown {
       if (offset === undefined) continue;
       try {
         return JSON.parse(value.slice(offset)) as unknown;
-      } catch {
-        continue;
-      }
+      } catch {}
     }
     return undefined;
   }
@@ -144,7 +148,7 @@ export function githubOutputText(value: unknown): string | undefined {
   if (typeof record.text === "string") return record.text.trim() || undefined;
   if (Array.isArray(record.content)) {
     const text = record.content
-      .map((part) => (asRecord(part)?.text as string | undefined))
+      .map((part) => asRecord(part)?.text as string | undefined)
       .filter((part): part is string => Boolean(part))
       .join("\n\n")
       .trim();

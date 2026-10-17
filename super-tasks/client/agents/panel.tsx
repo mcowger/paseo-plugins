@@ -1,10 +1,10 @@
 import type { PaseoAgentSendOptions } from "@getpaseo/client";
 import type { PluginTheme } from "@getpaseo/plugin";
 import {
-  usePaseo,
-  useRpc,
   type PluginHostProps,
   type PluginWorkspacePanelProps,
+  usePaseo,
+  useRpc,
 } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import type {
@@ -12,35 +12,35 @@ import type {
   AgentTimelineItem,
   ToolCallTimelineItem,
 } from "@getpaseo/protocol/agent-types";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { memo, type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  type GestureResponderEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   RefreshControl,
   ScrollView,
   Text,
-  View,
-  type GestureResponderEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   type TextStyle,
+  View,
   type ViewStyle,
 } from "react-native";
-import { TooltipPressable as Pressable } from "../ui/tooltip";
-import { isAgentStream } from "../timeline-events";
-import { openAgentInPaseoWorkspace } from "./navigation";
 import {
   cancelWorkspaceAgent,
   getProviderSubagentTimeline,
   listWorkspaceProviderSubagents,
   type ProviderSubagentItem,
 } from "../../shared/agents/control";
+import { isAgentStream } from "../timeline-events";
+import { TooltipPressable as Pressable } from "../ui/tooltip";
 import {
   AgentActionBar,
   AgentStatusIndicator,
   SteerComposer,
-  WorkingIndicator,
   statusDotColor,
+  WorkingIndicator,
 } from "./controls";
+import { openAgentInPaseoWorkspace } from "./navigation";
 
 const NOOP_HANDLER = (): void => {};
 const NOOP_EVENT_HANDLER = (_event: GestureResponderEvent): void => {};
@@ -934,7 +934,7 @@ function ToolCallRow({
   );
 }
 
-const TimelineEntryRow = memo(function TimelineEntryRow({
+const TimelineEntryRow = memo(function TimelineEntryRowInner({
   entry,
   theme,
   styles,
@@ -1259,7 +1259,7 @@ function SubagentTranscriptView({
  * then folds those children, and the thread is reached from the action bar. For
  * a leaf card the chevron toggles the thread directly.
  */
-const AgentCard = memo(function AgentCard({
+const AgentCard = memo(function AgentCardInner({
   agent,
   theme,
   compact,
@@ -1650,7 +1650,7 @@ export function WorkspaceSubagentsBody({
           const next = new Set(prev);
           for (const id of prev) {
             const matchedAgent = combined.find((a) => a.id === id);
-            if (!matchedAgent || matchedAgent.status !== "running") {
+            if (matchedAgent?.status !== "running") {
               next.delete(id);
             }
           }
@@ -1693,7 +1693,7 @@ export function WorkspaceSubagentsBody({
       clearTimeout(debounceTimer as TimerHandle);
       unsubAgents();
     };
-  }, [paseo, workspaceId, fetchAgentsForWorkspace]);
+  }, [paseo, fetchAgentsForWorkspace]);
 
   const handleManualRefresh = useCallback(() => {
     setRefreshing(true);

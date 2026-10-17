@@ -258,6 +258,12 @@ Run the plugin CLI help before using a subcommand: `paseo plugin <command> --hel
 - `paseo plugin logs <id>` checks daemon-side load and runtime errors after install or reload.
 - `paseo plugin enable <id>`, `disable <id>`, `remove <id>`, and `update [id|--all]` manage existing plugin configuration.
 
+Lint and format run through Biome (`npm run lint` is `biome check .` in each package).
+Shared config lives in the root `biome.json`, which also records per-package rule
+strictness: `super-tasks` and `poly-repo-workspaces` keep the stricter historical
+ruleset, the rest stay at recommended defaults with a few downgrades. Match the
+strictness of the package you are editing instead of loosening the shared config.
+
 For the normal local workflow, install dependencies, run `npm run lint`, `npm run typecheck`, and
 `npm test` from the plugin directory, then install the plugin with `paseo plugin install <directory>`
 (if it is not already configured), reload it explicitly with `paseo plugin reload <plugin-id>`, and

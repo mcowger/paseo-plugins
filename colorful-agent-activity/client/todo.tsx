@@ -2,15 +2,15 @@ import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import React from "react";
 import { Text, View } from "react-native";
-import type { ActivityStyles } from "./activity";
-import { Section } from "./paseo";
 import {
-  todoTaskLabel,
-  todoToolDetailModel,
   type ActivityPalette,
   type TodoToolStatus,
   type TodoToolTask,
+  todoTaskLabel,
+  todoToolDetailModel,
 } from "../shared/presentation";
+import type { ActivityStyles } from "./activity";
+import { Section } from "./paseo";
 
 type Theme = PluginTimelineItemProps["theme"];
 
@@ -50,7 +50,9 @@ function TodoTaskRow({
         : theme.colors.foregroundMuted;
   const meta = [
     task.status === "in_progress" ? task.activeForm : undefined,
-    task.blockedBy.length > 0 ? `blocked by ${task.blockedBy.map((id) => `#${id}`).join(", ")}` : undefined,
+    task.blockedBy.length > 0
+      ? `blocked by ${task.blockedBy.map((id) => `#${id}`).join(", ")}`
+      : undefined,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -100,12 +102,21 @@ export function TodoToolDetail({ input, output, theme, palette, styles }: Detail
                 key={task.id}
                 task={task}
                 showDescription={task.status === "in_progress"}
-                theme={theme} palette={palette} styles={styles} />
+                theme={theme}
+                palette={palette}
+                styles={styles}
+              />
             ))}
           </View>
         </Section>
       ) : model.tasks[0] ? (
-        <TodoTaskRow task={model.tasks[0]} showDescription theme={theme} palette={palette} styles={styles} />
+        <TodoTaskRow
+          task={model.tasks[0]}
+          showDescription
+          theme={theme}
+          palette={palette}
+          styles={styles}
+        />
       ) : null}
     </View>
   );

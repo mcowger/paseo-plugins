@@ -1,9 +1,4 @@
-export type ExaToolKind =
-  | "search"
-  | "fetch"
-  | "agent"
-  | "research-guide"
-  | "schema-templates";
+export type ExaToolKind = "search" | "fetch" | "agent" | "research-guide" | "schema-templates";
 
 export interface ExaSearchResult {
   title: string;
@@ -50,7 +45,13 @@ function fieldString(record: JsonRecord | null, ...keys: string[]): string | und
 }
 
 function toolLeaf(name: string): string {
-  return name.trim().toLowerCase().split(/__|[.:/]/).at(-1) ?? "";
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .split(/__|[.:/]/)
+      .at(-1) ?? ""
+  );
 }
 
 export function exaToolKind(name: string): ExaToolKind | null {
@@ -58,7 +59,10 @@ export function exaToolKind(name: string): ExaToolKind | null {
   const leaf = toolLeaf(normalized);
   if (normalized.endsWith("web_search_exa") || leaf === "web_search_exa") return "search";
   if (normalized.endsWith("web_fetch_exa") || leaf === "web_fetch_exa") return "fetch";
-  if (normalized.endsWith("exa_agent_run") || (normalized.includes("exa") && leaf === "agent_run")) {
+  if (
+    normalized.endsWith("exa_agent_run") ||
+    (normalized.includes("exa") && leaf === "agent_run")
+  ) {
     return "agent";
   }
   if (
@@ -91,7 +95,7 @@ export function exaToolSummary(kind: ExaToolKind, input: unknown): string | unde
       ? fieldString(record, "query")
       : kind === "fetch"
         ? fieldString(record, "url")
-        : fieldString(record, "prompt") ?? fieldString(record, "query");
+        : (fieldString(record, "prompt") ?? fieldString(record, "query"));
   if (!value) return undefined;
   const normalized = value.replace(/\s+/g, " ").trim();
   return normalized.length > 180 ? `${normalized.slice(0, 179)}…` : normalized;

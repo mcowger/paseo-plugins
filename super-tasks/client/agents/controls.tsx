@@ -1,18 +1,18 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  type GestureResponderEvent,
   KeyboardAvoidingView,
+  type NativeSyntheticEvent,
   Platform,
   Text,
   TextInput,
-  View,
-  type GestureResponderEvent,
-  type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
   type TextStyle,
+  View,
   type ViewStyle,
 } from "react-native";
 import { TooltipPressable as Pressable } from "../ui/tooltip";
@@ -52,7 +52,7 @@ function parseHexColor(value: string): RgbColor | null {
 
 function linearSrgbChannel(value: number): number {
   const channel = value / 255;
-  return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
 }
 
 function relativeLuminance(color: string): number {

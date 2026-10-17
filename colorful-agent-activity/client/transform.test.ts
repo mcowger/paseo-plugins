@@ -24,7 +24,8 @@ describe("colorful activity timeline transforms", () => {
       item: { ...toolCall({ type: "sub_agent", log }, "running"), name: "get_subagent_result" },
     });
     expect(result?.items[0]?.data).toMatchObject({
-      status: "running", detail: { type: "sub_agent", log },
+      status: "running",
+      detail: { type: "sub_agent", log },
       presentation: { label, summary: "reviewer · Review changes · running" },
     });
   });
@@ -113,10 +114,7 @@ describe("colorful activity timeline transforms", () => {
     const result = transformToolCall({
       phase: "streaming",
       item: {
-        ...toolCall(
-          { type: "shell", command: "bun test", output: "170 pass" },
-          "running",
-        ),
+        ...toolCall({ type: "shell", command: "bun test", output: "170 pass" }, "running"),
         name: "run",
       },
     });
@@ -200,12 +198,18 @@ describe("colorful activity timeline transforms", () => {
       expect.objectContaining({
         name: "apply_patch",
         detail: { type: "edit", filePath: "src/index.ts", unifiedDiff: "@@\n-old()\n+new()" },
-        presentation: expect.objectContaining({ label: "Edit", diffStats: { additions: 1, deletions: 1 } }),
+        presentation: expect.objectContaining({
+          label: "Edit",
+          diffStats: { additions: 1, deletions: 1 },
+        }),
       }),
       expect.objectContaining({
         name: "apply_patch",
         detail: { type: "edit", filePath: "docs/notes.md", unifiedDiff: "+Notes" },
-        presentation: expect.objectContaining({ label: "Add", diffStats: { additions: 1, deletions: 0 } }),
+        presentation: expect.objectContaining({
+          label: "Add",
+          diffStats: { additions: 1, deletions: 0 },
+        }),
       }),
     ]);
   });
@@ -226,13 +230,12 @@ describe("colorful activity timeline transforms", () => {
     const result = transformToolCall({
       phase: "complete",
       item: {
-        ...toolCall(
-          {
-            type: "unknown",
-            input: { patchText: patch },
-            output: "Success. Updated the following files:\nA ocr/docs/plan.md\nM src/index.ts\nD src/obsolete.ts",
-          },
-        ),
+        ...toolCall({
+          type: "unknown",
+          input: { patchText: patch },
+          output:
+            "Success. Updated the following files:\nA ocr/docs/plan.md\nM src/index.ts\nD src/obsolete.ts",
+        }),
         name: "patch",
       },
     });
@@ -243,9 +246,15 @@ describe("colorful activity timeline transforms", () => {
       "call-1:apply-patch:2",
     ]);
     expect(result?.items.map((item) => item.data)).toEqual([
-      expect.objectContaining({ presentation: expect.objectContaining({ label: "Add", summary: "ocr/docs/plan.md" }) }),
-      expect.objectContaining({ presentation: expect.objectContaining({ label: "Edit", summary: "src/index.ts" }) }),
-      expect.objectContaining({ presentation: expect.objectContaining({ label: "Delete", summary: "src/obsolete.ts" }) }),
+      expect.objectContaining({
+        presentation: expect.objectContaining({ label: "Add", summary: "ocr/docs/plan.md" }),
+      }),
+      expect.objectContaining({
+        presentation: expect.objectContaining({ label: "Edit", summary: "src/index.ts" }),
+      }),
+      expect.objectContaining({
+        presentation: expect.objectContaining({ label: "Delete", summary: "src/obsolete.ts" }),
+      }),
     ]);
   });
 
@@ -264,7 +273,15 @@ describe("colorful activity timeline transforms", () => {
         ...toolCall({ type: "unknown", input: { patchText: patch }, output: null }),
         name: "patch",
         metadata: {
-          files: [{ file: "src/index.ts", patch: "@@\n-old()\n+new()", additions: 1, deletions: 1, status: "modified" }],
+          files: [
+            {
+              file: "src/index.ts",
+              patch: "@@\n-old()\n+new()",
+              additions: 1,
+              deletions: 1,
+              status: "modified",
+            },
+          ],
         },
       },
     });
@@ -273,7 +290,10 @@ describe("colorful activity timeline transforms", () => {
     expect(result?.items[0]?.data).toEqual(
       expect.objectContaining({
         detail: { type: "edit", filePath: "src/index.ts", unifiedDiff: "@@\n-old()\n+new()" },
-        presentation: expect.objectContaining({ label: "Edit", diffStats: { additions: 1, deletions: 1 } }),
+        presentation: expect.objectContaining({
+          label: "Edit",
+          diffStats: { additions: 1, deletions: 1 },
+        }),
       }),
     );
   });

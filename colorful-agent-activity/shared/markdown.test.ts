@@ -31,9 +31,9 @@ describe("reasoning markdown", () => {
   });
 
   it("keeps an unclosed fenced block together", () => {
-    expect(parseReasoningMarkdown("before\n```json\n{\n  \"ok\": true\n")).toEqual([
+    expect(parseReasoningMarkdown('before\n```json\n{\n  "ok": true\n')).toEqual([
       { type: "paragraph", text: "before" },
-      { type: "code", language: "json", text: "{\n  \"ok\": true\n" },
+      { type: "code", language: "json", text: '{\n  "ok": true\n' },
     ]);
   });
 });

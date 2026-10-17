@@ -1,9 +1,13 @@
 import type { PluginAgentPanelProps } from "@getpaseo/plugin/client";
 import { useAgent, usePaseo } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Pressable, ScrollView, Text, View, type TextStyle, type ViewStyle } from "react-native";
-import { summarizeAgentActivity, summaryFileLabels, type SummarySourceEntry } from "../../shared/summary";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, type TextStyle, View, type ViewStyle } from "react-native";
+import {
+  type SummarySourceEntry,
+  summarizeAgentActivity,
+  summaryFileLabels,
+} from "../../shared/summary";
 import { useActivityStyles, usePalette } from "../activity";
 
 const TIMELINE_LIMIT = 400;
@@ -242,7 +246,10 @@ export function AgentSummaryPanel({ agentId, theme, layout }: PluginAgentPanelPr
       {timeline.status === "error" ? (
         <Text style={panelStyles.placeholder}>Could not load activity: {timeline.error}</Text>
       ) : null}
-      {summary && summary.toolCallCount === 0 && summary.thinkingCount === 0 && summary.outputCount === 0 ? (
+      {summary &&
+      summary.toolCallCount === 0 &&
+      summary.thinkingCount === 0 &&
+      summary.outputCount === 0 ? (
         <Text style={panelStyles.placeholder}>No activity on this agent yet.</Text>
       ) : null}
 
@@ -253,7 +260,11 @@ export function AgentSummaryPanel({ agentId, theme, layout }: PluginAgentPanelPr
               <Icon
                 name={group.icon}
                 size={12}
-                color={group.status === "completed" ? theme.colors.foregroundMuted : statusColor(group.status)}
+                color={
+                  group.status === "completed"
+                    ? theme.colors.foregroundMuted
+                    : statusColor(group.status)
+                }
               />
               <Text style={panelStyles.toolLabel}>
                 {group.label} ({group.count}×)
