@@ -2,8 +2,8 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
-  ProviderEventSchema,
   type ProviderEvent,
+  ProviderEventSchema,
   type ProviderSessionConfig,
 } from "@getpaseo/plugin/server/provider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,12 +11,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // The auth snapshot reads the real agent dir and writes to the shared temp dir;
 // session tests must not touch either.
 vi.mock("../server/auth-snapshot.js", () => ({ prepareAuthSnapshot: () => undefined }));
+
+import { SessionStore } from "../server/persistence.js";
 import type { PiRpcOptions } from "../server/pi-rpc.js";
 import { PiRpcTimeoutError } from "../server/pi-rpc.js";
-import { SessionStore } from "../server/persistence.js";
-import { CONTEXT_USAGE_POLL_INTERVAL_MS, createSuperpiSession, type SuperpiSessionOptions } from "../server/session.js";
-import { SUBPI_CHILD_CHANNEL_PREFIX } from "../shared/subagents.js";
+import {
+  CONTEXT_USAGE_POLL_INTERVAL_MS,
+  createSuperpiSession,
+  type SuperpiSessionOptions,
+} from "../server/session.js";
 import { companionStatePrefix } from "../shared/companion.js";
+import { SUBPI_CHILD_CHANNEL_PREFIX } from "../shared/subagents.js";
 import { FakePiRpc } from "../tests/fixtures/fake-pi-rpc.js";
 
 let root: string;
@@ -45,12 +50,14 @@ function baseConfig(overrides: Partial<ProviderSessionConfig> = {}): ProviderSes
   };
 }
 
-function harness(options: {
-  fake?: FakePiRpc;
-  config?: ProviderSessionConfig;
-  persistence?: SuperpiSessionOptions["persistence"];
-  history?: "replay" | "skip";
-} = {}) {
+function harness(
+  options: {
+    fake?: FakePiRpc;
+    config?: ProviderSessionConfig;
+    persistence?: SuperpiSessionOptions["persistence"];
+    history?: "replay" | "skip";
+  } = {},
+) {
   const fake = options.fake ?? new FakePiRpc();
   const events: ProviderEvent[] = [];
   let launch: PiRpcOptions | undefined;
@@ -78,19 +85,30 @@ function ofType<T extends ProviderEvent["type"]>(
   events: readonly ProviderEvent[],
   type: T,
 ): Array<Extract<ProviderEvent, { type: T }>> {
-  return events.filter((event): event is Extract<ProviderEvent, { type: T }> => event.type === type);
+  return events.filter(
+    (event): event is Extract<ProviderEvent, { type: T }> => event.type === type,
+  );
 }
 
 describe("root launch", () => {
   it("launches Pi with normal resources, the companion, owned session dir, and a session key", async () => {
     const { session, getLaunch } = harness({
-      config: baseConfig({ model: "test/model", thinkingOption: "high", systemPrompt: "host guidance" }),
+      config: baseConfig({
+        model: "test/model",
+        thinkingOption: "high",
+        systemPrompt: "host guidance",
+      }),
     });
     await session.open("open-1");
     const launch = getLaunch();
     expect(launch).toBeDefined();
     expect(launch?.command).toBe("pi");
-    expect(launch?.args?.slice(0, 4)).toEqual(["--mode", "rpc", "--session-dir", expect.any(String)]);
+    expect(launch?.args?.slice(0, 4)).toEqual([
+      "--mode",
+      "rpc",
+      "--session-dir",
+      expect.any(String),
+    ]);
     expect(launch?.args).toEqual(
       expect.arrayContaining([
         "--model",
@@ -122,7 +140,13 @@ describe("root launch", () => {
       state: {
         sessionId: "pi-session-1",
         sessionFile: transcript,
-        model: { provider: "test", id: "model", name: "Model", reasoning: true, contextWindow: 1000 },
+        model: {
+          provider: "test",
+          id: "model",
+          name: "Model",
+          reasoning: true,
+          contextWindow: 1000,
+        },
         thinkingLevel: "medium",
       },
       messages: [{ role: "user", id: "u1", content: "restored" }],
@@ -133,7 +157,9 @@ describe("root launch", () => {
     expect(launch?.args).toContain("--session");
     expect(launch?.args?.[launch?.args.indexOf("--session") + 1]).toBe(transcript);
     expect(fake.requestsOfType("get_messages")).toHaveLength(1);
-    const userItems = ofType(events, "timeline.item").filter((event) => event.item.type === "user_message");
+    const userItems = ofType(events, "timeline.item").filter(
+      (event) => event.item.type === "user_message",
+    );
     expect(userItems).toHaveLength(1);
     await session.close();
   });
@@ -141,10 +167,27 @@ describe("root launch", () => {
 
 describe("session open", () => {
   it("keeps premium-only tier choices unselected rather than silently choosing one", async () => {
-    const fake = new FakePiRpc({ helloData: { capabilities: [], tiers: ["priority", "flex"], settings: { tier: "default", longContext: false } } });
-    const { session, events } = harness({ fake, config: baseConfig({ settings: { tier: "default" } }) });
+    const fake = new FakePiRpc({
+      helloData: {
+        capabilities: [],
+        tiers: ["priority", "flex"],
+        settings: { tier: "default", longContext: false },
+      },
+    });
+    const { session, events } = harness({
+      fake,
+      config: baseConfig({ settings: { tier: "default" } }),
+    });
     await session.open("open-1");
-    expect(ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({ value: null, options: [{ label: "priority", value: "priority" }, { label: "flex", value: "flex" }] });
+    expect(
+      ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier"),
+    ).toMatchObject({
+      value: null,
+      options: [
+        { label: "priority", value: "priority" },
+        { label: "flex", value: "flex" },
+      ],
+    });
     expect(fake.companionSettings.tier).toBe("default");
     await session.configure("choose-default", { settings: { tier: "default" } });
     expect(ofType(events, "request.failed").at(-1)?.error.message).toContain("not advertised");
@@ -155,30 +198,74 @@ describe("session open", () => {
     let fake: FakePiRpc;
     let key = "";
     let published = false;
-    fake = new FakePiRpc({ helloData: { capabilities: [], tiers: [], settings: { tier: "default", longContext: false } }, onRequest: (command) => {
-      if (command.type === "prompt" && String(command.message).startsWith("/superpi-control ")) {
-        const request = JSON.parse(Buffer.from(String(command.message).split(" ")[1]!, "base64url").toString("utf8"));
-        key = request.sessionKey;
-      }
-      if (command.type === "get_available_models" && !published) {
-        published = true;
-        fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey: key, state: { capabilities: [], tiers: ["standard", "priority"], longContextAvailable: true, settings: { tier: "standard", longContext: false } } }) });
-      }
-    } });
-    const { session, events } = harness({ fake, config: baseConfig({ settings: { tier: "fast", longContext: true } }) });
+    fake = new FakePiRpc({
+      helloData: { capabilities: [], tiers: [], settings: { tier: "default", longContext: false } },
+      onRequest: (command) => {
+        if (command.type === "prompt" && String(command.message).startsWith("/superpi-control ")) {
+          const encoded = String(command.message).split(" ")[1];
+          if (encoded === undefined) throw new Error("expected an encoded superpi request");
+          const request = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+          key = request.sessionKey;
+        }
+        if (command.type === "get_available_models" && !published) {
+          published = true;
+          fake.emit({
+            type: "extension_ui_request",
+            method: "notify",
+            message:
+              companionStatePrefix +
+              JSON.stringify({
+                version: 1,
+                sessionKey: key,
+                state: {
+                  capabilities: [],
+                  tiers: ["standard", "priority"],
+                  longContextAvailable: true,
+                  settings: { tier: "standard", longContext: false },
+                },
+              }),
+          });
+        }
+      },
+    });
+    const { session, events } = harness({
+      fake,
+      config: baseConfig({ settings: { tier: "fast", longContext: true } }),
+    });
     await session.open("open-1");
     expect(ofType(events, "session.ready")).toHaveLength(1);
     expect(fake.companionSettings).toEqual({ tier: "priority", longContext: true });
     await session.close();
   });
   it("groups default tier aliases and removes the selector when support disappears", async () => {
-    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "priority", longContext: false }, tiers: ["auto", "standard", "flex", "priority"] } });
+    const fake = new FakePiRpc({
+      helloData: {
+        capabilities: [],
+        settings: { tier: "priority", longContext: false },
+        tiers: ["auto", "standard", "flex", "priority"],
+      },
+    });
     const { session, events, getLaunch } = harness({ fake });
     await session.open("open-1");
-    expect(ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({ value: "priority", options: ["default", "flex", "priority"].map((value) => ({ label: value, value })) });
+    expect(
+      ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier"),
+    ).toMatchObject({
+      value: "priority",
+      options: ["default", "flex", "priority"].map((value) => ({ label: value, value })),
+    });
     await session.configure("unsupported", { settings: { tier: "ultrafast" } });
     expect(ofType(events, "request.failed").at(-1)?.error.message).toContain("not advertised");
-    fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY, state: { capabilities: [], settings: { tier: "default", longContext: false }, tiers: [] } }) });
+    fake.emit({
+      type: "extension_ui_request",
+      method: "notify",
+      message:
+        companionStatePrefix +
+        JSON.stringify({
+          version: 1,
+          sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY,
+          state: { capabilities: [], settings: { tier: "default", longContext: false }, tiers: [] },
+        }),
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(ofType(events, "session.config").at(-1)?.config.settings).toEqual([]);
     await session.close();
@@ -187,68 +274,160 @@ describe("session open", () => {
     { tiers: ["default", "auto", "standard", "priority"], advertisedDefault: "default" },
     { tiers: ["auto", "standard", "priority"], advertisedDefault: "auto" },
     { tiers: ["standard", "priority"], advertisedDefault: "standard" },
-  ])("maps the default UI choice to advertised $advertisedDefault", async ({ tiers, advertisedDefault }) => {
-    let fake: FakePiRpc;
-    fake = new FakePiRpc({
-      helloData: { capabilities: [], settings: { tier: "priority", longContext: false }, tiers },
-      companionStateProvider: () => ({ capabilities: [], settings: { ...fake.companionSettings }, tiers }),
-    });
-    const { session, events } = harness({ fake });
-    await session.open("open-1");
-    await session.configure("choose-default", { settings: { tier: "default" } });
-    expect(ofType(events, "request.failed")).toHaveLength(0);
-    expect(fake.companionSettings.tier).toBe(advertisedDefault);
-    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({
-      value: "default", options: [{ label: "default", value: "default" }, { label: "priority", value: "priority" }],
-    });
-    await session.close();
-  });
+  ])(
+    "maps the default UI choice to advertised $advertisedDefault",
+    async ({ tiers, advertisedDefault }) => {
+      let fake: FakePiRpc;
+      fake = new FakePiRpc({
+        helloData: { capabilities: [], settings: { tier: "priority", longContext: false }, tiers },
+        companionStateProvider: () => ({
+          capabilities: [],
+          settings: { ...fake.companionSettings },
+          tiers,
+        }),
+      });
+      const { session, events } = harness({ fake });
+      await session.open("open-1");
+      await session.configure("choose-default", { settings: { tier: "default" } });
+      expect(ofType(events, "request.failed")).toHaveLength(0);
+      expect(fake.companionSettings.tier).toBe(advertisedDefault);
+      expect(
+        ofType(events, "session.config")
+          .at(-1)
+          ?.config.settings.find((setting) => setting.id === "tier"),
+      ).toMatchObject({
+        value: "default",
+        options: [
+          { label: "default", value: "default" },
+          { label: "priority", value: "priority" },
+        ],
+      });
+      await session.close();
+    },
+  );
 
   it("restores a saved standard selection as default without rewriting the companion tier", async () => {
     const tiers = ["auto", "standard", "flex"];
     let fake: FakePiRpc;
     fake = new FakePiRpc({
       helloData: { capabilities: [], settings: { tier: "standard", longContext: false }, tiers },
-      companionStateProvider: () => ({ capabilities: [], settings: { ...fake.companionSettings }, tiers }),
+      companionStateProvider: () => ({
+        capabilities: [],
+        settings: { ...fake.companionSettings },
+        tiers,
+      }),
     });
-    const { session, events } = harness({ fake, config: baseConfig({ settings: { tier: "standard" } }) });
+    const { session, events } = harness({
+      fake,
+      config: baseConfig({ settings: { tier: "standard" } }),
+    });
     await session.open("open-1");
     expect(fake.companionSettings.tier).toBe("standard");
-    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({ value: "default" });
+    expect(
+      ofType(events, "session.config")
+        .at(-1)
+        ?.config.settings.find((setting) => setting.id === "tier"),
+    ).toMatchObject({ value: "default" });
     await session.close();
   });
 
   it("updates the default group when live tier metadata changes", async () => {
-    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "auto", longContext: false }, tiers: ["auto", "standard", "priority"] } });
+    const fake = new FakePiRpc({
+      helloData: {
+        capabilities: [],
+        settings: { tier: "auto", longContext: false },
+        tiers: ["auto", "standard", "priority"],
+      },
+    });
     const { session, events, getLaunch } = harness({ fake });
     await session.open("open-1");
-    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "tier")?.value).toBe("default");
-    fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({
-      version: 1, sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY,
-      state: { capabilities: [], settings: { tier: "standard", longContext: false }, tiers: ["standard", "flex", "priority"] },
-    }) });
+    expect(
+      ofType(events, "session.config")
+        .at(-1)
+        ?.config.settings.find((setting) => setting.id === "tier")?.value,
+    ).toBe("default");
+    fake.emit({
+      type: "extension_ui_request",
+      method: "notify",
+      message:
+        companionStatePrefix +
+        JSON.stringify({
+          version: 1,
+          sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY,
+          state: {
+            capabilities: [],
+            settings: { tier: "standard", longContext: false },
+            tiers: ["standard", "flex", "priority"],
+          },
+        }),
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "tier")).toMatchObject({
-      value: "default", options: ["default", "flex", "priority"].map((value) => ({ label: value, value })),
+    expect(
+      ofType(events, "session.config")
+        .at(-1)
+        ?.config.settings.find((setting) => setting.id === "tier"),
+    ).toMatchObject({
+      value: "default",
+      options: ["default", "flex", "priority"].map((value) => ({ label: value, value })),
     });
     await session.close();
   });
 
   it("migrates old fast input to advertised priority and defers saved selections until metadata arrives", async () => {
-    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "default", longContext: false }, tiers: [] } });
-    const { session, events, getLaunch } = harness({ fake, config: baseConfig({ settings: { tier: "fast" } }) });
+    const fake = new FakePiRpc({
+      helloData: { capabilities: [], settings: { tier: "default", longContext: false }, tiers: [] },
+    });
+    const { session, events, getLaunch } = harness({
+      fake,
+      config: baseConfig({ settings: { tier: "fast" } }),
+    });
     await session.open("open-1");
     expect(ofType(events, "session.ready")).toHaveLength(1);
-    fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY, state: { capabilities: [], settings: { tier: "standard", longContext: false }, tiers: ["standard", "priority"] } }) });
+    fake.emit({
+      type: "extension_ui_request",
+      method: "notify",
+      message:
+        companionStatePrefix +
+        JSON.stringify({
+          version: 1,
+          sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY,
+          state: {
+            capabilities: [],
+            settings: { tier: "standard", longContext: false },
+            tiers: ["standard", "priority"],
+          },
+        }),
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fake.companionSettings.tier).toBe("priority");
     await session.close();
   });
   it("publishes a text-bearing selector and translates selections to companion booleans", async () => {
-    const fake = new FakePiRpc({ state: { model: { provider: "test", id: "model", contextWindow: 272000 } }, helloData: { capabilities: [], settings: { tier: "default", longContext: false }, longContextAvailable: true, contextWindow: 272000, shortContextBudgetTokens: 272000, longContextTarget: 1050000 } });
+    const fake = new FakePiRpc({
+      state: { model: { provider: "test", id: "model", contextWindow: 272000 } },
+      helloData: {
+        capabilities: [],
+        settings: { tier: "default", longContext: false },
+        longContextAvailable: true,
+        contextWindow: 272000,
+        shortContextBudgetTokens: 272000,
+        longContextTarget: 1050000,
+      },
+    });
     const { session, events } = harness({ fake });
     await session.open("open-1");
-    expect(ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "longContext")).toMatchObject({ type: "select", value: "false", options: [{ value: "false", label: "272K" }, { value: "true", label: "1M" }] });
+    expect(
+      ofType(events, "session.config")[0]?.config.settings.find(
+        (setting) => setting.id === "longContext",
+      ),
+    ).toMatchObject({
+      type: "select",
+      value: "false",
+      options: [
+        { value: "false", label: "272K" },
+        { value: "true", label: "1M" },
+      ],
+    });
     await session.configure("on", { settings: { longContext: "true" } });
     expect(fake.companionSettings.longContext).toBe(true);
     await session.configure("off", { settings: { longContext: "false" } });
@@ -259,40 +438,104 @@ describe("session open", () => {
   });
   it("labels both choices from policy even when the observed model budget differs from selected mode", async () => {
     for (const longContext of [false, true]) {
-      const fake = new FakePiRpc({ state: { model: { provider: "plexus", id: "gpt-6-luna", contextWindow: 1050000 } }, helloData: { capabilities: [], settings: { tier: "default", longContext }, longContextAvailable: true, shortContextBudgetTokens: 272000, longContextTarget: 1050000 } });
+      const fake = new FakePiRpc({
+        state: { model: { provider: "plexus", id: "gpt-6-luna", contextWindow: 1050000 } },
+        helloData: {
+          capabilities: [],
+          settings: { tier: "default", longContext },
+          longContextAvailable: true,
+          shortContextBudgetTokens: 272000,
+          longContextTarget: 1050000,
+        },
+      });
       const { session, events } = harness({ fake });
       await session.open("open-1");
-      const setting = ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "longContext");
-      expect(setting).toMatchObject({ type: "select", value: String(longContext), options: [{ value: "false", label: "272K" }, { value: "true", label: "1M" }] });
+      const setting = ofType(events, "session.config")[0]?.config.settings.find(
+        (setting) => setting.id === "longContext",
+      );
+      expect(setting).toMatchObject({
+        type: "select",
+        value: String(longContext),
+        options: [
+          { value: "false", label: "272K" },
+          { value: "true", label: "1M" },
+        ],
+      });
       await session.close();
     }
   });
   it("omits Long Context for companions/models without a distinct short budget", async () => {
-    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "default", longContext: false }, longContextAvailable: false } });
+    const fake = new FakePiRpc({
+      helloData: {
+        capabilities: [],
+        settings: { tier: "default", longContext: false },
+        longContextAvailable: false,
+      },
+    });
     const { session, events } = harness({ fake });
     await session.open("open-1");
-    expect(ofType(events, "session.config")[0]?.config.settings.map((setting) => setting.id)).toEqual([]);
+    expect(
+      ofType(events, "session.config")[0]?.config.settings.map((setting) => setting.id),
+    ).toEqual([]);
     await session.close();
   });
 
   it("does not fail reload on a stale saved Long Context setting for an unqualified model", async () => {
-    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "default", longContext: false }, longContextAvailable: false } });
-    const { session, events } = harness({ fake, config: baseConfig({ settings: { longContext: true } }) });
+    const fake = new FakePiRpc({
+      helloData: {
+        capabilities: [],
+        settings: { tier: "default", longContext: false },
+        longContextAvailable: false,
+      },
+    });
+    const { session, events } = harness({
+      fake,
+      config: baseConfig({ settings: { longContext: true } }),
+    });
     await session.open("open-1");
     expect(ofType(events, "session.ready")).toHaveLength(1);
     expect(fake.companionSettings.longContext).toBe(false);
-    expect(ofType(events, "session.config")[0]?.config.settings.map((setting) => setting.id)).toEqual([]);
+    expect(
+      ofType(events, "session.config")[0]?.config.settings.map((setting) => setting.id),
+    ).toEqual([]);
     await session.close();
   });
 
   it("reapplies an explicit On selection when startup metadata becomes available", async () => {
-    const fake = new FakePiRpc({ helloData: { capabilities: [], settings: { tier: "default", longContext: false }, longContextAvailable: false } });
-    const { session, events, getLaunch } = harness({ fake, config: baseConfig({ settings: { longContext: true } }) });
+    const fake = new FakePiRpc({
+      helloData: {
+        capabilities: [],
+        settings: { tier: "default", longContext: false },
+        longContextAvailable: false,
+      },
+    });
+    const { session, events, getLaunch } = harness({
+      fake,
+      config: baseConfig({ settings: { longContext: true } }),
+    });
     await session.open("open-1");
-    fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY, state: { capabilities: [], settings: { tier: "default", longContext: false }, longContextAvailable: true } }) });
+    fake.emit({
+      type: "extension_ui_request",
+      method: "notify",
+      message:
+        companionStatePrefix +
+        JSON.stringify({
+          version: 1,
+          sessionKey: getLaunch()?.env?.SUPERPI_SESSION_KEY,
+          state: {
+            capabilities: [],
+            settings: { tier: "default", longContext: false },
+            longContextAvailable: true,
+          },
+        }),
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fake.companionSettings.longContext).toBe(true);
-    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
+    expect(
+      ofType(events, "session.config")
+        .at(-1)
+        ?.config.settings.find((setting) => setting.id === "longContext")?.value,
+    ).toBe("true");
     await session.close();
   });
 
@@ -300,17 +543,37 @@ describe("session open", () => {
     const { session, fake, events, getLaunch } = harness();
     await session.open("open-1");
     events.length = 0;
-    const state = { capabilities: [], tiers: ["auto", "priority"], settings: { tier: "priority", longContext: false }, longContextAvailable: true, shortContextBudgetTokens: 200000, longContextTarget: 1000000 };
-    const emit = (sessionKey: string, state: unknown) => fake.emit({ type: "extension_ui_request", method: "notify", message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey, state }) });
+    const state = {
+      capabilities: [],
+      tiers: ["auto", "priority"],
+      settings: { tier: "priority", longContext: false },
+      longContextAvailable: true,
+      shortContextBudgetTokens: 200000,
+      longContextTarget: 1000000,
+    };
+    const emit = (sessionKey: string, state: unknown) =>
+      fake.emit({
+        type: "extension_ui_request",
+        method: "notify",
+        message: companionStatePrefix + JSON.stringify({ version: 1, sessionKey, state }),
+      });
     emit("other-key", state);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(ofType(events, "session.config")).toHaveLength(0);
     emit(String(getLaunch()?.env?.SUPERPI_SESSION_KEY), state);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "longContext")?.description).toContain("Short budget: 200,000 tokens");
+    expect(
+      ofType(events, "session.config")
+        .at(-1)
+        ?.config.settings.find((setting) => setting.id === "longContext")?.description,
+    ).toContain("Short budget: 200,000 tokens");
     emit(String(getLaunch()?.env?.SUPERPI_SESSION_KEY), { ...state, longContextAvailable: false });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(ofType(events, "session.config").at(-1)?.config.settings.map((setting) => setting.id)).toEqual(["tier"]);
+    expect(
+      ofType(events, "session.config")
+        .at(-1)
+        ?.config.settings.map((setting) => setting.id),
+    ).toEqual(["tier"]);
     expect(ofType(events, "timeline.item")).toHaveLength(0);
     await session.close();
   });
@@ -330,7 +593,13 @@ describe("session open", () => {
         thinkingLevel: "high",
       },
       models: [
-        { provider: "test", id: "reasoner", name: "Reasoner", reasoning: true, contextWindow: 2000 },
+        {
+          provider: "test",
+          id: "reasoner",
+          name: "Reasoner",
+          reasoning: true,
+          contextWindow: 2000,
+        },
         { provider: "test", id: "plain", name: "Plain", reasoning: false, contextWindow: 1000 },
       ],
       levels: ["off", "high"],
@@ -362,7 +631,10 @@ describe("session open", () => {
     expect(config?.modes).toEqual([]);
     expect(config?.models.map((model) => model.id)).toEqual(["test/reasoner", "test/plain"]);
     expect(config?.models.map((model) => model.label)).toEqual(["Reasoner", "Plain"]);
-    expect(config?.models.map((model) => model.description)).toEqual(["test/reasoner", "test/plain"]);
+    expect(config?.models.map((model) => model.description)).toEqual([
+      "test/reasoner",
+      "test/plain",
+    ]);
     const reasoner = config?.models.find((model) => model.id === "test/reasoner");
     expect(reasoner?.thinkingOptions?.map((option) => option.id)).toEqual([
       "off",
@@ -375,11 +647,21 @@ describe("session open", () => {
     expect(config?.settings.map((setting) => setting.id)).toEqual(["tier", "longContext"]);
     expect(config?.settings.find((setting) => setting.id === "longContext")?.label).toBe("2K");
 
-    expect(ofType(events, "session.commands")[0]?.commands).toEqual(expect.arrayContaining([
-      { name: "compact", description: "Manually compact the session context", argumentHint: "[instructions]" },
-      { name: "autocompact", description: "Toggle automatic context compaction", argumentHint: "[on|off|toggle]" },
-      { name: "skill", description: "Run a skill" },
-    ]));
+    expect(ofType(events, "session.commands")[0]?.commands).toEqual(
+      expect.arrayContaining([
+        {
+          name: "compact",
+          description: "Manually compact the session context",
+          argumentHint: "[instructions]",
+        },
+        {
+          name: "autocompact",
+          description: "Toggle automatic context compaction",
+          argumentHint: "[on|off|toggle]",
+        },
+        { name: "skill", description: "Run a skill" },
+      ]),
+    );
     expect(ofType(events, "session.persistence")).toHaveLength(1);
     expect(ofType(events, "session.ready")[0]?.requestId).toBe("open-1");
 
@@ -450,8 +732,14 @@ describe("prompt admission", () => {
     const turns = ofType(events, "session.turn");
     expect(turns.map((turn) => turn.state)).toEqual(["started", "completed"]);
 
-    const userItem = ofType(events, "timeline.item").find((event) => event.item.type === "user_message");
-    expect(userItem?.item).toMatchObject({ type: "user_message", clientMessageId: "client-1", text: "hello" });
+    const userItem = ofType(events, "timeline.item").find(
+      (event) => event.item.type === "user_message",
+    );
+    expect(userItem?.item).toMatchObject({
+      type: "user_message",
+      clientMessageId: "client-1",
+      text: "hello",
+    });
     const assistantItem = ofType(events, "timeline.item")
       .filter((event) => event.item.type === "assistant_message")
       .at(-1);
@@ -491,7 +779,11 @@ describe("prompt admission", () => {
     expect(results[0]?.result).toEqual({ type: "completed" });
     expect(ofType(events, "session.turn")).toHaveLength(0);
     expect(fake.requestsOfType("prompt").at(-1)?.message).toBe("/skill now");
-    const manifestPath = path.join(path.dirname(getLaunch()!.args![3]!), "manifest.json");
+    const launchOptions = getLaunch();
+    const transcriptArg = launchOptions?.args?.[3];
+    if (typeof transcriptArg !== "string")
+      throw new Error("expected a transcript path in the launch args");
+    const manifestPath = path.join(path.dirname(transcriptArg), "manifest.json");
     const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
     expect(manifest.interrupted).toBe(false);
     await session.close();
@@ -515,24 +807,34 @@ describe("prompt admission", () => {
   });
 
   it("does not bind a later user row to a refused prompt", async () => {
-    const fake = new FakePiRpc({ onRequest(command) {
-      if (command.message === "refused") throw new Error("Prompt refused before admission");
-      if (command.message === "accepted") {
-        fake.emit({ type: "message_start", message: { role: "user", timestamp: 42, content: "accepted" } });
-        fake.emit({ type: "message_end", message: { role: "user", timestamp: 42, content: "accepted" } });
-        fake.emit({ type: "agent_settled" });
-      }
-    } });
+    const fake = new FakePiRpc({
+      onRequest(command) {
+        if (command.message === "refused") throw new Error("Prompt refused before admission");
+        if (command.message === "accepted") {
+          fake.emit({
+            type: "message_start",
+            message: { role: "user", timestamp: 42, content: "accepted" },
+          });
+          fake.emit({
+            type: "message_end",
+            message: { role: "user", timestamp: 42, content: "accepted" },
+          });
+          fake.emit({ type: "agent_settled" });
+        }
+      },
+    });
     const { session, events } = harness({ fake });
     await session.open("open-1");
     const input = (clientMessageId: string, text: string) => ({
-      clientMessageId, delivery: "auto" as const,
+      clientMessageId,
+      delivery: "auto" as const,
       input: { type: "message" as const, content: [{ type: "text" as const, text }] },
     });
     await expect(session.prompt(input("refused-id", "refused"))).rejects.toThrow("refused");
     await session.prompt(input("accepted-id", "accepted"));
-    expect(ofType(events, "timeline.item").find((event) => event.item.type === "user_message")?.item)
-      .toMatchObject({ clientMessageId: "accepted-id" });
+    expect(
+      ofType(events, "timeline.item").find((event) => event.item.type === "user_message")?.item,
+    ).toMatchObject({ clientMessageId: "accepted-id" });
     await session.close();
   });
 
@@ -927,7 +1229,11 @@ describe("stage 2 configuration", () => {
       contextWindow: 1000,
     };
     const fake = new FakePiRpc({
-      stateProvider: () => ({ sessionId: "pi-session-1", model: currentModel, thinkingLevel: "medium" }),
+      stateProvider: () => ({
+        sessionId: "pi-session-1",
+        model: currentModel,
+        thinkingLevel: "medium",
+      }),
       onRequest: (command) => {
         if (command.type === "set_model") {
           currentModel = {
@@ -1034,7 +1340,10 @@ describe("stage 2 configuration", () => {
 
   it("rejects unknown settings during open without opening the session", async () => {
     const fake = new FakePiRpc();
-    const { session, events } = harness({ fake, config: baseConfig({ settings: { bogus: true } }) });
+    const { session, events } = harness({
+      fake,
+      config: baseConfig({ settings: { bogus: true } }),
+    });
     await session.open("open-1");
     expect(ofType(events, "session.opened")).toHaveLength(0);
     expect(ofType(events, "session.ready")).toHaveLength(0);
@@ -1072,7 +1381,13 @@ describe("stage 2 configuration", () => {
       stateProvider: () => ({
         sessionId: "pi-session-1",
         isStreaming: streaming,
-        model: { provider: "test", id: "model", name: "Model", reasoning: true, contextWindow: 1000 },
+        model: {
+          provider: "test",
+          id: "model",
+          name: "Model",
+          reasoning: true,
+          contextWindow: 1000,
+        },
         thinkingLevel: "medium",
       }),
     });
@@ -1101,9 +1416,17 @@ describe("stage 2 configuration", () => {
   it("dispatches typed /compact without sending it to the model or opening a turn", async () => {
     const { session, fake, events } = harness();
     await session.open("open-1");
-    await session.prompt({ clientMessageId: "c1", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "/compact keep the plan" }] } });
-    expect(fake.requestsOfType("compact")).toEqual([{ type: "compact", customInstructions: "keep the plan" }]);
-    expect(fake.requestsOfType("prompt").some((entry) => entry.message === "/compact keep the plan")).toBe(false);
+    await session.prompt({
+      clientMessageId: "c1",
+      delivery: "auto",
+      input: { type: "message", content: [{ type: "text", text: "/compact keep the plan" }] },
+    });
+    expect(fake.requestsOfType("compact")).toEqual([
+      { type: "compact", customInstructions: "keep the plan" },
+    ]);
+    expect(
+      fake.requestsOfType("prompt").some((entry) => entry.message === "/compact keep the plan"),
+    ).toBe(false);
     expect(ofType(events, "session.turn")).toHaveLength(0);
     expect(ofType(events, "session.prompt_result").at(-1)?.result.type).toBe("completed");
     await session.close();
@@ -1112,10 +1435,16 @@ describe("stage 2 configuration", () => {
   it("reloads resources and republishes config and commands without a model turn", async () => {
     let reloaded = false;
     const fake = new FakePiRpc({
-      commandsProvider: () => reloaded
-        ? [{ name: "superpi-control" }, { name: "skill:late-skill", description: "Arrived after launch" }]
-        : [{ name: "superpi-control" }],
-      onReload: () => { reloaded = true; },
+      commandsProvider: () =>
+        reloaded
+          ? [
+              { name: "superpi-control" },
+              { name: "skill:late-skill", description: "Arrived after launch" },
+            ]
+          : [{ name: "superpi-control" }],
+      onReload: () => {
+        reloaded = true;
+      },
     });
     const { session, events } = harness({ fake });
     await session.open("open-1");
@@ -1132,14 +1461,22 @@ describe("stage 2 configuration", () => {
     expect(commands.map((command) => command.name)).toContain("skill:late-skill");
     expect(ofType(events, "session.config")).not.toHaveLength(0);
     expect(ofType(events, "session.turn")).toHaveLength(0);
-    expect(fake.requestsOfType("prompt").filter((entry) => !String(entry.message).startsWith("/superpi-control "))).toHaveLength(0);
+    expect(
+      fake
+        .requestsOfType("prompt")
+        .filter((entry) => !String(entry.message).startsWith("/superpi-control ")),
+    ).toHaveLength(0);
     await session.close();
   });
 
   it("dispatches typed /reload without sending it to the model or opening a turn", async () => {
     const { session, fake, events } = harness();
     await session.open("open-1");
-    await session.prompt({ clientMessageId: "r1", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "/reload" }] } });
+    await session.prompt({
+      clientMessageId: "r1",
+      delivery: "auto",
+      input: { type: "message", content: [{ type: "text", text: "/reload" }] },
+    });
     expect(fake.requestsOfType("prompt").some((entry) => entry.message === "/reload")).toBe(false);
     expect(ofType(events, "session.turn")).toHaveLength(0);
     expect(ofType(events, "session.prompt_result").at(-1)?.result.type).toBe("completed");
@@ -1153,10 +1490,18 @@ describe("stage 2 configuration", () => {
       stateProvider: () => ({
         sessionId: "pi-session-1",
         isStreaming: streaming,
-        model: { provider: "test", id: "model", name: "Model", reasoning: true, contextWindow: 1000 },
+        model: {
+          provider: "test",
+          id: "model",
+          name: "Model",
+          reasoning: true,
+          contextWindow: 1000,
+        },
         thinkingLevel: "medium",
       }),
-      onReload: () => { reloads += 1; },
+      onReload: () => {
+        reloads += 1;
+      },
     });
     const { session, events } = harness({ fake });
     await session.open("open-1");
@@ -1190,33 +1535,86 @@ describe("stage 2 configuration", () => {
     let autoCompactionEnabled = false;
     const fake = new FakePiRpc({
       stateProvider: () => ({ sessionId: "pi-session-1", autoCompactionEnabled }),
-      onRequest: (command) => { if (command.type === "set_auto_compaction") autoCompactionEnabled = command.enabled === true; },
+      onRequest: (command) => {
+        if (command.type === "set_auto_compaction")
+          autoCompactionEnabled = command.enabled === true;
+      },
     });
     const { session, events } = harness({ fake });
     await session.open("open-1");
     const statsAfterOpen = fake.requestsOfType("get_session_stats").length;
-    for (const [name, args] of [["autocompact", ""], ["autocompact", "off"], ["model", "test/model"], ["thinking", "high"], ["name", "New title"], ["session", ""], ["resume", ""], ["autocompact", "wrong"], ["model", ""], ["thinking", "wrong"]]) {
-      await session.prompt({ clientMessageId: `${name}-${args}`, delivery: "auto", input: { type: "command", name: name!, arguments: args! } });
+    for (const [name, args] of [
+      ["autocompact", ""],
+      ["autocompact", "off"],
+      ["model", "test/model"],
+      ["thinking", "high"],
+      ["name", "New title"],
+      ["session", ""],
+      ["resume", ""],
+      ["autocompact", "wrong"],
+      ["model", ""],
+      ["thinking", "wrong"],
+    ]) {
+      if (name === undefined || args === undefined) throw new Error("expected a command case");
+      await session.prompt({
+        clientMessageId: `${name}-${args}`,
+        delivery: "auto",
+        input: { type: "command", name, arguments: args },
+      });
     }
-    expect(fake.requestsOfType("set_auto_compaction")).toEqual([{ type: "set_auto_compaction", enabled: true }, { type: "set_auto_compaction", enabled: false }]);
-    expect(fake.requestsOfType("set_model")).toContainEqual({ type: "set_model", provider: "test", modelId: "model" });
-    expect(fake.requestsOfType("set_thinking_level")).toEqual([{ type: "set_thinking_level", level: "high" }]);
-    expect(fake.requestsOfType("set_session_name")).toEqual([{ type: "set_session_name", name: "New title" }]);
+    expect(fake.requestsOfType("set_auto_compaction")).toEqual([
+      { type: "set_auto_compaction", enabled: true },
+      { type: "set_auto_compaction", enabled: false },
+    ]);
+    expect(fake.requestsOfType("set_model")).toContainEqual({
+      type: "set_model",
+      provider: "test",
+      modelId: "model",
+    });
+    expect(fake.requestsOfType("set_thinking_level")).toEqual([
+      { type: "set_thinking_level", level: "high" },
+    ]);
+    expect(fake.requestsOfType("set_session_name")).toEqual([
+      { type: "set_session_name", name: "New title" },
+    ]);
     // Only the native `/session` display reads stats; model/thinking changes
     // re-report through the usage publish path, which also reads stats.
-    expect(fake.requestsOfType("get_session_stats").length).toBeGreaterThanOrEqual(statsAfterOpen + 1);
-    expect(fake.requestsOfType("prompt").filter((entry) => !String(entry.message).startsWith("/superpi-control "))).toHaveLength(0);
-    expect(ofType(events, "session.prompt_result").slice(-4).every((event) => event.result.type === "failed")).toBe(true);
+    expect(fake.requestsOfType("get_session_stats").length).toBeGreaterThanOrEqual(
+      statsAfterOpen + 1,
+    );
+    expect(
+      fake
+        .requestsOfType("prompt")
+        .filter((entry) => !String(entry.message).startsWith("/superpi-control ")),
+    ).toHaveLength(0);
+    expect(
+      ofType(events, "session.prompt_result")
+        .slice(-4)
+        .every((event) => event.result.type === "failed"),
+    ).toBe(true);
     await session.close();
   });
 
   it("keeps extension-owned built-in names on the native extension path", async () => {
-    const fake = new FakePiRpc({ commands: [{ name: "superpi-control" }, { name: "session", description: "Extension session command" }], promptDisposition: "handled" });
+    const fake = new FakePiRpc({
+      commands: [
+        { name: "superpi-control" },
+        { name: "session", description: "Extension session command" },
+      ],
+      promptDisposition: "handled",
+    });
     const { session } = harness({ fake });
     await session.open("open-1");
     const statsAfterOpen = fake.requestsOfType("get_session_stats").length;
-    await session.prompt({ clientMessageId: "c1", delivery: "auto", input: { type: "command", name: "session", arguments: "custom" } });
-    expect(fake.requestsOfType("prompt")).toContainEqual({ type: "prompt", message: "/session custom" });
+    await session.prompt({
+      clientMessageId: "c1",
+      delivery: "auto",
+      input: { type: "command", name: "session", arguments: "custom" },
+    });
+    expect(fake.requestsOfType("prompt")).toContainEqual({
+      type: "prompt",
+      message: "/session custom",
+    });
     // The extension-owned command takes the prompt path and issues no
     // additional stats read beyond the open-time usage publish.
     expect(fake.requestsOfType("get_session_stats")).toHaveLength(statsAfterOpen);
@@ -1227,7 +1625,11 @@ describe("stage 2 configuration", () => {
     const { session, fake, events } = harness();
     await session.open("open-1");
     const count = fake.requestsOfType("prompt").length;
-    await session.prompt({ clientMessageId: "private", delivery: "auto", input: { type: "command", name: "superpi-control", arguments: "forged" } });
+    await session.prompt({
+      clientMessageId: "private",
+      delivery: "auto",
+      input: { type: "command", name: "superpi-control", arguments: "forged" },
+    });
     expect(fake.requestsOfType("prompt")).toHaveLength(count);
     expect(ofType(events, "session.prompt_result").at(-1)?.result.type).toBe("failed");
     await session.close();
@@ -1237,9 +1639,18 @@ describe("stage 2 configuration", () => {
     const fake = new FakePiRpc({ stateProvider: () => ({ autoCompactionEnabled: false }) });
     const { session, events } = harness({ fake });
     await session.open("open-1");
-    await session.prompt({ clientMessageId: "auto", delivery: "auto", input: { type: "command", name: "autocompact", arguments: "on" } });
-    expect(fake.requestsOfType("set_auto_compaction")).toEqual([{ type: "set_auto_compaction", enabled: true }]);
-    expect(ofType(events, "timeline.item").at(-1)?.item).toMatchObject({ type: "notification", message: expect.stringContaining("Automatic compaction: off.") });
+    await session.prompt({
+      clientMessageId: "auto",
+      delivery: "auto",
+      input: { type: "command", name: "autocompact", arguments: "on" },
+    });
+    expect(fake.requestsOfType("set_auto_compaction")).toEqual([
+      { type: "set_auto_compaction", enabled: true },
+    ]);
+    expect(ofType(events, "timeline.item").at(-1)?.item).toMatchObject({
+      type: "notification",
+      message: expect.stringContaining("Automatic compaction: off."),
+    });
     await session.close();
   });
 
@@ -1250,7 +1661,9 @@ describe("stage 2 configuration", () => {
       onRequest: (command) => {
         if (command.type === "set_model") modelId = String(command.modelId);
         if (command.type === "prompt" && String(command.message).startsWith("/superpi-control ")) {
-          const request = JSON.parse(Buffer.from(String(command.message).split(" ")[1]!, "base64url").toString("utf8"));
+          const encoded = String(command.message).split(" ")[1];
+          if (encoded === undefined) throw new Error("expected an encoded superpi request");
+          const request = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
           if (request.operation === "get-state") throw new Error("metadata unavailable");
         }
       },
@@ -1269,7 +1682,12 @@ function userEntry(
   parentId: string | null,
   timestamp: number,
 ): Record<string, unknown> {
-  return { id, parentId, type: "message", message: { role: "user", timestamp, content: `msg ${id}` } };
+  return {
+    id,
+    parentId,
+    type: "message",
+    message: { role: "user", timestamp, content: `msg ${id}` },
+  };
 }
 
 function assistantEntry(
@@ -1301,9 +1719,7 @@ function childEnvelope(
 }
 
 function firstUserToken(events: readonly ProviderEvent[]): unknown {
-  const item = ofType(events, "timeline.item").find(
-    (event) => event.item.type === "user_message",
-  );
+  const item = ofType(events, "timeline.item").find((event) => event.item.type === "user_message");
   return item && item.item.type === "user_message" ? item.item.revertToken : undefined;
 }
 
@@ -1311,9 +1727,13 @@ describe("root integration", () => {
   it("does not navigate if clearing old queued input fails", async () => {
     const onRewind = vi.fn();
     const fake = new FakePiRpc({
-      entries: [userEntry("e-u1", null, 100)], leafId: "e-u1", onRewind,
+      entries: [userEntry("e-u1", null, 100)],
+      leafId: "e-u1",
+      onRewind,
       messages: [{ role: "user", timestamp: 100, content: "hello" }],
-      onRequest(command) { if (command.type === "clear_queue") throw new Error("Queue clear refused"); },
+      onRequest(command) {
+        if (command.type === "clear_queue") throw new Error("Queue clear refused");
+      },
     });
     const { session, events } = harness({ fake, history: "replay" });
     await session.open("open-1");
@@ -1340,7 +1760,14 @@ describe("root integration", () => {
     const fake = new FakePiRpc({
       entriesProvider: () => ({ entries, leafId }),
       messagesProvider: () => messages,
-      companionStateProvider: () => ({ capabilities: [], settings: { tier: "default", longContext: false }, contextWindow: 1000, longContextAvailable: true, longContextTarget: 1050000, modelBaselineContextWindow: 1000 }),
+      companionStateProvider: () => ({
+        capabilities: [],
+        settings: { tier: "default", longContext: false },
+        contextWindow: 1000,
+        longContextAvailable: true,
+        longContextTarget: 1050000,
+        modelBaselineContextWindow: 1000,
+      }),
       clearQueue: { steering: ["stale"], followUp: [] },
       onRewind: () => {
         // navigateTree moves the leaf to the selected user entry's parent.
@@ -1366,15 +1793,19 @@ describe("root integration", () => {
     await session.revert("rev-1", targetToken, "conversation");
 
     expect(ofType(events, "request.completed")[0]?.requestId).toBe("rev-1");
-    expect(ofType(events, "session.config").at(-1)?.config.settings.find((setting) => setting.id === "longContext")?.description).toContain("Maximum: 1,050,000 tokens");
     expect(
-      ofType(events, "session.notice").some((notice) => notice.notice.id === "rewind-queue-cleared"),
+      ofType(events, "session.config")
+        .at(-1)
+        ?.config.settings.find((setting) => setting.id === "longContext")?.description,
+    ).toContain("Maximum: 1,050,000 tokens");
+    expect(
+      ofType(events, "session.notice").some(
+        (notice) => notice.notice.id === "rewind-queue-cleared",
+      ),
     ).toBe(true);
     const forbidden = ["write", "bash", "fork", "new_session", "switch_session", "clone"];
     expect(
-      fake.requests
-        .map((record) => String(record.type))
-        .filter((type) => forbidden.includes(type)),
+      fake.requests.map((record) => String(record.type)).filter((type) => forbidden.includes(type)),
     ).toEqual([]);
     const postUsers = ofType(events, "timeline.item")
       .filter((event) => event.item.type === "user_message")
@@ -1394,13 +1825,19 @@ describe("root integration", () => {
     events.length = 0;
     fake.requests.length = 0;
 
-    await session.revert("rev-foreign", { version: 1, owner: "other", entryId: "e-u1" }, "conversation");
+    await session.revert(
+      "rev-foreign",
+      { version: 1, owner: "other", entryId: "e-u1" },
+      "conversation",
+    );
     await session.revert("rev-offbranch", { ...token, entryId: "e-missing" }, "conversation");
 
     const failures = ofType(events, "request.failed");
     expect(failures.map((failure) => failure.requestId)).toEqual(["rev-foreign", "rev-offbranch"]);
     expect(
-      fake.requestsOfType("prompt").some((record) => String(record.message).includes("superpi-control")),
+      fake
+        .requestsOfType("prompt")
+        .some((record) => String(record.message).includes("superpi-control")),
     ).toBe(false);
     await session.close();
   });
@@ -1471,7 +1908,9 @@ describe("root integration", () => {
 
     expect(ofType(events, "request.failed")[0]?.error.message).toContain("cancelled");
     expect(
-      ofType(events, "session.notice").some((notice) => notice.notice.id === "rewind-queue-cleared"),
+      ofType(events, "session.notice").some(
+        (notice) => notice.notice.id === "rewind-queue-cleared",
+      ),
     ).toBe(true);
     await session.close();
   });
@@ -1513,7 +1952,9 @@ describe("root integration", () => {
 
     await session.revert("rev-1", token, "conversation");
 
-    expect(ofType(events, "request.failed")[0]?.error.message).toBe("rewind requires an idle agent");
+    expect(ofType(events, "request.failed")[0]?.error.message).toBe(
+      "rewind requires an idle agent",
+    );
     expect(ofType(events, "session.runtime_failed")).toHaveLength(0);
     expect(session.currentState).toBe("ready");
     await session.close();
@@ -1554,7 +1995,12 @@ describe("root integration", () => {
     expect(companionNoise).toHaveLength(0);
 
     events.length = 0;
-    fake.emit({ type: "extension_ui_request", method: "notify", message: "plain notice", level: "warning" });
+    fake.emit({
+      type: "extension_ui_request",
+      method: "notify",
+      message: "plain notice",
+      level: "warning",
+    });
     const notification = ofType(events, "timeline.item").find(
       (event) => event.item.type === "notification",
     );
@@ -1569,10 +2015,16 @@ describe("root integration", () => {
 
 describe("bounded final fixes", () => {
   function transcriptFile(cwdPath: string, lines: string[]): string {
-    return [
-      JSON.stringify({ type: "session", version: 3, id: "native-1", timestamp: "2026-01-01T00:00:00.000Z", cwd: cwdPath }),
+    return `${[
+      JSON.stringify({
+        type: "session",
+        version: 3,
+        id: "native-1",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        cwd: cwdPath,
+      }),
       ...lines,
-    ].join("\n") + "\n";
+    ].join("\n")}\n`;
   }
 
   function nativeUser(id: string, parentId: string | null, timestamp: number): string {
@@ -1612,7 +2064,13 @@ describe("bounded final fixes", () => {
       state: {
         sessionId: "pi-session-1",
         sessionFile: transcript,
-        model: { provider: "test", id: "model", name: "Model", reasoning: false, contextWindow: 1000 },
+        model: {
+          provider: "test",
+          id: "model",
+          name: "Model",
+          reasoning: false,
+          contextWindow: 1000,
+        },
         thinkingLevel: "medium",
       },
       messages: [{ role: "user", timestamp: 100, content: "restored" }],
@@ -1672,11 +2130,23 @@ describe("bounded final fixes", () => {
       onPrompt: (command) => {
         const message = String(command.message);
         if (message.includes("first")) {
-          fake.emit({ type: "message_start", message: { role: "user", timestamp: 1, content: "first" } });
-          fake.emit({ type: "message_end", message: { role: "user", timestamp: 1, content: "first" } });
+          fake.emit({
+            type: "message_start",
+            message: { role: "user", timestamp: 1, content: "first" },
+          });
+          fake.emit({
+            type: "message_end",
+            message: { role: "user", timestamp: 1, content: "first" },
+          });
         } else if (message.includes("later")) {
-          fake.emit({ type: "message_start", message: { role: "user", timestamp: 2, content: "later" } });
-          fake.emit({ type: "message_end", message: { role: "user", timestamp: 2, content: "later" } });
+          fake.emit({
+            type: "message_start",
+            message: { role: "user", timestamp: 2, content: "later" },
+          });
+          fake.emit({
+            type: "message_end",
+            message: { role: "user", timestamp: 2, content: "later" },
+          });
           fake.emit({ type: "agent_settled" });
         }
       },
@@ -1684,7 +2154,8 @@ describe("bounded final fixes", () => {
     const { session, events } = harness({ fake });
     await session.open("open-1");
     const input = (clientMessageId: string, text: string) => ({
-      clientMessageId, delivery: "auto" as const,
+      clientMessageId,
+      delivery: "auto" as const,
       input: { type: "message" as const, content: [{ type: "text" as const, text }] },
     });
     await session.prompt(input("first-id", "first"));
@@ -1936,19 +2407,45 @@ describe("context usage reporting", () => {
     const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
     const { session, events } = harness({ fake });
     await session.open("open-1");
-    expect(ofType(events, "session.usage").at(-1)?.usage).not.toHaveProperty("contextWindowUsedTokens");
-    await session.prompt({ clientMessageId: "context-live", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+    expect(ofType(events, "session.usage").at(-1)?.usage).not.toHaveProperty(
+      "contextWindowUsedTokens",
+    );
+    await session.prompt({
+      clientMessageId: "context-live",
+      delivery: "auto",
+      input: { type: "message", content: [{ type: "text", text: "work" }] },
+    });
     await flush();
     used = 42000;
-    fake.emit({ type: "message_end", message: { role: "assistant", timestamp: 1, content: [], stopReason: "toolUse", usage: { input: 41000, output: 1000, cost: { total: 0.02 } } } });
-    fake.emit({ type: "tool_execution_start", toolCallId: "long-tool", toolName: "bash", args: { command: "sleep 30" } });
-    await vi.waitFor(() => expect(ofType(events, "session.usage").at(-1)).toMatchObject({
-      turnId: ofType(events, "session.turn")[0]?.turnId,
-      usage: { contextWindowMaxTokens: 1000, contextWindowUsedTokens: 42000 },
-    }));
+    fake.emit({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        timestamp: 1,
+        content: [],
+        stopReason: "toolUse",
+        usage: { input: 41000, output: 1000, cost: { total: 0.02 } },
+      },
+    });
+    fake.emit({
+      type: "tool_execution_start",
+      toolCallId: "long-tool",
+      toolName: "bash",
+      args: { command: "sleep 30" },
+    });
+    await vi.waitFor(() =>
+      expect(ofType(events, "session.usage").at(-1)).toMatchObject({
+        turnId: ofType(events, "session.turn")[0]?.turnId,
+        usage: { contextWindowMaxTokens: 1000, contextWindowUsedTokens: 42000 },
+      }),
+    );
     expect(ofType(events, "session.turn").map((turn) => turn.state)).toEqual(["started"]);
     // The next streaming update retains the newly recovered measurement.
-    fake.emit({ type: "message_update", usage: { input: 2, output: 1, cost: { total: 0.001 } }, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "x" } });
+    fake.emit({
+      type: "message_update",
+      usage: { input: 2, output: 1, cost: { total: 0.001 } },
+      assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "x" },
+    });
     expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(42000);
     await session.close();
   });
@@ -1958,12 +2455,23 @@ describe("context usage reporting", () => {
     const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
     const { session, events } = harness({ fake });
     await session.open("open-1");
-    await session.prompt({ clientMessageId: "context-live", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+    await session.prompt({
+      clientMessageId: "context-live",
+      delivery: "auto",
+      input: { type: "message", content: [{ type: "text", text: "work" }] },
+    });
     await flush();
     for (const measurement of [2000, 3000]) {
       used = measurement;
-      fake.emit({ type: "message_end", message: { role: "assistant", timestamp: measurement, content: [], stopReason: "toolUse" } });
-      await vi.waitFor(() => expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(measurement));
+      fake.emit({
+        type: "message_end",
+        message: { role: "assistant", timestamp: measurement, content: [], stopReason: "toolUse" },
+      });
+      await vi.waitFor(() =>
+        expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(
+          measurement,
+        ),
+      );
     }
     expect(ofType(events, "session.turn").map((turn) => turn.state)).toEqual(["started"]);
     await session.close();
@@ -1974,15 +2482,26 @@ describe("context usage reporting", () => {
     const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
     const { session, events } = harness({ fake });
     await session.open("open-1");
-    await session.prompt({ clientMessageId: "context-compact", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+    await session.prompt({
+      clientMessageId: "context-compact",
+      delivery: "auto",
+      input: { type: "message", content: [{ type: "text", text: "work" }] },
+    });
     await flush();
     used = null;
     fake.emit({ type: "compaction_end", result: { summary: "compacted" }, aborted: false });
-    expect(ofType(events, "session.usage").at(-1)?.usage).not.toHaveProperty("contextWindowUsedTokens");
+    expect(ofType(events, "session.usage").at(-1)?.usage).not.toHaveProperty(
+      "contextWindowUsedTokens",
+    );
     await flush();
     used = 2000;
-    fake.emit({ type: "message_end", message: { role: "assistant", timestamp: 2, content: [], stopReason: "toolUse" } });
-    await vi.waitFor(() => expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(2000));
+    fake.emit({
+      type: "message_end",
+      message: { role: "assistant", timestamp: 2, content: [], stopReason: "toolUse" },
+    });
+    await vi.waitFor(() =>
+      expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(2000),
+    );
     expect(ofType(events, "session.turn")).toHaveLength(1);
     await session.close();
   });
@@ -1992,7 +2511,10 @@ describe("context usage reporting", () => {
     const { session, events } = harness({ fake });
     await session.open("open-1");
     fake.emit({ type: "compaction_end", aborted: false, errorMessage: "compaction failed" });
-    fake.emit({ type: "message_end", message: { role: "assistant", timestamp: 2, content: [], usage: { input: 100, output: 1 } } });
+    fake.emit({
+      type: "message_end",
+      message: { role: "assistant", timestamp: 2, content: [], usage: { input: 100, output: 1 } },
+    });
     expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(1000);
     await session.close();
   });
@@ -2001,10 +2523,12 @@ describe("context usage reporting", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let used: number | null = null;
     let unavailable = false;
-    const fake = new FakePiRpc({ sessionStatsProvider: () => {
-      if (unavailable) throw new Error("stats temporarily unavailable");
-      return statsPayload(used, 1000);
-    } });
+    const fake = new FakePiRpc({
+      sessionStatsProvider: () => {
+        if (unavailable) throw new Error("stats temporarily unavailable");
+        return statsPayload(used, 1000);
+      },
+    });
     const { session, events } = harness({ fake });
     try {
       await session.open("open-1");
@@ -2012,7 +2536,11 @@ describe("context usage reporting", () => {
       await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS * 2);
       expect(fake.requestsOfType("get_session_stats")).toHaveLength(idleCalls);
       unavailable = true;
-      await session.prompt({ clientMessageId: "context-retry", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+      await session.prompt({
+        clientMessageId: "context-retry",
+        delivery: "auto",
+        input: { type: "message", content: [{ type: "text", text: "work" }] },
+      });
       await vi.advanceTimersByTimeAsync(0);
       used = 2000;
       unavailable = false;
@@ -2023,14 +2551,21 @@ describe("context usage reporting", () => {
       const stoppedCalls = fake.requestsOfType("get_session_stats").length;
       await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS * 2);
       expect(fake.requestsOfType("get_session_stats")).toHaveLength(stoppedCalls);
-    } finally { await session.close(); vi.useRealTimers(); }
+    } finally {
+      await session.close();
+      vi.useRealTimers();
+    }
   });
 
   it("ignores a late live snapshot after a newer configuration refresh", async () => {
     let release!: () => void;
     let entered!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
     const fake = new FakePiRpc({ sessionStats: statsPayload(5000, 1000) });
     const { session, events } = harness({ fake });
     await session.open("open-1");
@@ -2038,11 +2573,18 @@ describe("context usage reporting", () => {
     let held = false;
     vi.spyOn(fake, "request").mockImplementation(async (command) => {
       if (command.type === "get_session_stats" && !held) {
-        held = true; entered(); await gate; return statsPayload(1000, 1000);
+        held = true;
+        entered();
+        await gate;
+        return statsPayload(1000, 1000);
       }
       return request(command);
     });
-    await session.prompt({ clientMessageId: "context-stale", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+    await session.prompt({
+      clientMessageId: "context-stale",
+      delivery: "auto",
+      input: { type: "message", content: [{ type: "text", text: "work" }] },
+    });
     await started;
     await session.configure("newer-stats", { thinkingOption: "high" });
     const usageCount = ofType(events, "session.usage").length;
@@ -2057,7 +2599,9 @@ describe("context usage reporting", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let used: number | null = 1000;
     let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
     const { session, events } = harness({ fake });
     try {
@@ -2066,11 +2610,17 @@ describe("context usage reporting", () => {
       let held = false;
       vi.spyOn(fake, "request").mockImplementation(async (command) => {
         if (command.type === "get_session_stats" && !held) {
-          held = true; await gate; return statsPayload(6000, 1000);
+          held = true;
+          await gate;
+          return statsPayload(6000, 1000);
         }
         return request(command);
       });
-      await session.prompt({ clientMessageId: "context-compact-stale", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+      await session.prompt({
+        clientMessageId: "context-compact-stale",
+        delivery: "auto",
+        input: { type: "message", content: [{ type: "text", text: "work" }] },
+      });
       used = null;
       fake.emit({ type: "compaction_end", result: { summary: "compacted" }, aborted: false });
       const usageCount = ofType(events, "session.usage").length;
@@ -2079,17 +2629,25 @@ describe("context usage reporting", () => {
       // The compaction event coalesced one fresh follow-up. The rejected old
       // reply must never restore its 6000-token pre-compaction measurement.
       expect(ofType(events, "session.usage")).toHaveLength(usageCount + 1);
-      expect(ofType(events, "session.usage").at(-1)?.usage).not.toHaveProperty("contextWindowUsedTokens");
+      expect(ofType(events, "session.usage").at(-1)?.usage).not.toHaveProperty(
+        "contextWindowUsedTokens",
+      );
       used = 2500;
       await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS);
       expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(2500);
-    } finally { release(); await session.close(); vi.useRealTimers(); }
+    } finally {
+      release();
+      await session.close();
+      vi.useRealTimers();
+    }
   });
 
   it("coalesces live event refreshes rather than overlapping slow stats requests", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const fake = new FakePiRpc();
     const { session } = harness({ fake });
     try {
@@ -2097,12 +2655,22 @@ describe("context usage reporting", () => {
       const request = fake.request.bind(fake);
       let statsCalls = 0;
       vi.spyOn(fake, "request").mockImplementation(async (command) => {
-        if (command.type === "get_session_stats") { statsCalls += 1; await gate; }
+        if (command.type === "get_session_stats") {
+          statsCalls += 1;
+          await gate;
+        }
         return request(command);
       });
-      await session.prompt({ clientMessageId: "context-slow", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+      await session.prompt({
+        clientMessageId: "context-slow",
+        delivery: "auto",
+        input: { type: "message", content: [{ type: "text", text: "work" }] },
+      });
       for (let timestamp = 1; timestamp <= 3; timestamp += 1) {
-        fake.emit({ type: "message_end", message: { role: "assistant", timestamp, content: [], stopReason: "toolUse" } });
+        fake.emit({
+          type: "message_end",
+          message: { role: "assistant", timestamp, content: [], stopReason: "toolUse" },
+        });
       }
       await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS * 2);
       expect(statsCalls).toBe(1);
@@ -2113,14 +2681,20 @@ describe("context usage reporting", () => {
       expect(statsCalls).toBe(2);
       await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS);
       expect(statsCalls).toBe(3);
-    } finally { release(); await session.close(); vi.useRealTimers(); }
+    } finally {
+      release();
+      await session.close();
+      vi.useRealTimers();
+    }
   });
 
   it("starts a new turn's refresh even when the previous turn's live stats reply is still pending", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let used: number | null = null;
     let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
     const { session, events } = harness({ fake, config: baseConfig({ persist: false }) });
     try {
@@ -2129,12 +2703,17 @@ describe("context usage reporting", () => {
       let held = false;
       vi.spyOn(fake, "request").mockImplementation(async (command) => {
         if (command.type === "get_session_stats" && !held) {
-          held = true; await gate; return statsPayload(1000, 1000);
+          held = true;
+          await gate;
+          return statsPayload(1000, 1000);
         }
         return request(command);
       });
-      const input = (clientMessageId: string) => ({ clientMessageId, delivery: "auto" as const,
-        input: { type: "message" as const, content: [{ type: "text" as const, text: "work" }] } });
+      const input = (clientMessageId: string) => ({
+        clientMessageId,
+        delivery: "auto" as const,
+        input: { type: "message" as const, content: [{ type: "text" as const, text: "work" }] },
+      });
       await session.prompt(input("turn-a"));
       fake.emit({ type: "agent_settled" });
       await vi.advanceTimersByTimeAsync(0);
@@ -2150,7 +2729,11 @@ describe("context usage reporting", () => {
       const calls = fake.requestsOfType("get_session_stats").length;
       await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS);
       expect(fake.requestsOfType("get_session_stats")).toHaveLength(calls + 1);
-    } finally { release(); await session.close(); vi.useRealTimers(); }
+    } finally {
+      release();
+      await session.close();
+      vi.useRealTimers();
+    }
   });
 
   it("refreshes context without replacing in-flight message usage with session token/cost totals", async () => {
@@ -2158,14 +2741,31 @@ describe("context usage reporting", () => {
     const fake = new FakePiRpc({ sessionStatsProvider: () => statsPayload(used, 1000) });
     const { session, events } = harness({ fake });
     await session.open("open-1");
-    await session.prompt({ clientMessageId: "context-accounting", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+    await session.prompt({
+      clientMessageId: "context-accounting",
+      delivery: "auto",
+      input: { type: "message", content: [{ type: "text", text: "work" }] },
+    });
     await flush();
     used = 2000;
-    fake.emit({ type: "message_end", message: { role: "assistant", timestamp: 1, content: [], stopReason: "toolUse",
-      usage: { input: 100, output: 12, cacheRead: 7, cost: { total: 0.001 } } } });
-    await vi.waitFor(() => expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(2000));
+    fake.emit({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        timestamp: 1,
+        content: [],
+        stopReason: "toolUse",
+        usage: { input: 100, output: 12, cacheRead: 7, cost: { total: 0.001 } },
+      },
+    });
+    await vi.waitFor(() =>
+      expect(ofType(events, "session.usage").at(-1)?.usage.contextWindowUsedTokens).toBe(2000),
+    );
     expect(ofType(events, "session.usage").at(-1)?.usage).toMatchObject({
-      inputTokens: 100, outputTokens: 12, cachedInputTokens: 7, totalCostUsd: 0.001,
+      inputTokens: 100,
+      outputTokens: 12,
+      cachedInputTokens: 7,
+      totalCostUsd: 0.001,
     });
     await session.close();
   });
@@ -2174,18 +2774,30 @@ describe("context usage reporting", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let release!: () => void;
     let entered!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
     const fake = new FakePiRpc();
     const { session, events } = harness({ fake });
     try {
       await session.open("open-1");
       const request = fake.request.bind(fake);
       vi.spyOn(fake, "request").mockImplementation(async (command) => {
-        if (command.type === "get_session_stats") { entered(); await gate; return statsPayload(1000, 1000); }
+        if (command.type === "get_session_stats") {
+          entered();
+          await gate;
+          return statsPayload(1000, 1000);
+        }
         return request(command);
       });
-      await session.prompt({ clientMessageId: "context-closed", delivery: "auto", input: { type: "message", content: [{ type: "text", text: "work" }] } });
+      await session.prompt({
+        clientMessageId: "context-closed",
+        delivery: "auto",
+        input: { type: "message", content: [{ type: "text", text: "work" }] },
+      });
       await started;
       await session.close();
       const usageCount = ofType(events, "session.usage").length;
@@ -2194,7 +2806,11 @@ describe("context usage reporting", () => {
       await vi.advanceTimersByTimeAsync(CONTEXT_USAGE_POLL_INTERVAL_MS * 2);
       expect(ofType(events, "session.usage")).toHaveLength(usageCount);
       expect(fake.requests).toHaveLength(requestCount);
-    } finally { release(); await session.close(); vi.useRealTimers(); }
+    } finally {
+      release();
+      await session.close();
+      vi.useRealTimers();
+    }
   });
 
   it("omits used tokens when Pi reports unknown consumption", async () => {
@@ -2233,7 +2849,9 @@ describe("context usage reporting", () => {
     used = 9000;
     await session.configure("config-1", { thinkingOption: "high" });
 
-    expect(ofType(events, "request.completed").map((event) => event.requestId)).toContain("config-1");
+    expect(ofType(events, "request.completed").map((event) => event.requestId)).toContain(
+      "config-1",
+    );
     expect(ofType(events, "session.usage").at(-1)).toMatchObject({
       usage: { contextWindowMaxTokens: 1000, contextWindowUsedTokens: 9000 },
     });

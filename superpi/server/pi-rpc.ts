@@ -126,7 +126,8 @@ function collectSecrets(env: NodeJS.ProcessEnv | undefined): string[] {
   const secrets: string[] = [];
   for (const [key, value] of Object.entries(env)) {
     if (typeof value !== "string" || value.length < 8) continue;
-    if (/(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE|SESSION)/i.test(key)) secrets.push(value);
+    if (/(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE|SESSION)/i.test(key))
+      secrets.push(value);
   }
   return secrets;
 }
@@ -135,7 +136,10 @@ function redact(text: string, secrets: readonly string[]): string {
   let output = text;
   for (const secret of secrets) output = output.split(secret).join("[redacted]");
   output = output.replace(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, "Bearer [redacted]");
-  output = output.replace(/\b(?:sk|pk|ghp|github_pat|xox[baprs])[-_][A-Za-z0-9_-]{8,}\b/g, "[redacted]");
+  output = output.replace(
+    /\b(?:sk|pk|ghp|github_pat|xox[baprs])[-_][A-Za-z0-9_-]{8,}\b/g,
+    "[redacted]",
+  );
   return output;
 }
 
@@ -224,7 +228,11 @@ export function createPiRpc(options: PiRpcOptions): Promise<PiRpc> {
     try {
       record = JSON.parse(line);
     } catch (error) {
-      fail(new PiRpcTransportError(`Pi emitted a non-JSON stdout record: ${line.slice(0, 200)}`, { cause: error }));
+      fail(
+        new PiRpcTransportError(`Pi emitted a non-JSON stdout record: ${line.slice(0, 200)}`, {
+          cause: error,
+        }),
+      );
       return;
     }
     if (record === null || typeof record !== "object" || Array.isArray(record)) {
@@ -237,8 +245,9 @@ export function createPiRpc(options: PiRpcOptions): Promise<PiRpc> {
   child.stdout.on("data", (chunk: Buffer) => {
     stdoutBuffer += decoder.write(chunk);
     stdoutBytes += chunk.byteLength;
-    let newlineIndex: number;
-    while ((newlineIndex = stdoutBuffer.indexOf("\n")) !== -1) {
+    for (;;) {
+      const newlineIndex = stdoutBuffer.indexOf("\n");
+      if (newlineIndex === -1) break;
       const raw = stdoutBuffer.slice(0, newlineIndex + 1);
       stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
       stdoutBytes -= Buffer.byteLength(raw, "utf8");
@@ -247,7 +256,11 @@ export function createPiRpc(options: PiRpcOptions): Promise<PiRpc> {
       if (state === "failed") return;
     }
     if (stdoutBytes > MAX_FRAME_BYTES) {
-      fail(new PiRpcTransportError(`Pi stdout frame exceeded ${MAX_FRAME_BYTES} bytes without a newline`));
+      fail(
+        new PiRpcTransportError(
+          `Pi stdout frame exceeded ${MAX_FRAME_BYTES} bytes without a newline`,
+        ),
+      );
     }
   });
 
@@ -302,7 +315,9 @@ export function createPiRpc(options: PiRpcOptions): Promise<PiRpc> {
     try {
       payload = `${JSON.stringify(record)}\n`;
     } catch (error) {
-      return Promise.reject(new PiRpcTransportError("Pi RPC record is not JSON-serializable", { cause: error }));
+      return Promise.reject(
+        new PiRpcTransportError("Pi RPC record is not JSON-serializable", { cause: error }),
+      );
     }
     return new Promise<void>((resolve, reject) => {
       if (!isOpen()) {
@@ -311,7 +326,12 @@ export function createPiRpc(options: PiRpcOptions): Promise<PiRpc> {
       }
       try {
         child.stdin.write(payload, (error) => {
-          if (error) reject(new PiRpcTransportError(`Failed to write to Pi stdin: ${error.message}`, { cause: error }));
+          if (error)
+            reject(
+              new PiRpcTransportError(`Failed to write to Pi stdin: ${error.message}`, {
+                cause: error,
+              }),
+            );
           else resolve();
         });
       } catch (error) {
@@ -405,7 +425,6 @@ export function createPiRpc(options: PiRpcOptions): Promise<PiRpc> {
       setTimeout(resolve, ms);
     });
   }
-
 
   function endStdin(): Promise<void> {
     return new Promise<void>((resolve) => {
@@ -520,7 +539,9 @@ export function createPiRpc(options: PiRpcOptions): Promise<PiRpc> {
     });
     child.once("error", (error: Error) => {
       reject(
-        new PiRpcTransportError(`Failed to launch Pi (${options.command}): ${error.message}`, { cause: error }),
+        new PiRpcTransportError(`Failed to launch Pi (${options.command}): ${error.message}`, {
+          cause: error,
+        }),
       );
     });
   });

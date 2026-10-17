@@ -1,9 +1,9 @@
-import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import type {
   ProviderEvent,
   ProviderPermissionRequest,
   ProviderPermissionResponse,
 } from "@getpaseo/plugin/server/provider";
+import type { JsonValue } from "@getpaseo/protocol/agent-types";
 import { z } from "zod";
 import type { DialogAnswer, DialogView } from "../shared/dialogs.js";
 
@@ -168,7 +168,10 @@ function questionFor(dialog: NativeDialog): Record<string, unknown> {
   };
 }
 
-function buildPermissionRequest(dialog: NativeDialog, generation?: string): ProviderPermissionRequest {
+function buildPermissionRequest(
+  dialog: NativeDialog,
+  generation?: string,
+): ProviderPermissionRequest {
   const request: Record<string, unknown> = {
     id: dialog.id,
     name: dialog.method,
@@ -187,7 +190,9 @@ function buildPermissionRequest(dialog: NativeDialog, generation?: string): Prov
           ? { prefill: dialog.prefill }
           : {}),
         ...(dialog.method === "confirm" ? { confirmLabel: CONFIRM_LABEL } : {}),
-        ...("timeout" in dialog && dialog.timeout !== undefined ? { timeoutMs: dialog.timeout } : {}),
+        ...("timeout" in dialog && dialog.timeout !== undefined
+          ? { timeoutMs: dialog.timeout }
+          : {}),
         ...(generation ? { generation } : {}),
       },
     }),
@@ -231,9 +236,7 @@ function nativeResponse(dialog: NativeDialog, answer: NativeAnswer): Record<stri
   }
   if (dialog.method === "confirm") {
     const confirmed =
-      answer.value === true ||
-      answer.value === "true" ||
-      answer.value === CONFIRM_LABEL;
+      answer.value === true || answer.value === "true" || answer.value === CONFIRM_LABEL;
     return { ...base, confirmed };
   }
   if (typeof answer.value === "string") {
@@ -321,7 +324,9 @@ export function createDialogBridge(input: CreateDialogBridgeInput): DialogBridge
   }
 
   async function cancelAll(): Promise<void> {
-    const results = await Promise.allSettled([...pending.keys()].map((id) => resolveNative(id, { behavior: "deny" })));
+    const results = await Promise.allSettled(
+      [...pending.keys()].map((id) => resolveNative(id, { behavior: "deny" })),
+    );
     const failed = results.find((result) => result.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
   }
@@ -332,18 +337,38 @@ export function createDialogBridge(input: CreateDialogBridgeInput): DialogBridge
       const dialog = parseNativeDialog(record);
       if (!dialog) {
         const raw = record as Record<string, unknown> | null;
-        if (!raw || raw.type !== "extension_ui_request" || typeof raw.id !== "string"
-          || !["select", "confirm", "input", "editor"].includes(String(raw.method))) return false;
-        emit({ type: "timeline.item", sessionId, item: {
-          type: "notification", id: `invalid-dialog:${raw.id}`, level: "error",
-          message: "Pi sent a malformed blocking dialog. Sending a cancellation response.",
-        } });
-        const write = rpc.send({ type: "extension_ui_response", id: raw.id, cancelled: true }).catch(() => {
-          emit({ type: "timeline.item", sessionId, item: {
-            type: "notification", id: `invalid-dialog-cancel:${raw.id}`, level: "error",
-            message: "The malformed Pi dialog could not be canceled because its connection failed.",
-          } });
+        if (!raw) return false;
+        if (
+          raw.type !== "extension_ui_request" ||
+          typeof raw.id !== "string" ||
+          !["select", "confirm", "input", "editor"].includes(String(raw.method))
+        )
+          return false;
+        emit({
+          type: "timeline.item",
+          sessionId,
+          item: {
+            type: "notification",
+            id: `invalid-dialog:${raw.id}`,
+            level: "error",
+            message: "Pi sent a malformed blocking dialog. Sending a cancellation response.",
+          },
         });
+        const write = rpc
+          .send({ type: "extension_ui_response", id: raw.id, cancelled: true })
+          .catch(() => {
+            emit({
+              type: "timeline.item",
+              sessionId,
+              item: {
+                type: "notification",
+                id: `invalid-dialog-cancel:${raw.id}`,
+                level: "error",
+                message:
+                  "The malformed Pi dialog could not be canceled because its connection failed.",
+              },
+            });
+          });
         invalidWrites.add(write);
         void write.finally(() => invalidWrites.delete(write));
         return true;

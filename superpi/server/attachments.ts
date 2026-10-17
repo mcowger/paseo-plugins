@@ -160,10 +160,7 @@ function renderIssue(part: {
   projectPath?: string;
 }): string {
   const format = forgeFormat(part.forge);
-  const lines = [
-    `${format.label} ${format.issue} #${part.number}: ${part.title}`,
-    part.url,
-  ];
+  const lines = [`${format.label} ${format.issue} #${part.number}: ${part.title}`, part.url];
   if (part.projectPath) lines.push(`Project: ${part.projectPath}`);
   if (part.body) lines.push("", part.body);
   return lines.join("\n");
@@ -228,9 +225,14 @@ function isChatHistoryText(part: { text: string } & Record<string, unknown>): bo
 function truncateForkHistory(entries: Array<{ text: string; isFork: boolean }>): string[] {
   const separator = "\n\n";
   const joinedLength = (): number =>
-    entries.reduce((total, entry, index) => total + entry.text.length + (index > 0 ? separator.length : 0), 0);
+    entries.reduce(
+      (total, entry, index) => total + entry.text.length + (index > 0 ? separator.length : 0),
+      0,
+    );
   if (joinedLength() <= MAX_PROMPT_TEXT_CHARS) return entries.map((entry) => entry.text);
-  const originalForkChars = entries.filter((entry) => entry.isFork).reduce((total, entry) => total + entry.text.length, 0);
+  const originalForkChars = entries
+    .filter((entry) => entry.isFork)
+    .reduce((total, entry) => total + entry.text.length, 0);
   let overflow = joinedLength() - MAX_PROMPT_TEXT_CHARS;
   for (const entry of entries) {
     if (overflow <= 0) break;
@@ -239,10 +241,10 @@ function truncateForkHistory(entries: Array<{ text: string; isFork: boolean }>):
     entry.text = entry.text.slice(entry.text.length - cut);
     overflow -= cut;
   }
-  const note =
-    `[Forked chat history truncated to fit the Pi prompt budget (showing part of ${originalForkChars} chars).]`;
+  const note = `[Forked chat history truncated to fit the Pi prompt budget (showing part of ${originalForkChars} chars).]`;
   const forkIndex = entries.findIndex((entry) => entry.isFork);
-  if (forkIndex >= 0) entries[forkIndex]!.text = `${note}\n${entries[forkIndex]!.text}`;
+  const forkEntry = forkIndex >= 0 ? entries[forkIndex] : undefined;
+  if (forkEntry) forkEntry.text = `${note}\n${forkEntry.text}`;
   else entries.unshift({ text: note, isFork: false });
   let message = entries.map((entry) => entry.text).join(separator);
   if (message.length > MAX_PROMPT_TEXT_CHARS + note.length) {

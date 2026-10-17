@@ -223,8 +223,9 @@ async function forEachTranscriptLine(
   try {
     for await (const chunk of stream) {
       buffer += chunk;
-      let index: number;
-      while ((index = buffer.indexOf("\n")) !== -1) {
+      for (;;) {
+        const index = buffer.indexOf("\n");
+        if (index === -1) break;
         emit(buffer.slice(0, index));
         buffer = buffer.slice(index + 1);
       }

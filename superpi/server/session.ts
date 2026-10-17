@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
 import type {
+  ProviderCommand,
   ProviderConfigChanges,
   ProviderConfigState,
-  ProviderEvent,
   ProviderError,
+  ProviderEvent,
   ProviderModel,
   ProviderPermissionResponse,
   ProviderPersistence,
@@ -12,40 +12,45 @@ import type {
   ProviderSessionConfig,
   ProviderSetting,
   ProviderThinkingOption,
-  ProviderCommand,
   ProviderUsage,
 } from "@getpaseo/plugin/server/provider";
+import { z } from "zod";
 import {
+  type CompanionState,
   companionPrefix,
-  companionStateSchema,
   companionStatePrefix,
+  companionStateSchema,
   companionStateUpdateSchema,
   contextSettingPresentation,
   formatContextLength,
   tierSchema,
-  type CompanionState,
 } from "../shared/companion.js";
-import {
-  parseSubpiChildEnvelope,
-  type SubpiChildEnvelope,
-} from "../shared/subagents.js";
+import { type ModelNameStyle, resolveModelNameStyle } from "../shared/settings.js";
+import { parseSubpiChildEnvelope, type SubpiChildEnvelope } from "../shared/subagents.js";
 import { tierSettingPresentation } from "../shared/tiers.js";
 import { buildPiPrompt } from "./attachments.js";
+import { prepareAuthSnapshot } from "./auth-snapshot.js";
+import { createCompanionChannel } from "./companion-channel.js";
 import { createDialogBridge, type DialogBridge, type DialogRegistry } from "./dialogs.js";
 import {
   buildActiveUserTokenMap,
   findActiveBranchUserEntry,
+  type NativeSessionEntry,
   parseNativeEntries,
+  type RewindToken,
   readPiTranscriptMessages,
   readPiTranscriptSnapshot,
   resolveRewindToken,
-  type NativeSessionEntry,
-  type RewindToken,
 } from "./native-history.js";
-import { createCompanionChannel } from "./companion-channel.js";
-import { prepareAuthSnapshot } from "./auth-snapshot.js";
-import { PiRpcTimeoutError, PiRpcTransportError, createPiRpc, type PiRecord, type PiRpc, type PiRpcOptions } from "./pi-rpc.js";
 import { SessionStore } from "./persistence.js";
+import {
+  createPiRpc,
+  type PiRecord,
+  type PiRpc,
+  type PiRpcOptions,
+  PiRpcTimeoutError,
+  PiRpcTransportError,
+} from "./pi-rpc.js";
 import { createSubagentObserver, type SubagentObserver } from "./subagents.js";
 import { createTimeline, type Timeline, type TimelineContext } from "./timeline.js";
 
@@ -143,6 +148,7 @@ function resolvePiThinkingOptions(
 export function mapPiModels(
   models: readonly unknown[],
   defaultModelId?: string,
+  nameStyle: ModelNameStyle = "full",
 ): ProviderModel[] {
   const mapped: ProviderModel[] = [];
   for (const raw of models) {
@@ -152,12 +158,14 @@ export function mapPiModels(
     if (!provider || !id) continue;
     const fullId = `${provider}/${id}`;
     const name = asString(raw.name) ?? id;
+    const shortName = asString(raw.plexusShortName)?.trim() || undefined;
+    const label = nameStyle === "short" && shortName ? shortName : name;
     const contextWindow = typeof raw.contextWindow === "number" ? raw.contextWindow : undefined;
     const { thinkingOptions, defaultThinkingOptionId } = resolvePiThinkingOptions(raw);
     mapped.push({
       id: fullId,
-      label: name,
-      description: fullId,
+      label,
+      description: label === name ? fullId : `${name} (${fullId})`,
       isSelectable: true,
       metadata: { provider, modelId: id },
       ...(contextWindow !== undefined ? { contextWindowMaxTokens: contextWindow } : {}),
@@ -181,18 +189,46 @@ export function mapPiThinkingLevels(levels: readonly string[]): ProviderThinking
 }
 
 const PI_RPC_COMMANDS: readonly ProviderCommand[] = [
-  { name: "compact", description: "Manually compact the session context", argumentHint: "[instructions]" },
+  {
+    name: "compact",
+    description: "Manually compact the session context",
+    argumentHint: "[instructions]",
+  },
   { name: "reload", description: "Reload extensions, skills, prompts, themes, and context files" },
-  { name: "autocompact", description: "Toggle automatic context compaction", argumentHint: "[on|off|toggle]" },
-  { name: "model", description: "Set model (or use the composer picker)", argumentHint: "<provider/model>" },
+  {
+    name: "autocompact",
+    description: "Toggle automatic context compaction",
+    argumentHint: "[on|off|toggle]",
+  },
+  {
+    name: "model",
+    description: "Set model (or use the composer picker)",
+    argumentHint: "<provider/model>",
+  },
   { name: "thinking", description: "Set thinking level", argumentHint: "<level>" },
   { name: "name", description: "Set Pi session display name", argumentHint: "<name>" },
   { name: "session", description: "Show Pi session info and stats" },
 ];
 
 const PI_TUI_COMMANDS = new Set([
-  "settings", "tree", "scoped-models", "export", "import", "share", "bug", "copy",
-  "changelog", "hotkeys", "fork", "clone", "trust", "login", "logout", "new", "resume", "quit",
+  "settings",
+  "tree",
+  "scoped-models",
+  "export",
+  "import",
+  "share",
+  "bug",
+  "copy",
+  "changelog",
+  "hotkeys",
+  "fork",
+  "clone",
+  "trust",
+  "login",
+  "logout",
+  "new",
+  "resume",
+  "quit",
 ]);
 
 export function mapPiCommands(commands: readonly unknown[]): ProviderCommand[] {
@@ -299,30 +335,41 @@ function parseSessionStats(data: unknown): ParsedSessionStats {
   return stats;
 }
 
-function buildCompanionSettings(state: CompanionState | undefined, modelContextWindow?: number): ProviderSetting[] {
+function buildCompanionSettings(
+  state: CompanionState | undefined,
+  modelContextWindow?: number,
+): ProviderSetting[] {
   const tier = tierSettingPresentation(state?.tiers ?? [], state?.settings.tier ?? "default");
   const longContext = state?.settings.longContext ?? false;
   const context = contextSettingPresentation(state, modelContextWindow);
   return [
-    ...(state?.tiers?.length ? [{
-      type: "select",
-      id: "tier",
-      label: "Service tier",
-      description: "Companion tier applied to the next provider request",
-      value: tier.value,
-      options: tier.options,
-    } as const] : []),
-    ...(state?.longContextAvailable === true ? [{
-      type: "select",
-      id: "longContext",
-      label: context.label,
-      description: context.description,
-      value: String(longContext),
-      options: [
-        { value: "false", label: formatContextLength(state.shortContextBudgetTokens) },
-        { value: "true", label: formatContextLength(state.longContextTarget) },
-      ],
-    } as const] : []),
+    ...(state?.tiers?.length
+      ? [
+          {
+            type: "select",
+            id: "tier",
+            label: "Service tier",
+            description: "Companion tier applied to the next provider request",
+            value: tier.value,
+            options: tier.options,
+          } as const,
+        ]
+      : []),
+    ...(state?.longContextAvailable === true
+      ? [
+          {
+            type: "select",
+            id: "longContext",
+            label: context.label,
+            description: context.description,
+            value: String(longContext),
+            options: [
+              { value: "false", label: formatContextLength(state.shortContextBudgetTokens) },
+              { value: "true", label: formatContextLength(state.longContextTarget) },
+            ],
+          } as const,
+        ]
+      : []),
   ];
 }
 
@@ -351,7 +398,11 @@ export function parseCompanionSettings(
       if (!parsed.success) throw new Error(`Invalid Superpi tier: ${String(settings.tier)}`);
       data.tier = parsed.data;
     } else if (key === "longContext") {
-      if (typeof settings.longContext !== "boolean" && settings.longContext !== "true" && settings.longContext !== "false") {
+      if (
+        typeof settings.longContext !== "boolean" &&
+        settings.longContext !== "true" &&
+        settings.longContext !== "false"
+      ) {
         throw new Error("Superpi longContext setting must be a boolean or true/false selection");
       }
       data.longContext = settings.longContext === true || settings.longContext === "true";
@@ -376,7 +427,10 @@ export interface BuildLaunchArgsInput {
  */
 export function buildLaunchArgs(input: BuildLaunchArgsInput): string[] {
   const { config, companionPath, sessionDirectory, transcript } = input;
-  const args = config.persist === false ? ["--mode", "rpc", "--no-session"] : ["--mode", "rpc", "--session-dir", sessionDirectory];
+  const args =
+    config.persist === false
+      ? ["--mode", "rpc", "--no-session"]
+      : ["--mode", "rpc", "--session-dir", sessionDirectory];
   if (config.persist !== false && transcript) args.push("--session", transcript);
   if (config.model) args.push("--model", config.model);
   if (config.thinkingOption) args.push("--thinking", config.thinkingOption);
@@ -397,6 +451,8 @@ export interface SuperpiSessionOptions {
   capabilities?: readonly string[];
   /** Aggregated plugin dialog registry; the session registers its bridge while open. */
   dialogRegistry?: DialogRegistry;
+  /** Model name style for catalog labels; resolved per config read, defaults to full names. */
+  getModelNameStyle?: () => Promise<ModelNameStyle>;
   emit: (event: ProviderEvent) => void;
   createPiRpc?: (options: PiRpcOptions) => Promise<PiRpc>;
 }
@@ -494,10 +550,16 @@ export class SuperpiSession {
   private emit(event: ProviderEvent): void {
     if (event.type === "session.usage") {
       const usage = { ...event.usage };
-      if (usage.contextWindowMaxTokens === undefined && this.lastContextWindow.maxTokens !== undefined) {
+      if (
+        usage.contextWindowMaxTokens === undefined &&
+        this.lastContextWindow.maxTokens !== undefined
+      ) {
         usage.contextWindowMaxTokens = this.lastContextWindow.maxTokens;
       }
-      if (usage.contextWindowUsedTokens === undefined && this.lastContextWindow.usedTokens !== undefined) {
+      if (
+        usage.contextWindowUsedTokens === undefined &&
+        this.lastContextWindow.usedTokens !== undefined
+      ) {
         usage.contextWindowUsedTokens = this.lastContextWindow.usedTokens;
       }
       this.lastReportedUsage = usage;
@@ -570,7 +632,8 @@ export class SuperpiSession {
         emit: (event) => this.emit(event),
         generation: this.generation,
       });
-      this.unregisterDialog = this.options.dialogRegistry?.register(this.sessionId, this.dialogBridge) ?? null;
+      this.unregisterDialog =
+        this.options.dialogRegistry?.register(this.sessionId, this.dialogBridge) ?? null;
 
       const state = parsePiState(await rpc.request({ type: "get_state" }));
       this.modelSupportsImages = piModelSupportsImages(state.model);
@@ -611,11 +674,22 @@ export class SuperpiSession {
       const config = await this.readConfigState();
       const nativeCommands = extractArray(await rpc.request({ type: "get_commands" }), "commands");
       const commands = mapPiCommands(nativeCommands);
-      this.extensionCommands = new Set(nativeCommands.flatMap((command) => isRecord(command) && asString(command.name) && command.name !== "superpi-control" ? [String(command.name)] : []));
-      this.steerableCommands = new Set(nativeCommands.flatMap((command) =>
-        isRecord(command) && asString(command.name) && (command.source === "prompt" || command.source === "skill")
-          ? [String(command.name)] : [],
-      ));
+      this.extensionCommands = new Set(
+        nativeCommands.flatMap((command) =>
+          isRecord(command) && asString(command.name) && command.name !== "superpi-control"
+            ? [String(command.name)]
+            : [],
+        ),
+      );
+      this.steerableCommands = new Set(
+        nativeCommands.flatMap((command) =>
+          isRecord(command) &&
+          asString(command.name) &&
+          (command.source === "prompt" || command.source === "skill")
+            ? [String(command.name)]
+            : [],
+        ),
+      );
 
       this.emit({
         type: "session.opened",
@@ -634,7 +708,8 @@ export class SuperpiSession {
             id: "interrupted-run",
             severity: "warning",
             title: "Previous run was interrupted",
-            description: "The last turn did not confirm a terminal record; it was not replayed automatically.",
+            description:
+              "The last turn did not confirm a terminal record; it was not replayed automatically.",
           },
         });
       }
@@ -649,7 +724,11 @@ export class SuperpiSession {
         await this.replayHistory();
       }
       if (store) {
-        this.emit({ type: "session.persistence", sessionId: this.sessionId, persistence: store.persistence });
+        this.emit({
+          type: "session.persistence",
+          sessionId: this.sessionId,
+          persistence: store.persistence,
+        });
       }
       this.state = "ready";
       await this.enqueueOperation(() => this.applyDeferredSettings());
@@ -662,13 +741,24 @@ export class SuperpiSession {
     }
   }
 
+  private async resolveModelNameStyle(): Promise<ModelNameStyle> {
+    if (!this.options.getModelNameStyle) return "full";
+    try {
+      return resolveModelNameStyle(await this.options.getModelNameStyle());
+    } catch {
+      return "full";
+    }
+  }
+
   private async readConfigState(): Promise<ProviderConfigState> {
     if (!this.rpc) throw new Error("Superpi session transport is not available");
     const state = parsePiState(await this.rpc.request({ type: "get_state" }));
     this.modelSupportsImages = piModelSupportsImages(state.model);
+    const nameStyle = await this.resolveModelNameStyle();
     const models = mapPiModels(
       extractArray(await this.rpc.request({ type: "get_available_models" }), "models"),
       modelKey(state.model),
+      nameStyle,
     );
     const thinkingOptions = mapPiThinkingLevels(
       extractArray(
@@ -682,7 +772,12 @@ export class SuperpiSession {
       models,
       modes: [],
       thinkingOptions,
-      settings: buildCompanionSettings(this.companionState, isRecord(state.model) && typeof state.model.contextWindow === "number" ? state.model.contextWindow : undefined),
+      settings: buildCompanionSettings(
+        this.companionState,
+        isRecord(state.model) && typeof state.model.contextWindow === "number"
+          ? state.model.contextWindow
+          : undefined,
+      ),
     };
   }
 
@@ -724,15 +819,27 @@ export class SuperpiSession {
         type: "session.prompt_result",
         sessionId: this.sessionId,
         clientMessageId: prompt.clientMessageId,
-        result: { type: "failed", error: { message: "Superpi has no active turn available for steering" } },
+        result: {
+          type: "failed",
+          error: { message: "Superpi has no active turn available for steering" },
+        },
       });
       return;
     }
-    const text = prompt.input.type === "message" && prompt.input.content.every((part) => part.type === "text")
-      ? prompt.input.content.map((part) => part.type === "text" ? part.text : "").join("\n").trim()
-      : undefined;
+    const text =
+      prompt.input.type === "message" && prompt.input.content.every((part) => part.type === "text")
+        ? prompt.input.content
+            .map((part) => (part.type === "text" ? part.text : ""))
+            .join("\n")
+            .trim()
+        : undefined;
     const typedCommand = text ? /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(text) : null;
-    const command = prompt.input.type === "command" ? prompt.input : typedCommand ? { name: typedCommand[1]!, arguments: typedCommand[2] ?? "" } : undefined;
+    const command =
+      prompt.input.type === "command"
+        ? prompt.input
+        : typedCommand?.[1]
+          ? { name: typedCommand[1], arguments: typedCommand[2] ?? "" }
+          : undefined;
     if (!steering && command && !this.extensionCommands.has(command.name)) {
       if (command.name === "compact") {
         await this.runCompactCommand(prompt, command.arguments);
@@ -742,7 +849,11 @@ export class SuperpiSession {
         await this.runReloadCommand(prompt);
         return;
       }
-      if (PI_RPC_COMMANDS.some((entry) => entry.name === command.name) || PI_TUI_COMMANDS.has(command.name) || command.name === "superpi-control") {
+      if (
+        PI_RPC_COMMANDS.some((entry) => entry.name === command.name) ||
+        PI_TUI_COMMANDS.has(command.name) ||
+        command.name === "superpi-control"
+      ) {
         await this.runNativeCommand(prompt, command.name, command.arguments);
         return;
       }
@@ -760,20 +871,30 @@ export class SuperpiSession {
     try {
       const built = await buildPiPrompt(prompt, this.modelSupportsImages);
       const commandName = /^\/([^\s]+)(?:\s|$)/.exec(built.message.trimStart())?.[1];
-      if (steering && commandName && (
-        PI_RPC_COMMANDS.some((entry) => entry.name === commandName) ||
-        PI_TUI_COMMANDS.has(commandName) || commandName === "superpi-control" ||
-        (this.extensionCommands.has(commandName) && !this.steerableCommands.has(commandName))
-      )) {
-        throw new Error("Pi extension and native commands are unavailable while steering; run them while idle");
+      if (
+        steering &&
+        commandName &&
+        (PI_RPC_COMMANDS.some((entry) => entry.name === commandName) ||
+          PI_TUI_COMMANDS.has(commandName) ||
+          commandName === "superpi-control" ||
+          (this.extensionCommands.has(commandName) && !this.steerableCommands.has(commandName)))
+      ) {
+        throw new Error(
+          "Pi extension and native commands are unavailable while steering; run them while idle",
+        );
       }
       admission.message = commandName ? undefined : built.message;
-      const admissionTimeout = !steering && commandName && this.extensionCommands.has(commandName) ? 0 : undefined;
+      const admissionTimeout =
+        !steering && commandName && this.extensionCommands.has(commandName) ? 0 : undefined;
       // A replacement prompt must not overtake end-of-turn queue cleanup.
       // Await outside the operation barrier: finalization may itself own it.
       if (!steering && this.settlePromise) await this.settlePromise;
       await this.enqueueOperation(async () => {
-        if (this.state !== "ready" || this.rpc !== rpc || !this.pendingResults.has(prompt.clientMessageId)) {
+        if (
+          this.state !== "ready" ||
+          this.rpc !== rpc ||
+          !this.pendingResults.has(prompt.clientMessageId)
+        ) {
           throw new Error("Superpi session closed before the prompt was sent");
         }
         if (steering) {
@@ -791,11 +912,14 @@ export class SuperpiSession {
           throw new Error("The active Pi turn ended before the steer was sent");
         }
         admission.sent = true;
-        const result = await rpc.request({
-          type: steering ? "steer" : "prompt",
-          message: built.message,
-          ...(built.images ? { images: built.images } : {}),
-        }, admissionTimeout);
+        const result = await rpc.request(
+          {
+            type: steering ? "steer" : "prompt",
+            message: built.message,
+            ...(built.images ? { images: built.images } : {}),
+          },
+          admissionTimeout,
+        );
         // Keep admission and any rejected-steer queue cleanup inside the
         // barrier, before a later prompt can start another run.
         await this.handleDisposition(prompt.clientMessageId, result);
@@ -840,7 +964,10 @@ export class SuperpiSession {
           type: "session.prompt_result",
           sessionId: this.sessionId,
           clientMessageId: prompt.clientMessageId,
-          result: { type: "failed", error: { message: "Cannot compact while the session is busy" } },
+          result: {
+            type: "failed",
+            error: { message: "Cannot compact while the session is busy" },
+          },
         });
         return;
       }
@@ -925,13 +1052,27 @@ export class SuperpiSession {
         while (Date.now() < deadline) {
           try {
             config = await this.readConfigState();
-            const nativeCommands = extractArray(await rpc.request({ type: "get_commands" }), "commands");
+            const nativeCommands = extractArray(
+              await rpc.request({ type: "get_commands" }),
+              "commands",
+            );
             commands = mapPiCommands(nativeCommands);
-            this.extensionCommands = new Set(nativeCommands.flatMap((command) => isRecord(command) && asString(command.name) && command.name !== "superpi-control" ? [String(command.name)] : []));
-            this.steerableCommands = new Set(nativeCommands.flatMap((command) =>
-              isRecord(command) && asString(command.name) && (command.source === "prompt" || command.source === "skill")
-                ? [String(command.name)] : [],
-            ));
+            this.extensionCommands = new Set(
+              nativeCommands.flatMap((command) =>
+                isRecord(command) && asString(command.name) && command.name !== "superpi-control"
+                  ? [String(command.name)]
+                  : [],
+              ),
+            );
+            this.steerableCommands = new Set(
+              nativeCommands.flatMap((command) =>
+                isRecord(command) &&
+                asString(command.name) &&
+                (command.source === "prompt" || command.source === "skill")
+                  ? [String(command.name)]
+                  : [],
+              ),
+            );
             lastError = undefined;
             break;
           } catch (error) {
@@ -940,7 +1081,11 @@ export class SuperpiSession {
           }
         }
         if (!config || !commands) {
-          throw lastError instanceof Error ? lastError : new Error("Pi did not confirm the reload; it may still be in progress, try /reload again");
+          throw lastError instanceof Error
+            ? lastError
+            : new Error(
+                "Pi did not confirm the reload; it may still be in progress, try /reload again",
+              );
         }
         this.emit({ type: "session.config", sessionId: this.sessionId, config });
         this.emit({ type: "session.commands", sessionId: this.sessionId, commands });
@@ -964,7 +1109,11 @@ export class SuperpiSession {
     }
   }
 
-  private async runNativeCommand(prompt: ProviderPrompt, name: string, args: string): Promise<void> {
+  private async runNativeCommand(
+    prompt: ProviderPrompt,
+    name: string,
+    args: string,
+  ): Promise<void> {
     try {
       await this.enqueueOperation(async () => {
         const rpc = this.rpc;
@@ -972,23 +1121,35 @@ export class SuperpiSession {
         switch (name) {
           case "autocompact": {
             const value = args.trim() || "toggle";
-            if (!["on", "off", "toggle"].includes(value)) throw new Error("Use /autocompact [on|off|toggle].");
+            if (!["on", "off", "toggle"].includes(value))
+              throw new Error("Use /autocompact [on|off|toggle].");
             const state = await rpc.request({ type: "get_state" });
-            if (value === "toggle" && (!isRecord(state) || typeof state.autoCompactionEnabled !== "boolean")) throw new Error("Pi did not report its automatic compaction state; use on or off.");
-            const enabled = value === "on" || (value === "toggle" && isRecord(state) && state.autoCompactionEnabled === false);
+            if (
+              value === "toggle" &&
+              (!isRecord(state) || typeof state.autoCompactionEnabled !== "boolean")
+            )
+              throw new Error("Pi did not report its automatic compaction state; use on or off.");
+            const enabled =
+              value === "on" ||
+              (value === "toggle" && isRecord(state) && state.autoCompactionEnabled === false);
             await rpc.request({ type: "set_auto_compaction", enabled });
             const applied = await rpc.request({ type: "get_state" });
-            if (!isRecord(applied) || typeof applied.autoCompactionEnabled !== "boolean") throw new Error("Pi did not confirm its automatic compaction state.");
-            this.commandNotice(`Automatic compaction: ${applied.autoCompactionEnabled ? "on" : "off"}. This updates Pi's global compaction preference; project overrides may take precedence.`);
+            if (!isRecord(applied) || typeof applied.autoCompactionEnabled !== "boolean")
+              throw new Error("Pi did not confirm its automatic compaction state.");
+            this.commandNotice(
+              `Automatic compaction: ${applied.autoCompactionEnabled ? "on" : "off"}. This updates Pi's global compaction preference; project overrides may take precedence.`,
+            );
             break;
           }
           case "model": {
-            if (!args.trim()) throw new Error("Use /model <provider/model>, or choose a model in the composer.");
+            if (!args.trim())
+              throw new Error("Use /model <provider/model>, or choose a model in the composer.");
             await this.applyConfiguration({ model: args.trim() });
             break;
           }
           case "thinking": {
-            if (!PI_THINKING_OPTIONS.some((option) => option.id === args.trim())) throw new Error("Use /thinking <off|minimal|low|medium|high|xhigh|max>.");
+            if (!PI_THINKING_OPTIONS.some((option) => option.id === args.trim()))
+              throw new Error("Use /thinking <off|minimal|low|medium|high|xhigh|max>.");
             await this.applyConfiguration({ thinkingOption: args.trim() });
             break;
           }
@@ -998,20 +1159,44 @@ export class SuperpiSession {
             this.commandNotice(`Pi session name: ${args.trim()}.`);
             break;
           case "session":
-            this.commandNotice(JSON.stringify(await rpc.request({ type: "get_session_stats" })) ?? "Pi returned no session statistics.");
+            this.commandNotice(
+              JSON.stringify(await rpc.request({ type: "get_session_stats" })) ??
+                "Pi returned no session statistics.",
+            );
             break;
           default:
-            throw new Error(`/${name} requires Pi's terminal UI and isn't available through Superpi. Use the Paseo controls or resume Pi in a terminal.`);
+            throw new Error(
+              `/${name} requires Pi's terminal UI and isn't available through Superpi. Use the Paseo controls or resume Pi in a terminal.`,
+            );
         }
       });
-      this.emit({ type: "session.prompt_result", sessionId: this.sessionId, clientMessageId: prompt.clientMessageId, result: { type: "completed" } });
+      this.emit({
+        type: "session.prompt_result",
+        sessionId: this.sessionId,
+        clientMessageId: prompt.clientMessageId,
+        result: { type: "completed" },
+      });
     } catch (error) {
-      this.emit({ type: "session.prompt_result", sessionId: this.sessionId, clientMessageId: prompt.clientMessageId, result: { type: "failed", error: toProviderError(error) } });
+      this.emit({
+        type: "session.prompt_result",
+        sessionId: this.sessionId,
+        clientMessageId: prompt.clientMessageId,
+        result: { type: "failed", error: toProviderError(error) },
+      });
     }
   }
 
   private commandNotice(message: string): void {
-    this.emit({ type: "timeline.item", sessionId: this.sessionId, item: { type: "notification", id: `${this.sessionId}:command:${++this.notificationCounter}`, level: "info", message } });
+    this.emit({
+      type: "timeline.item",
+      sessionId: this.sessionId,
+      item: {
+        type: "notification",
+        id: `${this.sessionId}:command:${++this.notificationCounter}`,
+        level: "info",
+        message,
+      },
+    });
   }
 
   async configure(requestId: string, changes: ProviderConfigChanges): Promise<void> {
@@ -1050,7 +1235,8 @@ export class SuperpiSession {
       const data = parseCompanionSettings(settings);
       if (typeof data.tier === "string") {
         const tier = this.resolveTierSelection(data.tier);
-        if (!tier) throw new Error(`Service tier '${data.tier}' is not advertised for the current model.`);
+        if (!tier)
+          throw new Error(`Service tier '${data.tier}' is not advertised for the current model.`);
         data.tier = tier;
       }
       if (Object.keys(data).length > 0) {
@@ -1068,10 +1254,21 @@ export class SuperpiSession {
       const parsed = parseModelId(changes.model);
       await rpc.request({ type: "set_model", provider: parsed.provider, modelId: parsed.modelId });
       if (this.companion) {
-        try { this.companionState = companionStateSchema.parse(await this.companion.request("get-state")); }
-        catch (error) {
-          if (this.companionState) this.companionState = { capabilities: this.companionState.capabilities, settings: this.companionState.settings };
-          this.emit({ type: "session.config", sessionId: this.sessionId, config: await this.readConfigState() });
+        try {
+          this.companionState = companionStateSchema.parse(
+            await this.companion.request("get-state"),
+          );
+        } catch (error) {
+          if (this.companionState)
+            this.companionState = {
+              capabilities: this.companionState.capabilities,
+              settings: this.companionState.settings,
+            };
+          this.emit({
+            type: "session.config",
+            sessionId: this.sessionId,
+            config: await this.readConfigState(),
+          });
           throw error;
         }
       }
@@ -1090,7 +1287,12 @@ export class SuperpiSession {
     const choices = this.companionState?.tiers ?? [];
     if (choices.includes(value)) return value;
     if (value === "fast" && choices.includes("priority")) return "priority";
-    if (value === "default") return choices.includes("auto") ? "auto" : choices.includes("standard") ? "standard" : undefined;
+    if (value === "default")
+      return choices.includes("auto")
+        ? "auto"
+        : choices.includes("standard")
+          ? "standard"
+          : undefined;
     return undefined;
   }
 
@@ -1106,15 +1308,33 @@ export class SuperpiSession {
       settings.longContext = true;
     }
     if (!Object.keys(settings).length) return;
-    try { await this.applyConfiguration({ settings }); }
-    catch (error) {
-      this.emit({ type: "session.notice", sessionId: this.sessionId, notice: { id: "settings-restore", severity: "warning", title: "Saved settings could not be applied", description: toProviderError(error).message } });
+    try {
+      await this.applyConfiguration({ settings });
+    } catch (error) {
+      this.emit({
+        type: "session.notice",
+        sessionId: this.sessionId,
+        notice: {
+          id: "settings-restore",
+          severity: "warning",
+          title: "Saved settings could not be applied",
+          description: toProviderError(error).message,
+        },
+      });
     }
   }
 
   private isSteerableTurn(turnId: string | undefined): boolean {
-    return turnId !== undefined && this.activeTurnId === turnId && this.state === "ready" &&
-      !this.settlePromise && !this.cancelIntent && !this.revertInFlight && !this.compactionInFlight && !this.reloadInFlight;
+    return (
+      turnId !== undefined &&
+      this.activeTurnId === turnId &&
+      this.state === "ready" &&
+      !this.settlePromise &&
+      !this.cancelIntent &&
+      !this.revertInFlight &&
+      !this.compactionInFlight &&
+      !this.reloadInFlight
+    );
   }
 
   private async handleDisposition(clientMessageId: string, result: unknown): Promise<void> {
@@ -1165,7 +1385,8 @@ export class SuperpiSession {
         this.dropQueuedUser(clientMessageId);
         if (this.store && !this.activeTurnId && this.pendingResults.size === 0 && this.rpc) {
           const state = parsePiState(await this.rpc.request({ type: "get_state" }));
-          if (!state.isStreaming && !state.isCompacting) await this.store.save({ interrupted: false });
+          if (!state.isStreaming && !state.isCompacting)
+            await this.store.save({ interrupted: false });
         }
         this.emit({
           type: "session.prompt_result",
@@ -1207,14 +1428,24 @@ export class SuperpiSession {
       if (record.type === "message_start" || !this.boundUser) {
         const next = this.userQueue[0];
         const message = isRecord(record.message) ? record.message : undefined;
-        const text = typeof message?.content === "string" ? message.content :
-          Array.isArray(message?.content) ? message.content.flatMap((part) =>
-            isRecord(part) && part.type === "text" && typeof part.text === "string" ? [part.text] : [],
-          ).join("") : undefined;
+        const text =
+          typeof message?.content === "string"
+            ? message.content
+            : Array.isArray(message?.content)
+              ? message.content
+                  .flatMap((part) =>
+                    isRecord(part) && part.type === "text" && typeof part.text === "string"
+                      ? [part.text]
+                      : [],
+                  )
+                  .join("")
+              : undefined;
         // Extensions can inject their own user messages between host steers.
         // Don't let a distinguishable native message steal a waiting host ID.
-        this.boundUser = next?.sent && (next.message === undefined || next.message === text)
-          ? this.userQueue.shift() : undefined;
+        this.boundUser =
+          next?.sent && (next.message === undefined || next.message === text)
+            ? this.userQueue.shift()
+            : undefined;
       }
       const context: TimelineContext = this.boundUser
         ? { clientMessageId: this.boundUser.clientMessageId, turnId: this.boundUser.turnId }
@@ -1235,7 +1466,10 @@ export class SuperpiSession {
         if (message.role === "assistant") this.refreshActiveContextUsage();
       }
     }
-    if ((record.type === "compaction_end" || record.type === "auto_compaction_end") && isRecord(record.result)) {
+    if (
+      (record.type === "compaction_end" || record.type === "auto_compaction_end") &&
+      isRecord(record.result)
+    ) {
       // A successful compaction invalidates pre-compaction consumption, even
       // if an older stats request is still in flight. Pi reports null until a
       // fresh assistant response establishes a new context measurement.
@@ -1245,8 +1479,12 @@ export class SuperpiSession {
       if (this.lastContextWindow.maxTokens !== undefined) {
         const usage = { ...this.lastReportedUsage };
         delete usage.contextWindowUsedTokens;
-        this.emit({ type: "session.usage", sessionId: this.sessionId,
-          ...(this.activeTurnId ? { turnId: this.activeTurnId } : {}), usage });
+        this.emit({
+          type: "session.usage",
+          sessionId: this.sessionId,
+          ...(this.activeTurnId ? { turnId: this.activeTurnId } : {}),
+          usage,
+        });
       }
       if (this.activeTurnId) this.refreshActiveContextUsage();
       else if (this.state === "ready") void this.publishContextUsage();
@@ -1277,12 +1515,27 @@ export class SuperpiSession {
     if (method === "notify" && typeof record.message === "string") {
       const message = record.message;
       if (message.startsWith(companionStatePrefix)) {
-        let parsed;
-        try { parsed = companionStateUpdateSchema.safeParse(JSON.parse(message.slice(companionStatePrefix.length))); } catch { return; }
+        let parsed: ReturnType<typeof companionStateUpdateSchema.safeParse>;
+        try {
+          parsed = companionStateUpdateSchema.safeParse(
+            JSON.parse(message.slice(companionStatePrefix.length)),
+          );
+        } catch {
+          return;
+        }
         if (!parsed.success || parsed.data.sessionKey !== this.sessionKey) return;
         this.companionState = parsed.data.state;
         if (parsed.data.state.contextPolicyError && this.state === "ready") {
-          this.emit({ type: "session.notice", sessionId: this.sessionId, notice: { id: "context-policy-apply", severity: "warning", title: "Context budget could not be applied", description: parsed.data.state.contextPolicyError } });
+          this.emit({
+            type: "session.notice",
+            sessionId: this.sessionId,
+            notice: {
+              id: "context-policy-apply",
+              severity: "warning",
+              title: "Context budget could not be applied",
+              description: parsed.data.state.contextPolicyError,
+            },
+          });
         }
         if (this.state === "ready") {
           void this.enqueueOperation(async () => {
@@ -1291,7 +1544,17 @@ export class SuperpiSession {
             const config = await this.readConfigState();
             this.emit({ type: "session.config", sessionId: this.sessionId, config });
           }).catch((error) => {
-            if (this.state === "ready") this.emit({ type: "session.notice", sessionId: this.sessionId, notice: { id: "context-policy-refresh", severity: "warning", title: "Context settings could not be refreshed", description: toProviderError(error).message } });
+            if (this.state === "ready")
+              this.emit({
+                type: "session.notice",
+                sessionId: this.sessionId,
+                notice: {
+                  id: "context-policy-refresh",
+                  severity: "warning",
+                  title: "Context settings could not be refreshed",
+                  description: toProviderError(error).message,
+                },
+              });
           });
         }
         return;
@@ -1309,8 +1572,7 @@ export class SuperpiSession {
   }
 
   private emitNotification(record: PiRecord, message: string): void {
-    const level =
-      record.level === "warning" || record.level === "error" ? record.level : "info";
+    const level = record.level === "warning" || record.level === "error" ? record.level : "info";
     this.emit({
       type: "timeline.item",
       sessionId: this.sessionId,
@@ -1423,9 +1685,9 @@ export class SuperpiSession {
     // next native prompt. Fast original-prompt settlement needs no barrier.
     const promise = this.hasUndeliveredSteers(turnId)
       ? this.enqueueOperation(async () => {
-        if (this.hasUndeliveredSteers(turnId)) await this.discardQueuedSteering(turnId);
-        await this.runFinalizeTurn();
-      }).catch(() => undefined) // discard failure already invalidated the runtime
+          if (this.hasUndeliveredSteers(turnId)) await this.discardQueuedSteering(turnId);
+          await this.runFinalizeTurn();
+        }).catch(() => undefined) // discard failure already invalidated the runtime
       : this.runFinalizeTurn();
     this.settlePromise = promise;
     void promise.finally(() => {
@@ -1518,7 +1780,8 @@ export class SuperpiSession {
    */
   private async publishContextUsage(turnId?: string, preserveReportedUsage = false): Promise<void> {
     const rpc = this.rpc;
-    if (!rpc || this.state === "closing" || this.state === "closed" || this.state === "failed") return;
+    if (!rpc || this.state === "closing" || this.state === "closed" || this.state === "failed")
+      return;
     const sequence = ++this.contextUsageSequence;
     const activeTurnId = this.activeTurnId;
     try {
@@ -1528,34 +1791,50 @@ export class SuperpiSession {
       ]);
       // A newer refresh, compaction, turn change, or close makes this response
       // stale. Never let a late snapshot overwrite the current context cache.
-      if (sequence !== this.contextUsageSequence || this.activeTurnId !== activeTurnId ||
-        this.rpc !== rpc || this.currentState === "closing" || this.currentState === "closed" || this.currentState === "failed") return;
+      if (
+        sequence !== this.contextUsageSequence ||
+        this.activeTurnId !== activeTurnId ||
+        this.rpc !== rpc ||
+        this.currentState === "closing" ||
+        this.currentState === "closed" ||
+        this.currentState === "failed"
+      )
+        return;
       // A stats transport failure means consumption is unknown; keep the
       // host's prior usage rather than replacing it with a max-only report.
       if (statsData === undefined) return;
       const stats = parseSessionStats(statsData);
-      const modelWindow = isRecord(stateData) && isRecord(stateData.model)
-        && typeof stateData.model.contextWindow === "number"
-        && Number.isFinite(stateData.model.contextWindow)
-        && stateData.model.contextWindow > 0
-        ? stateData.model.contextWindow
-        : undefined;
+      const modelWindow =
+        isRecord(stateData) &&
+        isRecord(stateData.model) &&
+        typeof stateData.model.contextWindow === "number" &&
+        Number.isFinite(stateData.model.contextWindow) &&
+        stateData.model.contextWindow > 0
+          ? stateData.model.contextWindow
+          : undefined;
       const companionWindow = this.companionState?.contextWindow;
       const statsWindow = stats.contextWindow;
       const maxTokens = companionWindow ?? modelWindow ?? statsWindow;
       if (maxTokens === undefined) return;
       const fallback = this.timeline.usage() ?? undefined;
       const usage: ProviderUsage = {
-        ...(preserveReportedUsage ? this.lastReportedUsage :
-          stats.inputTokens !== undefined || stats.cachedInputTokens !== undefined
-        || stats.outputTokens !== undefined || stats.totalCostUsd !== undefined
-          ? {
-            ...(stats.inputTokens !== undefined ? { inputTokens: stats.inputTokens } : {}),
-            ...(stats.cachedInputTokens !== undefined ? { cachedInputTokens: stats.cachedInputTokens } : {}),
-            ...(stats.outputTokens !== undefined ? { outputTokens: stats.outputTokens } : {}),
-            ...(stats.totalCostUsd !== undefined ? { totalCostUsd: stats.totalCostUsd } : {}),
-          }
-          : (fallback ? { ...fallback } : {})),
+        ...(preserveReportedUsage
+          ? this.lastReportedUsage
+          : stats.inputTokens !== undefined ||
+              stats.cachedInputTokens !== undefined ||
+              stats.outputTokens !== undefined ||
+              stats.totalCostUsd !== undefined
+            ? {
+                ...(stats.inputTokens !== undefined ? { inputTokens: stats.inputTokens } : {}),
+                ...(stats.cachedInputTokens !== undefined
+                  ? { cachedInputTokens: stats.cachedInputTokens }
+                  : {}),
+                ...(stats.outputTokens !== undefined ? { outputTokens: stats.outputTokens } : {}),
+                ...(stats.totalCostUsd !== undefined ? { totalCostUsd: stats.totalCostUsd } : {}),
+              }
+            : fallback
+              ? { ...fallback }
+              : {}),
         contextWindowMaxTokens: maxTokens,
       };
       // In-flight refreshes update context, not token/cost accounting: the
@@ -1701,8 +1980,13 @@ export class SuperpiSession {
   }
 
   private hasUndeliveredSteers(turnId: string): boolean {
-    return this.userQueue.some((entry) => entry.sent && entry.steering && entry.turnId === turnId &&
-      !this.pendingResults.has(entry.clientMessageId));
+    return this.userQueue.some(
+      (entry) =>
+        entry.sent &&
+        entry.steering &&
+        entry.turnId === turnId &&
+        !this.pendingResults.has(entry.clientMessageId),
+    );
   }
 
   private async discardQueuedSteering(turnId: string): Promise<void> {
@@ -1717,12 +2001,18 @@ export class SuperpiSession {
       this.invalidateRuntime(error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
-    if (undelivered) this.emit({
-      type: "session.notice", sessionId: this.sessionId,
-      notice: { id: `undelivered-steering-${turnId}`, severity: "warning",
-        title: "Queued steering was discarded",
-        description: "The Pi turn ended before delivering queued steering. Resend the instruction if it is still needed." },
-    });
+    if (undelivered)
+      this.emit({
+        type: "session.notice",
+        sessionId: this.sessionId,
+        notice: {
+          id: `undelivered-steering-${turnId}`,
+          severity: "warning",
+          title: "Queued steering was discarded",
+          description:
+            "The Pi turn ended before delivering queued steering. Resend the instruction if it is still needed.",
+        },
+      });
   }
 
   /** Purge only native admissions that a successful `clear_queue` discarded. */
@@ -1928,7 +2218,8 @@ export class SuperpiSession {
         type: "request.failed",
         requestId,
         error: {
-          message: "Superpi rewind token is stale or belongs to another session; refresh and try again",
+          message:
+            "Superpi rewind token is stale or belongs to another session; refresh and try again",
         },
       });
       return;
@@ -1962,8 +2253,11 @@ export class SuperpiSession {
       cleared = await rpc.request({ type: "clear_queue" });
     } catch (error) {
       this.emit({
-        type: "request.failed", requestId,
-        error: { message: `Cannot rewind because old queued input could not be cleared: ${toProviderError(error).message}` },
+        type: "request.failed",
+        requestId,
+        error: {
+          message: `Cannot rewind because old queued input could not be cleared: ${toProviderError(error).message}`,
+        },
       });
       return;
     }
@@ -2032,8 +2326,7 @@ export class SuperpiSession {
       throw new Error("Pi reported a busy session after rewind");
     }
     if (
-      (before.sessionId ?? this.options.sessionId) !==
-      (state.sessionId ?? this.options.sessionId)
+      (before.sessionId ?? this.options.sessionId) !== (state.sessionId ?? this.options.sessionId)
     ) {
       throw new Error("Pi changed session identity while rewinding the conversation");
     }
@@ -2047,7 +2340,8 @@ export class SuperpiSession {
       capabilities: this.companionState?.capabilities ?? [],
       settings,
     });
-    if (this.companion) this.companionState = companionStateSchema.parse(await this.companion.request("get-state"));
+    if (this.companion)
+      this.companionState = companionStateSchema.parse(await this.companion.request("get-state"));
     this.timeline.reset();
     const history = await this.readActiveHistory({ messages: true });
     this.userRevertTokens = history.tokens;
@@ -2113,7 +2407,10 @@ export class SuperpiSession {
       const failed = failure !== undefined || this.state === "failed";
       this.state = "closing";
       this.stopContextUsagePolling();
-      this.endTurn(failed ? "failed" : "canceled", failed ? toProviderError(failure ?? new Error("Superpi session failed")) : undefined);
+      this.endTurn(
+        failed ? "failed" : "canceled",
+        failed ? toProviderError(failure ?? new Error("Superpi session failed")) : undefined,
+      );
       this.failPendingPrompts(
         failure ?? new Error("Superpi session closed before the prompt settled"),
       );

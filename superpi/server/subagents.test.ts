@@ -1,16 +1,16 @@
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
 import {
-  ProviderEventSchema,
   type ProviderEvent,
+  ProviderEventSchema,
   type ProviderTimelineItem,
 } from "@getpaseo/plugin/server/provider";
+import { afterEach, describe, expect, it } from "vitest";
 import {
+  parseSubpiChildEnvelope,
   SUBPI_CHILD_CHANNEL_PREFIX,
   SUBPI_SUBSESSION_CAPABILITY,
-  parseSubpiChildEnvelope,
   type SubpiBridgeRecord,
 } from "../shared/subagents.js";
 import { createSubagentObserver, type SubagentObserver } from "./subagents.js";
@@ -28,13 +28,8 @@ interface Harness {
   observer: SubagentObserver;
 }
 
-async function harness(
-  restore = false,
-  directory?: string,
-  rootCwd?: string,
-): Promise<Harness> {
-  const resolved =
-    directory ?? (await fs.mkdtemp(path.join(os.tmpdir(), "superpi-subagents-")));
+async function harness(restore = false, directory?: string, rootCwd?: string): Promise<Harness> {
+  const resolved = directory ?? (await fs.mkdtemp(path.join(os.tmpdir(), "superpi-subagents-")));
   if (!directory) directories.push(resolved);
   const events: ProviderEvent[] = [];
   const observer = await createSubagentObserver({
@@ -52,11 +47,7 @@ function created(runId: string, extra: Partial<SubpiBridgeRecord> = {}): SubpiBr
   return { version: 1, runId, sequence: 1, type: "created", ...extra };
 }
 
-function activity(
-  runId: string,
-  sequence: number,
-  record: unknown,
-): SubpiBridgeRecord {
+function activity(runId: string, sequence: number, record: unknown): SubpiBridgeRecord {
   return { version: 1, runId, sequence, type: "activity", record };
 }
 
@@ -72,15 +63,13 @@ function opened(events: ProviderEvent[], sessionId: string) {
   const event = events.find(
     (candidate) => candidate.type === "session.opened" && candidate.sessionId === sessionId,
   );
-  if (!event || event.type !== "session.opened") throw new Error(`Missing opened ${sessionId}`);
+  if (event?.type !== "session.opened") throw new Error(`Missing opened ${sessionId}`);
   return event;
 }
 
 function timelineItems(events: ProviderEvent[], sessionId: string): ProviderTimelineItem[] {
   return events
-    .filter(
-      (event) => event.type === "timeline.item" && event.sessionId === sessionId,
-    )
+    .filter((event) => event.type === "timeline.item" && event.sessionId === sessionId)
     .map((event) => (event.type === "timeline.item" ? event.item : undefined))
     .filter((item): item is ProviderTimelineItem => Boolean(item));
 }
@@ -164,9 +153,7 @@ describe("subagent observer", () => {
     await observer.accept(activity("run-a", 3, { kind: "turn_start" }));
     await observer.accept(activity("run-b", 2, { kind: "turn_start" }));
 
-    expect(
-      events.filter((event) => event.type === "session.opened"),
-    ).toHaveLength(2);
+    expect(events.filter((event) => event.type === "session.opened")).toHaveLength(2);
     expect(turnStates(events, "superpi-child:run-a")).toEqual(["started"]);
     // run-b's higher sequence still applies after run-a's interleaved record.
     expect(turnStates(events, "superpi-child:run-b")).toEqual(["started"]);
@@ -179,7 +166,11 @@ describe("subagent observer", () => {
     const { events, observer } = await harness();
     await observer.accept(created("run-a"));
     await observer.accept(
-      activity("run-a", 2, { kind: "tool_execution_start", toolCallId: "tool-1", toolName: "bash" }),
+      activity("run-a", 2, {
+        kind: "tool_execution_start",
+        toolCallId: "tool-1",
+        toolName: "bash",
+      }),
     );
     await observer.accept(
       terminal("run-a", 3, { outcome: "canceled", reason: "parent stopped the child" }),
@@ -197,9 +188,7 @@ describe("subagent observer", () => {
     expect(turnStates(events, "superpi-child:run-a")).toEqual(["started", "canceled"]);
     expect(observer.activeCount()).toBe(0);
     const childNotices = notices(events, "superpi-child:run-a");
-    expect(childNotices.map((notice) => notice.description)).toContain(
-      "parent stopped the child",
-    );
+    expect(childNotices.map((notice) => notice.description)).toContain("parent stopped the child");
     // The late tool result is never published.
     const items = timelineItems(events, "superpi-child:run-a");
     expect(items.filter((item) => item.type === "tool_call")).toHaveLength(1);
@@ -246,27 +235,33 @@ describe("subagent observer", () => {
         message: { role: "assistant", timestamp: 1000, content: [{ type: "text", text: "done" }] },
       }),
     );
-    await first.observer.accept(terminal("run-done", 3, { outcome: "completed", result: { ok: true } }));
+    await first.observer.accept(
+      terminal("run-done", 3, { outcome: "completed", result: { ok: true } }),
+    );
     await first.observer.accept(created("run-lost", { toolCallId: "spawn-lost" }));
     await first.observer.accept(
-      activity("run-lost", 2, { kind: "tool_execution_start", toolCallId: "tool-lost", toolName: "bash" }),
+      activity("run-lost", 2, {
+        kind: "tool_execution_start",
+        toolCallId: "tool-lost",
+        toolName: "bash",
+      }),
     );
     await first.observer.close();
 
     const second = await harness(true, first.directory);
     const doneId = "superpi-child:run-done";
     expect(opened(second.events, doneId).parentSessionId).toBe("root-1");
-    expect(timelineItems(second.events, doneId).some((item) => item.type === "assistant_message")).toBe(
-      true,
-    );
+    expect(
+      timelineItems(second.events, doneId).some((item) => item.type === "assistant_message"),
+    ).toBe(true);
     expect(turnStates(second.events, doneId)).toEqual(["started", "completed"]);
 
     const lostId = "superpi-child:run-lost";
     expect(opened(second.events, lostId).parentSessionId).toBe("root-1");
     expect(turnStates(second.events, lostId)).toEqual(["started", "failed"]);
-    expect(
-      notices(second.events, lostId).some((notice) => /interrupted/i.test(notice.title)),
-    ).toBe(true);
+    expect(notices(second.events, lostId).some((notice) => /interrupted/i.test(notice.title))).toBe(
+      true,
+    );
     expect(second.observer.activeCount()).toBe(0);
     expectValidEvents(second.events);
     await second.observer.close();
@@ -292,9 +287,9 @@ describe("subagent observer", () => {
     }
     await first.observer.accept(terminal("run-big", sequence, { outcome: "completed" }));
     await first.observer.close();
-    expect(
-      (await fs.stat(path.join(first.directory, "child-journal.jsonl"))).size,
-    ).toBeGreaterThan(2 * 1024 * 1024);
+    expect((await fs.stat(path.join(first.directory, "child-journal.jsonl"))).size).toBeGreaterThan(
+      2 * 1024 * 1024,
+    );
 
     const second = await harness(true, first.directory);
     const childId = "superpi-child:run-big";
@@ -304,9 +299,9 @@ describe("subagent observer", () => {
     // The final assistant snapshot is retained, proving no prefix cutoff.
     expect(assistant[assistant.length - 1]?.id).toBe("assistant:2219");
     expect(turnStates(second.events, childId)).toEqual(["started", "completed"]);
-    expect(
-      notices(second.events, childId).some((notice) => /truncated/i.test(notice.title)),
-    ).toBe(true);
+    expect(notices(second.events, childId).some((notice) => /truncated/i.test(notice.title))).toBe(
+      true,
+    );
     expectValidEvents(second.events);
     await second.observer.close();
   });
@@ -455,16 +450,8 @@ describe("subagent observer", () => {
     const assistant = items.filter((item) => item.type === "assistant_message");
     expect(assistant.map((item) => item.text)).toEqual(["Hel", "Hello"]);
     const tools = items.filter((item) => item.type === "tool_call");
-    expect(tools.map((item) => item.id)).toEqual([
-      "tool:call-1",
-      "tool:call-1",
-      "tool:call-1",
-    ]);
-    expect(tools.map((item) => item.status)).toEqual([
-      "running",
-      "running",
-      "completed",
-    ]);
+    expect(tools.map((item) => item.id)).toEqual(["tool:call-1", "tool:call-1", "tool:call-1"]);
+    expect(tools.map((item) => item.status)).toEqual(["running", "running", "completed"]);
     // The provisional toolcall_start never published a phantom row of its own.
     expect(tools).toHaveLength(3);
     expect(observer.activeCount()).toBe(1);
@@ -487,9 +474,7 @@ describe("subagent observer", () => {
     const childNotices = notices(events, "superpi-child:run-omit");
     expect(childNotices.some((notice) => /omitted/i.test(notice.title))).toBe(true);
     expect(
-      timelineItems(events, "superpi-child:run-omit").filter(
-        (item) => item.type === "tool_call",
-      ),
+      timelineItems(events, "superpi-child:run-omit").filter((item) => item.type === "tool_call"),
     ).toHaveLength(0);
     expectValidEvents(events);
     await observer.close();
@@ -544,9 +529,7 @@ describe("subagent observer", () => {
       }),
     );
     sequence += 1;
-    await observer.accept(
-      terminal("run-deltas", sequence, { outcome: "completed", result: text }),
-    );
+    await observer.accept(terminal("run-deltas", sequence, { outcome: "completed", result: text }));
 
     // The accumulated deltas alone would exceed 20 MiB; the finalized journal is
     // linear in the final reply size.
@@ -576,9 +559,9 @@ describe("subagent observer", () => {
       }),
     );
     const childNotices = notices(events, "superpi-child:run-result-only");
-    expect(
-      childNotices.some((notice) => notice.description === "SYNTHETIC_HISTORY_END"),
-    ).toBe(true);
+    expect(childNotices.some((notice) => notice.description === "SYNTHETIC_HISTORY_END")).toBe(
+      true,
+    );
     expectValidEvents(events);
     await observer.close();
   });

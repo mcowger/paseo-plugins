@@ -1,6 +1,7 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
-import { DialogEditorScreen } from "./client/dialog-editor";
 import { copyText } from "@getpaseo/plugin/client/react-native";
+import { DialogEditorScreen } from "./client/dialog-editor";
+import { ModelNameSettings } from "./client/model-names";
 import { resumeCommandRpc } from "./shared/resume";
 
 export default function contribute(client: PluginClientContext): () => void {
@@ -10,12 +11,20 @@ export default function contribute(client: PluginClientContext): () => void {
     icon: "MessageSquare",
     Component: DialogEditorScreen,
   });
+  const removeModelNames = client.addSettingsScreen({
+    id: "superpi-model-names",
+    title: "Superpi model names",
+    icon: "Tag",
+    Component: ModelNameSettings,
+  });
   const removeCommand = client.addCommandCenterItem({
     id: "dialogs",
     title: "Pi dialogs",
     icon: "MessageSquare",
     context: "global",
-    onSelect({ openSettings }) { openSettings("superpi-dialogs"); },
+    onSelect({ openSettings }) {
+      openSettings("superpi-dialogs");
+    },
   });
   const removeResume = client.addCommandCenterItem({
     id: "copy-resume-command",
@@ -28,5 +37,10 @@ export default function contribute(client: PluginClientContext): () => void {
       await copyText(command);
     },
   });
-  return () => { removeResume(); removeCommand(); removeScreen(); };
+  return () => {
+    removeResume();
+    removeCommand();
+    removeModelNames();
+    removeScreen();
+  };
 }

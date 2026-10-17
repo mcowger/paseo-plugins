@@ -21,7 +21,10 @@ that pin is not a claim that newer hosts are unsupported.
   distinct short/max budgets supplied by `plexus-pi`. Internally, Off uses the
   short budget and On uses the maximum; the UI shows token lengths, not On/Off.
   Models without a short budget retain Pi's declared limit and have no context
-  selector.
+  selector. Settings → Superpi model names switches the picker between full
+  names and the server-advertised short names (`plexus-pi` v1.14.0+); models
+  without an advertised short name keep their full name, whose picker line
+  shows the full name alongside the id when short names are on.
   Settings apply to subsequent requests without interrupting a response.
 - Context usage and the effective budget are reported through provider usage
   events (`get_session_stats` consumption plus the companion-applied window).

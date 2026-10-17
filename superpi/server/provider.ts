@@ -1,19 +1,20 @@
 import type {
   ProviderCatalog,
-  ProviderConnectRequest,
   ProviderConnection,
+  ProviderConnectRequest,
   ProviderEvent,
   ProviderInput,
   ProviderRegistration,
 } from "@getpaseo/plugin/server/provider";
 import { negotiateProviderCapabilities } from "@getpaseo/plugin/server/provider";
+import { type ModelNameStyle, resolveModelNameStyle } from "../shared/settings.js";
 import { createDialogRegistry, type DialogRegistry } from "./dialogs.js";
 import { createPiRpc, type PiRpc, type PiRpcOptions } from "./pi-rpc.js";
 import {
-  SUPERPI_SESSION_CAPABILITIES,
-  SuperpiSession,
   mapPiModels,
   mapPiThinkingLevels,
+  SUPERPI_SESSION_CAPABILITIES,
+  SuperpiSession,
 } from "./session.js";
 
 /**
@@ -34,6 +35,8 @@ export interface CreateSuperpiProviderOptions {
   stateDirectory: string;
   /** Test seam: override the transport factory to avoid spawning real Pi. */
   createPiRpc?: (options: PiRpcOptions) => Promise<PiRpc>;
+  /** Model name style for catalog labels; defaults to full names. */
+  getModelNameStyle?: () => Promise<ModelNameStyle>;
 }
 
 export interface SuperpiProvider {
@@ -47,6 +50,8 @@ interface CatalogDiscovery {
   command: string;
   createRpc: (options: PiRpcOptions) => Promise<PiRpc>;
   cwd?: string;
+  /** Model name style for catalog labels; defaults to full names. */
+  modelNameStyle?: ModelNameStyle;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -76,6 +81,7 @@ function modelKey(model: unknown): string | undefined {
  */
 export async function discoverCatalog(input: CatalogDiscovery): Promise<ProviderCatalog> {
   const { command, createRpc, cwd } = input;
+  const nameStyle = resolveModelNameStyle(input.modelNameStyle);
   const rpc = await createRpc({
     command,
     args: ["--mode", "rpc", "--no-session"],
@@ -87,12 +93,12 @@ export async function discoverCatalog(input: CatalogDiscovery): Promise<Provider
     const models = mapPiModels(
       extractArray(await rpc.request({ type: "get_available_models" }), "models"),
       modelKey(isRecord(state) ? state.model : undefined),
+      nameStyle,
     );
     const thinkingOptions = mapPiThinkingLevels(
-      extractArray(
-        await rpc.request({ type: "get_available_thinking_levels" }),
-        "levels",
-      ).filter((level): level is string => typeof level === "string"),
+      extractArray(await rpc.request({ type: "get_available_thinking_levels" }), "levels").filter(
+        (level): level is string => typeof level === "string",
+      ),
     );
     const defaultModel = modelKey(isRecord(state) ? state.model : undefined);
     const defaultThinkingOption = isRecord(state) ? asString(state.thinkingLevel) : undefined;
@@ -117,13 +123,21 @@ export function createSuperpiProvider(options: CreateSuperpiProviderOptions): Su
   const createRpc = options.createPiRpc ?? createPiRpc;
   const connections = new Set<SuperpiConnection>();
   const dialogs = createDialogRegistry();
+  async function readModelNameStyle(): Promise<ModelNameStyle> {
+    if (!options.getModelNameStyle) return "full";
+    try {
+      return resolveModelNameStyle(await options.getModelNameStyle());
+    } catch {
+      return "full";
+    }
+  }
 
   const registration: ProviderRegistration = {
     id: "superpi",
     label: "Superpi",
     description: "Pi over subprocess JSON-RPC with the required Superpi companion.",
     async getCatalogCacheKey() {
-      return undefined;
+      return `superpi:models:${await readModelNameStyle()}`;
     },
     async connect(request: ProviderConnectRequest): Promise<ProviderConnection> {
       const connection = new SuperpiConnection(request, {
@@ -132,6 +146,7 @@ export function createSuperpiProvider(options: CreateSuperpiProviderOptions): Su
         stateDirectory: options.stateDirectory,
         createRpc,
         dialogRegistry: dialogs,
+        getModelNameStyle: readModelNameStyle,
       });
       connections.add(connection);
       return connection;
@@ -155,6 +170,7 @@ interface ConnectionDependencies {
   stateDirectory: string;
   createRpc: (options: PiRpcOptions) => Promise<PiRpc>;
   dialogRegistry: DialogRegistry;
+  getModelNameStyle: () => Promise<ModelNameStyle>;
 }
 
 class SuperpiConnection implements ProviderConnection {
@@ -231,19 +247,28 @@ class SuperpiConnection implements ProviderConnection {
         return;
       default: {
         const exhaustive: never = input;
-        throw new Error(`Unhandled Superpi provider input: ${String((exhaustive as { type?: string }).type)}`);
+        throw new Error(
+          `Unhandled Superpi provider input: ${String((exhaustive as { type?: string }).type)}`,
+        );
       }
     }
   }
 
-  private async handleCatalog(
-    input: Extract<ProviderInput, { type: "catalog" }>,
-  ): Promise<void> {
+  private async resolveModelNameStyle(): Promise<ModelNameStyle> {
+    try {
+      return resolveModelNameStyle(await this.deps.getModelNameStyle());
+    } catch {
+      return "full";
+    }
+  }
+
+  private async handleCatalog(input: Extract<ProviderInput, { type: "catalog" }>): Promise<void> {
     try {
       const catalog = await discoverCatalog({
         command: this.deps.command,
         createRpc: this.deps.createRpc,
         cwd: input.cwd,
+        modelNameStyle: await this.resolveModelNameStyle(),
       });
       this.emit({ type: "catalog", requestId: input.requestId, catalog });
     } catch (error) {
@@ -255,9 +280,7 @@ class SuperpiConnection implements ProviderConnection {
     }
   }
 
-  private async handleOpen(
-    input: Extract<ProviderInput, { type: "session.open" }>,
-  ): Promise<void> {
+  private async handleOpen(input: Extract<ProviderInput, { type: "session.open" }>): Promise<void> {
     if (this.sessions.has(input.sessionId)) {
       this.emit({
         type: "request.failed",
@@ -276,6 +299,7 @@ class SuperpiConnection implements ProviderConnection {
       companionPath: this.deps.companionPath,
       capabilities: this.capabilities,
       dialogRegistry: this.deps.dialogRegistry,
+      getModelNameStyle: () => this.resolveModelNameStyle(),
       createPiRpc: this.deps.createRpc,
       emit: (event) => {
         this.emit(event);

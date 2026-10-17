@@ -66,8 +66,13 @@ describe("activeBranchEntries", () => {
 
 describe("user entry helpers", () => {
   it("identifies user messages and builds the matching timeline id", () => {
-    const user = parseNativeEntries([entry("u1", null, "user", 42)])[0]!;
-    const assistant = parseNativeEntries([entry("a1", "u1", "assistant", 43)])[0]!;
+    const parsed = parseNativeEntries([
+      entry("u1", null, "user", 42),
+      entry("a1", "u1", "assistant", 43),
+    ]);
+    const user = parsed[0];
+    const assistant = parsed[1];
+    if (!user || !assistant) throw new Error("expected two parsed entries");
     expect(isUserMessageEntry(user)).toBe(true);
     expect(isUserMessageEntry(assistant)).toBe(false);
     expect(userTimelineItemId(user)).toBe("user:42");
@@ -91,7 +96,9 @@ describe("rewind tokens", () => {
     const token = createRewindToken("owner-1", "u1");
     expect(resolveRewindToken(token, "owner-1")).toBe("u1");
     expect(resolveRewindToken(token, "owner-2")).toBeUndefined();
-    expect(resolveRewindToken({ version: 2, owner: "owner-1", entryId: "u1" }, "owner-1")).toBeUndefined();
+    expect(
+      resolveRewindToken({ version: 2, owner: "owner-1", entryId: "u1" }, "owner-1"),
+    ).toBeUndefined();
     expect(resolveRewindToken(null, "owner-1")).toBeUndefined();
     expect(resolveRewindToken("nope", "owner-1")).toBeUndefined();
   });
@@ -114,7 +121,7 @@ describe("streamed native transcript", () => {
   async function withFile(lines: unknown[], run: (file: string) => Promise<void>): Promise<void> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "superpi-transcript-"));
     const file = path.join(dir, "session.jsonl");
-    await fs.writeFile(file, lines.map((line) => JSON.stringify(line)).join("\n") + "\n");
+    await fs.writeFile(file, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`);
     try {
       await run(file);
     } finally {
@@ -128,10 +135,34 @@ describe("streamed native transcript", () => {
     await withFile(
       [
         header,
-        { type: "message", id: "u1", parentId: null, timestamp: "t1", message: { role: "user", timestamp: 1, content: "one" } },
-        { type: "message", id: "a1", parentId: "u1", timestamp: "t2", message: { role: "assistant", timestamp: 2, content: [{ type: "text", text: "two" }] } },
-        { type: "message", id: "abandoned", parentId: "u1", timestamp: "t3", message: { role: "assistant", timestamp: 3, content: [{ type: "text", text: "gone" }] } },
-        { type: "message", id: "u2", parentId: "a1", timestamp: "t4", message: { role: "user", timestamp: 4, content: "four" } },
+        {
+          type: "message",
+          id: "u1",
+          parentId: null,
+          timestamp: "t1",
+          message: { role: "user", timestamp: 1, content: "one" },
+        },
+        {
+          type: "message",
+          id: "a1",
+          parentId: "u1",
+          timestamp: "t2",
+          message: { role: "assistant", timestamp: 2, content: [{ type: "text", text: "two" }] },
+        },
+        {
+          type: "message",
+          id: "abandoned",
+          parentId: "u1",
+          timestamp: "t3",
+          message: { role: "assistant", timestamp: 3, content: [{ type: "text", text: "gone" }] },
+        },
+        {
+          type: "message",
+          id: "u2",
+          parentId: "a1",
+          timestamp: "t4",
+          message: { role: "user", timestamp: 4, content: "four" },
+        },
       ],
       async (file) => {
         const snapshot = await readPiTranscriptSnapshot(file);
@@ -140,7 +171,9 @@ describe("streamed native transcript", () => {
         expect(snapshot.leafId).toBe("u2");
         expect(snapshot.activeEntries.map((entry) => entry.id)).toEqual(["u1", "a1", "u2"]);
         const messages = await readPiTranscriptMessages(file, snapshot.activeEntries);
-        expect(messages.map((message) => (message as { timestamp: number }).timestamp)).toEqual([1, 2, 4]);
+        expect(messages.map((message) => (message as { timestamp: number }).timestamp)).toEqual([
+          1, 2, 4,
+        ]);
       },
     );
   });
@@ -165,13 +198,28 @@ describe("streamed native transcript", () => {
     await withFile(
       [
         header,
-        { type: "message", id: "u1", parentId: null, timestamp: "t1", message: { role: "user", timestamp: 1, content: "one" } },
-        { type: "context_edit", id: "e1", parentId: "u1", timestamp: "t2", targetId: "u1", replacement: { content: [{ type: "text", text: "edited" }] } },
+        {
+          type: "message",
+          id: "u1",
+          parentId: null,
+          timestamp: "t1",
+          message: { role: "user", timestamp: 1, content: "one" },
+        },
+        {
+          type: "context_edit",
+          id: "e1",
+          parentId: "u1",
+          timestamp: "t2",
+          targetId: "u1",
+          replacement: { content: [{ type: "text", text: "edited" }] },
+        },
       ],
       async (file) => {
         const snapshot = await readPiTranscriptSnapshot(file);
         const messages = await readPiTranscriptMessages(file, snapshot.activeEntries);
-        expect(messages).toEqual([{ role: "user", timestamp: 1, content: [{ type: "text", text: "edited" }] }]);
+        expect(messages).toEqual([
+          { role: "user", timestamp: 1, content: [{ type: "text", text: "edited" }] },
+        ]);
       },
     );
   });

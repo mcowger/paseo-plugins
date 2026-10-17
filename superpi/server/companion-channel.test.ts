@@ -1,20 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { createCompanionChannel } from "./companion-channel.js";
 import { companionPrefix } from "../shared/companion.js";
+import { createCompanionChannel } from "./companion-channel.js";
 
 function fixture() {
   const listeners = new Set<(record: Record<string, unknown>) => void>();
   const commands: Record<string, unknown>[] = [];
   const emit = (reply: unknown) => {
-    for (const listener of listeners) listener({ type: "extension_ui_request", method: "notify", message: companionPrefix + JSON.stringify(reply) });
+    for (const listener of listeners)
+      listener({
+        type: "extension_ui_request",
+        method: "notify",
+        message: companionPrefix + JSON.stringify(reply),
+      });
   };
   const rpc = {
-    onRecord(listener: (record: Record<string, unknown>) => void) { listeners.add(listener); return () => listeners.delete(listener); },
+    onRecord(listener: (record: Record<string, unknown>) => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     async request(command: Record<string, unknown>): Promise<unknown> {
       commands.push(command);
       if (command.type === "get_commands") return { commands: [] };
-      const encoded = (command.message as string).split(" ")[1]!;
-      const request = JSON.parse(Buffer.from(encoded, "base64url").toString()) as Record<string, unknown>;
+      const encoded = (command.message as string).split(" ")[1];
+      if (encoded === undefined) throw new Error("expected an encoded superpi request");
+      const request = JSON.parse(Buffer.from(encoded, "base64url").toString()) as Record<
+        string,
+        unknown
+      >;
       emit({ ...request, sessionKey: "stale-generation", ok: true, data: "stale" });
       emit({ ...request, ok: true, data: { confirmed: true } });
       return { disposition: "handled" };
