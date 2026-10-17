@@ -1,11 +1,27 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createContextPolicyConsumer, CONTEXT_POLICY_REQUEST, CONTEXT_POLICY_SNAPSHOT } from "../src/context-policy.ts";
+import {
+  CONTEXT_POLICY_REQUEST,
+  CONTEXT_POLICY_SNAPSHOT,
+  createContextPolicyConsumer,
+} from "../src/context-policy.ts";
 import { createFakePi } from "./harness.ts";
 
 const publisherId = "00000000-0000-4000-8000-000000000001";
 const model = { provider: "plexus", id: "model" };
-const policy = { provider: "plexus", modelId: "model", maxContextTokens: 1_000_000, shortContextBudgetTokens: 200_000 };
-const snapshot = (overrides = {}) => ({ version: 1, publisherId, revision: 1, status: "ready", policies: [policy], ...overrides });
+const policy = {
+  provider: "plexus",
+  modelId: "model",
+  maxContextTokens: 1_000_000,
+  shortContextBudgetTokens: 200_000,
+};
+const snapshot = (overrides = {}) => ({
+  version: 1,
+  publisherId,
+  revision: 1,
+  status: "ready",
+  policies: [policy],
+  ...overrides,
+});
 afterEach(() => vi.useRealTimers());
 
 describe("policy event consumer", () => {
@@ -27,7 +43,15 @@ describe("policy event consumer", () => {
     const pi = createFakePi({ policies: [policy] });
     const consumer = createContextPolicyConsumer(pi.api.events, vi.fn());
     await consumer.request();
-    for (const invalid of [snapshot({ revision: 0 }), snapshot({ revision: 2, policies: [{ ...policy, shortContextBudgetTokens: 2_000_000 }] }), snapshot({ revision: 2, policies: [policy, policy] }), snapshot({ revision: 2, status: "loading" }), snapshot({ version: 2 }), snapshot({ revision: 2, requestId: "wrong" }), snapshot({ revision: 2, reason: "x".repeat(1024 * 1024) })]) {
+    for (const invalid of [
+      snapshot({ revision: 0 }),
+      snapshot({ revision: 2, policies: [{ ...policy, shortContextBudgetTokens: 2_000_000 }] }),
+      snapshot({ revision: 2, policies: [policy, policy] }),
+      snapshot({ revision: 2, status: "loading" }),
+      snapshot({ version: 2 }),
+      snapshot({ revision: 2, requestId: "wrong" }),
+      snapshot({ revision: 2, reason: "x".repeat(1024 * 1024) }),
+    ]) {
       pi.emitEvent(CONTEXT_POLICY_SNAPSHOT, invalid);
       expect(consumer.policy(model)).toEqual(policy);
     }
@@ -37,7 +61,10 @@ describe("policy event consumer", () => {
     expect(consumer.policy(model)).toBeUndefined();
     pi.emitEvent(CONTEXT_POLICY_SNAPSHOT, snapshot({ revision: 3 }));
     expect(consumer.policy(model)).toEqual(policy);
-    pi.emitEvent(CONTEXT_POLICY_SNAPSHOT, snapshot({ revision: 4, status: "unavailable", policies: [] }));
+    pi.emitEvent(
+      CONTEXT_POLICY_SNAPSHOT,
+      snapshot({ revision: 4, status: "unavailable", policies: [] }),
+    );
     expect(consumer.policy(model)).toBeUndefined();
     consumer.close();
   });
@@ -49,7 +76,14 @@ describe("policy event consumer", () => {
     const nextPublisher = "00000000-0000-4000-8000-000000000002";
     pi.eventHandlers.get(CONTEXT_POLICY_REQUEST)?.clear();
     pi.api.events.on(CONTEXT_POLICY_REQUEST, (request) => {
-      pi.emitEvent(CONTEXT_POLICY_SNAPSHOT, snapshot({ publisherId: nextPublisher, requestId: (request as { requestId: string }).requestId, policies: [] }));
+      pi.emitEvent(
+        CONTEXT_POLICY_SNAPSHOT,
+        snapshot({
+          publisherId: nextPublisher,
+          requestId: (request as { requestId: string }).requestId,
+          policies: [],
+        }),
+      );
     });
     pi.emitEvent(CONTEXT_POLICY_SNAPSHOT, snapshot({ publisherId: nextPublisher }));
     expect(consumer.policy(model)).toBeUndefined();

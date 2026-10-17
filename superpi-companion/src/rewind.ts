@@ -55,8 +55,6 @@ export function buildRewindEntry(
 /** Pi's `navigateTree` result carries a `cancelled` flag when a hook vetoed it. */
 export function navigationCancelled(result: unknown): boolean {
   return Boolean(
-    result &&
-      typeof result === "object" &&
-      (result as { cancelled?: unknown }).cancelled === true,
+    result && typeof result === "object" && (result as { cancelled?: unknown }).cancelled === true,
   );
 }

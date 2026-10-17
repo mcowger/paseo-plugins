@@ -46,7 +46,14 @@ export const SuperpiSettingsSchema = z.strictObject({
   longContext: z.boolean(),
 });
 
-export const OperationSchema = z.enum(["hello", "get-state", "configure", "rewind", "compact", "reload"]);
+export const OperationSchema = z.enum([
+  "hello",
+  "get-state",
+  "configure",
+  "rewind",
+  "compact",
+  "reload",
+]);
 export type Operation = z.infer<typeof OperationSchema>;
 
 export const OriginSchema = z.enum(["root", "child"]);
@@ -219,24 +226,48 @@ export type ParsedRequestResult =
 export function parseRequestArg(args: string): ParsedRequestResult {
   const trimmed = args.trim();
   if (!trimmed) {
-    return { ok: false, error: "missing base64url-encoded request", sessionKey: "", requestId: "", operation: "hello" };
+    return {
+      ok: false,
+      error: "missing base64url-encoded request",
+      sessionKey: "",
+      requestId: "",
+      operation: "hello",
+    };
   }
 
   let json: string;
   try {
     json = decodeBase64Url(trimmed);
   } catch {
-    return { ok: false, error: "invalid base64url request", sessionKey: "", requestId: "", operation: "hello" };
+    return {
+      ok: false,
+      error: "invalid base64url request",
+      sessionKey: "",
+      requestId: "",
+      operation: "hello",
+    };
   }
   if (json.trim().length === 0) {
-    return { ok: false, error: "empty request payload", sessionKey: "", requestId: "", operation: "hello" };
+    return {
+      ok: false,
+      error: "empty request payload",
+      sessionKey: "",
+      requestId: "",
+      operation: "hello",
+    };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
   } catch {
-    return { ok: false, error: "request payload is not valid JSON", sessionKey: "", requestId: "", operation: "hello" };
+    return {
+      ok: false,
+      error: "request payload is not valid JSON",
+      sessionKey: "",
+      requestId: "",
+      operation: "hello",
+    };
   }
 
   const result = SuperpiRequestSchema.safeParse(parsed);

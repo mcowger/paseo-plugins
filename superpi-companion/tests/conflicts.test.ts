@@ -30,22 +30,41 @@ describe("detectControlConflicts", () => {
 });
 
 describe("tier mapping", () => {
-  const policy = { provider: "plexus", modelId: "gpt", serviceTiers: ["auto", "standard", "flex", "priority", "ultrafast"] };
+  const policy = {
+    provider: "plexus",
+    modelId: "gpt",
+    serviceTiers: ["auto", "standard", "flex", "priority", "ultrafast"],
+  };
   it("injects exact advertised canonical tiers for all Plexus request dialects", () => {
     for (const api of ["openai-completions", "openai-responses", "anthropic-messages"]) {
-      for (const tier of policy.serviceTiers) expect(applyTierToPayload({ model: "gpt" }, { provider: "plexus", api, id: "gpt" }, tier, policy)).toEqual({ model: "gpt", service_tier: tier });
+      for (const tier of policy.serviceTiers)
+        expect(
+          applyTierToPayload(
+            { model: "gpt" },
+            { provider: "plexus", api, id: "gpt" },
+            tier,
+            policy,
+          ),
+        ).toEqual({ model: "gpt", service_tier: tier });
     }
   });
   it("does not inject guesses, legacy names, foreign policies or native-provider requests", () => {
     const model = { provider: "plexus", id: "gpt" };
     expect(applyTierToPayload({}, model, "fast", policy)).toBeUndefined();
     expect(applyTierToPayload({}, model, "default", undefined)).toBeUndefined();
-    expect(applyTierToPayload({}, model, "priority", { ...policy, modelId: "other" })).toBeUndefined();
-    expect(applyTierToPayload({}, { provider: "anthropic", id: "gpt" }, "priority", policy)).toBeUndefined();
+    expect(
+      applyTierToPayload({}, model, "priority", { ...policy, modelId: "other" }),
+    ).toBeUndefined();
+    expect(
+      applyTierToPayload({}, { provider: "anthropic", id: "gpt" }, "priority", policy),
+    ).toBeUndefined();
     expect(isTierApplicable(model, "flex", policy)).toBe(true);
     expect(isTierApplicable(model, "fast", policy)).toBe(false);
   });
   it("leaves malformed payloads untouched", () => {
-    for (const payload of [null, [], "text"]) expect(applyTierToPayload(payload, { provider: "plexus", id: "gpt" }, "priority", policy)).toBeUndefined();
+    for (const payload of [null, [], "text"])
+      expect(
+        applyTierToPayload(payload, { provider: "plexus", id: "gpt" }, "priority", policy),
+      ).toBeUndefined();
   });
 });

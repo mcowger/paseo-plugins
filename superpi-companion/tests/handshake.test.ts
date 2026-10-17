@@ -1,11 +1,20 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createCompanion, COMPANION_CAPABILITIES } from "../src/companion.ts";
-import { encodeRequest, ROLE_ENV, ROOT_FLAG, SESSION_KEY_ENV, type SuperpiRequest } from "../src/protocol.ts";
+import { COMPANION_CAPABILITIES, createCompanion } from "../src/companion.ts";
+import {
+  encodeRequest,
+  ROLE_ENV,
+  ROOT_FLAG,
+  SESSION_KEY_ENV,
+  type SuperpiRequest,
+} from "../src/protocol.ts";
 import { createFakeContext, createFakePi, readReply } from "./harness.ts";
 
 const KEY = "key-1";
 
-function request(operation: SuperpiRequest["operation"], overrides: Partial<SuperpiRequest> = {}): string {
+function request(
+  operation: SuperpiRequest["operation"],
+  overrides: Partial<SuperpiRequest> = {},
+): string {
   return encodeRequest({
     version: 1,
     sessionKey: KEY,

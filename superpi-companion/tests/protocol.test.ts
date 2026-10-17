@@ -5,8 +5,8 @@ import {
   encodeBase64Url,
   encodeRequest,
   formatIssues,
-  parseRequestArg,
   PROTOCOL_VERSION,
+  parseRequestArg,
   SuperpiRequestSchema,
   SuperpiStateSchema,
 } from "../src/protocol.ts";
@@ -60,7 +60,9 @@ describe("parseRequestArg", () => {
   });
 
   it("rejects an unknown operation", () => {
-    expect(SuperpiRequestSchema.safeParse({ ...validRequest, operation: "explode" }).success).toBe(false);
+    expect(SuperpiRequestSchema.safeParse({ ...validRequest, operation: "explode" }).success).toBe(
+      false,
+    );
   });
 });
 

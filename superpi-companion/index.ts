@@ -2,14 +2,17 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createCompanion } from "./src/companion.ts";
 
 export {
-  createCompanion,
+  createSubagentBridgeTracker,
+  formatChildForward,
+  type SubagentBridgeTracker,
+} from "./src/bridge.ts";
+export {
   COMPANION_CAPABILITIES,
   type CompanionHandle,
   type CompanionOptions,
+  createCompanion,
 } from "./src/companion.ts";
-export { createSubagentBridgeTracker, formatChildForward, type SubagentBridgeTracker } from "./src/bridge.ts";
 export { detectControlConflicts, KNOWN_CONTROL_OWNERS } from "./src/conflicts.ts";
-export { buildRewindEntry, findActiveBranchUserEntry, navigationCancelled } from "./src/rewind.ts";
 export {
   CHILD_NOTIFY_PREFIX,
   COMMAND_NAME,
@@ -17,8 +20,8 @@ export {
   ConfigureDataSchema,
   CUSTOM_ENTRY_TYPE,
   NOTIFY_PREFIX,
-  parseRequestArg,
   PROTOCOL_VERSION,
+  parseRequestArg,
   REWIND_ENTRY_TYPE,
   RewindDataSchema,
   RewindEntrySchema,
@@ -28,11 +31,12 @@ export {
   SUBAGENT_BRIDGE_CHANNEL,
   SUBAGENT_BRIDGE_VERSION,
   SubagentBridgeRecordSchema,
-  SuperpiRequestSchema,
   SuperpiReplySchema,
+  SuperpiRequestSchema,
   SuperpiStateSchema,
   TierSchema,
 } from "./src/protocol.ts";
+export { buildRewindEntry, findActiveBranchUserEntry, navigationCancelled } from "./src/rewind.ts";
 
 /**
  * Superpi companion Pi extension. The provider launches the root Pi with

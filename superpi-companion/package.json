@@ -6,10 +6,12 @@
   "description": "Superpi root Pi companion extension: versioned control envelope over Pi RPC-visible notifications.",
   "license": "MIT",
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   },
   "scripts": {
-    "lint": "oxlint",
+    "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -17,10 +19,10 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@earendil-works/pi-coding-agent": "1.0.0",
     "@types/node": "^20.9.0",
     "jiti": "2.7.0",
-    "oxlint": "1.61.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.6"
   }

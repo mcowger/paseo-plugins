@@ -1,7 +1,15 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { NOTIFY_PREFIX, SuperpiReplySchema, type SuperpiReply } from "../src/protocol.ts";
-import { CONTEXT_POLICY_REQUEST, CONTEXT_POLICY_SNAPSHOT, type ContextPolicy } from "../src/context-policy.ts";
-import { SERVICE_TIERS_REQUEST, SERVICE_TIERS_SNAPSHOT, type ServiceTierPolicy } from "../src/service-tiers.ts";
+import {
+  CONTEXT_POLICY_REQUEST,
+  CONTEXT_POLICY_SNAPSHOT,
+  type ContextPolicy,
+} from "../src/context-policy.ts";
+import { NOTIFY_PREFIX, type SuperpiReply, SuperpiReplySchema } from "../src/protocol.ts";
+import {
+  SERVICE_TIERS_REQUEST,
+  SERVICE_TIERS_SNAPSHOT,
+  type ServiceTierPolicy,
+} from "../src/service-tiers.ts";
 
 export interface FakeNotify {
   message: string;
@@ -39,7 +47,16 @@ export interface FakePi {
   findModel(provider: string | undefined, modelId: string): FakeModel | undefined;
 }
 
-export function createFakePi(seed: { commands?: FakeCommandSeed[]; registry?: FakeModel[]; policies?: ContextPolicy[]; noPolicyPublisher?: boolean; tierPolicies?: ServiceTierPolicy[]; noTierPublisher?: boolean } = {}): FakePi {
+export function createFakePi(
+  seed: {
+    commands?: FakeCommandSeed[];
+    registry?: FakeModel[];
+    policies?: ContextPolicy[];
+    noPolicyPublisher?: boolean;
+    tierPolicies?: ServiceTierPolicy[];
+    noTierPublisher?: boolean;
+  } = {},
+): FakePi {
   const state = {
     sessionModel: undefined as FakeModel | undefined,
     registry: seed.registry ?? [],
@@ -55,15 +72,51 @@ export function createFakePi(seed: { commands?: FakeCommandSeed[]; registry?: Fa
   const entries: FakePi["entries"] = [];
   const handlers = new Map<string, Array<(...args: any[]) => any>>();
   const eventHandlers = new Map<string, Set<(data: unknown) => void>>();
-  if (!seed.noPolicyPublisher) eventHandlers.set(CONTEXT_POLICY_REQUEST, new Set([(data: unknown) => {
-    const { requestId } = data as { requestId: string };
-    for (const handler of eventHandlers.get(CONTEXT_POLICY_SNAPSHOT) ?? []) handler({ version: 1, publisherId: "00000000-0000-4000-8000-000000000001", revision: 1, requestId, status: "ready", policies: seed.policies ?? [] });
-  }]));
-  if (!seed.noTierPublisher) eventHandlers.set(SERVICE_TIERS_REQUEST, new Set([(data: unknown) => {
-    const { requestId } = data as { requestId: string };
-    const policies = seed.tierPolicies ?? (seed.registry ?? []).filter((model) => model.provider === "plexus").map((model) => ({ provider: "plexus", modelId: model.id, serviceTiers: ["auto", "standard", "flex", "priority", "ultrafast"] }));
-    for (const handler of eventHandlers.get(SERVICE_TIERS_SNAPSHOT) ?? []) handler({ version: 1, publisherId: "00000000-0000-4000-8000-000000000001", revision: 1, requestId, status: "ready", policies });
-  }]));
+  if (!seed.noPolicyPublisher)
+    eventHandlers.set(
+      CONTEXT_POLICY_REQUEST,
+      new Set([
+        (data: unknown) => {
+          const { requestId } = data as { requestId: string };
+          for (const handler of eventHandlers.get(CONTEXT_POLICY_SNAPSHOT) ?? [])
+            handler({
+              version: 1,
+              publisherId: "00000000-0000-4000-8000-000000000001",
+              revision: 1,
+              requestId,
+              status: "ready",
+              policies: seed.policies ?? [],
+            });
+        },
+      ]),
+    );
+  if (!seed.noTierPublisher)
+    eventHandlers.set(
+      SERVICE_TIERS_REQUEST,
+      new Set([
+        (data: unknown) => {
+          const { requestId } = data as { requestId: string };
+          const policies =
+            seed.tierPolicies ??
+            (seed.registry ?? [])
+              .filter((model) => model.provider === "plexus")
+              .map((model) => ({
+                provider: "plexus",
+                modelId: model.id,
+                serviceTiers: ["auto", "standard", "flex", "priority", "ultrafast"],
+              }));
+          for (const handler of eventHandlers.get(SERVICE_TIERS_SNAPSHOT) ?? [])
+            handler({
+              version: 1,
+              publisherId: "00000000-0000-4000-8000-000000000001",
+              revision: 1,
+              requestId,
+              status: "ready",
+              policies,
+            });
+        },
+      ]),
+    );
 
   const api = {
     registerFlag: (name: string, options: { default?: boolean | string }) => {
@@ -78,7 +131,12 @@ export function createFakePi(seed: { commands?: FakeCommandSeed[]; registry?: Fa
         handler: (args: string, ctx: ExtensionCommandContext) => Promise<void> | void;
       },
     ) => {
-      commands.push({ name, source: "extension", description: options.description, handler: options.handler });
+      commands.push({
+        name,
+        source: "extension",
+        description: options.description,
+        handler: options.handler,
+      });
     },
     appendEntry: (customType: string, data?: unknown) => {
       entries.push({ customType, data });
@@ -138,7 +196,8 @@ export function createFakePi(seed: { commands?: FakeCommandSeed[]; registry?: Fa
     },
     findModel: (provider, modelId) =>
       state.registry.find(
-        (candidate) => (candidate.provider ?? "test") === (provider ?? "test") && candidate.id === modelId,
+        (candidate) =>
+          (candidate.provider ?? "test") === (provider ?? "test") && candidate.id === modelId,
       ),
   };
 }
@@ -199,10 +258,14 @@ export function createFakeContext(seed: FakeContextSeed = {}): FakeContext {
     navigateTree: async (targetId: string, options?: unknown) => {
       navigations.push({ targetId, options });
       if (seed.navigateThrows) throw new Error(seed.navigateThrows);
-      if (!seed.navigateCancelled && seed.navigateLeafId !== undefined) leafId = seed.navigateLeafId;
+      if (!seed.navigateCancelled && seed.navigateLeafId !== undefined)
+        leafId = seed.navigateLeafId;
       return { cancelled: seed.navigateCancelled ?? false };
     },
-    compact: (options?: { onComplete?: (result: unknown) => void; onError?: (error: Error) => void }) => {
+    compact: (options?: {
+      onComplete?: (result: unknown) => void;
+      onError?: (error: Error) => void;
+    }) => {
       compactions.push({ options });
       if (seed.compactAuto === false) return;
       if (seed.compactError !== undefined) options?.onError?.(new Error(seed.compactError));
@@ -227,12 +290,19 @@ export function createFakeContext(seed: FakeContextSeed = {}): FakeContext {
     get: () => (pi ? pi.sessionModel : seed.model),
   });
 
-  return { ctx: ctx as unknown as ExtensionCommandContext, notifies, navigations, compactions, reloads };
+  return {
+    ctx: ctx as unknown as ExtensionCommandContext,
+    notifies,
+    navigations,
+    compactions,
+    reloads,
+  };
 }
 
 export function readReply(notifies: FakeNotify[]): SuperpiReply {
   const last = notifies.at(-1);
   if (!last) throw new Error("no notification was emitted");
-  if (!last.message.startsWith(NOTIFY_PREFIX)) throw new Error(`notification missing prefix: ${last.message}`);
+  if (!last.message.startsWith(NOTIFY_PREFIX))
+    throw new Error(`notification missing prefix: ${last.message}`);
   return SuperpiReplySchema.parse(JSON.parse(last.message.slice(NOTIFY_PREFIX.length)));
 }

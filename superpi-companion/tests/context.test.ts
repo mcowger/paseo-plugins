@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planContextBudget, type ContextTracking } from "../src/context.ts";
+import { type ContextTracking, planContextBudget } from "../src/context.ts";
 
 interface CatalogModel {
   id: string;
@@ -15,14 +15,23 @@ function emptyTracking(): ContextTracking {
   return { model: undefined, baseline: undefined };
 }
 
-const policy = { provider: "plexus", modelId: "gpt-5.6", maxContextTokens: 1_000_000, shortContextBudgetTokens: 180_000 };
+const policy = {
+  provider: "plexus",
+  modelId: "gpt-5.6",
+  maxContextTokens: 1_000_000,
+  shortContextBudgetTokens: 180_000,
+};
 
 describe("planContextBudget", () => {
   it("returns a session-local clone and leaves the catalog object untouched", () => {
     const source = catalog();
     const plan = planContextBudget(emptyTracking(), source, policy, true);
     expect(plan?.model).not.toBe(source);
-    expect(plan?.model).toMatchObject({ id: "gpt-5.6", provider: "plexus", contextWindow: 1_000_000 });
+    expect(plan?.model).toMatchObject({
+      id: "gpt-5.6",
+      provider: "plexus",
+      contextWindow: 1_000_000,
+    });
     expect(plan?.baseline).toBe(200_000);
     expect(source.contextWindow).toBe(200_000);
   });
@@ -58,7 +67,9 @@ describe("planContextBudget", () => {
 
   it("refuses a model without a finite context window", () => {
     expect(planContextBudget(emptyTracking(), undefined, policy, true)).toBeUndefined();
-    expect(planContextBudget(emptyTracking(), catalog({ contextWindow: Number.NaN }), policy, true)).toBeUndefined();
+    expect(
+      planContextBudget(emptyTracking(), catalog({ contextWindow: Number.NaN }), policy, true),
+    ).toBeUndefined();
   });
 });
 
@@ -79,7 +90,12 @@ describe("missing policy", () => {
 
   it("leaves a model without a distinct budget unchanged", () => {
     const tracking = emptyTracking();
-    const plan = planContextBudget(tracking, catalog(), { ...policy, shortContextBudgetTokens: 1_000_000 }, true);
+    const plan = planContextBudget(
+      tracking,
+      catalog(),
+      { ...policy, shortContextBudgetTokens: 1_000_000 },
+      true,
+    );
     expect(plan?.available).toBe(false);
     expect(plan?.model.contextWindow).toBe(200_000);
   });

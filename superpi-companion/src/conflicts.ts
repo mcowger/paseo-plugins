@@ -47,7 +47,11 @@ export function detectControlConflicts(commands: readonly DeclaredCommand[]): Co
   for (const known of KNOWN_CONTROL_OWNERS) {
     const matched = known.commands.filter((command) => declared.has(command));
     if (matched.length > 0) {
-      conflicts.push({ owner: known.owner, command: matched.join(", "), resolution: known.resolution });
+      conflicts.push({
+        owner: known.owner,
+        command: matched.join(", "),
+        resolution: known.resolution,
+      });
     }
   }
   return conflicts;

@@ -7,12 +7,18 @@ import {
   SUBAGENT_BRIDGE_CHANNEL,
   type SuperpiRequest,
 } from "../src/protocol.ts";
-import { createFakeContext, createFakePi, readReply, type FakeContextSeed } from "./harness.ts";
+import { createFakeContext, createFakePi, type FakeContextSeed, readReply } from "./harness.ts";
 
 const KEY = "key-1";
 
 function rewind(targetEntryId: string, requestId = "rewind-1"): string {
-  return encodeRequest({ version: 1, sessionKey: KEY, requestId, operation: "rewind", data: { targetEntryId } });
+  return encodeRequest({
+    version: 1,
+    sessionKey: KEY,
+    requestId,
+    operation: "rewind",
+    data: { targetEntryId },
+  });
 }
 
 function userEntry(id: string, parentId: string | null = null): Record<string, unknown> {
@@ -46,7 +52,10 @@ function stateOf(reply: ReturnType<typeof readReply>) {
 
 describe("rewind guards", () => {
   it("rejects while the agent is busy", async () => {
-    const { companion, ctx, notifies, navigations } = setup({ idle: false, branch: [userEntry("u1")] });
+    const { companion, ctx, notifies, navigations } = setup({
+      idle: false,
+      branch: [userEntry("u1")],
+    });
     await companion.handleArgs(rewind("u1"), ctx);
     const reply = readReply(notifies);
     expect(reply.ok).toBe(false);
@@ -141,13 +150,23 @@ describe("rewind navigation", () => {
 
     const pin = pi.entries.at(-1);
     expect(pin?.customType).toBe(REWIND_ENTRY_TYPE);
-    expect(pin?.data).toMatchObject({ version: 1, targetEntryId: "u2", leafId: "a1", timestamp: 55 });
+    expect(pin?.data).toMatchObject({
+      version: 1,
+      targetEntryId: "u2",
+      leafId: "a1",
+      timestamp: 55,
+    });
   });
 
   it("restores companion controls from the rewound branch", async () => {
     const { pi, companion, ctx, notifies } = setup({
       model: { provider: "plexus", id: "gpt", api: "openai-completions", contextWindow: 200000 },
-      branch: [userEntry("u1"), assistantEntry("a1", "u1"), userEntry("u2", "a1"), controlEntry("ultrafast")],
+      branch: [
+        userEntry("u1"),
+        assistantEntry("a1", "u1"),
+        userEntry("u2", "a1"),
+        controlEntry("ultrafast"),
+      ],
       navigateLeafId: "a1",
     });
     await companion.handleArgs(rewind("u2"), ctx);

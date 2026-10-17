@@ -1,17 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createSubagentBridgeTracker, formatChildForward } from "../src/bridge.ts";
-import {
-  createCompanion,
-  ROOT_SIGNAL_CHANNEL,
-  ROOT_SIGNAL_VERSION,
-} from "../src/companion.ts";
+import { createCompanion, ROOT_SIGNAL_CHANNEL, ROOT_SIGNAL_VERSION } from "../src/companion.ts";
 import {
   CHILD_NOTIFY_PREFIX,
   ChildForwardSchema,
   ROLE_ENV,
   SUBAGENT_BRIDGE_CHANNEL,
-  SubagentBridgeRecordSchema,
   type SubagentBridgeRecord,
+  SubagentBridgeRecordSchema,
 } from "../src/protocol.ts";
 import { createFakeContext, createFakePi, type FakeNotify } from "./harness.ts";
 
@@ -31,7 +27,10 @@ function bridgeRecord(overrides: Record<string, unknown> = {}): SubagentBridgeRe
 function childNotifies(notifies: FakeNotify[]): Array<Record<string, unknown>> {
   return notifies
     .filter((notify) => notify.message.startsWith(CHILD_NOTIFY_PREFIX))
-    .map((notify) => JSON.parse(notify.message.slice(CHILD_NOTIFY_PREFIX.length)) as Record<string, unknown>);
+    .map(
+      (notify) =>
+        JSON.parse(notify.message.slice(CHILD_NOTIFY_PREFIX.length)) as Record<string, unknown>,
+    );
 }
 
 describe("subagent bridge tracker", () => {
@@ -40,10 +39,14 @@ describe("subagent bridge tracker", () => {
     expect(tracker.accept(bridgeRecord())).toBeDefined();
     expect(tracker.activeChildren()).toBe(1);
     expect(
-      tracker.accept(bridgeRecord({ sequence: 2, type: "activity", record: { kind: "message_start" } })),
+      tracker.accept(
+        bridgeRecord({ sequence: 2, type: "activity", record: { kind: "message_start" } }),
+      ),
     ).toBeDefined();
     expect(tracker.activeChildren()).toBe(1);
-    expect(tracker.accept(bridgeRecord({ sequence: 3, type: "terminal", outcome: "completed" }))).toBeDefined();
+    expect(
+      tracker.accept(bridgeRecord({ sequence: 3, type: "terminal", outcome: "completed" })),
+    ).toBeDefined();
     expect(tracker.activeChildren()).toBe(0);
   });
 
@@ -60,7 +63,9 @@ describe("subagent bridge tracker", () => {
     tracker.accept(bridgeRecord());
     tracker.accept(bridgeRecord({ sequence: 2, type: "terminal", outcome: "failed" }));
     expect(tracker.accept(bridgeRecord({ sequence: 3, type: "activity" }))).toBeUndefined();
-    expect(tracker.accept(bridgeRecord({ sequence: 4, type: "terminal", outcome: "completed" }))).toBeUndefined();
+    expect(
+      tracker.accept(bridgeRecord({ sequence: 4, type: "terminal", outcome: "completed" })),
+    ).toBeUndefined();
     expect(tracker.activeChildren()).toBe(0);
   });
 
@@ -68,11 +73,15 @@ describe("subagent bridge tracker", () => {
     const forward = { version: 1 as const, sessionKey: KEY, record: bridgeRecord() };
     const text = formatChildForward(forward);
     expect(text.startsWith(CHILD_NOTIFY_PREFIX)).toBe(true);
-    expect(ChildForwardSchema.parse(JSON.parse(text.slice(CHILD_NOTIFY_PREFIX.length)))).toEqual(forward);
+    expect(ChildForwardSchema.parse(JSON.parse(text.slice(CHILD_NOTIFY_PREFIX.length)))).toEqual(
+      forward,
+    );
   });
 
   it("accepts streaming activity, cwd, and omission fields", () => {
-    expect(SubagentBridgeRecordSchema.safeParse(bridgeRecord({ cwd: "/srv/child" })).success).toBe(true);
+    expect(SubagentBridgeRecordSchema.safeParse(bridgeRecord({ cwd: "/srv/child" })).success).toBe(
+      true,
+    );
     const stream = SubagentBridgeRecordSchema.parse(
       bridgeRecord({
         sequence: 2,
@@ -128,7 +137,10 @@ describe("root companion bridge subscription", () => {
     pi.handlers.get("session_start")?.[0]?.({ type: "session_start" }, ctx);
     pi.emitEvent(SUBAGENT_BRIDGE_CHANNEL, bridgeRecord());
     pi.emitEvent(SUBAGENT_BRIDGE_CHANNEL, bridgeRecord({ version: 2 }));
-    pi.emitEvent(SUBAGENT_BRIDGE_CHANNEL, bridgeRecord({ runId: "run-2", sequence: 5, surprise: true }));
+    pi.emitEvent(
+      SUBAGENT_BRIDGE_CHANNEL,
+      bridgeRecord({ runId: "run-2", sequence: 5, surprise: true }),
+    );
 
     const forwarded = childNotifies(notifies);
     expect(forwarded).toHaveLength(1);
@@ -144,7 +156,10 @@ describe("root companion bridge subscription", () => {
     pi.emitEvent(SUBAGENT_BRIDGE_CHANNEL, bridgeRecord({ runId: "run-a" }));
     pi.emitEvent(SUBAGENT_BRIDGE_CHANNEL, bridgeRecord({ runId: "run-b" }));
     expect(companion.activeChildren()).toBe(2);
-    pi.emitEvent(SUBAGENT_BRIDGE_CHANNEL, bridgeRecord({ runId: "run-a", sequence: 2, type: "terminal" }));
+    pi.emitEvent(
+      SUBAGENT_BRIDGE_CHANNEL,
+      bridgeRecord({ runId: "run-a", sequence: 2, type: "terminal" }),
+    );
     expect(companion.activeChildren()).toBe(1);
   });
 
@@ -192,9 +207,7 @@ describe("root session signal", () => {
 
     expect(signals).toHaveLength(0);
     pi.handlers.get("session_start")?.[0]?.({ type: "session_start" }, ctx);
-    expect(signals).toEqual([
-      { version: ROOT_SIGNAL_VERSION, sessionId: "root-session-1" },
-    ]);
+    expect(signals).toEqual([{ version: ROOT_SIGNAL_VERSION, sessionId: "root-session-1" }]);
   });
 
   it("does not signal for a child or an environment-only root", () => {

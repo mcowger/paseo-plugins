@@ -2,21 +2,66 @@ import { expect, it } from "vitest";
 import { createCompanion } from "../src/companion.ts";
 import { CONTEXT_POLICY_SNAPSHOT } from "../src/context-policy.ts";
 import { encodeRequest, STATE_NOTIFY_PREFIX } from "../src/protocol.ts";
-import { createFakePi, createFakeContext, readReply } from "./harness.ts";
+import { createFakeContext, createFakePi, readReply } from "./harness.ts";
 
-const model = { provider: "plexus", id: "model", api: "openai-responses", contextWindow: 1_000_000 };
-const policy = { provider: "plexus", modelId: "model", maxContextTokens: 1_000_000, shortContextBudgetTokens: 200_000 };
-const configure = (longContext: boolean) => encodeRequest({ version: 1, sessionKey: "key", requestId: "cfg", operation: "configure", data: { longContext } });
-const refresh = (pi: ReturnType<typeof createFakePi>, revision: number, policies: unknown[]) => pi.emitEvent(CONTEXT_POLICY_SNAPSHOT, { version: 1, publisherId: "00000000-0000-4000-8000-000000000001", revision, status: "ready", policies });
-const flush = async () => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
+const model = {
+  provider: "plexus",
+  id: "model",
+  api: "openai-responses",
+  contextWindow: 1_000_000,
+};
+const policy = {
+  provider: "plexus",
+  modelId: "model",
+  maxContextTokens: 1_000_000,
+  shortContextBudgetTokens: 200_000,
+};
+const configure = (longContext: boolean) =>
+  encodeRequest({
+    version: 1,
+    sessionKey: "key",
+    requestId: "cfg",
+    operation: "configure",
+    data: { longContext },
+  });
+const refresh = (pi: ReturnType<typeof createFakePi>, revision: number, policies: unknown[]) =>
+  pi.emitEvent(CONTEXT_POLICY_SNAPSHOT, {
+    version: 1,
+    publisherId: "00000000-0000-4000-8000-000000000001",
+    revision,
+    status: "ready",
+    policies,
+  });
+const flush = async () => {
+  for (let i = 0; i < 15; i++) await Promise.resolve();
+};
 
 it("retains saved On intent while metadata loads, without applying an unknown budget", async () => {
   const pi = createFakePi({ registry: [model] });
   const requests = "plexus:context-policy:request:v1";
   pi.eventHandlers.get(requests)?.clear();
-  pi.api.events.on(requests, (request) => pi.emitEvent(CONTEXT_POLICY_SNAPSHOT, { version: 1, publisherId: "00000000-0000-4000-8000-000000000001", revision: 1, requestId: (request as { requestId: string }).requestId, status: "loading", policies: [] }));
+  pi.api.events.on(requests, (request) =>
+    pi.emitEvent(CONTEXT_POLICY_SNAPSHOT, {
+      version: 1,
+      publisherId: "00000000-0000-4000-8000-000000000001",
+      revision: 1,
+      requestId: (request as { requestId: string }).requestId,
+      status: "loading",
+      policies: [],
+    }),
+  );
   const companion = createCompanion(pi.api, { origin: "root", sessionKey: "key" });
-  const { ctx } = createFakeContext({ pi, model, branch: [{ type: "custom", customType: "superpi-controls", data: { version: 1, tier: "fast", longContext: true, timestamp: 1 } }] });
+  const { ctx } = createFakeContext({
+    pi,
+    model,
+    branch: [
+      {
+        type: "custom",
+        customType: "superpi-controls",
+        data: { version: 1, tier: "fast", longContext: true, timestamp: 1 },
+      },
+    ],
+  });
   await companion.restore(ctx);
   expect(companion.buildState(ctx).settings.longContext).toBe(false);
   expect(pi.sessionModel?.contextWindow).toBe(1_000_000);
@@ -35,7 +80,11 @@ it("keeps the toggle available after an apply refusal so the user can retry", as
   pi.setModelRefuses = true;
   await companion.handleArgs(configure(false), ctx);
   expect(readReply(notifies).ok).toBe(false);
-  expect(companion.buildState(ctx)).toMatchObject({ longContextAvailable: true, settings: { longContext: true }, contextPolicyError: expect.any(String) });
+  expect(companion.buildState(ctx)).toMatchObject({
+    longContextAvailable: true,
+    settings: { longContext: true },
+    contextPolicyError: expect.any(String),
+  });
   pi.setModelRefuses = false;
   await companion.handleArgs(configure(false), ctx);
   expect(pi.sessionModel?.contextWindow).toBe(200_000);
@@ -79,7 +128,10 @@ it("starts with the short budget, toggles to the maximum, and updates/removes li
 
 it("keeps unqualified/equal-budget models unchanged and children independent", async () => {
   for (const origin of ["root", "child"] as const) {
-    const pi = createFakePi({ registry: [model], policies: [{ ...policy, shortContextBudgetTokens: policy.maxContextTokens }] });
+    const pi = createFakePi({
+      registry: [model],
+      policies: [{ ...policy, shortContextBudgetTokens: policy.maxContextTokens }],
+    });
     const companion = createCompanion(pi.api, { origin, sessionKey: "key" });
     const { ctx } = createFakeContext({ pi, model });
     await companion.restore(ctx);
@@ -123,9 +175,27 @@ it("restores persisted long-context selection only when a current policy support
   for (const policies of [[policy], []]) {
     const pi = createFakePi({ registry: [model], policies });
     const companion = createCompanion(pi.api, { origin: "root", sessionKey: "key" });
-    const { ctx } = createFakeContext({ pi, model, branch: [{ type: "custom", customType: "superpi-controls", data: { version: 1, tier: "fast", longContext: true, contextWindow: 1_050_000, timestamp: 1 } }] });
+    const { ctx } = createFakeContext({
+      pi,
+      model,
+      branch: [
+        {
+          type: "custom",
+          customType: "superpi-controls",
+          data: {
+            version: 1,
+            tier: "fast",
+            longContext: true,
+            contextWindow: 1_050_000,
+            timestamp: 1,
+          },
+        },
+      ],
+    });
     await companion.restore(ctx);
     expect(companion.buildState(ctx).settings.longContext).toBe(policies.length > 0);
-    expect(companion.buildState(ctx).longContextTarget).toBe(policies.length ? 1_000_000 : undefined);
+    expect(companion.buildState(ctx).longContextTarget).toBe(
+      policies.length ? 1_000_000 : undefined,
+    );
   }
 });

@@ -32,7 +32,12 @@ describe("extension load smoke", () => {
 
     const command = pi.commands.find((candidate) => candidate.name === "superpi-control");
     expect(command).toBeDefined();
-    const hello = encodeRequest({ version: 1, sessionKey: KEY, requestId: "smoke-1", operation: "hello" });
+    const hello = encodeRequest({
+      version: 1,
+      sessionKey: KEY,
+      requestId: "smoke-1",
+      operation: "hello",
+    });
     await command?.handler(hello, ctx);
 
     const reply = readReply(notifies);

@@ -14,11 +14,25 @@ export function resolveSavedTier(tier: string, choices: readonly string[]): stri
   return choices.includes("auto") ? "auto" : choices.includes("standard") ? "standard" : "default";
 }
 
-export function isTierApplicable(model: TierModel | undefined, tier: Tier, policy: ServiceTierPolicy | undefined): boolean {
-  return model?.provider === "plexus" && policy?.provider === model.provider && policy.modelId === model.id && policy.serviceTiers.includes(tier);
+export function isTierApplicable(
+  model: TierModel | undefined,
+  tier: Tier,
+  policy: ServiceTierPolicy | undefined,
+): boolean {
+  return (
+    model?.provider === "plexus" &&
+    policy?.provider === model.provider &&
+    policy.modelId === model.id &&
+    policy.serviceTiers.includes(tier)
+  );
 }
 
-export function applyTierToPayload(payload: unknown, model: TierModel | undefined, tier: Tier, policy: ServiceTierPolicy | undefined): unknown {
+export function applyTierToPayload(
+  payload: unknown,
+  model: TierModel | undefined,
+  tier: Tier,
+  policy: ServiceTierPolicy | undefined,
+): unknown {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return undefined;
   if (!isTierApplicable(model, tier, policy)) return undefined;
   return { ...payload, service_tier: tier };

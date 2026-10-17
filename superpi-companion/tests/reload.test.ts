@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createCompanion } from "../src/companion.ts";
 import { encodeRequest, SUBAGENT_BRIDGE_CHANNEL } from "../src/protocol.ts";
-import { createFakeContext, createFakePi, readReply, type FakeContextSeed } from "./harness.ts";
+import { createFakeContext, createFakePi, type FakeContextSeed, readReply } from "./harness.ts";
 
 const KEY = "key-1";
 

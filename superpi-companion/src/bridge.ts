@@ -1,8 +1,8 @@
 import {
   CHILD_NOTIFY_PREFIX,
   type ChildForward,
-  type SubagentBridgeRecord,
   SUBAGENT_BRIDGE_VERSION,
+  type SubagentBridgeRecord,
 } from "./protocol.ts";
 
 /**

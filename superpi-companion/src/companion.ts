@@ -1,44 +1,44 @@
-import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionCommandContext,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { createSubagentBridgeTracker, formatChildForward } from "./bridge.ts";
 import { detectControlConflicts } from "./conflicts.ts";
-import {
-  planContextBudget,
-  type ContextWindowModel,
-  type ContextTracking,
-} from "./context.ts";
+import { type ContextTracking, type ContextWindowModel, planContextBudget } from "./context.ts";
 import { createContextPolicyConsumer } from "./context-policy.ts";
-import { createServiceTiersConsumer } from "./service-tiers.ts";
-import { buildRewindEntry, findActiveBranchUserEntry, navigationCancelled } from "./rewind.ts";
-import { applyTierToPayload, isTierApplicable, resolveSavedTier } from "./tier.ts";
 import {
   COMMAND_NAME,
   CompactDataSchema,
   ConfigureDataSchema,
+  type Conflict,
+  type ControlEntry,
   ControlEntrySchema,
   CUSTOM_ENTRY_TYPE,
   formatIssues,
   NOTIFY_PREFIX,
-  STATE_NOTIFY_PREFIX,
-  parseRequestArg,
+  type Origin,
   PROTOCOL_VERSION,
+  parseRequestArg,
   REWIND_ENTRY_TYPE,
   RewindDataSchema,
+  type RewindResult,
   ROLE_ENV,
   ROOT_FLAG,
   SESSION_KEY_ENV,
+  STATE_NOTIFY_PREFIX,
   SUBAGENT_BRIDGE_CHANNEL,
   SubagentBridgeRecordSchema,
-  SuperpiReplySchema,
-  SuperpiStateSchema,
-  type Conflict,
-  type ControlEntry,
-  type Origin,
-  type RewindResult,
-  type SuperpiRequest,
   type SuperpiReply,
+  SuperpiReplySchema,
+  type SuperpiRequest,
   type SuperpiState,
+  SuperpiStateSchema,
   type Tier,
 } from "./protocol.ts";
+import { buildRewindEntry, findActiveBranchUserEntry, navigationCancelled } from "./rewind.ts";
+import { createServiceTiersConsumer } from "./service-tiers.ts";
+import { applyTierToPayload, isTierApplicable, resolveSavedTier } from "./tier.ts";
 
 export interface CompanionOptions {
   /** Expected integration session key. Defaults to `SUPERPI_SESSION_KEY`. */
@@ -123,7 +123,9 @@ function readLeafId(ctx: ExtensionContext): string | undefined {
   }
 }
 
-function readBranch(ctx: ExtensionContext): ReturnType<ExtensionContext["sessionManager"]["getBranch"]> {
+function readBranch(
+  ctx: ExtensionContext,
+): ReturnType<ExtensionContext["sessionManager"]["getBranch"]> {
   try {
     return ctx.sessionManager.getBranch();
   } catch {
@@ -149,7 +151,8 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
    * flag (or an explicit option). The role environment variable is inherited by
    * SDK child sessions, so it cannot distinguish the real root owner.
    */
-  const rootFlagged = () => (options.origin ? options.origin === "root" : pi.getFlag(ROOT_FLAG) === true);
+  const rootFlagged = () =>
+    options.origin ? options.origin === "root" : pi.getFlag(ROOT_FLAG) === true;
 
   const settings: { tier: Tier; longContext: boolean } = { tier: "default", longContext: false };
   let desiredLongContext = false;
@@ -187,13 +190,20 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
   });
 
   function tierChoices(ctx: ExtensionContext): readonly string[] {
-    return ctx.model?.provider === "plexus" ? serviceTiers.policy(ctx.model)?.serviceTiers ?? [] : [];
+    return ctx.model?.provider === "plexus"
+      ? (serviceTiers.policy(ctx.model)?.serviceTiers ?? [])
+      : [];
   }
 
   function reconcileTier(ctx: ExtensionContext): void {
     const choices = tierChoices(ctx);
     settings.tier = resolveSavedTier(desiredTier, choices);
-    if (choices.includes(desiredTier) || (desiredTier === "fast" && settings.tier === "priority") || (desiredTier === "default" && (settings.tier === "auto" || settings.tier === "standard"))) desiredTier = settings.tier;
+    if (
+      choices.includes(desiredTier) ||
+      (desiredTier === "fast" && settings.tier === "priority") ||
+      (desiredTier === "default" && (settings.tier === "auto" || settings.tier === "standard"))
+    )
+      desiredTier = settings.tier;
   }
 
   function enqueueContext<T>(operation: () => Promise<T>): Promise<T> {
@@ -205,21 +215,30 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
   async function initializeContext(ctx: ExtensionContext): Promise<void> {
     if (origin() !== "root" || contextClosed) return;
     policyContext = ctx;
-    initialPolicies ??= Promise.all([policies.request(), serviceTiers.request()]).then(() => undefined);
+    initialPolicies ??= Promise.all([policies.request(), serviceTiers.request()]).then(
+      () => undefined,
+    );
     await initialPolicies;
   }
 
   function publishState(ctx: ExtensionContext): void {
     if (!expectedSessionKey || origin() !== "root" || contextClosed) return;
-    ctx.ui.notify(`${STATE_NOTIFY_PREFIX}${JSON.stringify({ version: 1, sessionKey: expectedSessionKey, state: buildState(ctx) })}`, "info");
+    ctx.ui.notify(
+      `${STATE_NOTIFY_PREFIX}${JSON.stringify({ version: 1, sessionKey: expectedSessionKey, state: buildState(ctx) })}`,
+      "info",
+    );
   }
 
-  async function reconcileContext(ctx: ExtensionContext, enabled = settings.longContext): Promise<boolean> {
+  async function reconcileContext(
+    ctx: ExtensionContext,
+    enabled = settings.longContext,
+  ): Promise<boolean> {
     if (contextClosed) return false;
     const current = ctx.model;
     const catalog = current ? ctx.modelRegistry.find(current.provider, current.id) : undefined;
     const source = catalog ?? current;
-    const sourceTracking = catalog && tracking.model !== catalog ? { model: undefined, baseline: undefined } : tracking;
+    const sourceTracking =
+      catalog && tracking.model !== catalog ? { model: undefined, baseline: undefined } : tracking;
     const policy = policies.policy(source);
     const plan = planContextBudget(sourceTracking, source, policy, enabled);
     if (!plan) {
@@ -227,7 +246,10 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
       contextError = undefined;
       return false;
     }
-    if (current?.contextWindow !== plan.model.contextWindow && !(await applySessionModel(plan.model))) {
+    if (
+      current?.contextWindow !== plan.model.contextWindow &&
+      !(await applySessionModel(plan.model))
+    ) {
       contextError = "Pi could not apply the context policy budget.";
       return false;
     }
@@ -273,10 +295,12 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
   function buildState(ctx: ExtensionContext): SuperpiState {
     const root = origin() === "root";
     const model = ctx.model;
-    const contextWindow = typeof model?.contextWindow === "number" ? model.contextWindow : undefined;
+    const contextWindow =
+      typeof model?.contextWindow === "number" ? model.contextWindow : undefined;
     const sessionId = readSessionId(ctx);
     const policy = policies.policy(model);
-    const available = root && policy !== undefined && policy.shortContextBudgetTokens < policy.maxContextTokens;
+    const available =
+      root && policy !== undefined && policy.shortContextBudgetTokens < policy.maxContextTokens;
     const state: SuperpiState = {
       capabilities: root ? [...COMPANION_CAPABILITIES] : [],
       settings: { tier: settings.tier, longContext: settings.longContext },
@@ -294,7 +318,8 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     if (policy) {
       state.longContextTarget = policy.maxContextTokens;
       state.shortContextBudgetTokens = policy.shortContextBudgetTokens;
-      if (policy.pricingThresholdInputTokens !== undefined) state.pricingThresholdInputTokens = policy.pricingThresholdInputTokens;
+      if (policy.pricingThresholdInputTokens !== undefined)
+        state.pricingThresholdInputTokens = policy.pricingThresholdInputTokens;
     }
     if (contextError) state.contextPolicyError = contextError;
     return SuperpiStateSchema.parse(state);
@@ -302,7 +327,10 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
 
   function emit(ctx: ExtensionContext, reply: SuperpiReply): void {
     const validated = SuperpiReplySchema.parse(reply);
-    ctx.ui.notify(`${NOTIFY_PREFIX}${JSON.stringify(validated)}`, validated.ok ? "info" : "warning");
+    ctx.ui.notify(
+      `${NOTIFY_PREFIX}${JSON.stringify(validated)}`,
+      validated.ok ? "info" : "warning",
+    );
   }
 
   function base(request: SuperpiRequest) {
@@ -402,7 +430,11 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     });
   }
 
-  function rewindResult(cancelled: boolean, targetEntryId: string, ctx: ExtensionContext): RewindResult {
+  function rewindResult(
+    cancelled: boolean,
+    targetEntryId: string,
+    ctx: ExtensionContext,
+  ): RewindResult {
     const leafId = readLeafId(ctx);
     return {
       cancelled,
@@ -416,7 +448,9 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
   function handleHello(request: SuperpiRequest, ctx: ExtensionCommandContext): void {
     const data = buildState(ctx);
     if (data.conflicts.length > 0) {
-      const detail = data.conflicts.map((conflict) => `${conflict.owner} owns ${conflict.command}`).join("; ");
+      const detail = data.conflicts
+        .map((conflict) => `${conflict.owner} owns ${conflict.command}`)
+        .join("; ");
       const resolutions = data.conflicts.map((conflict) => conflict.resolution).join(" ");
       emit(ctx, {
         ...base(request),
@@ -429,30 +463,68 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     emit(ctx, { ...base(request), ok: true, data });
   }
 
-  async function handleConfigure(request: SuperpiRequest, ctx: ExtensionCommandContext): Promise<void> {
+  async function handleConfigure(
+    request: SuperpiRequest,
+    ctx: ExtensionCommandContext,
+  ): Promise<void> {
     const parsed = ConfigureDataSchema.safeParse(request.data ?? {});
     if (!parsed.success) {
-      emit(ctx, { ...base(request), ok: false, error: `invalid configure data: ${formatIssues(parsed.error)}` });
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        error: `invalid configure data: ${formatIssues(parsed.error)}`,
+      });
       return;
     }
 
     const before = { tier: settings.tier, longContext: settings.longContext };
     const choices = tierChoices(ctx);
     const requestedTier = parsed.data.tier;
-    const nextTier = requestedTier === undefined ? settings.tier : choices.includes(requestedTier) ? requestedTier : requestedTier === "fast" ? "priority" : requestedTier === "default" ? resolveSavedTier(requestedTier, choices) : requestedTier;
+    const nextTier =
+      requestedTier === undefined
+        ? settings.tier
+        : choices.includes(requestedTier)
+          ? requestedTier
+          : requestedTier === "fast"
+            ? "priority"
+            : requestedTier === "default"
+              ? resolveSavedTier(requestedTier, choices)
+              : requestedTier;
     if (requestedTier !== undefined && !choices.includes(nextTier)) {
-      emit(ctx, { ...base(request), ok: false, data: buildState(ctx), error: `Service tier '${requestedTier}' is not advertised for the current model.` });
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        data: buildState(ctx),
+        error: `Service tier '${requestedTier}' is not advertised for the current model.`,
+      });
       return;
     }
     const nextLongContext = parsed.data.longContext ?? settings.longContext;
 
     const policy = policies.policy(ctx.model);
-    if (nextLongContext && (!policy || policy.shortContextBudgetTokens >= policy.maxContextTokens)) {
-      emit(ctx, { ...base(request), ok: false, data: buildState(ctx), error: "The current model has no distinct short and long context budgets." });
+    if (
+      nextLongContext &&
+      (!policy || policy.shortContextBudgetTokens >= policy.maxContextTokens)
+    ) {
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        data: buildState(ctx),
+        error: "The current model has no distinct short and long context budgets.",
+      });
       return;
     }
-    if (parsed.data.longContext !== undefined && !(await reconcileContext(ctx, nextLongContext)) && ctx.model) {
-      emit(ctx, { ...base(request), ok: false, data: buildState(ctx), error: contextError ?? "The current model has no known context window." });
+    if (
+      parsed.data.longContext !== undefined &&
+      !(await reconcileContext(ctx, nextLongContext)) &&
+      ctx.model
+    ) {
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        data: buildState(ctx),
+        error: contextError ?? "The current model has no known context window.",
+      });
       return;
     }
 
@@ -464,16 +536,28 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     emit(ctx, { ...base(request), ok: true, data: buildState(ctx) });
   }
 
-  async function handleRewind(request: SuperpiRequest, ctx: ExtensionCommandContext): Promise<void> {
+  async function handleRewind(
+    request: SuperpiRequest,
+    ctx: ExtensionCommandContext,
+  ): Promise<void> {
     const parsed = RewindDataSchema.safeParse(request.data ?? {});
     if (!parsed.success) {
-      emit(ctx, { ...base(request), ok: false, error: `invalid rewind data: ${formatIssues(parsed.error)}` });
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        error: `invalid rewind data: ${formatIssues(parsed.error)}`,
+      });
       return;
     }
     const { targetEntryId } = parsed.data;
 
     if (!ctx.isIdle()) {
-      emit(ctx, { ...base(request), ok: false, data: buildState(ctx), error: "rewind requires an idle agent" });
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        data: buildState(ctx),
+        error: "rewind requires an idle agent",
+      });
       return;
     }
     if (compactionActive) {
@@ -498,7 +582,12 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
 
     const target = findActiveBranchUserEntry(readBranch(ctx), targetEntryId);
     if (!target.ok) {
-      emit(ctx, { ...base(request), ok: false, data: buildState(ctx), error: `invalid rewind target: ${target.error}` });
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        data: buildState(ctx),
+        error: `invalid rewind target: ${target.error}`,
+      });
       return;
     }
 
@@ -532,10 +621,17 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     emit(ctx, { ...base(request), ok: true, data: rewindResult(false, targetEntryId, ctx) });
   }
 
-  async function handleCompact(request: SuperpiRequest, ctx: ExtensionCommandContext): Promise<void> {
+  async function handleCompact(
+    request: SuperpiRequest,
+    ctx: ExtensionCommandContext,
+  ): Promise<void> {
     const parsed = CompactDataSchema.safeParse(request.data ?? {});
     if (!parsed.success) {
-      emit(ctx, { ...base(request), ok: false, error: `invalid compact data: ${formatIssues(parsed.error)}` });
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        error: `invalid compact data: ${formatIssues(parsed.error)}`,
+      });
       return;
     }
     if (!ctx.isIdle()) {
@@ -588,7 +684,10 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     }
   }
 
-  async function handleReload(request: SuperpiRequest, ctx: ExtensionCommandContext): Promise<void> {
+  async function handleReload(
+    request: SuperpiRequest,
+    ctx: ExtensionCommandContext,
+  ): Promise<void> {
     if (!ctx.isIdle()) {
       emit(ctx, {
         ...base(request),
@@ -650,7 +749,11 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
       return;
     }
     if (request.sessionKey !== expectedSessionKey) {
-      emit(ctx, { ...base(request), ok: false, error: "session key mismatch; refusing control request." });
+      emit(ctx, {
+        ...base(request),
+        ok: false,
+        error: "session key mismatch; refusing control request.",
+      });
       return;
     }
     if (origin() !== "root") {
@@ -707,7 +810,8 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
     if (applyingModel) return;
     // Pi's selectable snapshot may use a different object from registry.find.
     // Resolve by identity, and ignore an event for a model no longer selected.
-    if (!ctx.modelRegistry.find(event.model.provider, event.model.id) || ctx.model !== event.model) return;
+    if (!ctx.modelRegistry.find(event.model.provider, event.model.id) || ctx.model !== event.model)
+      return;
     await initializeContext(ctx);
     await enqueueContext(async () => {
       tracking.model = undefined;
@@ -755,7 +859,12 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
   });
   pi.on("before_provider_request", (event, ctx) => {
     if (origin() !== "root") return undefined;
-    return applyTierToPayload(event.payload, ctx.model, settings.tier, serviceTiers.policy(ctx.model));
+    return applyTierToPayload(
+      event.payload,
+      ctx.model,
+      settings.tier,
+      serviceTiers.policy(ctx.model),
+    );
   });
 
   pi.registerCommand(COMMAND_NAME, {
@@ -764,7 +873,9 @@ export function createCompanion(pi: ExtensionAPI, options: CompanionOptions = {}
   });
 
   return {
-    get origin() { return origin(); },
+    get origin() {
+      return origin();
+    },
     expectedSessionKey,
     handleArgs,
     buildState,
