@@ -929,6 +929,7 @@ describe("tool details nothing interprets", () => {
   });
 
   test("names the detail keys the mapping leaves unread", () => {
+    // A key a branch maps, shows as a fact, or drops on purpose is accounted for.
     expect(
       toolDetailDiagnostic("Agent", {
         agentId: "a1",
@@ -939,11 +940,12 @@ describe("tool details nothing interprets", () => {
         tokens: "",
         toolUses: 0,
       }),
-    ).toEqual({
+    ).toBeNull();
+    // A key nobody has decided about still reports.
+    expect(toolDetailDiagnostic("Agent", { agentId: "a1", somethingNew: 1 })).toMatchObject({
       tool: "Agent",
       kind: "agent",
-      consumed: ["agentId", "sessionId", "description", "subagentType"],
-      unconsumed: ["status", "tokens", "toolUses"],
+      unconsumed: ["somethingNew"],
     });
     // A key dropped on purpose is a decision, not a gap: it stays out of the log.
     expect(toolDetailDiagnostic("edit", { patch: "x", diff: "y", firstChangedLine: 3 })).toBeNull();

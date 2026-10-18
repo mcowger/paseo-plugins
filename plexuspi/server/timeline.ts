@@ -590,8 +590,10 @@ export function toolDetailKind(name: string): ToolDetailKind {
  * decisions the reader has to re-litigate every session.
  */
 interface DetailUsage {
-  /** Keys whose content reaches the timeline item. */
+  /** Keys mapped onto a typed field of the detail. */
   consumed: readonly string[];
+  /** Keys carried as `metadata.plexuspiFacts`, because no field can hold them. */
+  shown: readonly string[];
   /** Keys dropped on purpose, and why. */
   ignored: Readonly<Record<string, string>>;
 }
@@ -599,6 +601,7 @@ interface DetailUsage {
 const DETAIL_USAGE: Partial<Record<ToolDetailKind, DetailUsage>> = {
   edit: {
     consumed: ["patch", "unifiedDiff"],
+    shown: [],
     ignored: {
       diff: "Pi's trimmed view: line-number prefixes and … elisions, not a unified diff",
       firstChangedLine: "no rendering use",
@@ -608,10 +611,14 @@ const DETAIL_USAGE: Partial<Record<ToolDetailKind, DetailUsage>> = {
     // description and subagentType also land on the item, mapped from the call's
     // arguments; the result's copy of them adds nothing.
     consumed: ["agentId", "sessionId", "description", "subagentType"],
+    // The sub_agent detail has no field for a status or a token count, so these
+    // ride as facts. Showing them is all the protocol allows.
+    shown: ["status", "tokens", "toolUses", "durationMs", "modelName", "tags"],
     ignored: { displayName: "repeats subagentType" },
   },
   todo: {
     consumed: ["tasks"],
+    shown: [],
     ignored: {
       action: "the task card already depicts the request",
       params: "same as action",
@@ -620,10 +627,9 @@ const DETAIL_USAGE: Partial<Record<ToolDetailKind, DetailUsage>> = {
   },
   bash: {
     consumed: [],
-    ignored: {
-      truncation: "reduced to the truncation note the row renders",
-      fullOutputPath: "carried by the same note",
-    },
+    // Reduced to the note the shell row renders; see shellFacts.
+    shown: ["truncation", "fullOutputPath"],
+    ignored: {},
   },
 };
 
@@ -635,6 +641,7 @@ const DETAIL_USAGE: Partial<Record<ToolDetailKind, DetailUsage>> = {
 const TOOL_DETAIL_USAGE: Record<string, DetailUsage> = {
   get_subagent_result: {
     consumed: [],
+    shown: [],
     ignored: {
       agentId: "the row shows it from the result text",
       description: "same",
@@ -645,6 +652,7 @@ const TOOL_DETAIL_USAGE: Record<string, DetailUsage> = {
   },
   ask_user_question: {
     consumed: [],
+    shown: [],
     ignored: {
       answers: "the row renders the questions and answers from the result text",
       cancelled: "same",
@@ -661,11 +669,11 @@ function toolFacts(tool: string, details: unknown): DetailProjection["fields"] |
   if (!isRecord(details)) return undefined;
   if (toolDetailKind(tool) === "bash") return shellFacts(details);
   const usage = detailUsage(tool);
-  const accounted = [...(usage?.consumed ?? []), ...Object.keys(usage?.ignored ?? {})];
-  const leftover = Object.fromEntries(
-    Object.entries(details).filter(([key]) => !accounted.includes(key)),
+  if (!usage) return undefined;
+  const shown = Object.fromEntries(
+    Object.entries(details).filter(([key]) => usage.shown.includes(key)),
   );
-  return projectToolDetails(leftover)?.fields;
+  return projectToolDetails(shown)?.fields;
 }
 
 function shellFacts(details: Record<string, unknown>): DetailProjection["fields"] | undefined {
@@ -759,10 +767,8 @@ export function toolDetailDiagnostic(tool: string, details: unknown): ToolDetail
   const kind = toolDetailKind(tool);
   const usage = detailUsage(tool);
   const consumed = usage?.consumed ?? [];
-  const ignored = Object.keys(usage?.ignored ?? {});
-  const unconsumed = Object.keys(details).filter(
-    (key) => !consumed.includes(key) && !ignored.includes(key),
-  );
+  const accounted = [...consumed, ...(usage?.shown ?? []), ...Object.keys(usage?.ignored ?? {})];
+  const unconsumed = Object.keys(details).filter((key) => !accounted.includes(key));
   if (unconsumed.length === 0) return null;
   return { tool, kind, consumed: [...consumed], unconsumed };
 }
