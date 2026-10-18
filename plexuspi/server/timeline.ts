@@ -614,13 +614,13 @@ export function mapToolDetail(
     };
   }
   if (tool === "bash" || tool === "shell" || tool === "execute" || tool === "run") {
-    const exitCode = numberValue(record.exitCode);
+    // No exit code: Pi reports one nowhere. Its bash args are `{ command, timeout }`
+    // and the result details are null, so a shell row cannot show a status.
     return {
       type: "shell",
       command: asText(record.command),
       ...(asText(record.cwd) ? { cwd: asText(record.cwd) } : {}),
       ...(output !== undefined ? { output } : {}),
-      ...(exitCode !== undefined ? { exitCode } : {}),
     };
   }
   if (tool === "edit" || tool === "apply_patch" || tool === "str_replace") {
