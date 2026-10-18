@@ -67,6 +67,9 @@ const SUMMARY_KEYS = [
   "pullNumber",
   "key",
   "action",
+  // Servers that expose one tool with an action/subaction pair (unraid, plexus)
+  // say what they did in the second half, so both belong in the summary.
+  "subaction",
   "server",
 ];
 
@@ -92,7 +95,7 @@ export function mcpToolSummary(tool: string, input: unknown): string | undefined
   for (const key of SUMMARY_KEYS) {
     const value = scalarSummaryValue(record[key]);
     if (value) values.push(value);
-    if (values.length === 2) break;
+    if (values.length === 3) break;
   }
   if (values.length === 0) {
     // Fall back to the first scalar the call happens to carry.

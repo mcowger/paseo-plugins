@@ -38,7 +38,11 @@ describe("MCP tool names", () => {
       "Docker List · plex",
     );
     expect(mcpToolSummary("get_file_contents", { owner: "o", repo: "r", path: "a.ts" })).toBe(
-      "Get File Contents · a.ts · o",
+      "Get File Contents · a.ts · o · r",
+    );
+    // One tool with an action/subaction pair says what it did across both.
+    expect(mcpToolSummary("unraid", { action: "system", subaction: "overview" })).toBe(
+      "Unraid · system · overview",
     );
     // Nothing scalar to say: just the tool.
     expect(mcpToolSummary("info", { nested: { a: 1 } })).toBe("Info");
