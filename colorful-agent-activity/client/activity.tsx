@@ -2113,7 +2113,7 @@ function DetailBody({
       const facts = toolDetailFacts(detail.output);
       if (facts) {
         return (
-          <ToolFactsDetail
+          <ToolFacts
             text={facts.text}
             facts={facts.facts}
             omitted={facts.omitted}
@@ -2201,7 +2201,7 @@ function AskAnswersDetail({
  * facts behind a disclosure. The alternative was a JSON block that made the reader
  * decode a schema mid-scan, and the fields are capped by the provider either way.
  */
-function ToolFactsDetail({
+function ToolFacts({
   text,
   facts,
   omitted = 0,
@@ -2212,11 +2212,10 @@ function ToolFactsDetail({
   omitted?: number;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const [open, setOpen] = useState(false);
   const rows = Array.isArray(facts)
     ? facts
     : Object.entries(facts).map(([label, value]) => ({ label, value: String(value) }));
-  const total = rows.length + omitted;
+  // No second disclosure: the row is already open, so its facts show with it.
   return (
     <View style={styles.section}>
       {text ? (
@@ -2224,32 +2223,18 @@ function ToolFactsDetail({
           {text}
         </Text>
       ) : null}
-      <Pressable
-        accessibilityLabel={open ? "Hide details" : `Show ${total} details`}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        onPress={() => setOpen(!open)}
-        style={styles.showMoreButton}
-      >
-        <Text style={styles.showMoreText}>
-          {open ? "Hide details" : `Details (${total})`}
-        </Text>
-      </Pressable>
-      {open ? (
-        <View style={styles.factRows}>
-          {rows.map((fact) => (
-            <View key={fact.label} style={styles.factRow}>
-              <Text style={styles.factLabel}>{fact.label}</Text>
-              <Text selectable style={styles.factValue}>
-                {fact.value}
-              </Text>
-            </View>
-          ))}
-          {omitted > 0 ? (
-            <Text style={styles.mutedText}>+{omitted} more fields</Text>
-          ) : null}
-        </View>
-      ) : null}
+      <DetailLabel style={styles.detailLabel}>Details</DetailLabel>
+      <View style={styles.factRows}>
+        {rows.map((fact) => (
+          <View key={fact.label} style={styles.factRow}>
+            <Text style={styles.factLabel}>{fact.label}</Text>
+            <Text selectable style={styles.factValue}>
+              {fact.value}
+            </Text>
+          </View>
+        ))}
+        {omitted > 0 ? <Text style={styles.mutedText}>+{omitted} more fields</Text> : null}
+      </View>
     </View>
   );
 }
@@ -2941,7 +2926,7 @@ function ToolCallCard({
                 </Text>
               </View>
             ) : null}
-            {facts ? <ToolFactsDetail facts={facts} styles={styles} /> : null}
+            {facts ? <ToolFacts facts={facts} styles={styles} /> : null}
           </ScrollView>
         </View>
       ) : null}
