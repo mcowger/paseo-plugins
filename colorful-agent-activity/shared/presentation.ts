@@ -825,6 +825,45 @@ export interface PiToolTextEnvelope {
   details?: Record<string, unknown>;
 }
 
+/** One fact from an unparsed tool result, ready to render as a row. */
+export interface ToolDetailFact {
+  label: string;
+  value: string;
+}
+
+export interface ToolDetailFacts {
+  text: string;
+  facts: ToolDetailFact[];
+  /** Fields the provider had to leave out of its bounded projection. */
+  omitted: number;
+}
+
+/**
+ * A provider may send an unparsed tool result as `{ content, details }`: the text
+ * the model saw, plus a bounded set of scalar facts. This turns that envelope into
+ * rows, so a tool nobody has written a parser for does not render as JSON soup.
+ *
+ * Returns undefined for everything else, including a plain text result.
+ */
+export function toolDetailFacts(output: unknown): ToolDetailFacts | undefined {
+  const envelope = extractPiToolText(output);
+  if (!envelope?.details) return undefined;
+  const facts = Object.entries(envelope.details).flatMap(([label, value]) => {
+    if (typeof value === "string") return [{ label, value }];
+    if (typeof value === "number" || typeof value === "boolean") {
+      return [{ label, value: String(value) }];
+    }
+    return [];
+  });
+  if (facts.length === 0) return undefined;
+  const omitted = isRecord(output) ? numberOrZero(output.detailsOmitted) : 0;
+  return { text: envelope.text, facts, omitted };
+}
+
+function numberOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 function decodeToolInput(value: unknown): Record<string, unknown> | undefined {
   if (typeof value === "string") {
     const parsed = parseJsonString(value);

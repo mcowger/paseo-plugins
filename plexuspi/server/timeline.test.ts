@@ -1,12 +1,20 @@
 import type { ProviderEvent, ProviderTimelineItem } from "@getpaseo/plugin/server/provider";
 import { describe, expect, test } from "vitest";
-import { createTimeline, mapToolDetail, mapUsage } from "./timeline";
+import {
+  createTimeline,
+  mapToolDetail,
+  mapUsage,
+  projectToolDetails,
+  type ToolDetailDiagnostic,
+  toolDetailDiagnostic,
+} from "./timeline";
 
-function harness() {
+function harness(diagnostics: ToolDetailDiagnostic[] = []) {
   const events: ProviderEvent[] = [];
   const timeline = createTimeline({
     sessionId: "session-1",
     emit: (event) => events.push(event),
+    onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
   });
   const snapshots = () =>
     events.filter((event) => event.type === "timeline.item").map((event) => event.item);
@@ -857,6 +865,112 @@ describe("createTimeline user correlation and replay", () => {
     expect(live.timeline.items().map((item) => item.id)).toEqual(
       replayed.timeline.items().map((item) => item.id),
     );
+  });
+});
+
+describe("tool details nothing interprets", () => {
+  test("projects details to bounded, scannable facts", () => {
+    expect(
+      projectToolDetails({
+        status: "background",
+        durationMs: 0,
+        success: true,
+        tokens: "",
+        tags: ["a", "b", "c"],
+        params: { action: "create" },
+        empty: [],
+        nothing: null,
+      }),
+    ).toEqual({
+      fields: {
+        status: "background",
+        durationMs: 0,
+        success: true,
+        tags: "3 items",
+        params: "1 field",
+      },
+      omitted: 0,
+    });
+    expect(projectToolDetails({ tokens: "", empty: [] })).toBeNull();
+    expect(projectToolDetails("not a record")).toBeNull();
+  });
+
+  test("clips long values and stops adding fields past the budget", () => {
+    const projected = projectToolDetails({
+      long: "x".repeat(400),
+      ...Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`key${i}`, `v${i}`])),
+    });
+    expect(projected).not.toBeNull();
+    const fields = projected?.fields ?? {};
+    expect(String(fields.long)).toHaveLength(120);
+    expect(String(fields.long).endsWith("…")).toBe(true);
+    expect(Object.keys(fields).length).toBe(12);
+    expect(projected?.omitted).toBe(9);
+  });
+
+  test("carries the projection on an unknown tool's output, and only there", () => {
+    const detail = mapToolDetail("mystery", { a: 1 }, "did the thing", {
+      status: "ok",
+      tags: ["a"],
+      modelName: "m",
+    });
+    expect(detail).toEqual({
+      type: "unknown",
+      input: { a: 1 },
+      output: {
+        content: "did the thing",
+        details: { status: "ok", tags: "1 item", modelName: "m" },
+      },
+    });
+    // A tool with a branch keeps its curated view; its details are read, not dumped.
+    expect(
+      mapToolDetail("Agent", { description: "Audit" }, "started", { agentId: "a1", status: "ok" }),
+    ).toEqual({ type: "sub_agent", description: "Audit", childSessionId: "a1", log: "started" });
+  });
+
+  test("names the detail keys the mapping leaves unread", () => {
+    expect(
+      toolDetailDiagnostic("Agent", {
+        agentId: "a1",
+        status: "background",
+        tokens: "",
+        toolUses: 0,
+      }),
+    ).toEqual({
+      tool: "Agent",
+      kind: "agent",
+      consumed: ["agentId", "sessionId"],
+      unconsumed: ["status", "tokens", "toolUses"],
+    });
+    expect(toolDetailDiagnostic("edit", { patch: "x", diff: "y", firstChangedLine: 3 })).toEqual({
+      tool: "edit",
+      kind: "edit",
+      consumed: ["patch", "unifiedDiff"],
+      unconsumed: ["diff", "firstChangedLine"],
+    });
+    // Nothing left over means nothing to report.
+    expect(toolDetailDiagnostic("todo", { tasks: [] })).toBeNull();
+    expect(toolDetailDiagnostic("bash", null)).toBeNull();
+  });
+
+  test("reports a tool once per session, not once per call", () => {
+    const diagnostics: ToolDetailDiagnostic[] = [];
+    const { timeline } = harness(diagnostics);
+    for (const callId of ["call-a", "call-b"]) {
+      timeline.accept({
+        type: "tool_execution_end",
+        toolCallId: callId,
+        toolName: "mystery",
+        result: { content: [{ type: "text", text: "ok" }] },
+        details: { status: "ok" },
+      });
+    }
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      tool: "mystery",
+      kind: "unknown",
+      unconsumed: ["status"],
+    });
   });
 });
 

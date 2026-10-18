@@ -86,6 +86,7 @@ import {
   tailPreview,
   todoTaskLabel,
   toolCallHasBody,
+  toolDetailFacts,
   truncateDirFront,
 } from "../shared/presentation";
 import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
@@ -469,6 +470,29 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         fontSize: 10,
         fontWeight: "500",
         lineHeight: 14,
+      } satisfies TextStyle,
+      factRows: {
+        gap: 4,
+        marginTop: 4,
+      } satisfies ViewStyle,
+      factRow: {
+        alignItems: "flex-start",
+        flexDirection: "row",
+        gap: 10,
+      } satisfies ViewStyle,
+      factLabel: {
+        color: theme.colors.foregroundMuted,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 16,
+        minWidth: 84,
+      } satisfies TextStyle,
+      factValue: {
+        color: theme.colors.foreground,
+        flex: 1,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 16,
       } satisfies TextStyle,
       codeHeader: {
         alignItems: "center",
@@ -2053,6 +2077,17 @@ function DetailBody({
           />
         );
       }
+      const facts = toolDetailFacts(detail.output);
+      if (facts) {
+        return (
+          <ToolFactsDetail
+            text={facts.text}
+            facts={facts.facts}
+            omitted={facts.omitted}
+            styles={styles}
+          />
+        );
+      }
       const codeInput = extractCodeInput(data.name, detail.input);
       if (codeInput) {
         return (
@@ -2104,6 +2139,61 @@ function DetailBody({
       );
     }
   }
+}
+
+/**
+ * A tool nobody has written a parser for: the text the model saw, plus its scalar
+ * facts behind a disclosure. The alternative was a JSON block that made the reader
+ * decode a schema mid-scan, and the fields are capped by the provider either way.
+ */
+function ToolFactsDetail({
+  text,
+  facts,
+  omitted,
+  styles,
+}: {
+  text: string;
+  facts: { label: string; value: string }[];
+  omitted: number;
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  const [open, setOpen] = useState(false);
+  const total = facts.length + omitted;
+  return (
+    <View style={styles.section}>
+      {text ? (
+        <Text selectable style={styles.detailText}>
+          {text}
+        </Text>
+      ) : null}
+      <Pressable
+        accessibilityLabel={open ? "Hide details" : `Show ${total} details`}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen(!open)}
+        style={styles.showMoreButton}
+      >
+        <Text style={styles.showMoreText}>
+          {open ? "Hide details" : `Details (${total})`}
+        </Text>
+      </Pressable>
+      {open ? (
+        <View style={styles.factRows}>
+          {facts.map((fact) => (
+            <View key={fact.label} style={styles.factRow}>
+              <Text style={styles.factLabel}>{fact.label}</Text>
+              <Text selectable style={styles.factValue}>
+                {fact.value}
+              </Text>
+            </View>
+          ))}
+          {omitted > 0 ? (
+            <Text style={styles.mutedText}>+{omitted} more fields</Text>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 function SubAgentProgress({

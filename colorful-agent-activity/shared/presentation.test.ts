@@ -82,6 +82,7 @@ import {
   todoToolDetailModel,
   todoToolSummary,
   toolCallHasBody,
+  toolDetailFacts,
   truncateDirFront,
   unwrapPaseoToolOutput,
 } from "./presentation";
@@ -988,6 +989,40 @@ describe("colorful activity presentation", () => {
     const capped = previewText(huge, 0);
     expect(capped.truncated).toBe(true);
     expect(capped.text.length).toBe(MAX_PREVIEW_CHARS);
+  });
+});
+
+describe("toolDetailFacts", () => {
+  it("turns a provider's bounded details into rows, not JSON", () => {
+    expect(
+      toolDetailFacts({
+        content: "Agent started in background.",
+        details: { status: "background", toolUses: 0, worker: "cwd" },
+      }),
+    ).toEqual({
+      text: "Agent started in background.",
+      facts: [
+        { label: "status", value: "background" },
+        { label: "toolUses", value: "0" },
+        { label: "worker", value: "cwd" },
+      ],
+      omitted: 0,
+    });
+  });
+
+  it("counts the fields the provider trimmed", () => {
+    expect(toolDetailFacts({ content: "", details: { a: "1" }, detailsOmitted: 9 })).toEqual({
+      text: "",
+      facts: [{ label: "a", value: "1" }],
+      omitted: 9,
+    });
+  });
+
+  it("leaves a plain result and a fact-free envelope to the existing rendering", () => {
+    expect(toolDetailFacts("All done")).toBeUndefined();
+    expect(toolDetailFacts(undefined)).toBeUndefined();
+    // A provider that sends structure we cannot show as rows stays a JSON block.
+    expect(toolDetailFacts({ content: "x", details: { nested: { a: 1 } } })).toBeUndefined();
   });
 });
 

@@ -177,6 +177,20 @@ interface Timeline {
   - `bash` reports no exit code anywhere: its args are `{ command, timeout }` and
     its result details are null. A shell row cannot show one because it is not on
     the wire.
+- A tool no branch handles still reports facts on its result. Those become a
+  bounded, flat projection on `detail.output` (`{ content, details,
+  detailsOmitted }`): scalars as-is, arrays and objects as counts, strings clipped
+  to 120 characters, at most 12 fields and 1,000 characters. A renderer shows them
+  as label/value rows behind a disclosure. This is deliberately not a JSON dump:
+  an unparsed schema makes the reader decode it mid-scan, and the size cap is what
+  keeps the timeline item small. A tool with a branch keeps its curated view and
+  is never projected.
+- Every tool whose result details are left unread is logged once per session, with
+  key names and never values:
+  `unconsumed tool details for "Agent" (agent): status, tokens, …`. This is the
+  signal that a tool has structured output worth a real mapping; `CONSUMED_DETAIL_KEYS`
+  in `server/timeline.ts` is where a mapping declares what it reads. The diagnostic
+  is deliberately not a timeline item: it is a note to the maintainer, not content.
 - The `todo` tool is not a tool row. Its result reports the whole list
   (`details.tasks`), which is emitted as a `type: "todo"` timeline item under
   `todo:<callId>`, the way Paseo's own providers present a checklist. A running

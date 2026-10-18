@@ -11,6 +11,7 @@ import {
   plexuspiBridgeRecordSchema,
 } from "../shared/subagents.js";
 import { type ChildJournal, openChildJournal } from "./child-journal.js";
+import { logToolDetailDiagnostic } from "./diagnostics.js";
 import { createTimeline, type Timeline } from "./timeline.js";
 
 /**
@@ -196,6 +197,7 @@ class SubagentObserverImpl implements SubagentObserver {
     state.timeline = createTimeline({
       sessionId,
       emit: (event) => this.publishTimeline(state, event),
+      onDiagnostic: logToolDetailDiagnostic,
     });
     this.runs.set(record.runId, state);
     return state;

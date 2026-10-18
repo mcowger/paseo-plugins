@@ -34,12 +34,17 @@ export interface Timeline {
 export function createTimeline(input: {
   sessionId: string;
   emit: (event: ProviderEvent) => void;
+  /** Called once per tool name whose result details the mapping leaves unread. */
+  onDiagnostic?: (diagnostic: ToolDetailDiagnostic) => void;
 }): Timeline {
-  const { sessionId, emit } = input;
+  const { sessionId, emit, onDiagnostic } = input;
   const order: string[] = [];
   const byId = new Map<string, ProviderTimelineItem>();
   const toolArgs = new Map<string, unknown>();
   const toolNames = new Map<string, string>();
+  // One report per tool name per session: a diagnostic is a prompt to write a
+  // parser, not a per-call event.
+  const diagnosedTools = new Set<ToolDetailKind>();
   let stream: StreamingTurn | null = null;
   let activeTurnId: string | undefined;
   let lastUsage: ProviderUsage | null = null;
@@ -352,6 +357,7 @@ export function createTimeline(input: {
     if (name) toolNames.set(callId, name);
     const resolvedName = name || toolNames.get(callId) || "";
     const failed = status === "failed";
+    reportUnreadDetails(resolvedName, resultDetails);
     if (isTodoToolName(resolvedName)) {
       const items = failed ? null : todoItemsFromDetails(resultDetails);
       if (items) {
@@ -375,6 +381,17 @@ export function createTimeline(input: {
       } as ProviderTimelineItem,
       timestamp,
     );
+  }
+
+  /** Tells the host which detail keys of a tool the mapping has no use for. */
+  function reportUnreadDetails(tool: string, details: unknown): void {
+    if (!onDiagnostic) return;
+    const kind = toolDetailKind(tool);
+    if (diagnosedTools.has(kind)) return;
+    const diagnostic = toolDetailDiagnostic(tool, details);
+    if (!diagnostic) return;
+    diagnosedTools.add(kind);
+    onDiagnostic(diagnostic);
   }
 
   function applyToolResult(message: Record<string, unknown>): void {
@@ -513,6 +530,130 @@ export function reasoningItemId(nativeKey: string, index: number): string {
 
 export function toolItemId(callId: string): string {
   return `tool:${callId}`;
+}
+
+/** The mapping branch a tool name lands in; `unknown` means no branch handles it. */
+export type ToolDetailKind =
+  | "read"
+  | "bash"
+  | "edit"
+  | "write"
+  | "search"
+  | "fetch"
+  | "agent"
+  | "todo"
+  | "plan"
+  | "unknown";
+
+/** Pi tool names and their aliases, resolved to the branch that maps them. */
+export function toolDetailKind(name: string): ToolDetailKind {
+  const tool = name.trim().toLowerCase();
+  if (tool === "read") return "read";
+  if (tool === "bash" || tool === "shell" || tool === "execute" || tool === "run") return "bash";
+  if (tool === "edit" || tool === "apply_patch" || tool === "str_replace") return "edit";
+  if (tool === "write" || tool === "create_file") return "write";
+  if (
+    tool === "grep" ||
+    tool === "glob" ||
+    tool === "search" ||
+    tool === "web_search" ||
+    tool === "find"
+  )
+    return "search";
+  if (tool === "fetch" || tool === "web_fetch" || tool === "http") return "fetch";
+  if (tool === "agent" || tool === "subagent" || tool === "task") return "agent";
+  if (tool === "todo") return "todo";
+  if (tool === "plan") return "plan";
+  return "unknown";
+}
+
+/**
+ * Result-detail keys each branch actually reads. Everything else in a tool's
+ * details is unread, which is what the diagnostic reports: a tool whose details
+ * are mostly unread is a candidate for a real mapping.
+ */
+const CONSUMED_DETAIL_KEYS: Partial<Record<ToolDetailKind, readonly string[]>> = {
+  edit: ["patch", "unifiedDiff"],
+  agent: ["agentId", "sessionId"],
+  todo: ["tasks"],
+};
+
+const MAX_DETAIL_FIELDS = 12;
+const MAX_DETAIL_CHARS = 1_000;
+const MAX_DETAIL_VALUE_CHARS = 120;
+
+/** A flat, bounded view of result details for a tool no branch handles. */
+export interface DetailProjection {
+  fields: Record<string, string | number | boolean>;
+  omitted: number;
+}
+
+/**
+ * Reduce arbitrary result details to facts a person can scan: scalars as-is,
+ * aggregates as counts, long strings clipped. This is not a JSON dump on purpose:
+ * a row has to stay readable without the reader knowing the tool's schema.
+ */
+export function projectToolDetails(details: unknown): DetailProjection | null {
+  if (!isRecord(details)) return null;
+  const fields: Record<string, string | number | boolean> = {};
+  let chars = 0;
+  let omitted = 0;
+  for (const [key, value] of Object.entries(details)) {
+    const fact = detailFact(value);
+    if (fact === undefined) continue;
+    const next = chars + key.length + String(fact).length;
+    if (Object.keys(fields).length >= MAX_DETAIL_FIELDS || next > MAX_DETAIL_CHARS) {
+      omitted += 1;
+      continue;
+    }
+    fields[key] = fact;
+    chars = next;
+  }
+  return Object.keys(fields).length > 0 ? { fields, omitted } : null;
+}
+
+function detailFact(value: unknown): string | number | boolean | undefined {
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return undefined;
+    return text.length > MAX_DETAIL_VALUE_CHARS
+      ? `${text.slice(0, MAX_DETAIL_VALUE_CHARS - 1)}…`
+      : text;
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.length > 0 ? countLabel(value.length, "item") : undefined;
+  if (isRecord(value)) {
+    const size = Object.keys(value).length;
+    return size > 0 ? countLabel(size, "field") : undefined;
+  }
+  return undefined;
+}
+
+function countLabel(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/** The log line a provider writes for a diagnostic; key names only, never values. */
+export function formatToolDetailDiagnostic(diagnostic: ToolDetailDiagnostic): string {
+  return `unconsumed tool details for "${diagnostic.tool}" (${diagnostic.kind}): ${diagnostic.unconsumed.join(", ")}`;
+}
+
+/** What the mapping did with a tool's result details, for the diagnostic log. */
+export interface ToolDetailDiagnostic {
+  tool: string;
+  kind: ToolDetailKind;
+  consumed: string[];
+  unconsumed: string[];
+}
+
+export function toolDetailDiagnostic(tool: string, details: unknown): ToolDetailDiagnostic | null {
+  if (!isRecord(details)) return null;
+  const kind = toolDetailKind(tool);
+  const consumed = CONSUMED_DETAIL_KEYS[kind] ?? [];
+  const unconsumed = Object.keys(details).filter((key) => !consumed.includes(key));
+  if (unconsumed.length === 0) return null;
+  return { tool, kind, consumed: [...consumed], unconsumed };
 }
 
 /** One task card per todo call, so a replay re-folds the same item instead of adding one. */
@@ -703,10 +844,19 @@ export function mapToolDetail(
   if (tool === "plan") {
     return { type: "plan", text: output ?? asText(record.text) };
   }
+  // A tool no branch handles still reports what it did in its details. Carry a
+  // bounded, flat view of them so the row can show facts instead of JSON soup.
+  const projection = projectToolDetails(details);
   return {
     type: "unknown",
     input: toJson(args),
-    output: toJson(output),
+    output: projection
+      ? (toJson({
+          content: output ?? "",
+          details: projection.fields,
+          ...(projection.omitted > 0 ? { detailsOmitted: projection.omitted } : {}),
+        }) as JsonValue)
+      : toJson(output),
   };
 }
 

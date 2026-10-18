@@ -31,6 +31,7 @@ import { tierSettingPresentation } from "../shared/tiers.js";
 import { buildPiPrompt } from "./attachments.js";
 import { prepareAuthSnapshot } from "./auth-snapshot.js";
 import { createControlChannel } from "./control-channel.js";
+import { logToolDetailDiagnostic } from "./diagnostics.js";
 import { createDialogBridge, type DialogBridge, type DialogRegistry } from "./dialogs.js";
 import {
   buildActiveUserTokenMap,
@@ -542,6 +543,7 @@ export class PlexuspiSession {
     this.timeline = createTimeline({
       sessionId: options.sessionId,
       emit: (event) => this.emit(event),
+      onDiagnostic: logToolDetailDiagnostic,
     });
   }
 
