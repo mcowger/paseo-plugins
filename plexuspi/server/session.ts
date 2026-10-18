@@ -1417,6 +1417,26 @@ export class PlexuspiSession {
     }
   }
 
+  /**
+   * Bind a native user echo to the host admission that sent it.
+   *
+   * Pi echoes admissions in submission order, so the first queued admission
+   * whose sent text matches claims the echo. Anything still queued ahead of
+   * it was never echoed and never will be; dropping it matters, because a
+   * dead admission at the head fails every later bind, and every unbound
+   * echo makes the host record that prompt a second time.
+   */
+  private bindQueuedUser(text: string | undefined): Admission | undefined {
+    const index = this.userQueue.findIndex(
+      (entry) =>
+        entry.sent && (entry.message === undefined || userEchoMatches(entry.message, text)),
+    );
+    if (index < 0) return undefined;
+    const [bound] = this.userQueue.splice(index, 1);
+    this.userQueue.splice(0, index);
+    return bound;
+  }
+
   private dropQueuedUser(clientMessageId: string): void {
     const index = this.userQueue.findIndex((entry) => entry.clientMessageId === clientMessageId);
     if (index >= 0) this.userQueue.splice(index, 1);
@@ -1433,7 +1453,6 @@ export class PlexuspiSession {
       // Each queued steer is a new user message in the same Pi run. Keep its
       // start/end snapshots bound together, but rebind at the next user start.
       if (record.type === "message_start" || !this.boundUser) {
-        const next = this.userQueue[0];
         const message = isRecord(record.message) ? record.message : undefined;
         const text =
           typeof message?.content === "string"
@@ -1449,10 +1468,7 @@ export class PlexuspiSession {
               : undefined;
         // Extensions can inject their own user messages between host steers.
         // Don't let a distinguishable native message steal a waiting host ID.
-        this.boundUser =
-          next?.sent && (next.message === undefined || next.message === text)
-            ? this.userQueue.shift()
-            : undefined;
+        this.boundUser = this.bindQueuedUser(text);
       }
       const context: TimelineContext = this.boundUser
         ? { clientMessageId: this.boundUser.clientMessageId, turnId: this.boundUser.turnId }
@@ -2470,6 +2486,21 @@ export class PlexuspiSession {
 
 export function createPlexuspiSession(options: PlexuspiSessionOptions): PlexuspiSession {
   return new PlexuspiSession(options);
+}
+
+/**
+ * Pi annotates attached images in the user message it echoes back
+ * ("[Image: original 2044x294, displayed at …]"), so the echo of an
+ * image-bearing prompt carries lines the sent prompt never had.
+ */
+const IMAGE_ANNOTATION_TAIL =
+  /(?:\n\n\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\])+$/;
+
+function userEchoMatches(sent: string, echoed: string | undefined): boolean {
+  if (echoed === undefined) return false;
+  if (echoed === sent) return true;
+  if (sent === "") return /^(?:\[Image: original [^\]]+\]\n?)+$/.test(echoed);
+  return echoed.replace(IMAGE_ANNOTATION_TAIL, "") === sent;
 }
 
 function isUserMessageRecord(record: PiRecord): boolean {

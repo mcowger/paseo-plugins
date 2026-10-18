@@ -516,7 +516,10 @@ Minimal plugin UI consists of the Pi dialogs screen and resume-command action.
 
 Direct steering uses the public `prompt.steer` capability and native Pi `steer`
 RPC. Admissions retain the active turn ID, rebind each native user echo, and
-refuse idle or ended turns. Requested permission clearing cancels native dialogs;
+refuse idle or ended turns. Echo binding matches in submission order and
+tolerates the image-annotation lines Pi appends to echoed prompts; an
+admission that never echoes is dropped when a later echo passes it, so one
+lost echo cannot leave the host recording every later prompt twice. Requested permission clearing cancels native dialogs;
 Stop clears queued input before aborting. End-of-turn cleanup discards accepted
 but undelivered steering with a warning, before another prompt can start. Native
 and extension commands remain idle-only, while skills and prompt templates

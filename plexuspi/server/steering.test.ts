@@ -134,6 +134,54 @@ describe("native prompt steering", () => {
     ]);
   });
 
+  it("binds an echo carrying Pi's image annotation to its admission", async () => {
+    const { session, fake, events, turnId } = await harness();
+    echo(fake, "original", 1);
+    await session.prompt(prompt("img-1", "steer", "look"));
+    expect(result(events, "img-1")).toEqual({ type: "steer", turnId });
+    // Pi annotates attached images in the user message it echoes back; the
+    // prompt PlexusPi sent was just "look". The annotation must not defeat
+    // the bind, or the host records the prompt a second time.
+    echo(
+      fake,
+      "look\n\n[Image: original 10x10, displayed at 10x10. Multiply coordinates by 1.00 to map to original image.]",
+      2,
+    );
+    const rows = ofType(events, "timeline.item").filter(
+      (event) => event.item.type === "user_message",
+    );
+    expect(
+      rows.map((event) =>
+        event.item.type === "user_message" ? event.item.clientMessageId : undefined,
+      ),
+    ).toEqual(["original", "original", "img-1", "img-1"]);
+    expect(new Set(rows.map((event) => event.item.id)).size).toBe(2);
+  });
+
+  it("does not let an unechoed admission strand every later bind", async () => {
+    const { session, fake, events } = await harness({}, false);
+    // A prompt Pi accepted but whose user message never echoes (an abort can
+    // land before the first event) must not sit at the head of the queue and
+    // fail every later bind; the host would duplicate every later prompt.
+    await session.prompt(prompt("lost", "auto", "lost-text"));
+    fake.emit({ type: "agent_settled" });
+    await vi.waitFor(() =>
+      expect(
+        ofType(events, "session.turn").filter((event) => event.state !== "started"),
+      ).toHaveLength(1),
+    );
+    await session.prompt(prompt("next", "auto", "next-text"));
+    echo(fake, "next-text", 2);
+    const rows = ofType(events, "timeline.item").filter(
+      (event) => event.item.type === "user_message",
+    );
+    expect(
+      rows.map((event) =>
+        event.item.type === "user_message" ? event.item.clientMessageId : undefined,
+      ),
+    ).toEqual(["next", "next"]);
+  });
+
   it("binds a steer echoed before its admission response without starting a new turn", async () => {
     const { session, fake, events, turnId } = await harness({
       onSteer(_command) {
