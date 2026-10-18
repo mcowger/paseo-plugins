@@ -592,7 +592,10 @@ export function mapToolDetail(
     };
   }
   if (tool === "write" || tool === "create_file") {
-    return { type: "write", filePath, content: output ?? asText(record.content) };
+    // The call carries the file; the result only reports that it landed
+    // ("Successfully wrote to …"). Preferring the result put that confirmation
+    // where the file body belongs.
+    return { type: "write", filePath, content: asText(record.content) || output };
   }
   if (
     tool === "grep" ||

@@ -511,7 +511,9 @@ describe("createTimeline tools", () => {
     expect(findItem(timeline.items(), "tool:call-3")).toMatchObject({
       type: "tool_call",
       status: "completed",
-      detail: { type: "write", filePath: "out.txt", content: "wrote out.txt" },
+      // The written payload comes from the call; the result text is the tool's
+      // confirmation ("wrote out.txt") and must not stand in for the file.
+      detail: { type: "write", filePath: "out.txt", content: "hello" },
     });
   });
 
@@ -785,6 +787,24 @@ describe("createTimeline user correlation and replay", () => {
 });
 
 describe("mapToolDetail and mapUsage", () => {
+  test("renders the written file, not the tool's confirmation line", () => {
+    // Pi reports only "Successfully wrote to <path>" on the result; the payload is
+    // on the call. Using the result put that confirmation in the file body.
+    expect(
+      mapToolDetail(
+        "write",
+        { path: "src/a.ts", content: "export const a = 1;\n" },
+        "Successfully wrote to src/a.ts",
+      ),
+    ).toEqual({ type: "write", filePath: "src/a.ts", content: "export const a = 1;\n" });
+    // A write tool that only reports text still has something to show.
+    expect(mapToolDetail("write", { path: "b.ts" }, "wrote b.ts")).toEqual({
+      type: "write",
+      filePath: "b.ts",
+      content: "wrote b.ts",
+    });
+  });
+
   test("carries the patch Pi reports on the tool result, not just the call arguments", () => {
     const patch = [
       "--- /app/src/a.ts",
