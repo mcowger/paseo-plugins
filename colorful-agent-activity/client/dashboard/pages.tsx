@@ -5,6 +5,8 @@ import { StyleSheet, Text, View } from "react-native";
 import { alpha, sunken } from "../../shared/color";
 import {
   type ActivitySettings,
+  BLOCK_HEIGHT_KINDS,
+  type BlockHeightKind,
   type CodeChrome,
   type CommandColor,
   DEFAULT_EXPANSION,
@@ -15,7 +17,16 @@ import {
 } from "../../shared/settings";
 import { type ActivityPalette, type ActivityThemeColors, resolveActivityPalette } from "../../shared/presentation";
 import { quietOpacity } from "../prefs";
-import { ActionButton, ControlRow, Group, Note, Segmented, Tile, useDashboardStyles } from "./controls";
+import {
+  ActionButton,
+  CompactRow,
+  ControlRow,
+  Group,
+  Note,
+  Segmented,
+  Tile,
+  useDashboardStyles,
+} from "./controls";
 
 export interface PageProps {
   prefs: ActivitySettings;
@@ -72,22 +83,65 @@ const PRESETS: { id: string; label: string; expansion: Expansion }[] = [
 ];
 
 /**
- * Line budgets for long blocks, as pickable steps. `0` is "All": the block renders
- * whole and the Show all control disappears.
+ * Block heights in pixels, as pickable steps. `0` is "All": the block never gets its
+ * own window and the timeline scrolls instead.
  */
-const CODE_LINE_OPTIONS: { value: number; label: string }[] = [
-  { value: 10, label: "10" },
-  { value: 20, label: "20" },
-  { value: 40, label: "40" },
-  { value: 80, label: "80" },
-  { value: 0, label: "All" },
+/**
+ * Rows the daemon and the providers raise rather than you: worth a line of prose,
+ * because the label alone says nothing about where the row came from.
+ */
+const ROW_HINTS: Partial<Record<ExpansionTarget, string>> = {
+  worktree_setup:
+    "Paseo's own worktree setup: the commands it ran when this workspace was created.",
+  plain_text: "A provider tool with nothing but text to show — a label and a message.",
+  plan: "A plan a provider proposed, not a tool call with input and output.",
+  sub_agent: "Rows for child agents and the tasks they were given.",
+  unknown: "Any tool with no shape the row renderer recognizes.",
+};
+
+/** The rows a session raises constantly, and the ones it raises occasionally. */
+const COMMON_ROWS: ExpansionTarget[] = [
+  "thinking",
+  "read",
+  "edit",
+  "write",
+  "shell",
+  "search",
+  "fetch",
+  "sub_agent",
+  "todo",
+];
+const RARE_ROWS: ExpansionTarget[] = [
+  "worktree_setup",
+  "plain_text",
+  "plan",
+  "ask",
+  "speak",
+  "unknown",
 ];
 
-const THINKING_LINE_OPTIONS: { value: number; label: string }[] = [
-  { value: 50, label: "50" },
-  { value: 150, label: "150" },
-  { value: 400, label: "400" },
-  { value: 800, label: "800" },
+const BLOCK_HEIGHT_LABELS: Record<BlockHeightKind, string> = {
+  thinking: "Thinking",
+  read: "Read",
+  shell: "Shell",
+  write: "Write",
+  edit: "Edit",
+};
+
+const BLOCK_HEIGHT_HINTS: Record<BlockHeightKind, string> = {
+  thinking: "Streams to its end, so the newest lines are the ones in view.",
+  read: "A file's contents, scrolled from its start.",
+  shell: "Command output, scrolled from its end.",
+  write: "A new file's contents.",
+  edit: "Diffs, which are read line by line against each other.",
+};
+
+const BLOCK_HEIGHT_OPTIONS: { value: number; label: string }[] = [
+  { value: 200, label: "200" },
+  { value: 320, label: "320" },
+  { value: 420, label: "420" },
+  { value: 600, label: "600" },
+  { value: 900, label: "900" },
   { value: 0, label: "All" },
 ];
 
@@ -230,14 +284,22 @@ function ActivityPage({ prefs, change, theme }: PageProps) {
   );
 }
 
+const EXPANSION_MODES = [
+  { value: "always" as const, label: "Always" },
+  { value: "latest" as const, label: "Latest" },
+  { value: "never" as const, label: "Never" },
+];
+
+const ROW_LABELS = new Map(EXPANSION_TARGETS.map((target) => [target.key, target.label]));
+
+function labelFor(key: ExpansionTarget): string {
+  return ROW_LABELS.get(key) ?? key;
+}
+
 function RowsPage({ prefs, change, theme, layout }: PageProps) {
   const styles = useDashboardStyles(theme);
   const stacked = layout.compact;
-  const targets = EXPANSION_TARGETS.map((target) => ({
-    key: target.key,
-    label: target.label,
-    mode: prefs.expansion[target.key] ?? DEFAULT_EXPANSION[target.key],
-  }));
+  const modeFor = (key: ExpansionTarget) => prefs.expansion[key] ?? DEFAULT_EXPANSION[key];
   return (
     <View style={{ gap: 24 }}>
       <Group
@@ -257,73 +319,74 @@ function RowsPage({ prefs, change, theme, layout }: PageProps) {
           ))}
         </View>
       </Group>
+      {[
+        {
+          title: "Row expansion",
+          hint: "Always starts expanded, Latest opens only while the row is newest, Never stays collapsed until tapped.",
+          keys: COMMON_ROWS,
+        },
+        {
+          title: "Provider and daemon rows",
+          hint: "Rows nothing you typed produced. Same three choices, explained because the names are not yours.",
+          keys: RARE_ROWS,
+        },
+      ].map((group) => (
+        <Group key={group.title} title={group.title} hint={group.hint} styles={styles}>
+          <View>
+            {group.keys.map((key, index) => {
+              const mode = modeFor(key);
+              return (
+                <CompactRow
+                  key={key}
+                  label={labelFor(key)}
+                  hint={ROW_HINTS[key]}
+                  styles={styles}
+                  stacked={stacked}
+                  first={index === 0}
+                >
+                  <Segmented
+                    accessibilityLabel={`${labelFor(key)} expansion`}
+                    value={mode}
+                    compact
+                    options={EXPANSION_MODES}
+                    onChange={(value) =>
+                      change({ expansion: { ...prefs.expansion, [key]: value } })
+                    }
+                    styles={styles}
+                  />
+                </CompactRow>
+              );
+            })}
+          </View>
+        </Group>
+      ))}
       <Group
-        title="Row expansion"
-        hint="Always starts expanded, Latest opens only while the row is newest, Never stays collapsed until tapped."
+        title="Block height"
+        hint="How tall a block grows before it scrolls in place. All lets the timeline scroll instead, apart from a 100,000-character ceiling that keeps a runaway payload from stalling layout."
         styles={styles}
       >
-        <View style={{ gap: 11 }}>
-          {targets.map((target, index) => (
-            <ControlRow
-              key={target.key}
-              label={target.label}
+        {BLOCK_HEIGHT_KINDS.map((kind, index) => (
+          <CompactRow
+            key={kind}
+            label={BLOCK_HEIGHT_LABELS[kind]}
+            hint={BLOCK_HEIGHT_HINTS[kind]}
+            controlWidth={244}
+            styles={styles}
+            stacked={stacked}
+            first={index === 0}
+          >
+            <Segmented<number>
+              accessibilityLabel={`${BLOCK_HEIGHT_LABELS[kind]} block height`}
+              value={prefs.blockHeights[kind]}
+              options={withCurrent(BLOCK_HEIGHT_OPTIONS, prefs.blockHeights[kind])}
+              onChange={(value) =>
+                change({ blockHeights: { ...prefs.blockHeights, [kind]: value } })
+              }
+              compact
               styles={styles}
-              stacked={stacked}
-              first={index === 0}
-            >
-              <Segmented
-                accessibilityLabel={`${target.label} expansion`}
-                value={target.mode}
-                options={[
-                  { value: "always" as const, label: "Always" },
-                  { value: "latest" as const, label: "Latest" },
-                  { value: "never" as const, label: "Never" },
-                ]}
-                onChange={(value) =>
-                  change({
-                    expansion: { ...prefs.expansion, [target.key as ExpansionTarget]: value },
-                  })
-                }
-                styles={styles}
-              />
-            </ControlRow>
-          ))}
-        </View>
-      </Group>
-      <Group
-        title="Long blocks"
-        hint="Lines rendered before a block offers its Show all control. All drops the cut, apart from a 100,000-character ceiling that keeps a runaway payload from stalling layout."
-        styles={styles}
-      >
-        <ControlRow
-          label="Thinking"
-          hint="Read at its end, so the newest lines are the ones kept."
-          styles={styles}
-          stacked={stacked}
-          first
-        >
-          <Segmented<number>
-            accessibilityLabel="Thinking block lines"
-            value={prefs.thinkingLines}
-            options={withCurrent(THINKING_LINE_OPTIONS, prefs.thinkingLines)}
-            onChange={(value) => change({ thinkingLines: value })}
-            styles={styles}
-          />
-        </ControlRow>
-        <ControlRow
-          label="File contents & diffs"
-          hint="Read from their start, so the opening lines are the ones kept."
-          styles={styles}
-          stacked={stacked}
-        >
-          <Segmented<number>
-            accessibilityLabel="File and diff block lines"
-            value={prefs.previewLines}
-            options={withCurrent(CODE_LINE_OPTIONS, prefs.previewLines)}
-            onChange={(value) => change({ previewLines: value })}
-            styles={styles}
-          />
-        </ControlRow>
+            />
+          </CompactRow>
+        ))}
       </Group>
     </View>
   );

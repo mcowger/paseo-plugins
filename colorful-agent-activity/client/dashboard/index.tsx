@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import {
   activitySettings,
+  BLOCK_HEIGHT_KINDS,
   DEFAULT_ACTIVITY_SETTINGS,
   type ActivitySettings,
 } from "../../shared/settings";
@@ -184,8 +185,7 @@ function sameSettings(left: ActivitySettings, right: ActivitySettings): boolean 
     left.codeChrome === right.codeChrome &&
     left.diffWrap === right.diffWrap &&
     left.replyCode === right.replyCode &&
-    left.previewLines === right.previewLines &&
-    left.thinkingLines === right.thinkingLines &&
+    BLOCK_HEIGHT_KINDS.every((kind) => left.blockHeights[kind] === right.blockHeights[kind]) &&
     EXPANSION_KEYS.every((key) => left.expansion[key] === right.expansion[key])
   );
 }

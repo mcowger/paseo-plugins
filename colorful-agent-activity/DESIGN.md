@@ -94,8 +94,16 @@ manual toggles persist across later task updates.
 
 Shipped defaults: reads and questions start collapsed, task updates and everything else follow
 Latest. Saved Tasks settings are preserved, so set Tasks to Latest if an existing install still
-has it set to Always. Settings are schema version 3, with a migration from versions 1 and 2 and
-fully defaulted keys.
+has it set to Always. Settings are schema version 4, with a migration from earlier versions and
+fully defaulted keys; the retired line-budget values are dropped on the way through.
+
+The settings page splits the targets into the rows a session raises constantly and the rows the
+daemon and the providers raise on their own — worktree setup (the commands Paseo ran to create the
+workspace), plain text (a provider tool with nothing but a label and a message), plans (a plan a
+provider proposed, not a tool call), subagents, and unknown tools. The second group carries a line
+of explanation per row, because those names are not the reader's. Fifteen pickers laid out as
+fifteen decisions take a page and a half of scrolling; laid out as two dense tables they take
+about a third of that, so the dense row is the default form for a repeated picker.
 
 ## Expanded activity
 
@@ -386,12 +394,15 @@ reusing the plugin's derived colors.
   layouts. Never a fixed-height inner scroller: the screen itself scrolls.
 - Every choice is a tile with its own miniature preview (palette, quiet strength, code frame,
   command color), so the effect is visible before it is selected. Segmented controls are for
-  two-or-three-way choices that need no picture, and for value pickers such as the long-block line
-  limits, where a picture of "40 lines" would not read any clearer than the number.
-- Long blocks stop at a line budget and offer **Show all** below the block: thinking keeps its tail
-  (400 lines by default, because it is read at its end), file contents and diffs keep their head
-  (20 lines, because they are read from their start). Both budgets are settings, and **All** drops
-  the cut; the shell-output ceiling stays fixed because output is streamed, not read.
+  two-or-three-way choices that need no picture, and for value pickers such as the block heights,
+  where a picture of "420 px" would not read any clearer than the number.
+- A long block scrolls inside a window instead of being cut: the **Block height** setting decides how
+  tall that window is, per block kind, because a CI log, a diff, and a thinking block do not want the
+  same one. Thinking streams to its tail (420 px by default, and read at its end), read and write show
+  their head, shell output follows its end, and edits get the most room (520 px). **All** drops the
+  window so the timeline scrolls instead. Everything else — searches, fetches, to-do lists, unknown
+  tools — shares one fixed default, since nobody would tune those; **Show all** survives only as the
+  escape hatch for a payload past the 100,000-character ceiling that keeps layout from stalling.
 - The preview renders the real renderers over sample data produced by the real transforms, so it
   cannot drift from the timeline. It reads draft values through `PrefsOverride`, which is why a tap
   updates the preview on the same frame as the save leaves.

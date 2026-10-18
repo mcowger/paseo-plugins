@@ -26,7 +26,6 @@ import {
 import type { ActivityStyles } from "./activity";
 import { ChildAgentTimeline } from "./child-agent";
 import { type HighlightToken, useHighlightTokens } from "./highlight";
-import { useActivityPrefs } from "./prefs";
 
 type Theme = PluginTimelineItemProps["theme"];
 type JsonRecord = Record<string, unknown>;
@@ -421,12 +420,10 @@ export function PaseoCodeBlock({
   theme: Theme;
   styles: ActivityStyles;
 }) {
-  const prefs = useActivityPrefs();
   const [showAll, setShowAll] = useState(false);
-  const preview = useMemo(
-    () => previewText(code, prefs.previewLines),
-    [code, prefs.previewLines],
-  );
+  // No line cut: a block's height decides how much is visible, and the "Show all"
+  // control only appears for a payload long enough to stall layout.
+  const preview = useMemo(() => previewText(code, 0), [code]);
   const displayCode = showAll ? code : preview.text;
   const tokens = useHighlightTokens(displayCode, language, theme.colors);
   return (

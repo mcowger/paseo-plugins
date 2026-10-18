@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { activitySettings, DEFAULT_EXPANSION, EXPANSION_TARGETS } from "./settings";
 
 describe("activity settings", () => {
-  it("stays on schema version 3 with a migration for older stored values", () => {
-    expect(activitySettings.version).toBe(3);
+  it("stays on schema version 4 with a migration for older stored values", () => {
+    expect(activitySettings.version).toBe(4);
     expect(activitySettings.migrate?.({ palette: "soft" }, 1)).toEqual({ palette: "soft" });
     expect(activitySettings.migrate?.({ palette: "soft" }, 2)).toEqual({ palette: "soft" });
   });
@@ -22,14 +22,28 @@ describe("activity settings", () => {
     expect(parsed.codeChrome).toBe("header");
     expect(parsed.diffWrap).toBe("off");
     expect(parsed.replyCode).toBe("on");
-    expect(parsed.previewLines).toBe(20);
-    expect(parsed.thinkingLines).toBe(400);
+    expect(parsed.blockHeights).toEqual({
+      thinking: 420,
+      read: 420,
+      shell: 320,
+      write: 420,
+      edit: 520,
+    });
   });
 
   it("accepts a zero line limit, and rejects a negative or fractional one", () => {
-    expect(activitySettings.schema.parse({ previewLines: 0 }).previewLines).toBe(0);
-    expect(activitySettings.schema.safeParse({ previewLines: -1 }).success).toBe(false);
-    expect(activitySettings.schema.safeParse({ thinkingLines: 1.5 }).success).toBe(false);
+    expect(
+      activitySettings.schema.parse({ blockHeights: { thinking: 0 } }).blockHeights,
+    ).toEqual({ thinking: 0, read: 420, shell: 320, write: 420, edit: 520 });
+    expect(
+      activitySettings.schema.safeParse({ blockHeights: { thinking: -1 } }).success,
+    ).toBe(false);
+    expect(
+      activitySettings.schema.safeParse({ blockHeights: { shell: 1.5 } }).success,
+    ).toBe(false);
+    // Values from before the switch to heights are dropped, not carried along.
+    const migrated = activitySettings.schema.parse({ previewLines: 20, thinkingLines: 400 });
+    expect(migrated.blockHeights.thinking).toBe(420);
   });
 
   it("fills presentation defaults for a version 1 payload", () => {

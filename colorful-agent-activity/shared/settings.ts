@@ -31,11 +31,46 @@ export const expansionModeSchema = z.enum(["always", "latest", "never"]);
 export type ExpansionMode = z.output<typeof expansionModeSchema>;
 
 /**
- * How many lines of a long block render before its "Show all" control appears.
- * `0` shows the whole block: the expander is the only escape hatch otherwise.
+ * How tall a block grows before it scrolls in place, in pixels. `0` is "All": the
+ * block never gets its own viewport and the timeline scrolls instead.
  */
-export const previewLinesSchema = z.number().int().min(0).max(2_000);
-export const thinkingLinesSchema = z.number().int().min(0).max(20_000);
+export const blockHeightSchema = z.number().int().min(0).max(2_000);
+
+/** The blocks whose height is worth choosing; everything else shares the default. */
+export const BLOCK_HEIGHT_KINDS = ["thinking", "read", "shell", "write", "edit"] as const;
+export type BlockHeightKind = (typeof BLOCK_HEIGHT_KINDS)[number];
+export type BlockHeights = Record<BlockHeightKind, number>;
+
+/**
+ * The height every other scrolling block gets. A CI log and a to-do list still need a
+ * window, but not one anybody would tune.
+ */
+export const DEFAULT_BLOCK_HEIGHT = 420;
+
+export const DEFAULT_BLOCK_HEIGHTS: BlockHeights = {
+  thinking: 420,
+  read: 420,
+  shell: 320,
+  write: 420,
+  edit: 520,
+};
+
+const blockHeightsSchema = z.object({
+  thinking: blockHeightSchema.default(DEFAULT_BLOCK_HEIGHTS.thinking),
+  read: blockHeightSchema.default(DEFAULT_BLOCK_HEIGHTS.read),
+  shell: blockHeightSchema.default(DEFAULT_BLOCK_HEIGHTS.shell),
+  write: blockHeightSchema.default(DEFAULT_BLOCK_HEIGHTS.write),
+  edit: blockHeightSchema.default(DEFAULT_BLOCK_HEIGHTS.edit),
+});
+
+/** A block's height, or `undefined` when the reader asked for the whole thing. */
+export function blockHeightFor(
+  heights: BlockHeights | undefined,
+  kind: BlockHeightKind | undefined,
+): number | undefined {
+  const height = kind ? (heights?.[kind] ?? DEFAULT_BLOCK_HEIGHTS[kind]) : DEFAULT_BLOCK_HEIGHT;
+  return height > 0 ? height : undefined;
+}
 
 /**
  * One expansion knob per collapsible row renderer. Defaults keep reads and
@@ -100,10 +135,11 @@ const expansionSettingsSchema = z.object({
 export const activitySettings = defineSettings({
   id: "display",
   scope: "host",
-  version: 3,
+  version: 4,
   // v1 stored only the palette and row expansion; v2 added the display knobs; v3
-  // added the block-length limits. Every key has a default, so passing older
-  // values through the current schema fills the missing ones in.
+  // added block-length limits; v4 replaced those line budgets with per-block heights.
+  // Every key has a default, so passing older values through the current schema
+  // fills the missing ones in and drops the retired ones.
   migrate: (values) => values,
   schema: z.object({
     palette: paletteModeSchema.default("vivid"),
@@ -113,11 +149,7 @@ export const activitySettings = defineSettings({
     codeChrome: codeChromeSchema.default("header"),
     diffWrap: diffWrapSchema.default("off"),
     replyCode: replyCodeSchema.default("on"),
-    // File contents, diffs, and JSON payloads: 20 lines is the historical cap.
-    previewLines: previewLinesSchema.default(20),
-    // Thinking is the main reading surface, so its default matches the old 32,000
-    // character cap it used to carry: plenty for a real block, finite for a runaway one.
-    thinkingLines: thinkingLinesSchema.default(400),
+    blockHeights: blockHeightsSchema.default(DEFAULT_BLOCK_HEIGHTS),
   }),
 });
 

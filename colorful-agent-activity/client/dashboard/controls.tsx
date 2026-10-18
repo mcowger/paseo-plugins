@@ -180,6 +180,56 @@ export function useDashboardStyles(theme: PluginTheme) {
         gap: 2,
         padding: 2,
       } satisfies ViewStyle,
+      segmentedCompact: {
+        borderRadius: 6,
+        padding: 1,
+      } satisfies ViewStyle,
+      segmentCompact: {
+        minHeight: 22,
+        paddingHorizontal: 4,
+        paddingVertical: 2,
+      } satisfies ViewStyle,
+      segmentTextCompact: {
+        fontSize: 11,
+        lineHeight: 15,
+      } satisfies TextStyle,
+      compactRow: {
+        alignItems: "center",
+        borderTopColor: railColor,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        flexDirection: "row",
+        gap: 10,
+        paddingVertical: 5,
+      } satisfies ViewStyle,
+      compactRowFirst: {
+        borderTopWidth: 0,
+      } satisfies ViewStyle,
+      compactRowStacked: {
+        alignItems: "stretch",
+        flexDirection: "column",
+        gap: 6,
+      } satisfies ViewStyle,
+      compactLabelGroup: {
+        flex: 1,
+        gap: 1,
+        minWidth: 0,
+      } satisfies ViewStyle,
+      compactLabel: {
+        color: c.foreground,
+        fontFamily: ui,
+        fontSize: 12,
+        lineHeight: 16,
+      } satisfies TextStyle,
+      compactHint: {
+        color: c.foregroundMuted,
+        fontFamily: ui,
+        fontSize: 10,
+        lineHeight: 13,
+        opacity: 0.85,
+      } satisfies TextStyle,
+      compactControlStacked: {
+        width: "100%",
+      } satisfies ViewStyle,
       segment: {
         alignItems: "center",
         borderRadius: 5,
@@ -335,15 +385,22 @@ export function Segmented<T extends string | number>({
   onChange,
   styles,
   accessibilityLabel,
+  compact,
 }: {
   value: T;
   options: readonly { value: T; label: string; disabled?: boolean }[];
   onChange: (value: T) => void;
   styles: DashboardStyles;
   accessibilityLabel: string;
+  /** A dense row: shorter segments and tighter text, for pickers that repeat. */
+  compact?: boolean;
 }) {
   return (
-    <View accessibilityLabel={accessibilityLabel} accessibilityRole="radiogroup" style={styles.segmented}>
+    <View
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="radiogroup"
+      style={[styles.segmented, compact ? styles.segmentedCompact : null]}
+    >
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -355,6 +412,7 @@ export function Segmented<T extends string | number>({
             onPress={() => onChange(option.value)}
             style={[
               styles.segment,
+              compact ? styles.segmentCompact : null,
               active ? { backgroundColor: styles.colors.surface2 } : null,
               option.disabled ? { opacity: 0.5 } : null,
             ]}
@@ -362,6 +420,7 @@ export function Segmented<T extends string | number>({
             <Text
               style={[
                 styles.segmentText,
+                compact ? styles.segmentTextCompact : null,
                 active ? { color: styles.colors.foreground, fontWeight: "600" } : null,
               ]}
             >
@@ -370,6 +429,55 @@ export function Segmented<T extends string | number>({
           </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+/**
+ * The dense form of a setting row: one line, control on the right.
+ *
+ * A page of fifteen identical three-way pickers is a table, not fifteen separate
+ * decisions, so it reads as one: hairline rules do the separating and the label
+ * carries the only text that changes.
+ */
+export function CompactRow({
+  label,
+  hint,
+  children,
+  controlWidth = 150,
+  styles,
+  stacked,
+  first,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+  controlWidth?: number;
+  styles: DashboardStyles;
+  stacked?: boolean;
+  first?: boolean;
+}) {
+  return (
+    <View
+      style={[
+        styles.compactRow,
+        stacked ? styles.compactRowStacked : null,
+        first ? styles.compactRowFirst : null,
+      ]}
+    >
+      <View style={styles.compactLabelGroup}>
+        <Text style={styles.compactLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        {hint ? (
+          <Text style={styles.compactHint} numberOfLines={2}>
+            {hint}
+          </Text>
+        ) : null}
+      </View>
+      <View style={stacked ? styles.compactControlStacked : { width: controlWidth }}>
+        {children}
+      </View>
     </View>
   );
 }

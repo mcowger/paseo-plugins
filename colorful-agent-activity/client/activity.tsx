@@ -100,6 +100,9 @@ import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
 import { alpha, rule, sunken, tint } from "../shared/color";
 import type { CodeChrome, ExpansionMode, ExpansionTarget } from "../shared/settings";
 import {
+  type BlockHeightKind,
+  blockHeightFor,
+  DEFAULT_BLOCK_HEIGHT,
   DEFAULT_EXPANSION,
 } from "../shared/settings";
 import {
@@ -138,13 +141,30 @@ import {
   pmonoViewEscape,
 } from "./web";
 
-const MAX_DETAIL_HEIGHT = 420;
+/**
+ * Which block-height setting governs a tool call, by the kind of body it shows.
+ * Anything else — a search, a fetch, an unknown tool — shares the one default.
+ */
+function blockHeightKindFor(detailType: string | undefined): BlockHeightKind | undefined {
+  switch (detailType) {
+    case "read":
+      return "read";
+    case "shell":
+      return "shell";
+    case "write":
+      return "write";
+    case "edit":
+      return "edit";
+    default:
+      return undefined;
+  }
+}
 /**
  * Reasoning is shown whole while it streams, because truncating it to a preview
  * would cut off the newest text and leave the block frozen on its opening lines.
- * The scroll region caps the height instead. The **Thinking** line budget decides
- * where the cut is; this is the character ceiling behind it, so a thinking block
- * of pathological width cannot stall layout either.
+ * The scroll region caps the height instead — the **Thinking** block height. This
+ * is the character ceiling behind it, so a pathological payload cannot stall
+ * layout in the one block nobody scrolls to the top of anyway.
  */
 const MAX_REASONING_TAIL_CHARS = 32_000;
 
@@ -414,9 +434,6 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         minWidth: 0,
         overflow: "hidden",
       } satisfies ViewStyle,
-      detailsScroll: {
-        maxHeight: MAX_DETAIL_HEIGHT,
-      } satisfies ViewStyle,
       detailsContent: {
         gap: 6,
         paddingLeft: 8,
@@ -667,7 +684,7 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         borderColor: rail,
         borderRadius: 6,
         borderWidth: 1,
-        maxHeight: 280,
+        maxHeight: DEFAULT_BLOCK_HEIGHT,
       } satisfies ViewStyle,
       codeLine: {
         color: theme.colors.foreground,
@@ -1251,7 +1268,7 @@ function HighlightedCodeBlock({
   const prefs = useActivityPrefs();
   const frame = chrome ?? prefs.codeChrome;
   const [showAll, setShowAll] = useState(false);
-  const preview = useMemo(() => previewText(code, prefs.previewLines), [code, prefs.previewLines]);
+  const preview = useMemo(() => previewText(code, 0), [code]);
   const displayCode = showAll ? code : preview.text;
   const tokens = useHighlightTokens(displayCode, language, theme.colors);
   const lineCount = displayCode.split("\n").length;
@@ -1434,14 +1451,10 @@ function DiffBlock({
   palette: ActivityPalette;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const [showAll, setShowAll] = useState(false);
   const prefs = useActivityPrefs();
   const wrap = prefs.diffWrap === "on";
-  // 0 means the reader asked for whole blocks: never cut a diff they chose to see.
-  const limit = prefs.previewLines;
-  const lines = useMemo(() => diffLinesForDetail(detail), [detail]);
-  const isTruncated = limit > 0 && lines.length > limit;
-  const displayLines = showAll || !isTruncated ? lines : lines.slice(0, limit);
+  // A diff scrolls inside its block height, so there is no line cut to undo.
+  const displayLines = useMemo(() => diffLinesForDetail(detail), [detail]);
   const body = (
     <View style={styles.diffSurface}>
       {displayLines.length === 0 ? (
@@ -1470,17 +1483,6 @@ function DiffBlock({
           {body}
         </ScrollView>
       )}
-      {isTruncated ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setShowAll(!showAll)}
-          style={styles.showMoreButton}
-        >
-          <Text style={styles.showMoreText}>
-            {showAll ? "Show less" : `Show all (${lines.length} lines)`}
-          </Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -2683,12 +2685,16 @@ function ReasoningText({
   styles: ReturnType<typeof useActivityStyles>;
 }) {
   const prefs = useActivityPrefs();
+  const thinkingScroll = useMemo(
+    () => ({ maxHeight: blockHeightFor(prefs.blockHeights, "thinking") }),
+    [prefs.blockHeights],
+  );
   const [showAll, setShowAll] = useState(false);
   const isStreaming = phase === "streaming";
   // Whole text, not a head preview: a truncated block would stop following the
   // stream and hide the newest lines. The tail is what matters, and the cap that
   // governs it is the thinking setting.
-  const window = tailPreview(text, prefs.thinkingLines, MAX_REASONING_TAIL_CHARS);
+  const window = tailPreview(text, 0, MAX_REASONING_TAIL_CHARS);
   const shownText = showAll ? text : window.text;
   const revealedText = useRevealedText(shownText, phase);
   const steps = useMemo(() => splitReasoningSteps(revealedText), [revealedText]);
@@ -2708,7 +2714,7 @@ function ReasoningText({
         onScroll={tail.handleScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator
-        style={styles.detailsScroll}
+        style={thinkingScroll}
       >
         {steps.length <= 1 ? (
           <ReasoningMarkdown text={revealedText} theme={theme} styles={styles} />
@@ -2994,6 +3000,10 @@ function ToolCallCard({
       ? relativizeLeadingCd(item.data.presentation.summary, cwd)
       : item.data.presentation.summary;
   const prefs = useActivityPrefs();
+  const bodyScroll = useMemo(
+    () => ({ maxHeight: blockHeightFor(prefs.blockHeights, blockHeightKindFor(detail?.type)) }),
+    [prefs.blockHeights, detail?.type],
+  );
   // A typed detail has no field for these; the provider attaches them as facts.
   // A shell shows truncation inline, so the same two keys are not repeated here.
   const facts = useMemo(() => {
@@ -3074,7 +3084,7 @@ function ToolCallCard({
         <View {...cmonoViewEscape} style={styles.details}>
           <ScrollView
             ref={tail.ref}
-            style={styles.detailsScroll}
+            style={bodyScroll}
             contentContainerStyle={styles.detailsContent}
             nestedScrollEnabled
             onContentSizeChange={tail.handleContentSizeChange}
@@ -3143,6 +3153,7 @@ export function ColorfulTodo({
     setUserExpanded({ expanded: !expanded, latestTimestamp: latestTaskUpdateTimestamp });
   }, [expanded, latestTaskUpdateTimestamp]);
   const quiet = useQuietRow(!expanded && done === item.data.items.length);
+  const defaultScroll = useMemo(() => ({ maxHeight: DEFAULT_BLOCK_HEIGHT }), []);
   useReplyCodeStyles(theme);
   return (
     <View {...pmonoViewEscape} style={[styles.card, quiet.quiet]}>
@@ -3159,7 +3170,7 @@ export function ColorfulTodo({
       {expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
           <ScrollView
-            style={styles.detailsScroll}
+            style={defaultScroll}
             contentContainerStyle={styles.detailsContent}
             nestedScrollEnabled
             showsVerticalScrollIndicator
