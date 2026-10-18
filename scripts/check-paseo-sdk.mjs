@@ -24,14 +24,15 @@ for (const plugin of config.plugins) {
     skipped.push(plugin);
     continue;
   }
+  const expected = config.pluginVersions?.[plugin] ?? config.version;
   for (const sdkPackage of sdkPackages) {
     const locations = ["dependencies", "devDependencies", "optionalDependencies"];
     const specs = locations
       .map((location) => packageJson[location]?.[sdkPackage])
       .filter((spec) => spec !== undefined);
-    if (specs.length !== 1 || specs[0] !== config.version) {
+    if (specs.length !== 1 || specs[0] !== expected) {
       errors.push(
-        `${plugin}/package.json must pin ${sdkPackage} to ${config.version} (found ${specs.join(", ") || "missing"})`,
+        `${plugin}/package.json must pin ${sdkPackage} to ${expected} (found ${specs.join(", ") || "missing"})`,
       );
     }
   }
@@ -42,5 +43,7 @@ if (errors.length > 0) {
   process.exitCode = 1;
 } else {
   const suffix = skipped.length > 0 ? ` (skipped ${skipped.length} plugin(s) not present in this checkout: ${skipped.join(", ")})` : "";
-  console.log(`All present plugins pin the Paseo SDK to ${config.version}${suffix}.`);
+  const overrides = Object.entries(config.pluginVersions ?? {}).map(([plugin, version]) => `${plugin}@${version}`);
+  const pinned = overrides.length > 0 ? `${config.version}, with ${overrides.join(", ")}` : config.version;
+  console.log(`All present plugins pin the Paseo SDK to ${pinned}${suffix}.`);
 }

@@ -7,6 +7,12 @@ The current target host and SDK baseline is **Paseo v0.10.0**. Pin `@getpaseo/cl
 `@getpaseo/plugin`, and `@getpaseo/protocol` to 0.10.0. Declare compatibility in
 `paseo-plugin.json` via `requirements: { "paseo": ">=0.10.0" }` to enforce version checks at startup.
 
+Per-plugin exceptions live in `.paseo-sdk.json` under `pluginVersions`, and both `npm run sdk:check`
+and `npm run sdk:install` honor them (installing, packing, and verifying each plugin at the version
+it pins). Current exception: **colorful-agent-activity** targets `>=0.11.4`, so it can use
+`addScreen` / `addSidebarHeaderItem`; keep its `requirements.paseo`, its three dependency pins, and
+the override in step. `plexuspi` stays on 0.10.0.
+
 When researching Paseo contracts (plugin SDK types, protocol, examples), use the local
 Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
 `plugin-examples`) instead of web calls to GitHub.
@@ -88,7 +94,11 @@ Patterns observed across Paseo plugins:
 - Match the contribution scope to the task:
   - Global surfaces (`client.addSurface`) and sidebar items (`client.addSidebarItem`) for host-wide workflows.
   - Workspace and agent panels (`client.addWorkspacePanel`) declaring `locations: ["workspace", "explorer"]`.
-  - Dedicated settings screens (`client.addSettingsScreen({ id, title, icon, Component })`) under Settings.
+  - Dedicated settings screens (`client.addSettingsScreen({ id, title, icon, Component })`) under
+    Settings, and full dashboard screens (`client.addScreen({ id, title, Component })`) with an
+    always-mounted entry (`client.addSidebarHeaderItem`) for configuration that needs width or a live
+    preview. A dashboard reads draft values through a context override so the preview updates before
+    a save resolves, and serializes saves against the newest revision.
   - Agent and workspace lifecycle hooks & customization (`server.agents.onAgentCreate`, lifecycle observation, and archiving hooks for closed agents).
   - Contextual commands (`client.addCommandCenterItem` for `global`, `workspace`, or `agent` contexts).
   - Message composer slash commands (`client.addSlashCommand` with `context: "workspace" | "agent"`).

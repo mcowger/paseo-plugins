@@ -9,6 +9,13 @@ const config = JSON.parse(await readFile(path.join(root, ".paseo-sdk.json"), "ut
 const sdkPackages = Object.entries(config.packages);
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
+/** The version a plugin pins: its override, else the repo-wide default. */
+function versionFor(plugin) {
+  return config.pluginVersions?.[plugin] ?? config.version;
+}
+
+const describeVersions = (plugins) => [...new Set(plugins.map(versionFor))].join(", ");
+
 function usage() {
   console.log(`Usage: npm run sdk:install -- [options]
 
@@ -101,12 +108,14 @@ function selectedPlugins(requested) {
   return [...new Set(requested)];
 }
 
-async function onlinePackagesAvailable() {
-  for (const [packageName] of sdkPackages) {
-    try {
-      await run(npmCommand, ["view", `${packageName}@${config.version}`, "version", "--json"], root, true);
-    } catch {
-      return false;
+async function onlinePackagesAvailable(versions) {
+  for (const version of versions) {
+    for (const [packageName] of sdkPackages) {
+      try {
+        await run(npmCommand, ["view", `${packageName}@${version}`, "version", "--json"], root, true);
+      } catch {
+        return false;
+      }
     }
   }
   return true;
@@ -116,14 +125,14 @@ function tarballPrefix(packageName) {
   return `${packageName.replace(/^@/, "").replace("/", "-")}-`;
 }
 
-async function tarballsFromDirectory(directory) {
+async function tarballsFromDirectory(directory, version) {
   const files = await readdir(directory);
   const tarballs = new Map();
   for (const [packageName] of sdkPackages) {
     const candidates = files.filter(
       (file) => file.startsWith(tarballPrefix(packageName)) && file.endsWith(".tgz"),
     );
-    const expected = `${tarballPrefix(packageName)}${config.version}.tgz`;
+    const expected = `${tarballPrefix(packageName)}${version}.tgz`;
     if (!files.includes(expected)) {
       throw new Error(
         `Expected ${expected} in ${directory}; found ${candidates.length === 0 ? "none" : candidates.join(", ")}`,
@@ -134,7 +143,7 @@ async function tarballsFromDirectory(directory) {
   return tarballs;
 }
 
-async function packLocalPackages(paseoRepo, skipBuild) {
+async function packLocalPackages(paseoRepo, skipBuild, version) {
   const packageRoot = path.resolve(resolveHome(paseoRepo));
   if (!(await exists(path.join(packageRoot, "package.json")))) {
     throw new Error(`Paseo checkout not found at ${packageRoot}`);
@@ -164,10 +173,10 @@ async function packLocalPackages(paseoRepo, skipBuild) {
       await cp(distRoot, path.join(stagedRoot, "dist"), { recursive: true });
       const readmePath = path.join(sourceRoot, "README.md");
       if (await exists(readmePath)) await cp(readmePath, path.join(stagedRoot, "README.md"));
-      packageJson.version = config.version;
+      packageJson.version = version;
       for (const location of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]) {
         for (const [sdkPackage] of sdkPackages) {
-          if (packageJson[location]?.[sdkPackage] !== undefined) packageJson[location][sdkPackage] = config.version;
+          if (packageJson[location]?.[sdkPackage] !== undefined) packageJson[location][sdkPackage] = version;
         }
       }
       await writeFile(path.join(stagedRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
@@ -209,13 +218,14 @@ async function installOnline(plugins) {
 }
 
 async function verifyInstalledSdk(plugin) {
+  const expected = versionFor(plugin);
   const pluginRoot = path.join(root, plugin);
   for (const [packageName] of sdkPackages) {
     const packageJsonPath = path.join(pluginRoot, "node_modules", ...packageName.split("/"), "package.json");
     const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
-    if (packageJson.version !== config.version) {
+    if (packageJson.version !== expected) {
       throw new Error(
-        `${plugin} installed ${packageName}@${packageJson.version}; expected ${packageName}@${config.version}`,
+        `${plugin} installed ${packageName}@${packageJson.version}; expected ${packageName}@${expected}`,
       );
     }
   }
@@ -223,32 +233,41 @@ async function verifyInstalledSdk(plugin) {
 
 const options = parseArgs(process.argv.slice(2));
 const plugins = selectedPlugins(options.plugins);
-let temporaryDirectory;
+const temporaryDirectories = [];
+
+/** Plugins grouped by the version they pin, so each version is packed once. */
+function pluginsByVersion() {
+  const groups = new Map();
+  for (const plugin of plugins) groups.set(versionFor(plugin), [...(groups.get(versionFor(plugin)) ?? []), plugin]);
+  return groups;
+}
 
 try {
   let source = options.source;
   if (source === "auto") {
-    if (await onlinePackagesAvailable()) source = "online";
+    if (await onlinePackagesAvailable([...pluginsByVersion().keys()])) source = "online";
     else if (options.tarballDir || (await exists(path.join(resolveHome(options.paseoRepo), "package.json")))) source = options.tarballDir ? "tarball" : "local";
-    else throw new Error(`Paseo SDK ${config.version} is not available online and no local checkout or tarballs were found`);
+    else throw new Error(`Paseo SDK ${describeVersions(plugins)} is not available online and no local checkout or tarballs were found`);
   }
 
   if (source === "online") {
     await installOnline(plugins);
-    console.log(`Installed Paseo SDK ${config.version} from the registry.`);
+    console.log(`Installed Paseo SDK ${describeVersions(plugins)} from the registry.`);
   } else {
-    let tarballs;
-    if (source === "local") {
-      const packed = await packLocalPackages(options.paseoRepo, options.skipBuild);
-      temporaryDirectory = packed.directory;
-      tarballs = packed.tarballs;
-    } else {
-      if (!options.tarballDir) throw new Error("--tarball-dir is required when --source is tarball");
-      const directory = path.resolve(resolveHome(options.tarballDir));
-      if (!(await exists(directory))) throw new Error(`Tarball directory not found at ${directory}`);
-      tarballs = await tarballsFromDirectory(directory);
+    for (const [version, group] of pluginsByVersion()) {
+      let tarballs;
+      if (source === "local") {
+        const packed = await packLocalPackages(options.paseoRepo, options.skipBuild, version);
+        temporaryDirectories.push(packed.directory);
+        tarballs = packed.tarballs;
+      } else {
+        if (!options.tarballDir) throw new Error("--tarball-dir is required when --source is tarball");
+        const directory = path.resolve(resolveHome(options.tarballDir));
+        if (!(await exists(directory))) throw new Error(`Tarball directory not found at ${directory}`);
+        tarballs = await tarballsFromDirectory(directory, version);
+      }
+      for (const plugin of group) await installLocalTarballs(plugin, tarballs);
     }
-    for (const plugin of plugins) await installLocalTarballs(plugin, tarballs);
     console.log(`Installed Paseo SDK from ${source} tarballs for: ${plugins.join(", ")}.`);
   }
 } catch (error) {
@@ -256,5 +275,5 @@ try {
   console.error("Run with --source local or --source tarball when the SDK is not available online.");
   process.exitCode = 1;
 } finally {
-  if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true });
+  for (const directory of temporaryDirectories) await rm(directory, { recursive: true, force: true });
 }
