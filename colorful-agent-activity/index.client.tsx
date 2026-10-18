@@ -1,98 +1,97 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
-import { ColorfulReasoning, ColorfulTodo, ColorfulToolCall } from "./client/activity";
-import { Dashboard } from "./client/dashboard";
-import { DashboardSidebarItem, DASHBOARD_SCREEN_ID } from "./client/dashboard/sidebar";
-import { AgentSummaryPanel } from "./client/summary/panel";
-import { syncReplyCodeStyles } from "./client/prefs";
-import { transformReasoning, transformTodo, transformToolCall } from "./client/transform";
-import { installColorfulFonts } from "./client/web";
-import {
-  REASONING_RENDERER_KIND,
-  REASONING_RENDERER_VERSION,
-  reasoningItemDataSchema,
-  TODO_RENDERER_KIND,
-  TODO_RENDERER_VERSION,
-  TOOL_CALL_RENDERER_KIND,
-  TOOL_CALL_RENDERER_VERSION,
-  todoItemDataSchema,
-  toolCallItemDataSchema,
-} from "./shared/timeline";
+import { CLIENT_PAYLOAD_VERSION, clientPayloadRpc } from "./shared/client-payload";
 
-export default function contribute(client: PluginClientContext) {
-  const removeFonts = installColorfulFonts();
-  client.addScreen({
-    id: DASHBOARD_SCREEN_ID,
-    title: "Colorful Activity",
-    Component: Dashboard,
-  });
-  client.addSidebarHeaderItem({
-    id: DASHBOARD_SCREEN_ID,
-    title: "Colorful Activity",
-    Component: DashboardSidebarItem,
-  });
-  client.addCommandCenterItem({
-    id: "open-dashboard",
-    title: "Open Colorful Activity settings",
-    icon: "Palette",
-    keywords: ["colorful", "activity", "display", "palette", "settings"],
-    context: "global",
-    onSelect({ openScreen }) {
-      openScreen({ screenId: DASHBOARD_SCREEN_ID });
-    },
-  });
-  client.addWorkspacePanel({
-    id: "summary",
-    title: "Activity Summary",
-    icon: "Activity",
-    context: "agent",
-    Component: AgentSummaryPanel,
-  });
-  client.addCommandCenterItem({
-    id: "open-agent-summary",
-    title: "Open Activity Summary",
-    icon: "Activity",
-    keywords: ["summary", "activity", "tools", "thinking", "status"],
-    context: "agent",
-    onSelect({ openPanel }) {
-      openPanel("summary");
-    },
-  });
-  client.addTimelineTransformer({
-    id: "reasoning",
-    query: { itemType: "reasoning" },
-    transform: transformReasoning,
-  });
-  client.addTimelineTransformer({
-    id: "todos",
-    query: { itemType: "todo" },
-    transform: transformTodo,
-  });
-  client.addTimelineTransformer({
-    id: "tool-calls",
-    query: { itemType: "tool_call" },
-    transform: transformToolCall,
-  });
-  client.addTimelineRenderer({
-    kind: TODO_RENDERER_KIND,
-    version: TODO_RENDERER_VERSION,
-    schema: todoItemDataSchema,
-    Component: ColorfulTodo,
-  });
-  client.addTimelineRenderer({
-    kind: REASONING_RENDERER_KIND,
-    version: REASONING_RENDERER_VERSION,
-    schema: reasoningItemDataSchema,
-    Component: ColorfulReasoning,
-  });
-  client.addTimelineRenderer({
-    kind: TOOL_CALL_RENDERER_KIND,
-    version: TOOL_CALL_RENDERER_VERSION,
-    schema: toolCallItemDataSchema,
-    Component: ColorfulToolCall,
-  });
+/**
+ * The client entry Paseo compiles and ships inside the plugin catalog.
+ *
+ * Paseo re-sends every plugin's entire client bundle on each connect and each
+ * plugin change, which is expensive on an unreliable link. So the catalog entry
+ * is this loader (~1 KB) and the real client code travels once over an RPC,
+ * cached in the app's JS context under the payload's hash:
+ *
+ * - warm cache (the usual reconnect): no request at all, registration is
+ *   synchronous, exactly like a normal plugin entry;
+ * - cold cache (first load in a session): one RPC, then registration.
+ *
+ * `server/payload.ts` serves the code; `scripts/build-client.mjs` builds it and
+ * stamps both the payload and this loader's version.
+ */
+
+interface PayloadCache {
+  version: string;
+  code: string;
+}
+
+const CACHE_KEY = "__colorfulActivityClientPayload";
+
+// Paseo wraps every client bundle as `(function(require) { … })` and calls it
+// with its own module resolver, so this identifier is the host resolver inside
+// this module too. The payload needs it to reach the host modules.
+declare const require: (name: string) => unknown;
+
+const cacheStore = globalThis as typeof globalThis & {
+  [CACHE_KEY]?: PayloadCache;
+};
+
+type PayloadFactory = (require: unknown) => { default?: unknown };
+
+// The same mechanism Paseo uses to evaluate the bundle that contains this file.
+// The payload is a factory that takes `require`, so it needs no scope from here.
+const evaluate = globalThis.eval;
+
+function runPayload(code: string, client: PluginClientContext): () => void {
+  const factory = evaluate(code) as unknown;
+  if (typeof factory !== "function") {
+    throw new Error("Colorful Activity client payload is not executable");
+  }
+  const exports = (factory as PayloadFactory)(require);
+  const setup = exports && typeof exports === "object" ? exports.default : undefined;
+  if (typeof setup !== "function") {
+    throw new Error("Colorful Activity client payload has no default export");
+  }
+  const cleanup = (setup as (context: PluginClientContext) => unknown)(client);
+  return typeof cleanup === "function" ? (cleanup as () => void) : () => {};
+}
+
+export default function contribute(client: PluginClientContext): () => void {
+  let dispose: (() => void) | null = null;
+  let cancelled = false;
+
+  const start = (code: string) => {
+    if (cancelled) return;
+    try {
+      dispose = runPayload(code, client);
+    } catch (error) {
+      console.warn("[colorful-agent-activity] Couldn't start the client payload", error);
+    }
+  };
+
+  const cached = cacheStore[CACHE_KEY];
+  if (cached && cached.version === CLIENT_PAYLOAD_VERSION) {
+    start(cached.code);
+  } else {
+    void client
+      .rpc(clientPayloadRpc, {})
+      .then((payload) => {
+        if (cancelled) return;
+        if (payload.version === CLIENT_PAYLOAD_VERSION) {
+          cacheStore[CACHE_KEY] = { version: payload.version, code: payload.code };
+        }
+        start(payload.code);
+      })
+      .catch((error: unknown) => {
+        console.warn("[colorful-agent-activity] Couldn't load the client payload", error);
+      });
+  }
+
   return () => {
-    removeFonts();
-    // Drop the web reply stylesheet with the plugin, not with the next theme change.
-    syncReplyCodeStyles(false, null);
+    cancelled = true;
+    const teardown = dispose;
+    dispose = null;
+    try {
+      teardown?.();
+    } catch (error) {
+      console.warn("[colorful-agent-activity] Client payload cleanup failed", error);
+    }
   };
 }

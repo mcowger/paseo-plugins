@@ -102,10 +102,15 @@ For a local checkout:
 ```bash
 cd /absolute/path/to/paseo-plugins/colorful-agent-activity
 npm install --legacy-peer-deps
+npm run build:client
 npm run typecheck
 npm test
 paseo plugin install "$PWD"
 ```
+
+`npm run build:client` regenerates the client payload (see [How the client code loads](#how-the-client-code-loads));
+`npm test` fails when it is stale. Node 24 or newer is required for the build script, which runs
+TypeScript directly (tested on Node 26).
 
 ## Setup
 
@@ -153,17 +158,42 @@ paseo plugin reload colorful-agent-activity
 - Unknown tool payloads render as syntax-highlighted JSON, with a plain-text fallback for oversized or unsupported output.
 - A transformer that claims the same source row in another plugin can win before this plugin runs.
 
+## How the client code loads
+
+Paseo ships every plugin's whole client bundle inside the plugin catalog, and it re-sends that
+catalog on every connect and every plugin change. On a flaky link that is a lot of repeated traffic,
+so this plugin splits the two roles:
+
+- `index.client.tsx` is a ~3 KB loader. It embeds the payload's version hash and, on a reconnect
+  with a warm cache, registers the plugin from memory with no request at all. On a cold cache it
+  fetches the payload once over the `client.payload` RPC.
+- `client/entry.tsx` is the real entry: everything the plugin contributes. `scripts/build-client.ts`
+  builds it into a minified payload (232 KB instead of the ~491 KB Paseo would compile from source),
+  mirroring Paseo's own compile options.
+- `server/payload.ts` serves the payload from the server bundle. The payload lives there rather than
+  on disk because a plugin server module is evaluated from a string and cannot resolve its own
+  directory.
+
+The generated modules (`shared/client-payload-version.ts` and `server/client-payload.generated.ts`)
+are committed, because Paseo installs npm and git sources with `--ignore-scripts --omit=dev` and
+would have no way to run the build. `npm test` compares them against a fresh build, so they cannot
+go stale silently.
+
+Numbers on this plugin: the catalog entry drops from ~513 KB to ~3.4 KB per reconnect, and the
+payload itself from 491 KB to 232 KB.
+
 ## Development
 
 ```bash
 npm run lint
 npm run typecheck
 npm test
+npm run build:client   # after changing client/ sources
 ```
 
 The plugin uses separate Paseo v0.11.4 client and server entries. The server entry registers the
-host-scoped settings and serves image files back to the client for inline read previews; timeline
-rendering runs in the client bundle.
+host-scoped settings, serves image files back to the client for inline read previews, and serves the
+client payload; timeline rendering runs in the client bundle.
 
 Layout values live in one place (`useActivityStyles` in `client/activity.tsx`), derived colors in
 `shared/color.ts`, and the settings dashboard reads draft values through `PrefsOverride` so its

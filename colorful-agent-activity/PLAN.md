@@ -113,7 +113,6 @@ are fixed:
   the dashboard, quiet rows, and code cards still need an on-device smoke test.
 
 ## Post-review fixes
-
 - **"Show all" was category-green** (`palette.categoryColors.agent`), which read as a status next to muted
   metadata. It is now muted foreground text, in every code, diff, and reasoning surface.
 - **Long thinking blocks froze on their opening lines.** Reasoning was cut with the code-preview
@@ -125,6 +124,31 @@ are fixed:
   react-native-web does not report reliably. It is driven by the revealed text instead (one frame
   later, via `requestAnimationFrame`), only while streaming, and only while the reader is near the
   bottom. A finished block opens at its start rather than jumping to its end.
+
+## Reconnect cost: loader, payload cache, minification
+
+Paseo ships every plugin's whole client bundle inside the catalog, on every connect and every
+`plugin_catalog_changed`, with no compression and no "I already have it" negotiation. On a train that
+repeated transfer dominated startup, so the client entry was split in two:
+
+- `index.client.tsx` is a ~3 KB loader. It embeds the payload hash; a reconnect with a warm
+  `globalThis` cache registers synchronously with zero requests, a cold cache fetches the payload
+  once over the `client.payload` RPC. Registration from cache happens inside `contribute`, so it is
+  as synchronous as a normal plugin entry; only the cold path defers (Paseo publishes late
+  contributions, and a late transformer invalidates the projection cache, so rows re-transform).
+- `client/entry.tsx` holds the real contributions and is built by `scripts/build-client.ts` into a
+  minified payload, mirroring Paseo's compile options exactly (externals, `cjs`, `neutral`, `es2020`,
+  `async-await` lowering, and the `makeHermesInteropEager` rewrite). Minification alone is 491 →
+  232 KB; every Prism grammar is kept.
+- `server/payload.ts` serves the payload out of the server bundle, because a plugin server module is
+  evaluated from a string and has no reliable directory.
+- The generated modules are committed: Paseo installs npm/git sources with `--ignore-scripts
+  --omit=dev`, so the build cannot run there. `client/bundle.test.ts` fails when they drift from a
+  fresh build, and `client/loader.test.ts` covers the cache, fetch, dispose-during-fetch, and failure
+  paths.
+
+Measured against a live 0.11.4 daemon: the catalog entry for this plugin went from 513.5 KB to
+3.4 KB, the payload RPC returns 241 KB (232 KB of code), and a warm reconnect sends neither.
 
 ## Follow-ups
 

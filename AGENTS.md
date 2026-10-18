@@ -289,3 +289,9 @@ For the normal local workflow, install dependencies, run `npm run lint`, `npm ru
 `npm test` from the plugin directory, then install the plugin with `paseo plugin install <directory>`
 (if it is not already configured), reload it explicitly with `paseo plugin reload <plugin-id>`, and
 confirm it loaded with `paseo plugin ls <plugin-id>` and `paseo plugin logs <plugin-id>`.
+
+A plugin that generates client code at build time must have that output committed and regenerated
+before reloading. colorful-agent-activity is the current example: `npm run build:client` emits its
+client payload and version. Paseo installs npm and Git sources with `--ignore-scripts --omit=dev`, so
+nothing runs a build for those installs, and a `paseo-plugin.json` `build` command cannot rely on
+development tooling being present. Make the plugin's own tests fail when generated output drifts.

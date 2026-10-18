@@ -363,15 +363,18 @@ reusing the plugin's derived colors.
 
 The visual system currently lives in:
 
-- `client/activity.tsx`: shared style factory, activity rows, reasoning, details, code, diffs, and nested progress
+- `client/activity.tsx`: shared style factory, activity rows, reasoning, details, code cards, diffs, and nested progress
+- `client/prefs.ts`: the settings view every renderer reads, plus the preview override
+- `shared/color.ts`: derived color helpers (sunken surfaces, rules, tints)
 - `client/paseo.tsx`: specialized tool details, fields, lists, statuses, prompts, and compact headers
 - `client/child-agent.tsx`: child activity hierarchy
 - `client/github.tsx`: GitHub-specific detail rows
 - `shared/presentation.ts`: category and status palettes
-- `shared/color.ts`: derived color helpers (sunken surfaces, rules, tints)
-- `client/prefs.ts`: the settings view every renderer reads, plus the preview override
 - `client/dashboard/`: the settings dashboard (navigation, controls, live preview)
 - `client/web.ts`: web-only font stacks and the reply-markdown restyle
+- `index.client.tsx`: the catalog loader (caches the payload, so reconnects are cheap)
+- `client/entry.tsx`: the real client entry, built into the payload by `scripts/build-client.ts`
+- `server/payload.ts`: serves the payload to the loader
 
 Keep shared layout values in `useActivityStyles`. Specialized renderers should consume `ActivityStyles` instead of creating a competing style system.
 

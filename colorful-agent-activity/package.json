@@ -7,14 +7,15 @@
   "scripts": {
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:client": "node scripts/build-client.ts"
   },
   "devDependencies": {
     "@getpaseo/client": "0.11.4",
     "@getpaseo/plugin": "0.11.4",
     "@getpaseo/protocol": "0.11.4",
     "@tanstack/react-query": "^5.90.11",
-    "@types/node": "^20.9.0",
+    "@types/node": "^26.6.5",
     "@types/prismjs": "^1.26.6",
     "@types/react": "~19.2.0",
     "esbuild": "^0.25.0",
@@ -25,5 +26,8 @@
     "typescript": "^5.9.3",
     "vitest": "^4.1.6",
     "zod": "^4.4.3"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
