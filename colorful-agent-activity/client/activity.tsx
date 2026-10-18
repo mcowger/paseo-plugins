@@ -73,7 +73,9 @@ import {
   notInHeader,
   parseAskAnswers,
   parseOpencodeSearchContent,
+  parsePiFileList,
   parsePiLsOutput,
+  parsePiSearchContent,
   parseSubAgentActionLog,
   paseoToolLeafName,
   previewText,
@@ -1527,18 +1529,48 @@ function SearchDetail({
   theme: Theme;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const parsed = useMemo(() => parseOpencodeSearchContent(detail.content), [detail.content]);
+  // A file search lists paths; a content search groups matches per file. Pi emits
+  // neither in opencode's format, so both parsers run.
+  const fileList = useMemo(
+    () => (detail.toolName === "glob" ? parsePiFileList(detail.content) : undefined),
+    [detail.toolName, detail.content],
+  );
+  const parsed = useMemo(
+    () => parseOpencodeSearchContent(detail.content) ?? parsePiSearchContent(detail.content),
+    [detail.content],
+  );
   const displayPath = useCallback(
     (filePath: string) => (cwd ? relativeToRoot(filePath, cwd) : filePath),
     [cwd],
   );
   const { matchCount, fileCount } = resolveSearchCounts(detail, parsed);
-  const meta = [
-    matchCount !== undefined ? `${matchCount} match${matchCount === 1 ? "" : "es"}` : undefined,
-    fileCount !== undefined ? `${fileCount} file${fileCount === 1 ? "" : "s"}` : undefined,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const meta = fileList
+    ? `${fileList.length} file${fileList.length === 1 ? "" : "s"}`
+    : [
+        matchCount !== undefined ? `${matchCount} match${matchCount === 1 ? "" : "es"}` : undefined,
+        fileCount !== undefined ? `${fileCount} file${fileCount === 1 ? "" : "s"}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+  if (fileList) {
+    return (
+      <>
+        {notInHeader(detail.query, headerSummary) ? (
+          <Text style={styles.detailText}>Pattern: {detail.query}</Text>
+        ) : null}
+        <Text style={styles.mutedText}>{meta}</Text>
+        {fileList.map((filePath) => (
+          <PathRow
+            key={filePath}
+            icon={fileIconForPath(filePath)}
+            path={displayPath(filePath)}
+            styles={styles}
+          />
+        ))}
+      </>
+    );
+  }
 
   return (
     <>

@@ -1044,6 +1044,65 @@ describe("tool details nothing interprets", () => {
     expect(toolDetailDiagnostic("bash", { truncation: {}, fullOutputPath: "/tmp/x" })).toBeNull();
   });
 
+  test("keeps separate content blocks separate", () => {
+    const { timeline } = harness();
+    timeline.accept({
+      type: "tool_execution_end",
+      toolCallId: "call-mcp",
+      toolName: "mcp__github__get_file_contents",
+      args: { owner: "o", repo: "r", path: "a.json" },
+      result: {
+        content: [
+          { type: "text", text: "downloaded a.json" },
+          { type: "text", text: '{"name":"a"}' },
+        ],
+      },
+    });
+    const tool = findItem(timeline.items(), "tool:call-mcp");
+    expect(tool.type === "tool_call" && (tool.detail as { output?: string }).output).toBe(
+      'downloaded a.json\n{"name":"a"}',
+    );
+  });
+
+  test("counts an MCP tool's transport details as accounted for", () => {
+    // `server` and `tool` restate the row's own title, so they are neither a fact
+    // to render nor a gap worth logging.
+    expect(
+      toolDetailDiagnostic("mcp__github__get_file_contents", { server: "github", tool: "x" }),
+    ).toBeNull();
+    expect(
+      mapToolDetail("mcp__github__get_file_contents", { path: "a" }, "body", {
+        server: "github",
+        tool: "x",
+      }),
+    ).toEqual({
+      type: "unknown",
+      input: { path: "a" },
+      output: "body",
+    });
+    // An MCP tool that reports something else still shows it.
+    expect(
+      mapToolDetail("mcp__unraid__info", {}, "body", {
+        server: "unraid",
+        tool: "info",
+        version: "7.1",
+      }),
+    ).toEqual({
+      type: "unknown",
+      input: {},
+      output: { content: "body", details: { version: "7.1" } },
+    });
+  });
+
+  test("maps find to the file-list flavour of search", () => {
+    expect(mapToolDetail("find", { pattern: "**/*.ts" }, "a.ts\nb.ts")).toEqual({
+      type: "search",
+      query: "**/*.ts",
+      toolName: "glob",
+      content: "a.ts\nb.ts",
+    });
+  });
+
   test("reports a tool once per session, not once per call", () => {
     const diagnostics: ToolDetailDiagnostic[] = [];
     const { timeline } = harness(diagnostics);

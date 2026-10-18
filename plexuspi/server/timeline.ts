@@ -394,7 +394,7 @@ export function createTimeline(input: {
   function metadataForTool(tool: string, details: unknown): Record<string, unknown> | undefined {
     if (toolDetailKind(tool) === "unknown") return undefined;
     const facts = toolFacts(tool, details);
-    return facts ? { plexuspiFacts: facts } : undefined;
+    return facts ? { plexuspiFacts: facts.fields } : undefined;
   }
 
   /** Tells the host which detail keys of a tool the mapping has no use for. */
@@ -665,15 +665,22 @@ const TOOL_DETAIL_USAGE: Record<string, DetailUsage> = {
  * same bounded scalars as an unparsed tool's details. A shell reports truncation
  * as a nested object, so it gets its own view.
  */
-function toolFacts(tool: string, details: unknown): DetailProjection["fields"] | undefined {
+function toolFacts(tool: string, details: unknown): DetailProjection | undefined {
   if (!isRecord(details)) return undefined;
-  if (toolDetailKind(tool) === "bash") return shellFacts(details);
+  const kind = toolDetailKind(tool);
+  if (kind === "bash") {
+    const fields = shellFacts(details);
+    return fields ? { fields, omitted: 0 } : undefined;
+  }
   const usage = detailUsage(tool);
-  if (!usage) return undefined;
   const shown = Object.fromEntries(
-    Object.entries(details).filter(([key]) => usage.shown.includes(key)),
+    Object.entries(details).filter(([key]) =>
+      // A typed detail carries only what it declared it would show; a tool with no
+      // branch carries everything nobody has accounted for.
+      kind === "unknown" ? !isAccounted(usage, key) : Boolean(usage?.shown.includes(key)),
+    ),
   );
-  return projectToolDetails(shown)?.fields;
+  return projectToolDetails(shown) ?? undefined;
 }
 
 function shellFacts(details: Record<string, unknown>): DetailProjection["fields"] | undefined {
@@ -689,8 +696,27 @@ function shellFacts(details: Record<string, unknown>): DetailProjection["fields"
   return Object.keys(facts).length > 0 ? facts : undefined;
 }
 
+/**
+ * Every MCP tool reports the server and tool it came from. The row already shows
+ * both in its title, so neither is a fact to render nor a gap to log.
+ */
+const MCP_DETAIL_USAGE: DetailUsage = {
+  consumed: ["server", "tool"],
+  shown: [],
+  ignored: {},
+};
+
 function detailUsage(tool: string): DetailUsage | undefined {
-  return TOOL_DETAIL_USAGE[tool.trim().toLowerCase()] ?? DETAIL_USAGE[toolDetailKind(tool)];
+  const name = tool.trim().toLowerCase();
+  if (name.startsWith("mcp__")) return MCP_DETAIL_USAGE;
+  return TOOL_DETAIL_USAGE[name] ?? DETAIL_USAGE[toolDetailKind(tool)];
+}
+
+function isAccounted(usage: DetailUsage | undefined, key: string): boolean {
+  if (!usage) return false;
+  return (
+    usage.consumed.includes(key) || usage.shown.includes(key) || Object.hasOwn(usage.ignored, key)
+  );
 }
 
 const MAX_DETAIL_FIELDS = 12;
@@ -767,8 +793,7 @@ export function toolDetailDiagnostic(tool: string, details: unknown): ToolDetail
   const kind = toolDetailKind(tool);
   const usage = detailUsage(tool);
   const consumed = usage?.consumed ?? [];
-  const accounted = [...consumed, ...(usage?.shown ?? []), ...Object.keys(usage?.ignored ?? {})];
-  const unconsumed = Object.keys(details).filter((key) => !accounted.includes(key));
+  const unconsumed = Object.keys(details).filter((key) => !isAccounted(usage, key));
   if (unconsumed.length === 0) return null;
   return { tool, kind, consumed: [...consumed], unconsumed };
 }
@@ -924,7 +949,12 @@ export function mapToolDetail(
     tool === "web_search" ||
     tool === "find"
   ) {
-    const toolName = tool === "grep" || tool === "glob" || tool === "web_search" ? tool : "search";
+    const toolName =
+      tool === "grep" || tool === "glob" || tool === "web_search"
+        ? tool
+        : tool === "find"
+          ? "glob"
+          : "search";
     return {
       type: "search",
       query: asText(record.pattern) || asText(record.query) || asText(record.glob),
@@ -963,7 +993,7 @@ export function mapToolDetail(
   }
   // A tool no branch handles still reports what it did in its details. Carry a
   // bounded, flat view of them so the row can show facts instead of JSON soup.
-  const projection = projectToolDetails(details);
+  const projection = toolFacts(name, details);
   return {
     type: "unknown",
     input: toJson(args),
@@ -1006,9 +1036,13 @@ function extractResultText(value: unknown): string | undefined {
 function extractText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
+    // Blocks are separate paragraphs. Joining them bare glued an MCP tool's
+    // summary onto its JSON payload ("downloaded…{") with no way to tell them
+    // apart, and still does for any tool without a renderer of its own.
     return content
       .map((block) => (isRecord(block) ? asText(block.text ?? block.thinking) : ""))
-      .join("");
+      .filter((text) => text.length > 0)
+      .join("\n");
   }
   if (isRecord(content)) return asText(content.text ?? content.thinking);
   return "";

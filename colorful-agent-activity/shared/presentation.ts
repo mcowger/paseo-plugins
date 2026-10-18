@@ -2950,6 +2950,42 @@ export interface OpencodeSearchFile {
   matches: OpencodeSearchMatch[];
 }
 
+/**
+ * Pi's grep output is one `path:line: text` row per match, with no header and no
+ * grouping. OpenEcode's parser cannot see it, so search rows fell back to a raw
+ * block with no counts.
+ */
+export function parsePiSearchContent(content: string | undefined | null): OpencodeSearchContent | undefined {
+  if (typeof content !== "string" || !content.trim()) return undefined;
+  const byFile = new Map<string, OpencodeSearchMatch[]>();
+  for (const raw of content.replace(/\r\n?/g, "\n").split("\n")) {
+    const line = raw.trimEnd();
+    if (!line) continue;
+    const match = line.match(/^(.+?):(\d+):(?: ?(.*))?$/);
+    if (!match?.[1]) continue;
+    const lineNumber = Number.parseInt(match[2] ?? "", 10);
+    if (!Number.isFinite(lineNumber)) continue;
+    const filePath = match[1];
+    const matches = byFile.get(filePath) ?? [];
+    matches.push({ lineNumber, text: match[3] ?? "" });
+    byFile.set(filePath, matches);
+  }
+  if (byFile.size === 0) return undefined;
+  const files = [...byFile.entries()].map(([filePath, matches]) => ({ filePath, matches }));
+  return { numMatches: files.reduce((total, file) => total + file.matches.length, 0), files };
+}
+
+/** A bare path per line, which is what a file search returns. */
+export function parsePiFileList(content: string | undefined | null): string[] | undefined {
+  if (typeof content !== "string" || !content.trim()) return undefined;
+  const paths = content
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !/^no\s+(?:files?|matches?)\b/i.test(line));
+  return paths.length > 0 ? paths : undefined;
+}
+
 export interface OpencodeSearchContent {
   numMatches?: number;
   files: OpencodeSearchFile[];

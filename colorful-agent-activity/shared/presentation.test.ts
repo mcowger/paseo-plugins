@@ -26,6 +26,8 @@ import {
   isApplyPatchTool,
   agentRowFacts,
   isAskTool,
+  parsePiFileList,
+  parsePiSearchContent,
   parseAskAnswers,
   isBgWaitTool,
   isDirectoryRead,
@@ -1026,6 +1028,53 @@ describe("toolDetailFacts", () => {
     expect(toolDetailFacts(undefined)).toBeUndefined();
     // A provider that sends structure we cannot show as rows stays a JSON block.
     expect(toolDetailFacts({ content: "x", details: { nested: { a: 1 } } })).toBeUndefined();
+  });
+});
+
+describe("Pi search output", () => {
+  const grepOutput = [
+    "shared/presentation.ts:541: export function agentRowFacts(",
+    "shared/presentation.test.ts:27:   agentRowFacts,",
+    "shared/presentation.test.ts:1035:       agentRowFacts({",
+    "client/activity.tsx:46:   agentRowFacts,",
+  ].join("\n");
+
+  it("groups grep's path:line: text rows per file, with exact counts", () => {
+    const parsed = parsePiSearchContent(grepOutput);
+    expect(parsed?.numMatches).toBe(4);
+    expect(parsed?.files).toEqual([
+      {
+        filePath: "shared/presentation.ts",
+        matches: [{ lineNumber: 541, text: "export function agentRowFacts(" }],
+      },
+      {
+        filePath: "shared/presentation.test.ts",
+        matches: [
+          { lineNumber: 27, text: "  agentRowFacts," },
+          { lineNumber: 1035, text: "      agentRowFacts({" },
+        ],
+      },
+      {
+        filePath: "client/activity.tsx",
+        matches: [{ lineNumber: 46, text: "  agentRowFacts," }],
+      },
+    ]);
+    expect(resolveSearchCounts({}, parsed)).toEqual({ matchCount: 4, fileCount: 3 });
+  });
+
+  it("leaves output it does not recognize to the existing fallback", () => {
+    expect(parsePiSearchContent("No matches found")).toBeUndefined();
+    expect(parsePiSearchContent("")).toBeUndefined();
+    expect(parsePiSearchContent(undefined)).toBeUndefined();
+  });
+
+  it("reads a file search as a bare path list", () => {
+    expect(parsePiFileList("client/bundle.test.ts\nshared/color.test.ts\n")).toEqual([
+      "client/bundle.test.ts",
+      "shared/color.test.ts",
+    ]);
+    expect(parsePiFileList("No files found")).toBeUndefined();
+    expect(parsePiFileList("")).toBeUndefined();
   });
 });
 
