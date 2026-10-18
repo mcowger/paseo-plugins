@@ -1,7 +1,9 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { ColorfulReasoning, ColorfulTodo, ColorfulToolCall } from "./client/activity";
-import { ActivitySettings } from "./client/settings";
+import { Dashboard } from "./client/dashboard";
+import { DashboardSidebarItem, DASHBOARD_SCREEN_ID } from "./client/dashboard/sidebar";
 import { AgentSummaryPanel } from "./client/summary/panel";
+import { syncReplyCodeStyles } from "./client/prefs";
 import { transformReasoning, transformTodo, transformToolCall } from "./client/transform";
 import { installColorfulFonts } from "./client/web";
 import {
@@ -18,11 +20,25 @@ import {
 
 export default function contribute(client: PluginClientContext) {
   const removeFonts = installColorfulFonts();
-  client.addSettingsScreen({
-    id: "display",
-    title: "Colorful activity",
+  client.addScreen({
+    id: DASHBOARD_SCREEN_ID,
+    title: "Colorful Activity",
+    Component: Dashboard,
+  });
+  client.addSidebarHeaderItem({
+    id: DASHBOARD_SCREEN_ID,
+    title: "Colorful Activity",
+    Component: DashboardSidebarItem,
+  });
+  client.addCommandCenterItem({
+    id: "open-dashboard",
+    title: "Open Colorful Activity settings",
     icon: "Palette",
-    Component: ActivitySettings,
+    keywords: ["colorful", "activity", "display", "palette", "settings"],
+    context: "global",
+    onSelect({ openScreen }) {
+      openScreen({ screenId: DASHBOARD_SCREEN_ID });
+    },
   });
   client.addWorkspacePanel({
     id: "summary",
@@ -76,5 +92,7 @@ export default function contribute(client: PluginClientContext) {
   });
   return () => {
     removeFonts();
+    // Drop the web reply stylesheet with the plugin, not with the next theme change.
+    syncReplyCodeStyles(false, null);
   };
 }

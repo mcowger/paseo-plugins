@@ -82,8 +82,11 @@ describe("client mobile bundle compatibility", () => {
     const bundle = await compileClientBundle();
     const sizeKb = Math.round(bundle.length / 1024);
 
-    // Keep client bundle under 1024 KB for mobile Hermes eval performance
+    // Mobile downloads, parses, and evals the whole bundle string, so growth is
+    // deliberate: the dashboard and preview must reuse existing renderers.
+    // Measured 488 KB after the settings dashboard landed.
     expect(sizeKb).toBeLessThan(1024);
+    expect(sizeKb).toBeLessThan(512);
   });
 
   it("contains no ES6 classes in client bundle code", async () => {

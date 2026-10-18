@@ -1,5 +1,5 @@
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
-import { useAgent, useRpc, useSettings } from "@getpaseo/plugin/client";
+import { useAgent, useRpc } from "@getpaseo/plugin/client";
 import {
   copyText,
   Icon,
@@ -9,6 +9,7 @@ import {
 } from "@getpaseo/plugin/client/react-native";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import React, {
+  Fragment,
   type ReactNode,
   useCallback,
   useEffect,
@@ -87,8 +88,11 @@ import {
   truncateDirFront,
 } from "../shared/presentation";
 import { readImageRpc, shouldAttemptImageLoad } from "../shared/read-image";
-import type { ExpansionMode, ExpansionTarget } from "../shared/settings";
-import { activitySettings, DEFAULT_EXPANSION, DEFAULT_PALETTE_MODE } from "../shared/settings";
+import { alpha, rule, sunken, tint } from "../shared/color";
+import type { CodeChrome, ExpansionMode, ExpansionTarget } from "../shared/settings";
+import {
+  DEFAULT_EXPANSION,
+} from "../shared/settings";
 import {
   isLatestTaskUpdate,
   type ReasoningItemData,
@@ -103,6 +107,7 @@ import {
 import { CodeModeToolDetail } from "./codemode";
 import { GithubToolDetail } from "./github";
 import { type HighlightToken, useHighlightTokens } from "./highlight";
+import { commandColorEnabled, quietOpacity, useActivityPrefs, useReplyCodeStyles } from "./prefs";
 import { OmpFindToolDetail } from "./omp-find";
 import { OmpWaitToolDetail } from "./omp-wait";
 import { OpencodeSubagentToolDetail } from "./opencode-subagent";
@@ -123,6 +128,13 @@ import {
 } from "./web";
 
 const MAX_DETAIL_HEIGHT = 420;
+/**
+ * Reasoning is shown whole while it streams, because truncating it to a preview
+ * would cut off the newest text and leave the block frozen on its opening lines.
+ * The scroll region caps the height instead. Above this size only the tail is
+ * rendered, so a runaway block cannot stall layout.
+ */
+const MAX_REASONING_CHARS = 32_000;
 
 // Paseo spaces consecutive activity rows by applying its inter-row gap to the row
 // that still has a newer neighbor. On the native inverted timeline the newest live
@@ -259,23 +271,38 @@ function useIsLiveTail(
   );
 }
 
+/**
+ * Where a row's details start: past the header's padding, icon, and gap, so
+ * expanded content lines up under the row's label rather than its icon. Every
+ * renderer consumes this through `useActivityStyles` instead of guessing.
+ */
+export const LABEL_INSET = 26;
+/** One nesting level inside a detail region. */
+export const NEST_INSET = 12;
+
 function useExpansionMode(target: ExpansionTarget): ExpansionMode {
-  const settings = useSettings(activitySettings);
-  if (settings.status === "ready")
-    return settings.values.expansion[target] ?? DEFAULT_EXPANSION[target];
-  return DEFAULT_EXPANSION[target];
+  const prefs = useActivityPrefs();
+  return prefs.expansion[target] ?? DEFAULT_EXPANSION[target];
 }
 
 export function usePalette(theme: Theme): ActivityPalette {
-  const settings = useSettings(activitySettings);
-  const mode = settings.status === "ready" ? settings.values.palette : DEFAULT_PALETTE_MODE;
+  const prefs = useActivityPrefs();
   return useMemo(
-    () => resolveActivityPalette(mode, theme.colors as ActivityThemeColors),
-    [mode, theme.colors],
+    () => resolveActivityPalette(prefs.palette, theme.colors as ActivityThemeColors),
+    [prefs.palette, theme.colors],
   );
 }
 
 export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
+  // Derived colors: a sunken surface for code, softened rules for guides, and
+  // washes for changed diff lines. Kept here so every renderer shares them.
+  const c = theme.colors;
+  const codeSurface = sunken(c.surface0);
+  const rail = rule(c.border);
+  const gutter = alpha(c.foregroundMuted, 0.6);
+  const diffAdded = tint(palette.statusColors.completed, 0.12);
+  const diffRemoved = tint(palette.statusColors.failed, 0.12);
+  const diffMeta = tint(palette.categoryColors.search, 0.1);
   return useMemo(
     () => ({
       card: {
@@ -366,10 +393,10 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         lineHeight: 15,
       } satisfies TextStyle,
       details: {
-        borderLeftColor: theme.colors.border,
+        borderLeftColor: rail,
         borderLeftWidth: 1,
         flexShrink: 1,
-        marginLeft: 12,
+        marginLeft: LABEL_INSET - 9,
         minWidth: 0,
         overflow: "hidden",
       } satisfies ViewStyle,
@@ -378,7 +405,8 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       } satisfies ViewStyle,
       detailsContent: {
         gap: 6,
-        paddingHorizontal: 7,
+        paddingLeft: 8,
+        paddingRight: 7,
         paddingVertical: 5,
       } satisfies ViewStyle,
       detailLabel: {
@@ -432,10 +460,10 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         marginTop: 3,
       } satisfies ViewStyle,
       showMoreText: {
-        color: palette.categoryColors.agent,
+        color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
         fontSize: 10,
-        fontWeight: "600",
+        fontWeight: "500",
         lineHeight: 14,
       } satisfies TextStyle,
       codeHeader: {
@@ -487,9 +515,9 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         textDecorationLine: "line-through",
       } satisfies TextStyle,
       imageSurface: {
-        backgroundColor: theme.colors.surface0,
-        borderColor: theme.colors.border,
-        borderRadius: 2,
+        backgroundColor: codeSurface,
+        borderColor: rail,
+        borderRadius: 6,
         borderWidth: 1,
         minWidth: "100%",
         overflow: "hidden",
@@ -503,14 +531,68 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         width: "100%",
       } satisfies ViewStyle,
       codeSurface: {
-        backgroundColor: theme.colors.surface0,
-        borderColor: theme.colors.border,
-        borderRadius: 2,
-        borderWidth: 1,
         minWidth: "100%",
-        paddingHorizontal: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+      } satisfies ViewStyle,
+      codeCard: {
+        backgroundColor: codeSurface,
+        borderColor: rail,
+        borderRadius: 6,
+        borderWidth: 1,
+        overflow: "hidden",
+      } satisfies ViewStyle,
+      codeCardHeader: {
+        alignItems: "center",
+        borderBottomColor: rail,
+        borderBottomWidth: 1,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        minWidth: "100%",
+        paddingHorizontal: 8,
         paddingVertical: 4,
       } satisfies ViewStyle,
+      codeCardLanguage: {
+        color: gutter,
+        fontFamily: "monospace",
+        fontSize: 10,
+        fontWeight: "500",
+        letterSpacing: 0.4,
+        lineHeight: 14,
+      } satisfies TextStyle,
+      shellCommandScroll: {
+        flex: 1,
+        minWidth: 0,
+      } satisfies ViewStyle,
+      shellCommand: {
+        color: theme.colors.foreground,
+        fontSize: 11.5,
+        lineHeight: 16,
+      } satisfies TextStyle,
+      /** Command output recedes: it is reference material, not the point of the row. */
+      shellOutput: {
+        color: theme.colors.foregroundMuted,
+      } satisfies TextStyle,
+      shellExitFailed: {
+        color: theme.colors.statusDanger,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 16,
+      } satisfies TextStyle,
+      codeLineRow: {
+        flexDirection: "row",
+        gap: 8,
+      } satisfies ViewStyle,
+      codeGutter: {
+        color: gutter,
+        flexShrink: 0,
+        fontFamily: "monospace",
+        fontSize: 11,
+        lineHeight: 16,
+        minHeight: 16,
+        textAlign: "right",
+        width: 22,
+      } satisfies TextStyle,
       codeScroll: {
         maxWidth: "100%",
       } satisfies ViewStyle,
@@ -522,9 +604,9 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         minHeight: 16,
       } satisfies TextStyle,
       diffSurface: {
-        backgroundColor: theme.colors.surface0,
-        borderColor: theme.colors.border,
-        borderRadius: 2,
+        backgroundColor: codeSurface,
+        borderColor: rail,
+        borderRadius: 6,
         borderWidth: 1,
         minWidth: "100%",
         overflow: "hidden",
@@ -547,23 +629,29 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         fontSize: 11,
         lineHeight: 16,
       } satisfies TextStyle,
+      diffTextWrap: {
+        flex: 1,
+        flexShrink: 1,
+      } satisfies TextStyle,
       diffAdded: {
-        backgroundColor: palette.categoryBackgrounds.agent,
+        backgroundColor: diffAdded,
       } satisfies ViewStyle,
       diffRemoved: {
-        backgroundColor: palette.statusBackgrounds.failed,
+        backgroundColor: diffRemoved,
       } satisfies ViewStyle,
       diffMeta: {
-        backgroundColor: palette.categoryBackgrounds.search,
+        backgroundColor: diffMeta,
       } satisfies ViewStyle,
       reasoningBody: {
         gap: 3,
-        paddingHorizontal: 7,
+        paddingLeft: 8,
+        paddingRight: 7,
         paddingVertical: 5,
       } satisfies ViewStyle,
       stepList: {
         gap: 10,
-        paddingHorizontal: 7,
+        paddingLeft: 8,
+        paddingRight: 7,
         paddingVertical: 5,
       } satisfies ViewStyle,
       stepHeader: {
@@ -601,7 +689,7 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         gap: 4,
       } satisfies ViewStyle,
       reasoningQuote: {
-        borderLeftColor: theme.colors.border,
+        borderLeftColor: rail,
         borderLeftWidth: 1,
         color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
@@ -611,21 +699,21 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       } satisfies TextStyle,
       reasoningInlineCode: {
         backgroundColor: theme.colors.surface2,
+        borderRadius: 3,
         color: theme.colors.foreground,
         fontFamily: "monospace",
         fontSize: 11,
-        paddingHorizontal: 2,
+        paddingHorizontal: 3,
       } satisfies TextStyle,
       reasoningSpacer: {
         height: 2,
       } satisfies ViewStyle,
       subAgentProgress: {
-        borderLeftColor: theme.colors.border,
+        borderLeftColor: rail,
         borderLeftWidth: 1,
         gap: 1,
-        marginLeft: 12,
         paddingBottom: 2,
-        paddingLeft: 7,
+        paddingLeft: NEST_INSET,
         paddingTop: 1,
       } satisfies ViewStyle,
       subAgentLine: {
@@ -700,11 +788,10 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         gap: 5,
       } satisfies ViewStyle,
       childTimelineList: {
-        borderLeftColor: theme.colors.border,
+        borderLeftColor: rail,
         borderLeftWidth: 1,
         gap: 1,
-        marginLeft: 7,
-        paddingLeft: 7,
+        paddingLeft: NEST_INSET,
       } satisfies ViewStyle,
       childTimelineItem: {
         alignItems: "center",
@@ -753,7 +840,7 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         gap: 6,
       } satisfies ViewStyle,
       paseoHero: {
-        borderLeftColor: theme.colors.border,
+        borderLeftColor: rail,
         borderLeftWidth: 2,
         paddingHorizontal: 6,
         paddingVertical: 2,
@@ -811,9 +898,10 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         minWidth: 0,
       } satisfies TextStyle,
       paseoPrompt: {
-        backgroundColor: theme.colors.surface0,
-        borderLeftColor: theme.colors.border,
+        backgroundColor: codeSurface,
+        borderLeftColor: rail,
         borderLeftWidth: 1,
+        borderRadius: 4,
         color: theme.colors.foreground,
         fontFamily: "monospace",
         fontSize: 11,
@@ -825,7 +913,7 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         gap: 0,
       } satisfies ViewStyle,
       paseoListItem: {
-        borderTopColor: theme.colors.border,
+        borderTopColor: rail,
         borderTopWidth: 1,
         gap: 1,
         paddingHorizontal: 5,
@@ -859,8 +947,8 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         gap: 5,
       } satisfies ViewStyle,
       paseoChip: {
-        borderColor: theme.colors.border,
-        borderRadius: 2,
+        borderColor: rail,
+        borderRadius: 3,
         borderWidth: 1,
         paddingHorizontal: 4,
         paddingVertical: 1,
@@ -882,11 +970,28 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         lineHeight: 14,
       } satisfies TextStyle,
     }),
-    [palette, theme],
+    [
+      codeSurface,
+      diffAdded,
+      diffMeta,
+      diffRemoved,
+      gutter,
+      palette,
+      rail,
+      theme,
+    ],
   );
 }
 
 export type ActivityStyles = ReturnType<typeof useActivityStyles>;
+
+function useQuietRow(calm: boolean) {
+  const prefs = useActivityPrefs();
+  const [hovered, setHovered] = useState(false);
+  const onHoverChange = useCallback((next: boolean) => setHovered(next), []);
+  const opacity = quietOpacity(prefs.quiet);
+  return { onHoverChange, quiet: calm && !hovered && opacity < 1 ? { opacity } : null };
+}
 
 function statusIcon(status: ToolCallData["status"]): string {
   switch (status) {
@@ -931,57 +1036,88 @@ function PathRow({
   );
 }
 
+/**
+ * A command, syntax colored with the theme's own colors. Rendered inside the
+ * row's summary Text, so it inherits the muted summary color for every token the
+ * bash grammar does not name. Longer commands keep every line: a heredoc or a
+ * chained command must not lose its tail.
+ */
+function HighlightedCommand({ text, theme }: { text: string; theme: Theme }) {
+  const tokens = useHighlightTokens(text, "bash", theme.colors);
+  if (!tokens) return <>{text}</>;
+  return (
+    <>
+      {tokens.map((line, lineIndex) => (
+        <Fragment key={`cmd-${lineIndex}`}>
+          {lineIndex > 0 ? "\n" : null}
+          {line.map((token, tokenIndex) =>
+            token.color ? (
+              <Text key={`token-${lineIndex}-${tokenIndex}`} style={{ color: token.color }}>
+                {token.content}
+              </Text>
+            ) : (
+              token.content
+            ),
+          )}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
 function TokenizedLines({
   lines,
   styles,
+  gutter = false,
 }: {
   lines: HighlightToken[][];
   styles: ReturnType<typeof useActivityStyles>;
+  /** Line numbers in a muted column, aligned with the code. */
+  gutter?: boolean;
 }) {
+  const width = String(lines.length).length;
   return (
     <View>
       {lines.map((line, lineIndex) => (
-        <Text key={`line-${lineIndex}`} selectable style={styles.codeLine}>
-          {line.length === 0
-            ? " "
-            : line.map((token, tokenIndex) => {
-                const tokenStyle: TextStyle = {
-                  color: token.color ?? styles.codeLine.color,
-                  ...(token.fontStyle && token.fontStyle & 1 ? { fontStyle: "italic" } : {}),
-                  ...(token.fontStyle && token.fontStyle & 2 ? { fontWeight: "700" } : {}),
-                  ...(token.fontStyle && token.fontStyle & 4
-                    ? { textDecorationLine: "underline" }
-                    : {}),
-                };
-                return (
-                  <Text key={`${lineIndex}-${tokenIndex}`} style={tokenStyle}>
-                    {token.content}
-                  </Text>
-                );
-              })}
-        </Text>
+        <View key={`line-${lineIndex}`} style={gutter ? styles.codeLineRow : undefined}>
+          {gutter ? (
+            <Text style={styles.codeGutter}>{String(lineIndex + 1).padStart(width, " ")}</Text>
+          ) : null}
+          <Text selectable style={styles.codeLine}>
+            {line.length === 0
+              ? " "
+              : line.map((token, tokenIndex) => {
+                  const tokenStyle: TextStyle = {
+                    color: token.color ?? styles.codeLine.color,
+                    ...(token.fontStyle && token.fontStyle & 1 ? { fontStyle: "italic" } : {}),
+                    ...(token.fontStyle && token.fontStyle & 2 ? { fontWeight: "700" } : {}),
+                    ...(token.fontStyle && token.fontStyle & 4
+                      ? { textDecorationLine: "underline" }
+                      : {}),
+                  };
+                  return (
+                    <Text key={`${lineIndex}-${tokenIndex}`} style={tokenStyle}>
+                      {token.content}
+                    </Text>
+                  );
+                })}
+          </Text>
+        </View>
       ))}
     </View>
   );
 }
 
-function HighlightedCodeBlock({
+/** Copy-to-clipboard control shared by every code and command surface. */
+function CopyCodeButton({
   code,
-  language,
   theme,
-  label,
   styles,
 }: {
   code: string;
-  language: string;
   theme: Theme;
-  label?: string;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const [showAll, setShowAll] = useState(false);
-  const preview = useMemo(() => previewText(code), [code]);
-  const displayCode = showAll ? code : preview.text;
-  const tokens = useHighlightTokens(displayCode, language, theme.colors);
   const toast = useToast();
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1006,34 +1142,79 @@ function HighlightedCodeBlock({
   }, [code, toast]);
 
   return (
+    <Pressable
+      accessibilityLabel={copied ? "Copied" : "Copy code"}
+      accessibilityRole="button"
+      onPress={handleCopy}
+      style={styles.copyButton}
+    >
+      <Icon
+        name={copied ? "Check" : "Copy"}
+        color={copied ? theme.colors.statusSuccess : styles.copyText.color}
+        size={11}
+      />
+      <Text style={styles.copyText}>{copied ? "Copied" : "Copy"}</Text>
+    </Pressable>
+  );
+}
+
+function HighlightedCodeBlock({
+  code,
+  language,
+  theme,
+  label,
+  styles,
+  chrome,
+}: {
+  code: string;
+  language: string;
+  theme: Theme;
+  label?: string;
+  styles: ReturnType<typeof useActivityStyles>;
+  /** Overrides the saved code-chrome setting, for surfaces that need a fixed frame. */
+  chrome?: CodeChrome;
+}) {
+  const prefs = useActivityPrefs();
+  const frame = chrome ?? prefs.codeChrome;
+  const [showAll, setShowAll] = useState(false);
+  const preview = useMemo(() => previewText(code), [code]);
+  const displayCode = showAll ? code : preview.text;
+  const tokens = useHighlightTokens(displayCode, language, theme.colors);
+  const lineCount = displayCode.split("\n").length;
+  const framed = frame !== "bare";
+  return (
     <View {...cmonoViewEscape} style={styles.section}>
-      <View style={styles.codeHeader}>
-        {label ? <DetailLabel style={styles.detailLabel}>{label}</DetailLabel> : <View />}
-        <Pressable
-          accessibilityLabel={copied ? "Copied" : "Copy code"}
-          accessibilityRole="button"
-          onPress={handleCopy}
-          style={styles.copyButton}
-        >
-          <Icon
-            name={copied ? "Check" : "Copy"}
-            color={copied ? theme.colors.statusSuccess : styles.copyText.color}
-            size={11}
-          />
-          <Text style={styles.copyText}>{copied ? "Copied" : "Copy"}</Text>
-        </Pressable>
-      </View>
-      <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
-        <View style={styles.codeSurface}>
-          {tokens ? (
-            <TokenizedLines lines={tokens} styles={styles} />
-          ) : (
-            <Text selectable style={styles.codeLine}>
-              {displayCode || " "}
-            </Text>
-          )}
+      {!framed ? (
+        <View style={styles.codeHeader}>
+          {label ? <DetailLabel style={styles.detailLabel}>{label}</DetailLabel> : <View />}
+          <CopyCodeButton code={code} theme={theme} styles={styles} />
         </View>
-      </ScrollView>
+      ) : null}
+      <View style={styles.codeCard}>
+        {framed ? (
+          <View style={styles.codeCardHeader}>
+            <Text style={styles.codeCardLanguage}>{(label ?? language).toLowerCase()}</Text>
+            <CopyCodeButton code={code} theme={theme} styles={styles} />
+          </View>
+        ) : null}
+        <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
+          <View style={styles.codeSurface}>
+            {tokens ? (
+              <TokenizedLines
+                lines={tokens}
+                styles={styles}
+                gutter={frame === "gutter" && lineCount > 1}
+              />
+            ) : frame === "gutter" && lineCount > 1 ? (
+              <PlainLines code={displayCode} styles={styles} />
+            ) : (
+              <Text selectable style={styles.codeLine}>
+                {displayCode || " "}
+              </Text>
+            )}
+          </View>
+        </ScrollView>
+      </View>
       {preview.truncated ? (
         <Pressable
           accessibilityRole="button"
@@ -1055,6 +1236,61 @@ type ReadImageState =
   | { status: "loading" }
   | { status: "ok"; uri: string }
   | { status: "fallback" };
+
+/** Code with no grammar to highlight: still numbered when the gutter is on. */
+function PlainLines({
+  code,
+  styles,
+}: {
+  code: string;
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  const lines = code.split("\n");
+  const width = String(lines.length).length;
+  return (
+    <View>
+      {lines.map((line, index) => (
+        <View key={`plain-${index}`} style={styles.codeLineRow}>
+          <Text style={styles.codeGutter}>{String(index + 1).padStart(width, " ")}</Text>
+          <Text selectable style={styles.codeLine}>
+            {line || " "}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * The plugin's code card for callers outside this module: the dashboard preview
+ * renders the same component the timeline does, so the two cannot drift.
+ */
+export function CodeCard({
+  code,
+  language,
+  label,
+  theme,
+  chrome,
+}: {
+  code: string;
+  language: string;
+  label?: string;
+  theme: Theme;
+  chrome?: CodeChrome;
+}) {
+  const palette = usePalette(theme);
+  const styles = useActivityStyles(theme, palette);
+  return (
+    <HighlightedCodeBlock
+      code={code}
+      language={language}
+      label={label}
+      theme={theme}
+      styles={styles}
+      chrome={chrome}
+    />
+  );
+}
 
 function ReadImageBlock({
   filePath,
@@ -1125,29 +1361,38 @@ function DiffBlock({
   styles: ReturnType<typeof useActivityStyles>;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const wrap = useActivityPrefs().diffWrap === "on";
   const lines = useMemo(() => diffLinesForDetail(detail), [detail]);
   const isTruncated = lines.length > PREVIEW_LINES;
   const displayLines = showAll || !isTruncated ? lines : lines.slice(0, PREVIEW_LINES);
+  const body = (
+    <View style={styles.diffSurface}>
+      {displayLines.length === 0 ? (
+        <Text style={styles.empty}>Diff unavailable.</Text>
+      ) : (
+        displayLines.map((line, index) => (
+          <DiffRow
+            key={`${line.kind}-${index}`}
+            line={line}
+            palette={palette}
+            styles={styles}
+            wrap={wrap}
+          />
+        ))
+      )}
+    </View>
+  );
 
   return (
     <View style={styles.section}>
       <DetailLabel style={styles.detailLabel}>Diff</DetailLabel>
-      <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
-        <View style={styles.diffSurface}>
-          {displayLines.length === 0 ? (
-            <Text style={styles.empty}>Diff unavailable.</Text>
-          ) : (
-            displayLines.map((line, index) => (
-              <DiffRow
-                key={`${line.kind}-${index}`}
-                line={line}
-                palette={palette}
-                styles={styles}
-              />
-            ))
-          )}
-        </View>
-      </ScrollView>
+      {wrap ? (
+        body
+      ) : (
+        <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
+          {body}
+        </ScrollView>
+      )}
       {isTruncated ? (
         <Pressable
           accessibilityRole="button"
@@ -1167,10 +1412,12 @@ function DiffRow({
   line,
   palette,
   styles,
+  wrap,
 }: {
   line: DiffLine;
   palette: ActivityPalette;
   styles: ReturnType<typeof useActivityStyles>;
+  wrap: boolean;
 }) {
   const rowStyle =
     line.kind === "add"
@@ -1197,6 +1444,7 @@ function DiffRow({
         selectable
         style={[
           styles.diffText,
+          wrap ? styles.diffTextWrap : null,
           { color: line.kind === "meta" ? markerColor : styles.codeLine.color },
         ]}
       >
@@ -1218,17 +1466,17 @@ function PendingOutput({ styles }: { styles: ReturnType<typeof useActivityStyles
 function SearchDetail({
   detail,
   headerSummary,
-  agentId,
+  cwd,
   theme,
   styles,
 }: {
   detail: Extract<ToolCallDetail, { type: "search" }>;
   headerSummary: string | undefined;
-  agentId: string;
+  /** Passed down from the card: this component never looks up agent state itself. */
+  cwd: string | null;
   theme: Theme;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const cwd = useAgent(agentId, (agent) => agent.cwd);
   const parsed = useMemo(() => parseOpencodeSearchContent(detail.content), [detail.content]);
   const displayPath = useCallback(
     (filePath: string) => (cwd ? relativeToRoot(filePath, cwd) : filePath),
@@ -1311,15 +1559,107 @@ function SearchDetail({
   );
 }
 
+/**
+ * A shell call as one surface: the command in the card's header, colored with the
+ * bash grammar, then the output it produced and how the command exited.
+ */
+function ShellCommandBlock({
+  detail,
+  theme,
+  styles,
+}: {
+  detail: Extract<ToolCallDetail, { type: "shell" }> & {
+    truncated?: boolean;
+    fullOutputPath?: string;
+  };
+  theme: Theme;
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const output = detail.output ?? "";
+  const preview = useMemo(() => previewText(output), [output]);
+  const displayOutput = showAll ? output : preview.text;
+  const tokens = useHighlightTokens(displayOutput, "ansi", theme.colors);
+  const failed = typeof detail.exitCode === "number" && detail.exitCode !== 0;
+  return (
+    <View {...cmonoViewEscape} style={styles.section}>
+      <View style={styles.codeCard}>
+        <View style={styles.codeCardHeader}>
+          <Text
+            style={[
+              styles.codeCardLanguage,
+              { color: failed ? theme.colors.statusDanger : styles.codeCardLanguage.color },
+            ]}
+          >
+            $
+          </Text>
+          <ScrollView horizontal nestedScrollEnabled style={styles.shellCommandScroll}>
+            <Text selectable style={[styles.codeLine, styles.shellCommand]}>
+              <HighlightedCommand text={detail.command} theme={theme} />
+            </Text>
+          </ScrollView>
+          {detail.cwd ? (
+            <Text numberOfLines={1} style={styles.codeCardLanguage}>
+              {detail.cwd.split("/").pop()}
+            </Text>
+          ) : null}
+          <CopyCodeButton code={detail.command} theme={theme} styles={styles} />
+        </View>
+        {output ? (
+          <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
+            <View style={styles.codeSurface}>
+              {tokens ? (
+                <TokenizedLines lines={tokens} styles={styles} />
+              ) : (
+                <Text selectable style={[styles.codeLine, styles.shellOutput]}>
+                  {displayOutput || " "}
+                </Text>
+              )}
+            </View>
+          </ScrollView>
+        ) : null}
+      </View>
+      {preview.truncated ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setShowAll(!showAll)}
+          style={styles.showMoreButton}
+        >
+          <Text style={styles.showMoreText}>
+            {showAll
+              ? "Show less"
+              : `Show all (${preview.totalLines} lines, ${preview.totalChars.toLocaleString()} chars)`}
+          </Text>
+        </Pressable>
+      ) : null}
+      {detail.exitCode !== undefined && detail.exitCode !== null ? (
+        <Text style={failed ? styles.shellExitFailed : styles.mutedText}>
+          Exit code {detail.exitCode}
+        </Text>
+      ) : null}
+      {detail.truncated === true ? (
+        <Text selectable style={styles.mutedText}>
+          {detail.fullOutputPath
+            ? `Output truncated · ${compactText(detail.fullOutputPath, 160)}`
+            : "Output truncated"}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function DetailBody({
   data,
   agentId,
+  cwd,
   theme,
   palette,
   styles,
 }: {
   data: ToolCallData;
   agentId: string;
+  /** Resolved once by the card; detail views never touch agent state. */
+  cwd: string | null;
   theme: Theme;
   palette: ActivityPalette;
   styles: ReturnType<typeof useActivityStyles>;
@@ -1338,39 +1678,8 @@ function DetailBody({
   }
 
   switch (detail.type) {
-    case "shell": {
-      const shell = detail as typeof detail & { truncated?: boolean; fullOutputPath?: string };
-      return (
-        <>
-          <HighlightedCodeBlock
-            code={`$ ${detail.command}`}
-            language="bash"
-            label="Command"
-            styles={styles}
-            theme={theme}
-          />
-          {detail.output ? (
-            <HighlightedCodeBlock
-              code={detail.output}
-              language="ansi"
-              label="Output"
-              styles={styles}
-              theme={theme}
-            />
-          ) : null}
-          {detail.exitCode !== undefined && detail.exitCode !== null ? (
-            <Text style={styles.mutedText}>Exit code {detail.exitCode}</Text>
-          ) : null}
-          {shell.truncated === true ? (
-            <Text selectable style={styles.mutedText}>
-              {shell.fullOutputPath
-                ? `Output truncated · ${compactText(shell.fullOutputPath, 160)}`
-                : "Output truncated"}
-            </Text>
-          ) : null}
-        </>
-      );
-    }
+    case "shell":
+      return <ShellCommandBlock detail={detail} theme={theme} styles={styles} />;
     case "read":
       if (readErrorMessage(detail.content) && data.errorText) {
         return (
@@ -1494,7 +1803,7 @@ function DetailBody({
         <SearchDetail
           detail={detail}
           headerSummary={data.presentation.summary}
-          agentId={agentId}
+          cwd={cwd}
           theme={theme}
           styles={styles}
         />
@@ -2017,20 +2326,35 @@ function ReasoningText({
   styles: ReturnType<typeof useActivityStyles>;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const preview = useMemo(() => previewText(text), [text]);
-  const targetText = showAll ? text : preview.text;
-  const revealedText = useRevealedText(targetText, phase);
-  const steps = useMemo(() => splitReasoningSteps(revealedText), [revealedText]);
   const isStreaming = phase === "streaming";
+  // Whole text, not a preview: a truncated block would stop following the stream
+  // and hide the newest lines. Past the safety cap the tail is what matters.
+  const overflow = text.length > MAX_REASONING_CHARS;
+  const shownText = overflow && !showAll ? text.slice(-MAX_REASONING_CHARS) : text;
+  const revealedText = useRevealedText(shownText, phase);
+  const steps = useMemo(() => splitReasoningSteps(revealedText), [revealedText]);
   const scrollRef = useRef<NativeScrollView | null>(null);
   const isNearBottom = useRef(true);
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     isNearBottom.current = layoutMeasurement.height + contentOffset.y >= contentSize.height - 32;
   }, []);
-  const handleContentSizeChange = useCallback(() => {
-    if (isNearBottom.current) scrollRef.current?.scrollToEnd({ animated: false });
-  }, []);
+  // Pinning only makes sense while text is arriving; a finished block opens at its start.
+  const followTail = useCallback(() => {
+    if (!isStreaming || !isNearBottom.current) return;
+    const scroll = () => scrollRef.current?.scrollToEnd({ animated: false });
+    // After the frame that laid the new text out: react-native-web does not
+    // report content-size changes reliably, so this cannot ride on that event.
+    const frame = (
+      globalThis as { requestAnimationFrame?: (callback: () => void) => unknown }
+    ).requestAnimationFrame;
+    if (frame) frame(scroll);
+    else scroll();
+  }, [isStreaming]);
+  const handleContentSizeChange = useCallback(() => followTail(), [followTail]);
+  useEffect(() => {
+    followTail();
+  }, [revealedText, followTail]);
 
   return (
     <View>
@@ -2061,7 +2385,7 @@ function ReasoningText({
           </View>
         )}
       </ScrollView>
-      {preview.truncated ? (
+      {overflow ? (
         <Pressable
           accessibilityRole="button"
           onPress={() => setShowAll(!showAll)}
@@ -2070,7 +2394,7 @@ function ReasoningText({
           <Text style={styles.showMoreText}>
             {showAll
               ? "Show less"
-              : `Show all (${preview.totalLines} lines, ${preview.totalChars.toLocaleString()} chars)`}
+              : `Earlier reasoning hidden · ${text.length.toLocaleString()} chars`}
           </Text>
         </Pressable>
       ) : null}
@@ -2083,6 +2407,8 @@ function ActivityHeader({
   iconColor,
   title,
   summary,
+  summaryContent,
+  onHoverChange,
   fileDisplay,
   status,
   statusColor,
@@ -2096,6 +2422,9 @@ function ActivityHeader({
   iconColor: string;
   title: string;
   summary?: string;
+  /** Rendered instead of the plain summary: syntax-colored spans for a shell command. */
+  summaryContent?: ReactNode;
+  onHoverChange?: (hovered: boolean) => void;
   fileDisplay?: { dir?: string; base: string };
   status?: ToolCallData["status"];
   statusColor?: string;
@@ -2124,9 +2453,9 @@ function ActivityHeader({
             {fileDisplay.base}
           </Text>
         </View>
-      ) : summary ? (
+      ) : summary || summaryContent ? (
         <Text numberOfLines={1} style={styles.summary}>
-          {summary}
+          {summaryContent ?? summary}
         </Text>
       ) : null}
       {stats ? (
@@ -2152,13 +2481,23 @@ function ActivityHeader({
     </>
   );
   if (!expandable) {
-    return <View style={styles.headerButton}>{content}</View>;
+    return (
+      <View
+        onPointerEnter={onHoverChange ? () => onHoverChange(true) : undefined}
+        onPointerLeave={onHoverChange ? () => onHoverChange(false) : undefined}
+        style={styles.headerButton}
+      >
+        {content}
+      </View>
+    );
   }
   return (
     <Pressable
       accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${title}`}
       accessibilityRole="button"
       onPress={onPress}
+      onHoverIn={onHoverChange ? () => onHoverChange(true) : undefined}
+      onHoverOut={onHoverChange ? () => onHoverChange(false) : undefined}
       style={styles.headerButton}
     >
       {content}
@@ -2180,6 +2519,8 @@ export function ColorfulReasoning({
   const isLiveTail = useIsLiveTail(agentId, timestamp, isStreaming, layout.platform);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const expanded = resolveExpansion(useExpansionMode("thinking"), isLatest, userExpanded);
+  const quiet = useQuietRow(!expanded && !isStreaming);
+  useReplyCodeStyles(theme);
   const meta = useMemo(
     () =>
       formatReasoningMeta(
@@ -2192,7 +2533,10 @@ export function ColorfulReasoning({
     setUserExpanded(!expanded);
   }, [expanded]);
   return (
-    <View {...pmonoViewEscape} style={[styles.card, isLiveTail ? styles.cardTail : null]}>
+    <View
+      {...pmonoViewEscape}
+      style={[styles.card, isLiveTail ? styles.cardTail : null, quiet.quiet]}
+    >
       <ActivityHeader
         icon="Sparkles"
         iconColor={palette.categoryColors.reasoning}
@@ -2200,6 +2544,7 @@ export function ColorfulReasoning({
         summary={meta}
         expanded={expanded}
         onPress={toggle}
+        onHoverChange={quiet.onHoverChange}
         styles={styles}
       />
       {expanded ? (
@@ -2217,13 +2562,43 @@ export function ColorfulReasoning({
   );
 }
 
+/**
+ * Resolves the agent's working directory for path shortening.
+ *
+ * Kept in its own component on purpose: Paseo only provides agent state inside a
+ * timeline or popover, and `useAgent` throws anywhere else (a plugin screen, for
+ * example). Mounting this component only when that state exists keeps the card
+ * itself renderable in a preview.
+ */
+function AgentCwd({
+  agentId,
+  children,
+}: {
+  agentId: string;
+  children: (cwd: string | null) => ReactNode;
+}) {
+  const cwd = useAgent(agentId, (agent) => agent.cwd) ?? null;
+  return <>{children(cwd)}</>;
+}
+
 export function ColorfulToolCall({
+  preview,
+  ...props
+}: PluginTimelineItemProps<ToolCallItemData> & { preview?: boolean }) {
+  if (preview) return <ToolCallCard {...props} cwd={null} />;
+  return (
+    <AgentCwd agentId={props.agentId}>{(cwd) => <ToolCallCard {...props} cwd={cwd} />}</AgentCwd>
+  );
+}
+
+function ToolCallCard({
   agentId,
   item,
   theme,
   timestamp,
   layout,
-}: PluginTimelineItemProps<ToolCallItemData>) {
+  cwd,
+}: PluginTimelineItemProps<ToolCallItemData> & { cwd: string | null }) {
   const palette = usePalette(theme);
   const styles = useActivityStyles(theme, palette);
   const isRunning = item.data.status === "running";
@@ -2264,7 +2639,6 @@ export function ColorfulToolCall({
   }, [expanded, isTaskUpdate, latestTaskUpdateTimestamp]);
   const operation = piSubagentOperation(item.data.name);
   const subAgentDetail = detail?.type === "sub_agent" ? detail : null;
-  const cwd = useAgent(agentId, (agent) => agent.cwd);
   const headerFile = useMemo(() => {
     const filePath = item.data.presentation.filePath;
     if (!filePath) return null;
@@ -2275,19 +2649,34 @@ export function ColorfulToolCall({
     detail?.type === "shell" && item.data.presentation.summary
       ? stripLeadingCwdCd(item.data.presentation.summary, cwd)
       : item.data.presentation.summary;
+  const prefs = useActivityPrefs();
+  const quiet = useQuietRow(!expanded && item.data.status === "completed");
+  useReplyCodeStyles(theme);
+  // A shell row colors its command once expanded (or always, per settings); collapsed rows stay quiet.
+  const coloredCommand =
+    detail?.type === "shell" &&
+    headerSummary !== undefined &&
+    commandColorEnabled(prefs.commandColor, expanded);
   return (
-    <View {...pmonoViewEscape} style={[styles.card, isLiveTail ? styles.cardTail : null]}>
+    <View
+      {...pmonoViewEscape}
+      style={[styles.card, isLiveTail ? styles.cardTail : null, quiet.quiet]}
+    >
       <ActivityHeader
         icon={item.data.presentation.icon}
         iconColor={categoryColor}
         title={item.data.presentation.label}
         summary={headerSummary}
+        summaryContent={
+          coloredCommand ? <HighlightedCommand text={headerSummary} theme={theme} /> : undefined
+        }
         fileDisplay={headerFile ?? undefined}
         status={item.data.status}
         statusColor={statusColor}
         stats={item.data.presentation.diffStats}
         expanded={expanded}
         onPress={toggle}
+        onHoverChange={quiet.onHoverChange}
         expandable={expandable}
         styles={styles}
       />
@@ -2322,6 +2711,7 @@ export function ColorfulToolCall({
               <DetailBody
                 data={item.data}
                 agentId={agentId}
+                cwd={cwd}
                 theme={theme}
                 palette={palette}
                 styles={styles}
@@ -2376,8 +2766,10 @@ export function ColorfulTodo({
   const toggle = useCallback(() => {
     setUserExpanded({ expanded: !expanded, latestTimestamp: latestTaskUpdateTimestamp });
   }, [expanded, latestTaskUpdateTimestamp]);
+  const quiet = useQuietRow(!expanded && done === item.data.items.length);
+  useReplyCodeStyles(theme);
   return (
-    <View {...pmonoViewEscape} style={styles.card}>
+    <View {...pmonoViewEscape} style={[styles.card, quiet.quiet]}>
       <ActivityHeader
         icon="ListChecks"
         iconColor={palette.categoryColors.plan}
@@ -2385,6 +2777,7 @@ export function ColorfulTodo({
         summary={`${done}/${item.data.items.length} done`}
         expanded={expanded}
         onPress={toggle}
+        onHoverChange={quiet.onHoverChange}
         styles={styles}
       />
       {expanded ? (

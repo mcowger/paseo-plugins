@@ -1,5 +1,6 @@
 import type { TextProps, ViewProps } from "react-native";
 import { Platform } from "react-native";
+import { rule, sunken } from "../shared/color";
 
 // System font stacks: zero bytes over the wire, resolving to each OS's newest
 // built-in faces (SF Pro/SF Mono on Apple, Segoe UI Variable on Windows 11,
@@ -43,9 +44,15 @@ export const cmonoTextEscape = {
   dataSet: { cmono: true },
 } as unknown as TextProps;
 
+interface DomElement {
+  id: string;
+  textContent: string | null;
+  remove(): void;
+}
+
 declare const document:
   | {
-      createElement(tag: string): { id: string; textContent: string | null };
+      createElement(tag: string): DomElement;
       getElementById(id: string): unknown | null;
       head: { appendChild(node: unknown): void };
     }
@@ -76,4 +83,79 @@ export function installColorfulFonts(): () => void {
       (node as { remove: () => void }).remove();
     }
   };
+}
+
+export interface ReplyCodePalette {
+  surface0: string;
+  surface2: string;
+  border: string;
+  foreground: string;
+  foregroundMuted: string;
+}
+
+const REPLY_CODE_STYLE_ID = "colorful-reply-code";
+const REPLY_MESSAGE = '[data-testid="assistant-message"]';
+const REPLY_INLINE_CODE = `${REPLY_MESSAGE} span[data-paseo-markdown-tag="code"]`;
+const REPLY_CODE_BLOCK = `${REPLY_MESSAGE} [data-paseo-markdown-tag="pre"]`;
+// Paseo sets the language attribute only when the fence names one; the guard keeps the header off bare fences.
+const REPLY_CODE_LANG = `${REPLY_CODE_BLOCK}[data-paseo-markdown-language]:not([data-paseo-markdown-language=""])`;
+// Paseo keeps the copy control hidden until the block is hovered; the label is
+// English-only, so other locales keep the host's own placement.
+const REPLY_COPY = 'button[aria-label="Copy code"]';
+
+/**
+ * CSS that restyles assistant-reply inline code and fenced code blocks, derived
+ * from the palette. Declarations carry `!important` because React Native Web sets
+ * these properties atomically on each element.
+ */
+export function replyCodeCss(palette: ReplyCodePalette): string {
+  const block = sunken(palette.surface0);
+  const edge = rule(palette.border);
+  return [
+    `${REPLY_INLINE_CODE} { background: ${palette.surface2} !important; border-radius: 4px !important; padding: 1px 4px !important; font-family: ${MONO_STACK} !important; color: ${palette.foreground} !important; }`,
+    `${REPLY_CODE_BLOCK} { background: ${block} !important; border: 1px solid ${edge} !important; border-radius: 8px !important; padding: 12px 14px !important; }`,
+    `${REPLY_CODE_LANG} { padding-top: 0 !important; }`,
+    `${REPLY_CODE_LANG}::before { content: attr(data-paseo-markdown-language); display: block; margin: 0 -14px 10px; padding: 7px 14px; border-bottom: 1px solid ${edge}; font-family: ${MONO_STACK}; font-size: 12px; line-height: 18px; color: ${palette.foregroundMuted}; }`,
+    `${REPLY_CODE_LANG} > ${REPLY_COPY} { opacity: 0.6 !important; pointer-events: auto !important; top: 5px !important; }`,
+    `${REPLY_CODE_LANG} > ${REPLY_COPY}:hover { opacity: 1 !important; }`,
+  ].join("\n");
+}
+
+/** Identity of a palette, so callers can skip re-installing an unchanged stylesheet. */
+export function replyCodeStyleKey(palette: ReplyCodePalette): string {
+  return [
+    palette.surface0,
+    palette.surface2,
+    palette.border,
+    palette.foreground,
+    palette.foregroundMuted,
+  ].join("|");
+}
+
+/**
+ * Installs the reply code styles, or removes them when `palette` is null. Web-only:
+ * a no-op elsewhere. Returns a remover that is safe to call more than once.
+ */
+export function installReplyCodeStyles(palette: ReplyCodePalette | null): () => void {
+  if (Platform.OS !== "web") return () => {};
+  if (typeof document === "undefined") return () => {};
+
+  const removeStyle = () => {
+    const node = document.getElementById(REPLY_CODE_STYLE_ID) as DomElement | null;
+    if (node) node.remove();
+  };
+  if (palette === null) {
+    removeStyle();
+    return () => {};
+  }
+
+  let style = document.getElementById(REPLY_CODE_STYLE_ID) as DomElement | null;
+  if (!style) {
+    style = document.createElement("style");
+    style.id = REPLY_CODE_STYLE_ID;
+    document.head.appendChild(style);
+  }
+  style.textContent = replyCodeCss(palette);
+
+  return removeStyle;
 }

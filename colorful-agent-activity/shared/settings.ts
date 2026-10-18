@@ -4,6 +4,29 @@ import { z } from "zod";
 export const paletteModeSchema = z.enum(["vivid", "soft", "high_contrast"]);
 export type PaletteMode = z.output<typeof paletteModeSchema>;
 
+/**
+ * How far completed rows step back. Running, failed, hovered, and expanded rows
+ * always render at full strength, so quieting never hides active work.
+ */
+export const quietStrengthSchema = z.enum(["dim", "faded", "soft", "full"]);
+export type QuietStrength = z.output<typeof quietStrengthSchema>;
+
+/** When the shell command in a row summary is syntax colored. */
+export const commandColorSchema = z.enum(["expanded", "always", "off"]);
+export type CommandColor = z.output<typeof commandColorSchema>;
+
+/** How a code or command block is framed: label bar, nothing, or a line-number gutter. */
+export const codeChromeSchema = z.enum(["header", "bare", "gutter"]);
+export type CodeChrome = z.output<typeof codeChromeSchema>;
+
+/** Wrap long diff and code lines, or keep them on one line with horizontal scrolling. */
+export const diffWrapSchema = z.enum(["on", "off"]);
+export type DiffWrap = z.output<typeof diffWrapSchema>;
+
+/** Restyle the host's own reply markdown (inline code, fenced blocks). Desktop and web only. */
+export const replyCodeSchema = z.enum(["on", "off"]);
+export type ReplyCode = z.output<typeof replyCodeSchema>;
+
 export const expansionModeSchema = z.enum(["always", "latest", "never"]);
 export type ExpansionMode = z.output<typeof expansionModeSchema>;
 
@@ -70,11 +93,24 @@ const expansionSettingsSchema = z.object({
 export const activitySettings = defineSettings({
   id: "display",
   scope: "host",
-  version: 1,
+  version: 2,
+  // v1 stored only the palette and row expansion; every v2 key has a default, so
+  // passing the old values through the current schema fills them in.
+  migrate: (values) => values,
   schema: z.object({
     palette: paletteModeSchema.default("vivid"),
     expansion: expansionSettingsSchema.default(DEFAULT_EXPANSION),
+    quiet: quietStrengthSchema.default("faded"),
+    commandColor: commandColorSchema.default("expanded"),
+    codeChrome: codeChromeSchema.default("header"),
+    diffWrap: diffWrapSchema.default("off"),
+    replyCode: replyCodeSchema.default("on"),
   }),
 });
 
-export const DEFAULT_PALETTE_MODE: PaletteMode = "vivid";
+export type ActivitySettings = z.output<typeof activitySettings.schema>;
+
+/** What every renderer reads when nothing is stored yet or the read failed. */
+export const DEFAULT_ACTIVITY_SETTINGS: ActivitySettings = activitySettings.schema.parse({});
+
+export const DEFAULT_PALETTE_MODE: PaletteMode = DEFAULT_ACTIVITY_SETTINGS.palette;

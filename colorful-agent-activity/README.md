@@ -5,9 +5,11 @@ IDE-style activity rows across desktop, web, and native mobile (iOS and Android)
 thinking block and latest tool call open, shows useful details on demand, and uses Prism for shell and
 code output.
 
-Requires Paseo `>=0.10.0`.
+Requires Paseo `>=0.11.4`.
 
 ## Screenshots
+
+> These predate the settings dashboard, code cards, and quiet rows; refresh them after a UI pass.
 
 ### Desktop & Web
 
@@ -56,6 +58,14 @@ File edit with colored line diff:
 - Detail views for shell, read, write, edit, search, fetch, worktree, sub-agent, plan, plain-text,
   and unknown tool payloads.
 - Vivid, soft, and high-contrast palette modes using the active Paseo theme.
+- Quiet rows: finished activity steps back (dim, faded, soft, or full strength) while running,
+  failed, hovered, and expanded rows stay at full strength.
+- Shell commands highlighted with the bash grammar in the row itself once expanded, and a `$` header
+  with the command, working directory, and copy control in the detail card.
+- Code cards with a language header, copy control, a sunken surface, and optional line-number gutter.
+- Diffs wrap or scroll, with low-opacity washes behind changed lines.
+- On desktop and web, Paseo's own reply markdown is restyled to match: filled inline-code chips and
+  fenced blocks with a language header.
 - Status indicators for running, completed, failed, and canceled calls.
 - Specialized Paseo views for agents, workspaces, terminals, schedules, providers, permissions, and browser automation instead of raw JSON.
 - Dedicated Exa views show search queries, result metadata, URLs, and highlights instead of the raw MCP envelope.
@@ -105,11 +115,20 @@ original tool call *before* its Overview grouping, so this plugin renders one ro
 native tool-call items, and this plugin claims all of them, so the setting does not change these
 rows.
 
-Choose a palette under the plugin's **Colorful activity** settings screen:
+## Settings
 
-- **Vivid** - restrained category accents on neutral rows.
-- **Soft** - mostly neutral icons with color reserved for status.
-- **High contrast** - stronger dividers and status colors.
+Open the dashboard from **Colorful Activity** in the sidebar, or from the command center
+(**Open Colorful Activity settings**). Changes preview live and save automatically; **Defaults**
+restores every value. Four pages:
+
+- **Activity** - palette (vivid, soft, high contrast) and quiet-row strength (dim, faded, soft, full).
+- **Rows** - start state for each collapsible row (Always / Latest / Never), with *Newest only*,
+  *Everything open*, and *Everything collapsed* presets.
+- **Code & commands** - when shell commands are colored (expanded, always, never), the code-block
+  frame (header bar, bare, or header + line-number gutter), and whether long diff lines wrap or scroll.
+- **Replies** - restyle Paseo's own reply code. Desktop and web only; see Limitations.
+
+Stored settings are schema version 2 and migrate from version 1 in place.
 
 Reload after installation or source changes:
 
@@ -120,6 +139,10 @@ paseo plugin reload colorful-agent-activity
 ## Limitations
 
 - The plugin sees public agent tool calls, not internal orchestrator calls.
+- Reply code restyling (inline chips, fenced-block headers) is desktop and web only: Paseo exposes
+  no markdown contribution point, so a plugin cannot render assistant replies itself. It uses
+  Paseo's `data-paseo-markdown-tag` marks, which a Paseo change could move; the restyle then stops
+  applying rather than breaking anything, and it can be turned off under **Replies**.
 - Paseo's built-in Overview tool-call grouping does not apply to this plugin's rows, because the
   plugin transforms every call before grouping runs. Use the Activity Summary panel for whole-agent
   aggregation instead.
@@ -138,9 +161,13 @@ npm run typecheck
 npm test
 ```
 
-The plugin uses separate Paseo v0.10 client and server entries. The server entry registers the
-host-scoped palette settings and serves image files back to the client for inline read previews;
-timeline rendering runs in the client bundle.
+The plugin uses separate Paseo v0.11.4 client and server entries. The server entry registers the
+host-scoped settings and serves image files back to the client for inline read previews; timeline
+rendering runs in the client bundle.
+
+Layout values live in one place (`useActivityStyles` in `client/activity.tsx`), derived colors in
+`shared/color.ts`, and the settings dashboard reads draft values through `PrefsOverride` so its
+preview updates before a save completes.
 
 ## paseo.cafe submission
 

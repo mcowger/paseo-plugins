@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { activitySettings, DEFAULT_EXPANSION, EXPANSION_TARGETS } from "./settings";
 
 describe("activity settings", () => {
-  it("stays on version 1 so stored settings need no migration", () => {
-    expect(activitySettings.version).toBe(1);
+  it("stays on schema version 2 with a migration for stored version 1 values", () => {
+    expect(activitySettings.version).toBe(2);
+    expect(activitySettings.migrate?.({ palette: "soft" }, 1)).toEqual({ palette: "soft" });
   });
 
   it("backfills expansion defaults for legacy stored values", () => {
@@ -15,6 +16,26 @@ describe("activity settings", () => {
     const parsed = activitySettings.schema.parse({});
     expect(parsed.palette).toBe("vivid");
     expect(parsed.expansion).toEqual(DEFAULT_EXPANSION);
+    expect(parsed.quiet).toBe("faded");
+    expect(parsed.commandColor).toBe("expanded");
+    expect(parsed.codeChrome).toBe("header");
+    expect(parsed.diffWrap).toBe("off");
+    expect(parsed.replyCode).toBe("on");
+  });
+
+  it("fills presentation defaults for a version 1 payload", () => {
+    const parsed = activitySettings.schema.parse(
+      activitySettings.migrate?.({ palette: "high_contrast", expansion: { shell: "never" } }, 1),
+    );
+    expect(parsed.palette).toBe("high_contrast");
+    expect(parsed.expansion.shell).toBe("never");
+    expect(parsed.quiet).toBe("faded");
+    expect(parsed.commandColor).toBe("expanded");
+  });
+
+  it("rejects unknown enum values instead of guessing", () => {
+    expect(activitySettings.schema.safeParse({ quiet: "invisible" }).success).toBe(false);
+    expect(activitySettings.schema.safeParse({ commandColor: "sometimes" }).success).toBe(false);
   });
 
   it("keeps an explicit expansion choice and fills the rest", () => {

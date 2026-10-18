@@ -1,0 +1,485 @@
+import type { PluginTheme } from "@getpaseo/plugin";
+import type { PluginHostProps } from "@getpaseo/plugin/client";
+import type { ReactNode } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { alpha, sunken } from "../../shared/color";
+import {
+  type ActivitySettings,
+  type CodeChrome,
+  type CommandColor,
+  DEFAULT_EXPANSION,
+  EXPANSION_TARGETS,
+  type ExpansionTarget,
+  type QuietStrength,
+  type ReplyCode,
+} from "../../shared/settings";
+import { type ActivityPalette, type ActivityThemeColors, resolveActivityPalette } from "../../shared/presentation";
+import { quietOpacity } from "../prefs";
+import { ActionButton, ControlRow, Group, Note, Segmented, Tile, useDashboardStyles } from "./controls";
+
+export interface PageProps {
+  prefs: ActivitySettings;
+  change: (patch: Partial<ActivitySettings>) => void;
+  theme: PluginTheme;
+  layout: PluginHostProps["layout"];
+}
+
+const PALETTES: { value: ActivitySettings["palette"]; name: string; hint: string }[] = [
+  { value: "vivid", name: "Vivid", hint: "Restrained category accents on neutral rows." },
+  { value: "soft", name: "Soft", hint: "Mostly neutral icons, with color kept for status." },
+  {
+    value: "high_contrast",
+    name: "High contrast",
+    hint: "Stronger dividers and status colors for scanning.",
+  },
+];
+
+const QUIET: { value: QuietStrength; name: string }[] = [
+  { value: "dim", name: "Dim" },
+  { value: "faded", name: "Faded" },
+  { value: "soft", name: "Soft" },
+  { value: "full", name: "Full strength" },
+];
+
+const CHROME: { value: CodeChrome; name: string; hint: string }[] = [
+  { value: "header", name: "Header bar", hint: "Language and copy inside the card." },
+  { value: "bare", name: "Bare", hint: "Label above the card, nothing inside." },
+  { value: "gutter", name: "Header + gutter", hint: "Line numbers in a muted column." },
+];
+
+const COMMANDS: { value: CommandColor; name: string; hint: string }[] = [
+  { value: "expanded", name: "When expanded", hint: "Collapsed rows keep a quiet summary." },
+  { value: "always", name: "Always", hint: "Color the command in every row." },
+  { value: "off", name: "Never", hint: "Plain monospace commands." },
+];
+
+type Expansion = ActivitySettings["expansion"];
+type ExpansionMode = Expansion[ExpansionTarget];
+
+const expansionPreset = (value: ExpansionMode, except: Partial<Expansion> = {}): Expansion =>
+  Object.fromEntries(
+    EXPANSION_TARGETS.map((target) => [target.key, except[target.key] ?? value]),
+  ) as Expansion;
+
+const PRESETS: { id: string; label: string; expansion: Expansion }[] = [
+  {
+    id: "newest",
+    label: "Newest only",
+    expansion: expansionPreset("latest", { read: "never", ask: "never" }),
+  },
+  { id: "all", label: "Everything open", expansion: expansionPreset("always") },
+  { id: "none", label: "Everything collapsed", expansion: expansionPreset("never") },
+];
+
+/** A miniature activity row: icon dot, label, muted summary. */
+function MiniRow({
+  palette,
+  styles,
+  quiet = 1,
+}: {
+  palette: ActivityPalette;
+  styles: ReturnType<typeof useDashboardStyles>;
+  quiet?: number;
+}) {
+  return (
+    <View style={{ alignItems: "center", flexDirection: "row", gap: 6, opacity: quiet }}>
+      <View
+        style={{
+          backgroundColor: palette.categoryColors.shell,
+          borderRadius: 3,
+          height: 11,
+          width: 11,
+        }}
+      />
+      <View
+        style={{
+          backgroundColor: styles.colors.foreground,
+          borderRadius: 2,
+          height: 6,
+          opacity: 0.85,
+          width: 58,
+        }}
+      />
+      <View
+        style={{
+          backgroundColor: styles.colors.foregroundMuted,
+          borderRadius: 2,
+          height: 6,
+          opacity: 0.7,
+          width: 74,
+        }}
+      />
+    </View>
+  );
+}
+
+function ActivityPage({ prefs, change, theme }: PageProps) {
+  const styles = useDashboardStyles(theme);
+  const activityColors = theme.colors as ActivityThemeColors;
+  return (
+    <View style={{ gap: 24 }}>
+      <Group
+        title="Palette"
+        hint="How much color activity rows spend. Layout and density never change."
+        styles={styles}
+      >
+        <View accessibilityRole="radiogroup" style={styles.tiles}>
+          {PALETTES.map((option) => (
+            <Tile
+              key={option.value}
+              name={option.name}
+              selected={prefs.palette === option.value}
+              onPress={() => change({ palette: option.value })}
+              styles={styles}
+            >
+              <MiniRow palette={resolveActivityPalette(option.value, activityColors)} styles={styles} />
+            </Tile>
+          ))}
+        </View>
+        <Text style={styles.hint}>
+          {PALETTES.find((option) => option.value === prefs.palette)?.hint}
+        </Text>
+      </Group>
+      <Group
+        title="Quiet rows"
+        hint="Finished rows step back so the newest work stands out. Running, failed, hovered, and expanded rows stay at full strength."
+        styles={styles}
+      >
+        <View accessibilityRole="radiogroup" style={styles.tiles}>
+          {QUIET.map((option) => (
+            <Tile
+              key={option.value}
+              name={option.name}
+              selected={prefs.quiet === option.value}
+              onPress={() => change({ quiet: option.value })}
+              styles={styles}
+            >
+              <MiniRow
+                palette={resolveActivityPalette(prefs.palette, activityColors)}
+                styles={styles}
+                quiet={quietOpacity(option.value)}
+              />
+            </Tile>
+          ))}
+        </View>
+      </Group>
+    </View>
+  );
+}
+
+function RowsPage({ prefs, change, theme, layout }: PageProps) {
+  const styles = useDashboardStyles(theme);
+  const stacked = layout.compact;
+  const targets = EXPANSION_TARGETS.map((target) => ({
+    key: target.key,
+    label: target.label,
+    mode: prefs.expansion[target.key] ?? DEFAULT_EXPANSION[target.key],
+  }));
+  return (
+    <View style={{ gap: 24 }}>
+      <Group
+        title="Presets"
+        hint="Replace every row's start state at once; individual rows stay adjustable below."
+        styles={styles}
+      >
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {PRESETS.map((preset) => (
+            <ActionButton
+              key={preset.id}
+              label={preset.label}
+              icon="Wand2"
+              onPress={() => change({ expansion: preset.expansion })}
+              styles={styles}
+            />
+          ))}
+        </View>
+      </Group>
+      <Group
+        title="Row expansion"
+        hint="Always starts expanded, Latest opens only while the row is newest, Never stays collapsed until tapped."
+        styles={styles}
+      >
+        <View style={{ gap: 11 }}>
+          {targets.map((target, index) => (
+            <ControlRow
+              key={target.key}
+              label={target.label}
+              styles={styles}
+              stacked={stacked}
+              first={index === 0}
+            >
+              <Segmented
+                accessibilityLabel={`${target.label} expansion`}
+                value={target.mode}
+                options={[
+                  { value: "always" as const, label: "Always" },
+                  { value: "latest" as const, label: "Latest" },
+                  { value: "never" as const, label: "Never" },
+                ]}
+                onChange={(value) =>
+                  change({
+                    expansion: { ...prefs.expansion, [target.key as ExpansionTarget]: value },
+                  })
+                }
+                styles={styles}
+              />
+            </ControlRow>
+          ))}
+        </View>
+      </Group>
+    </View>
+  );
+}
+
+/** A miniature code card showing the chosen chrome. */
+function ChromeSample({
+  chrome,
+  styles,
+}: {
+  chrome: CodeChrome;
+  styles: ReturnType<typeof useDashboardStyles>;
+}) {
+  const surface = sunken(styles.colors.surface0);
+  const rule = alpha(styles.colors.border, 0.6);
+  return (
+    <View
+      style={{
+        borderColor: rule,
+        borderRadius: 5,
+        borderWidth: 1,
+        backgroundColor: surface,
+        minWidth: 96,
+        overflow: "hidden",
+      }}
+    >
+      {chrome !== "bare" ? (
+        <View
+          style={{
+            borderBottomColor: rule,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            paddingHorizontal: 6,
+            paddingVertical: 3,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: styles.colors.foregroundMuted,
+              borderRadius: 2,
+              height: 5,
+              opacity: 0.7,
+              width: 26,
+            }}
+          />
+          <View
+            style={{
+              backgroundColor: styles.colors.foregroundMuted,
+              borderRadius: 2,
+              height: 5,
+              opacity: 0.5,
+              width: 10,
+            }}
+          />
+        </View>
+      ) : null}
+      <View style={{ flexDirection: "row", gap: 5, paddingHorizontal: 6, paddingVertical: 5 }}>
+        {chrome === "gutter" ? (
+          <View style={{ gap: 3 }}>
+            {[0, 1, 2].map((line) => (
+              <View
+                key={line}
+                style={{
+                  backgroundColor: styles.colors.foregroundMuted,
+                  borderRadius: 1,
+                  height: 4,
+                  opacity: 0.5,
+                  width: 6,
+                }}
+              />
+            ))}
+          </View>
+        ) : null}
+        <View style={{ gap: 3 }}>
+          {[64, 48, 56].map((width, line) => (
+            <View
+              key={width}
+              style={{
+                backgroundColor:
+                  line === 1 ? styles.colors.statusSuccess : styles.colors.foreground,
+                borderRadius: 1,
+                height: 4,
+                opacity: line === 1 ? 0.8 : 0.75,
+                width,
+              }}
+            />
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function CodePage({ prefs, change, theme, layout }: PageProps) {
+  const styles = useDashboardStyles(theme);
+  return (
+    <View style={{ gap: 24 }}>
+      <Group
+        title="Shell commands"
+        hint="Commands are highlighted with the bash grammar in the plugin's own colors."
+        styles={styles}
+      >
+        <View accessibilityRole="radiogroup" style={{ gap: 8 }}>
+          {COMMANDS.map((option) => (
+            <Tile
+              key={option.value}
+              name={option.name}
+              selected={prefs.commandColor === option.value}
+              onPress={() => change({ commandColor: option.value })}
+              styles={styles}
+            >
+              <Text
+                style={{
+                  color: styles.colors.foreground,
+                  fontFamily: styles.mono,
+                  fontSize: 12,
+                  opacity: option.value === "off" ? 0.75 : 1,
+                }}
+              >
+                <Text style={{ color: option.value === "off" ? styles.colors.foregroundMuted : styles.colors.statusWarning }}>
+                  npm
+                </Text>{" "}
+                run lint --fix
+              </Text>
+            </Tile>
+          ))}
+        </View>
+        <Text style={styles.hint}>
+          {COMMANDS.find((option) => option.value === prefs.commandColor)?.hint}
+        </Text>
+      </Group>
+      <Group title="Code blocks" hint="Used for commands, file contents, diffs, and reasoning fences." styles={styles}>
+        <View accessibilityRole="radiogroup" style={styles.tiles}>
+          {CHROME.map((option) => (
+            <Tile
+              key={option.value}
+              name={option.name}
+              selected={prefs.codeChrome === option.value}
+              onPress={() => change({ codeChrome: option.value })}
+              styles={styles}
+            >
+              <ChromeSample chrome={option.value} styles={styles} />
+            </Tile>
+          ))}
+        </View>
+        <Text style={styles.hint}>{CHROME.find((option) => option.value === prefs.codeChrome)?.hint}</Text>
+      </Group>
+      <Group title="Long lines" hint="Diff lines wrap or scroll sideways; code cards always scroll." styles={styles}>
+        <ControlRow label="Diff lines" styles={styles} stacked={layout.compact} first>
+          <Segmented
+            accessibilityLabel="Diff line wrapping"
+            value={prefs.diffWrap}
+            options={[
+              { value: "on" as const, label: "Wrap" },
+              { value: "off" as const, label: "Scroll" },
+            ]}
+            onChange={(value) => change({ diffWrap: value })}
+            styles={styles}
+          />
+        </ControlRow>
+      </Group>
+    </View>
+  );
+}
+
+function RepliesPage({ prefs, change, theme, layout }: PageProps) {
+  const styles = useDashboardStyles(theme);
+  const web = layout.platform === "web";
+  return (
+    <View style={{ gap: 24 }}>
+      <Group
+        title="Reply code"
+        hint="Inline code chips and fenced blocks inside Paseo's own assistant replies."
+        styles={styles}
+      >
+        <ControlRow label="Restyle reply code" styles={styles} stacked={layout.compact} first>
+          <Segmented<ReplyCode>
+            accessibilityLabel="Restyle reply code"
+            value={prefs.replyCode}
+            options={[
+              { value: "on", label: "On" },
+              { value: "off", label: "Off" },
+            ]}
+            onChange={(value) => change({ replyCode: value })}
+            styles={styles}
+            />
+        </ControlRow>
+        {web ? (
+          <Note styles={styles}>
+            Applies to replies in this app. The plugin's own rows (thinking, tool calls, tasks) are
+            styled on every platform, including mobile.
+          </Note>
+        ) : (
+          <Note styles={styles}>
+            Replies keep Paseo's rendering on iOS and Android: Paseo does not expose a markdown hook
+            to plugins, so this restyle is desktop and web only. The plugin's own rows (thinking,
+            tool calls, tasks) are styled everywhere.
+          </Note>
+        )}
+      </Group>
+      <Group
+        title="What it changes"
+        hint="The same visual language as the plugin's code cards."
+        styles={styles}
+      >
+        <View style={{ gap: 6 }}>
+          <Text style={styles.body}>
+            Middleware lives in{" "}
+            <Text
+              style={{
+                backgroundColor: styles.colors.surface2,
+                borderRadius: 3,
+                color: styles.colors.foreground,
+                fontFamily: styles.mono,
+                fontSize: 12,
+              }}
+            >
+              {" "}
+              requireAuth{" "}
+            </Text>{" "}
+            and runs once per request.
+          </Text>
+          <Text style={styles.small}>Inline code: a filled chip in the theme's surface color.</Text>
+          <Text style={styles.small}>
+            Fenced blocks: a sunken surface, a hairline rule, and a language header with a copy
+            control.
+          </Text>
+        </View>
+      </Group>
+    </View>
+  );
+}
+
+export const PAGES = [
+  { id: "activity", icon: "Gauge", label: "Activity", group: "DISPLAY" },
+  { id: "rows", icon: "ListTree", label: "Rows", group: "DISPLAY" },
+  { id: "code", icon: "Code", label: "Code & commands", group: "CONTENT" },
+  { id: "replies", icon: "MessageSquareText", label: "Replies", group: "CONTENT" },
+] as const;
+
+export type PageId = (typeof PAGES)[number]["id"];
+
+export function Page({ page, ...props }: { page: PageId } & PageProps): ReactNode {
+  switch (page) {
+    case "activity":
+      return <ActivityPage {...props} />;
+    case "rows":
+      return <RowsPage {...props} />;
+    case "code":
+      return <CodePage {...props} />;
+    case "replies":
+      return <RepliesPage {...props} />;
+    default:
+      return null;
+  }
+}

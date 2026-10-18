@@ -94,7 +94,8 @@ manual toggles persist across later task updates.
 
 Shipped defaults: reads and questions start collapsed, task updates and everything else follow
 Latest. Saved Tasks settings are preserved, so set Tasks to Latest if an existing install still
-has it set to Always. Settings stay on schema version 1 with fully defaulted keys.
+has it set to Always. Settings are schema version 2, with a migration from version 1 and fully
+defaulted keys.
 
 ## Expanded activity
 
@@ -280,12 +281,35 @@ Specialized tool detail headers are compact identity rows, not hero cards.
 
 Code and command output can use a subtle surface because the content needs a fixed reading region.
 
-- Use `surface0`, a 1 px theme border, and a 2 px radius.
-- Keep horizontal padding around 6 px and vertical padding around 4 px.
-- Use 11 px monospace text with 16 px line height.
-- Keep output scrollable rather than allowing it to dominate the timeline.
-- Apply diff color to changed lines only, with low-opacity backgrounds.
-- Do not wrap code blocks in another prominent card.
+### Code cards
+
+One component frames every code and command surface (`HighlightedCodeBlock` in
+`client/activity.tsx`). Its frame is a setting (**Code blocks**: header bar, bare, or header +
+gutter):
+
+- Header bar: the language label and the copy control sit inside the card, above a hairline rule.
+- Bare: the label and copy control sit above the card, for surfaces already inside a domain header.
+- Header + gutter: the header bar plus a muted, right-aligned line-number column when the code has
+  more than one line.
+
+The card itself is always `sunken(surface0)` with a `rule(border)` border and a 6 px radius. Code is
+11 px monospace with a 16 px line height; horizontal scrolling is expected for long lines, except
+for diffs when wrapping is on.
+
+### Shell commands
+
+A shell call is one card: the header carries `$`, the command highlighted with the bash grammar, the
+working directory's last segment, and the copy control; the body carries the output in muted
+foreground with ANSI colors preserved, then the exit code (danger color when nonzero) and any
+truncation note.
+
+The same command is highlighted in the row summary while the row is expanded (or always, per
+**Shell commands** in the dashboard). Collapsed rows keep a plain muted summary.
+
+### Diffs
+
+Apply diff color to changed lines only, with the low-opacity `tint` washers. Added and removed lines
+read in their status color; context lines keep the highlight theme. Line wrapping is a setting.
 
 ## Reasoning
 
@@ -315,6 +339,26 @@ The density and hierarchy must remain unchanged in light mode.
 - Verify muted text still has enough contrast.
 - Do not compensate for light mode with larger tinted panels.
 
+## Settings dashboard
+
+The dashboard is Paseo UI, not an activity row, so it follows the host's settings language while
+reusing the plugin's derived colors.
+
+- Three panes when the window allows it: navigation rail (216 px), controls (max 520 px), live
+  preview. Two panes below 1120 px, and a horizontal tab strip with a stacked preview on compact
+  layouts. Never a fixed-height inner scroller: the screen itself scrolls.
+- Every choice is a tile with its own miniature preview (palette, quiet strength, code frame,
+  command color), so the effect is visible before it is selected. Segmented controls are for
+  two-or-three-way choices that need no picture.
+- The preview renders the real renderers over sample data produced by the real transforms, so it
+  cannot drift from the timeline. It reads draft values through `PrefsOverride`, which is why a tap
+  updates the preview on the same frame as the save leaves.
+- Pages whose controls are not about expansion force the preview's sample rows open; the Rows page
+  passes the live expansion values instead, so its controls show their actual effect.
+- Save state is always visible: *Saved automatically*, *Saving…*, or the host's error. **Defaults**
+  is one click away, and there is no separate save button.
+
+
 ## Implementation map
 
 The visual system currently lives in:
@@ -324,7 +368,10 @@ The visual system currently lives in:
 - `client/child-agent.tsx`: child activity hierarchy
 - `client/github.tsx`: GitHub-specific detail rows
 - `shared/presentation.ts`: category and status palettes
-- `client/settings.tsx`: palette descriptions and row expansion controls
+- `shared/color.ts`: derived color helpers (sunken surfaces, rules, tints)
+- `client/prefs.ts`: the settings view every renderer reads, plus the preview override
+- `client/dashboard/`: the settings dashboard (navigation, controls, live preview)
+- `client/web.ts`: web-only font stacks and the reply-markdown restyle
 
 Keep shared layout values in `useActivityStyles`. Specialized renderers should consume `ActivityStyles` instead of creating a competing style system.
 
@@ -335,6 +382,9 @@ Before merging a UI change, check:
 - Can more useful activity fit on screen than before?
 - Does the information remain easy to scan?
 - Is any large background tint doing work that text, alignment, or a guide line could do?
+- Is any new color spelled out by hand instead of derived in `shared/color.ts`?
+- Does expanded detail start at `LABEL_INSET`, and nested content at `NEST_INSET`?
+- Do finished rows step back without hiding running, failed, hovered, or expanded ones?
 - Is any section wrapped in a card without a strong reason?
 - Are expanded sections free of enclosing borders and header dividers?
 - Does nested activity read clearly through indentation and one thin guide?
