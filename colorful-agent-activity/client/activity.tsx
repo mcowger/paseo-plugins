@@ -121,7 +121,7 @@ import { OmpFindToolDetail } from "./omp-find";
 import { OmpWaitToolDetail } from "./omp-wait";
 import { OpencodeSubagentToolDetail } from "./opencode-subagent";
 import { ExaToolDetail, PaseoFields, PaseoToolDetail, Section } from "./paseo";
-import { mcpCallFields, mcpToolLabel, type McpToolName, parseMcpToolName } from "../shared/mcp";
+import { mcpCallFields, mcpResultFields, parseMcpToolName } from "../shared/mcp";
 import { isRecallTool, parseRecallOutput, type RecallResult } from "../shared/recall";
 import {
   BgWaitToolDetail,
@@ -2147,7 +2147,6 @@ function DetailBody({
       if (mcpTool) {
         return (
           <McpCallDetail
-            mcp={mcpTool}
             input={detail.input}
             output={detail.output}
             theme={theme}
@@ -2246,14 +2245,12 @@ function DetailBody({
  * happened — which container, which repo — and they are almost always flat.
  */
 function McpCallDetail({
-  mcp,
   input,
   output,
   theme,
   palette,
   styles,
 }: {
-  mcp: McpToolName;
   input: unknown;
   output: unknown;
   theme: Theme;
@@ -2261,19 +2258,27 @@ function McpCallDetail({
   styles: ReturnType<typeof useActivityStyles>;
 }) {
   const fields = mcpCallFields(input);
-  const text = extractPiToolText(output)?.text ?? "";
-  const result = text.trim();
+  const text = (extractPiToolText(output)?.text ?? "").trim();
+  // A JSON response gets the same field treatment as the call that produced it.
+  const result = mcpResultFields(text);
   return (
     <View style={styles.paseoStack}>
       {fields.length > 0 ? (
-        <Section title={`${mcpToolLabel(mcp.tool)} call`} styles={styles}>
+        <Section title="Call" styles={styles}>
           <PaseoFields fields={fields} palette={palette} styles={styles} />
         </Section>
       ) : null}
       {result ? (
+        <Section title="Result" styles={styles}>
+          <PaseoFields fields={result.fields} palette={palette} styles={styles} />
+          {result.omitted > 0 ? (
+            <Text style={styles.mutedText}>+{result.omitted} more fields</Text>
+          ) : null}
+        </Section>
+      ) : text ? (
         <HighlightedCodeBlock
-          code={result}
-          language={/^\s*[[{]/.test(result) ? "json" : "text"}
+          code={text}
+          language={/^\s*[[{]/.test(text) ? "json" : "text"}
           label="Result"
           styles={styles}
           theme={theme}

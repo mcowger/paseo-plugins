@@ -314,8 +314,12 @@ read in their status color; context lines keep the highlight theme. Line wrappin
 ### Tools with no bespoke renderer
 
 - An MCP tool (`mcp__<server>__<tool>`) takes its server as the row label, and its
-  tool plus the identifying arguments as the summary: `Unraid` / `Docker List ·
-  plex`. Its body is the arguments as fields, then the result. Servers that earn a
+  tool plus the identifying arguments as the summary: `Unraid` / `system ·
+  overview`. A single-tool server whose name matches its tool says it once. Its body
+  is the arguments as fields, then the result — and a JSON result gets field rows
+  too, because a response should read like a response rather than a horizontally
+  scrolling line. Non-JSON output keeps the code block, and a wide payload stops at
+  20 fields with a `+N more fields` note. Servers that earn a
   real renderer (exa, github) are matched before this, and Paseo's own MCP tools
   keep their curated labels.
 - The session-recall tool is a list, so it renders as one: `#N`, kind, and time in

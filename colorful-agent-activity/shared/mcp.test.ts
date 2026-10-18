@@ -3,6 +3,7 @@ import {
   mcpCallFields,
   mcpServerLabel,
   mcpToolLabel,
+  mcpResultFields,
   mcpToolSummary,
   parseMcpToolName,
 } from "./mcp";
@@ -33,19 +34,52 @@ describe("MCP tool names", () => {
   });
 
   it("summarizes the tool plus the arguments that identify the call", () => {
-    expect(mcpToolSummary("list_hosts", {})).toBe("List Hosts");
-    expect(mcpToolSummary("docker_list", { container: "plex", all: true })).toBe(
-      "Docker List · plex",
+    expect(mcpToolSummary({ server: "nginx_proxy_manager", tool: "list_hosts" }, {})).toBe(
+      "List Hosts",
     );
-    expect(mcpToolSummary("get_file_contents", { owner: "o", repo: "r", path: "a.ts" })).toBe(
-      "Get File Contents · a.ts · o · r",
-    );
+    expect(
+      mcpToolSummary({ server: "unraid", tool: "docker_list" }, { container: "plex", all: true }),
+    ).toBe("Docker List · plex");
+    expect(
+      mcpToolSummary(
+        { server: "github", tool: "get_file_contents" },
+        { owner: "o", repo: "r", path: "a.ts" },
+      ),
+    ).toBe("Get File Contents · a.ts · o · r");
     // One tool with an action/subaction pair says what it did across both.
-    expect(mcpToolSummary("unraid", { action: "system", subaction: "overview" })).toBe(
-      "Unraid · system · overview",
-    );
+    expect(
+      mcpToolSummary({ server: "unraid", tool: "unraid" }, { action: "system", subaction: "overview" }),
+    ).toBe("system · overview");
     // Nothing scalar to say: just the tool.
-    expect(mcpToolSummary("info", { nested: { a: 1 } })).toBe("Info");
+    expect(mcpToolSummary({ server: "olive", tool: "info" }, { nested: { a: 1 } })).toBe("Info");
+  });
+
+  it("renders a JSON result as field rows, not a blob", () => {
+    expect(
+      mcpResultFields('{"summary":{"os":"Unraid OS 7.3","hostname":"Shark"},"uptime_ms":12}'),
+    ).toEqual({
+      fields: [
+        ["Summary", { os: "Unraid OS 7.3", hostname: "Shark" }],
+        ["Uptime Ms", 12],
+      ],
+      omitted: 0,
+    });
+    // An array result is one row of items, which the field renderer lists.
+    expect(mcpResultFields('["a","b"]')).toEqual({ fields: [["Items", ["a", "b"]]], omitted: 0 });
+    // Prose, logs, and partial bodies keep the code block.
+    expect(mcpResultFields("Error: not found")).toBeUndefined();
+    expect(mcpResultFields("{\"broken\":")).toBeUndefined();
+    expect(mcpResultFields("{}")).toBeUndefined();
+    expect(mcpResultFields(undefined)).toBeUndefined();
+  });
+
+  it("caps a huge payload and counts what it left out", () => {
+    const wide = JSON.stringify(
+      Object.fromEntries(Array.from({ length: 25 }, (_, index) => [`key${index}`, index])),
+    );
+    const view = mcpResultFields(wide);
+    expect(view?.fields).toHaveLength(20);
+    expect(view?.omitted).toBe(5);
   });
 
   it("renders arguments as field rows and drops empties", () => {

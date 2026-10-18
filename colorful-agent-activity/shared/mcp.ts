@@ -86,7 +86,7 @@ function scalarSummaryValue(value: unknown): string | undefined {
  * Only scalars are considered — a nested object summarizes to nothing useful in a
  * one-line header, and the body shows the full call anyway.
  */
-export function mcpToolSummary(tool: string, input: unknown): string | undefined {
+export function mcpToolSummary(mcp: McpToolName, input: unknown): string | undefined {
   const record =
     typeof input === "object" && input !== null && !Array.isArray(input)
       ? (input as Record<string, unknown>)
@@ -107,7 +107,50 @@ export function mcpToolSummary(tool: string, input: unknown): string | undefined
       }
     }
   }
-  return [mcpToolLabel(tool), ...values].filter(Boolean).join(" · ");
+  // A single-tool server (unraid) names its tool after itself; the row's label
+  // already says it, so the summary starts with the arguments.
+  const toolLabel = mcpToolLabel(mcp.tool);
+  const name =
+    toolLabel.toLowerCase() === mcpServerLabel(mcp.server).toLowerCase() ? undefined : toolLabel;
+  return [name, ...values].filter(Boolean).join(" · ");
+}
+
+export interface McpResultView {
+  fields: Array<[string, unknown]>;
+  /** Top-level keys beyond the cap, which the row leaves out. */
+  omitted: number;
+}
+
+const MAX_RESULT_FIELDS = 20;
+
+/**
+ * A JSON result as field rows, so a response reads like a response.
+ *
+ * The call's arguments already render as fields; a payload that is JSON deserves
+ * the same treatment rather than a horizontally scrolling line. Anything that is
+ * not JSON — logs, prose, a partial body — keeps the code block.
+ */
+export function mcpResultFields(output: string | undefined | null): McpResultView | undefined {
+  const text = typeof output === "string" ? output.trim() : "";
+  if (!text.startsWith("{") && !text.startsWith("[")) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (Array.isArray(parsed)) {
+    return { fields: [["Items", parsed]], omitted: 0 };
+  }
+  if (typeof parsed !== "object" || parsed === null) return undefined;
+  const entries = Object.entries(parsed as Record<string, unknown>).filter(([, value]) => {
+    return value !== undefined && value !== null;
+  });
+  if (entries.length === 0) return undefined;
+  const fields = entries
+    .slice(0, MAX_RESULT_FIELDS)
+    .map(([key, value]) => [humanize(key), value] as [string, unknown]);
+  return { fields, omitted: Math.max(0, entries.length - MAX_RESULT_FIELDS) };
 }
 
 /** Arguments as field rows, with the long ones dropped: they belong in the body. */

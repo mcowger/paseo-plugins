@@ -2759,7 +2759,7 @@ export function resolveToolCallPresentation(
           category: "unknown",
           icon: "Server",
           label: mcpServerLabel(mcpTool.server),
-          summary: mcpToolSummary(mcpTool.tool, detail.input),
+          summary: mcpToolSummary(mcpTool, detail.input),
         };
       }
       return {
