@@ -167,6 +167,21 @@ interface Timeline {
     trimmed view with line-number prefixes, not a unified diff, and is ignored.
     A lone `edits[0]` stands in as an old/new pair when no patch was reported;
     several edits do not, because one pair would understate the diff.
+  - `write` is the same split in the other direction: the call carries the file
+    and the result reports only that the write landed. The call wins, with the
+    result text as the fallback.
+  - `read` carries `offset`/`limit` (1-indexed start, line count), so the detail
+    says when it is a slice rather than a whole file.
+  - A sub-agent result names its child, which fills `childSessionId`; consumers
+    need not parse it back out of the log text.
+  - `bash` reports no exit code anywhere: its args are `{ command, timeout }` and
+    its result details are null. A shell row cannot show one because it is not on
+    the wire.
+- The `todo` tool is not a tool row. Its result reports the whole list
+  (`details.tasks`), which is emitted as a `type: "todo"` timeline item under
+  `todo:<callId>`, the way Paseo's own providers present a checklist. A running
+  call emits nothing (a placeholder would outlive it), and a call with no list
+  falls back to a tool row so its outcome stays visible.
 - `replay` resets active history and folds an authoritative Pi message array
   into the same identities, without emitting usage. Root restoration reads the
   owned transcript incrementally and selects active ancestry. Lifetime RPC
