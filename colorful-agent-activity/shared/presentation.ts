@@ -13,7 +13,9 @@ import {
 import { exaToolIcon, exaToolKind, exaToolLabel, exaToolSummary } from "./exa";
 import { githubToolIcon, githubToolKind, githubToolLabel, githubToolSummary } from "./github";
 import { piSubagentOperation, piSubagentPresentation } from "./pi-subagents";
+import { mcpServerLabel, mcpToolSummary, parseMcpToolName } from "./mcp";
 import { shouldAttemptImageLoad } from "./read-image";
+import { isRecallTool, parseRecallOutput, recallSummary } from "./recall";
 import type { ExpansionTarget, PaletteMode } from "./settings";
 
 export const TOOL_CATEGORIES = [
@@ -2731,6 +2733,15 @@ export function resolveToolCallPresentation(
           summary: exaToolSummary(exaKind, detail.input),
         };
       }
+      if (isRecallTool(item.name)) {
+        const recalled = parseRecallOutput(extractPiToolText(detail.output)?.text);
+        return {
+          category: "search",
+          icon: "History",
+          label: "Recall",
+          ...(recalled ? { summary: recallSummary(recalled) } : {}),
+        };
+      }
       const paseoLabel = paseoToolLabel(item.name);
       if (paseoLabel) {
         return {
@@ -2738,6 +2749,17 @@ export function resolveToolCallPresentation(
           icon: paseoToolIcon(item.name) ?? "Sparkles",
           label: `Paseo ${paseoLabel}`,
           summary: paseoToolSummary(item.name, detail.input),
+        };
+      }
+      // Paseo's own MCP tools are labelled above; anything else falls back to its
+      // server and tool, which is all a provider can know about it.
+      const mcpTool = parseMcpToolName(item.name);
+      if (mcpTool) {
+        return {
+          category: "unknown",
+          icon: "Server",
+          label: mcpServerLabel(mcpTool.server),
+          summary: mcpToolSummary(mcpTool.tool, detail.input),
         };
       }
       return {

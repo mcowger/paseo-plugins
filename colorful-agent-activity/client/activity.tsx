@@ -120,7 +120,9 @@ import { commandColorEnabled, quietOpacity, useActivityPrefs, useReplyCodeStyles
 import { OmpFindToolDetail } from "./omp-find";
 import { OmpWaitToolDetail } from "./omp-wait";
 import { OpencodeSubagentToolDetail } from "./opencode-subagent";
-import { ExaToolDetail, PaseoToolDetail } from "./paseo";
+import { ExaToolDetail, PaseoFields, PaseoToolDetail, Section } from "./paseo";
+import { mcpCallFields, mcpToolLabel, type McpToolName, parseMcpToolName } from "../shared/mcp";
+import { isRecallTool, parseRecallOutput, type RecallResult } from "../shared/recall";
 import {
   BgWaitToolDetail,
   PiSubagentLifecycleSummary,
@@ -477,6 +479,18 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         fontSize: 10,
         fontWeight: "500",
         lineHeight: 14,
+      } satisfies TextStyle,
+      recallEntry: {
+        borderLeftColor: alpha(theme.colors.border, 0.5),
+        borderLeftWidth: 2,
+        gap: 2,
+        paddingLeft: 8,
+      } satisfies ViewStyle,
+      recallMeta: {
+        color: theme.colors.foregroundMuted,
+        fontFamily: "monospace",
+        fontSize: 10.5,
+        lineHeight: 15,
       } satisfies TextStyle,
       askPair: {
         gap: 2,
@@ -2123,6 +2137,25 @@ function DetailBody({
           />
         );
       }
+      if (isRecallTool(data.name)) {
+        const recalled = parseRecallOutput(extractPiToolText(detail.output)?.text);
+        if (recalled) {
+          return <RecallDetail result={recalled} styles={styles} />;
+        }
+      }
+      const mcpTool = parseMcpToolName(data.name);
+      if (mcpTool) {
+        return (
+          <McpCallDetail
+            mcp={mcpTool}
+            input={detail.input}
+            output={detail.output}
+            theme={theme}
+            palette={palette}
+            styles={styles}
+          />
+        );
+      }
       if (paseoToolLeafName(data.name)) {
         return (
           <PaseoToolDetail
@@ -2204,6 +2237,84 @@ function DetailBody({
       );
     }
   }
+}
+
+/**
+ * An MCP tool no renderer targets: the arguments as fields, then its result.
+ *
+ * The alternative was two JSON blocks. Arguments are the part that identifies what
+ * happened — which container, which repo — and they are almost always flat.
+ */
+function McpCallDetail({
+  mcp,
+  input,
+  output,
+  theme,
+  palette,
+  styles,
+}: {
+  mcp: McpToolName;
+  input: unknown;
+  output: unknown;
+  theme: Theme;
+  palette: ActivityPalette;
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  const fields = mcpCallFields(input);
+  const text = extractPiToolText(output)?.text ?? "";
+  const result = text.trim();
+  return (
+    <View style={styles.paseoStack}>
+      {fields.length > 0 ? (
+        <Section title={`${mcpToolLabel(mcp.tool)} call`} styles={styles}>
+          <PaseoFields fields={fields} palette={palette} styles={styles} />
+        </Section>
+      ) : null}
+      {result ? (
+        <HighlightedCodeBlock
+          code={result}
+          language={/^\s*[[{]/.test(result) ? "json" : "text"}
+          label="Result"
+          styles={styles}
+          theme={theme}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/** One recalled session entry: where it is, then what it says. */
+function RecallDetail({
+  result,
+  styles,
+}: {
+  result: RecallResult;
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  return (
+    <View style={styles.paseoStack}>
+      {result.entries.map((entry) => (
+        <View key={`recall-${entry.index}`} style={styles.recallEntry}>
+          <Text style={styles.recallMeta} numberOfLines={1}>
+            #{entry.index}
+            {`  ${entry.kind}`}
+            {entry.time ? `  ${entry.time}` : ""}
+          </Text>
+          {entry.preview ? (
+            <Text selectable style={styles.detailText} numberOfLines={3}>
+              {entry.preview}
+            </Text>
+          ) : null}
+          {entry.note ? <Text style={styles.mutedText}>{entry.note}</Text> : null}
+        </View>
+      ))}
+      {result.hints.map((hint) => (
+        <Text key={hint} style={styles.mutedText}>
+          {hint}
+        </Text>
+      ))}
+    </View>
+  );
 }
 
 /** An ask tool's result as the Q/A pairs it actually is, rather than one paragraph. */

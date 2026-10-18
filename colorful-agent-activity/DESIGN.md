@@ -311,6 +311,17 @@ The same command is highlighted in the row summary while the row is expanded (or
 Apply diff color to changed lines only, with the low-opacity `tint` washers. Added and removed lines
 read in their status color; context lines keep the highlight theme. Line wrapping is a setting.
 
+### Tools with no bespoke renderer
+
+- An MCP tool (`mcp__<server>__<tool>`) takes its server as the row label, and its
+  tool plus the identifying arguments as the summary: `Unraid` / `Docker List ·
+  plex`. Its body is the arguments as fields, then the result. Servers that earn a
+  real renderer (exa, github) are matched before this, and Paseo's own MCP tools
+  keep their curated labels.
+- The session-recall tool is a list, so it renders as one: `#N`, kind, and time in
+  a muted line, the hit's preview under it, and the tool's own hint lines last. The
+  header carries `50 of 129 · page 1/10 · "query"`.
+
 ### Unparsed tool results
 
 A tool nobody has written a parser for shows the text the model saw, then a **Details**

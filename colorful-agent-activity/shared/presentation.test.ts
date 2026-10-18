@@ -1118,6 +1118,50 @@ describe("agent row facts", () => {
   });
 });
 
+describe("tools with no bespoke renderer", () => {
+  it("labels an MCP tool by its server, and summarizes tool and arguments", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "mcp__unraid__docker_list",
+        detail: { type: "unknown", input: { container: "plex" }, output: "{}" },
+      }),
+    ).toEqual({
+      category: "unknown",
+      icon: "Server",
+      label: "Unraid",
+      summary: "Docker List · plex",
+    });
+  });
+
+  it("keeps a bespoke MCP renderer ahead of the generic one", () => {
+    // github and exa are matched before the generic MCP branch.
+    expect(
+      resolveToolCallPresentation({
+        name: "mcp__github__get_file_contents",
+        detail: { type: "unknown", input: { path: "a.ts" }, output: "{}" },
+      }).label,
+    ).toBe("GitHub File");
+  });
+
+  it("labels a recall row from its result, not its name", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "vcc_recall",
+        detail: {
+          type: "unknown",
+          input: { query: "x" },
+          output: 'Page 1/2 (5 total matches) for "x":\n\n#12 [assistant] hello',
+        },
+      }),
+    ).toEqual({
+      category: "search",
+      icon: "History",
+      label: "Recall",
+      summary: '5 total · page 1/2 · "x"',
+    });
+  });
+});
+
 describe("readRangeLabel", () => {
   it("names the slice a read returned", () => {
     expect(readRangeLabel(501, 100)).toBe("Lines 501–600");
