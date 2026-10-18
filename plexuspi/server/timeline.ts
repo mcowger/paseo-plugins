@@ -352,6 +352,17 @@ export function createTimeline(input: {
     if (name) toolNames.set(callId, name);
     const resolvedName = name || toolNames.get(callId) || "";
     const failed = status === "failed";
+    if (isTodoToolName(resolvedName)) {
+      const items = failed ? null : todoItemsFromDetails(resultDetails);
+      if (items) {
+        // The card replaces the tool row, the way Paseo's own providers do it:
+        // "Created #3 …" would only repeat what the list already shows.
+        upsert({ type: "todo", id: todoItemId(callId), items } as ProviderTimelineItem, timestamp);
+        return;
+      }
+      // A running call has no list yet, and a placeholder row would outlive it.
+      if (status === "running") return;
+    }
     upsert(
       {
         type: "tool_call",
@@ -502,6 +513,46 @@ export function reasoningItemId(nativeKey: string, index: number): string {
 
 export function toolItemId(callId: string): string {
   return `tool:${callId}`;
+}
+
+/** One task card per todo call, so a replay re-folds the same item instead of adding one. */
+export function todoItemId(callId: string): string {
+  return `todo:${callId}`;
+}
+
+function isTodoToolName(name: string): boolean {
+  return name.trim().toLowerCase() === "todo";
+}
+
+type TodoTimelineItem = Extract<ProviderTimelineItem, { type: "todo" }>;
+
+/**
+ * Pi reports the whole task list on the todo tool result:
+ * `details.tasks: [{ id, subject, status, description }]`. It is a first-class
+ * timeline item in the provider API, so the list renders as a task card instead
+ * of a text row that can only describe one task.
+ */
+function todoItemsFromDetails(details: unknown): TodoTimelineItem["items"] | null {
+  const record = isRecord(details) ? details : null;
+  const tasks = record && Array.isArray(record.tasks) ? record.tasks : null;
+  if (!tasks) return null;
+  const items = tasks.flatMap((entry, index) => {
+    if (!isRecord(entry)) return [];
+    const text = asText(entry.subject) || asText(entry.text) || asText(entry.description);
+    if (!text) return [];
+    const status = todoStatus(entry.status);
+    return [{ text, status, completed: status === "completed", id: todoTaskId(entry.id, index) }];
+  });
+  return items.length > 0 ? items : null;
+}
+
+function todoStatus(value: unknown): "pending" | "in_progress" | "completed" {
+  return value === "completed" || value === "in_progress" ? value : "pending";
+}
+
+function todoTaskId(value: unknown, index: number): string {
+  const id = numberValue(value);
+  return String(id ?? index + 1);
 }
 
 export function userItemId(message: Record<string, unknown>, _clientMessageId?: string): string {

@@ -488,6 +488,80 @@ describe("createTimeline tools", () => {
     expect(tool.type === "tool_call" && tool.error).not.toBeNull();
   });
 
+  test("renders Pi's task list as a task card instead of a text row", () => {
+    const { timeline } = harness();
+
+    timeline.accept({
+      type: "tool_execution_start",
+      toolCallId: "call-todo",
+      toolName: "todo",
+      args: { action: "create", subject: "Inspect working tree status" },
+    });
+    // A running todo call has no list yet: it must not leave a placeholder row
+    // behind that the card then sits next to.
+    expect(timeline.items().filter((item) => item.type === "tool_call")).toHaveLength(0);
+
+    timeline.accept({
+      type: "tool_execution_end",
+      toolCallId: "call-todo",
+      toolName: "todo",
+      result: { content: [{ type: "text", text: "Created #1: Inspect working tree status" }] },
+      details: {
+        action: "create",
+        nextId: 3,
+        tasks: [
+          { id: 1, subject: "Inspect working tree status", status: "pending", description: "x" },
+          { id: 2, subject: "Split the rename", status: "in_progress", description: "y" },
+        ],
+      },
+    });
+
+    const items = timeline.items();
+    expect(items.some((item) => item.type === "tool_call")).toBe(false);
+    expect(items.find((item) => item.type === "todo")).toEqual({
+      type: "todo",
+      id: "todo:call-todo",
+      items: [
+        { text: "Inspect working tree status", status: "pending", completed: false, id: "1" },
+        { text: "Split the rename", status: "in_progress", completed: false, id: "2" },
+      ],
+    });
+  });
+
+  test("falls back to a tool row when a todo call reports no list", () => {
+    const { timeline } = harness();
+
+    timeline.accept({
+      type: "tool_execution_end",
+      toolCallId: "call-todo-2",
+      toolName: "todo",
+      result: { content: [{ type: "text", text: "No tasks" }] },
+    });
+
+    expect(findItem(timeline.items(), "tool:call-todo-2")).toMatchObject({
+      type: "tool_call",
+      detail: { type: "plain_text", label: "Todo", text: "No tasks" },
+    });
+  });
+
+  test("replay folds the same task card instead of stacking duplicates", () => {
+    const messages = [
+      {
+        role: "toolResult",
+        toolCallId: "call-todo",
+        toolName: "todo",
+        content: [{ type: "text", text: "Created #1" }],
+        details: { tasks: [{ id: 1, subject: "One", status: "pending" }] },
+      },
+    ];
+    const first = harness();
+    first.timeline.replay(messages);
+    const second = harness();
+    second.timeline.replay(messages);
+    expect(first.timeline.items()).toEqual(second.timeline.items());
+    expect(first.timeline.items().filter((item) => item.type === "todo")).toHaveLength(1);
+  });
+
   test("replaces a tool result row from a toolResult message", () => {
     const { timeline } = harness();
 
