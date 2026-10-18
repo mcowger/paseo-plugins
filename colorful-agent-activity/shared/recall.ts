@@ -1,5 +1,3 @@
-import { compactText } from "./presentation";
-
 /**
  * The session-recall tool's result.
  *
@@ -35,6 +33,13 @@ export function isRecallTool(name: string): boolean {
 }
 
 const ENTRY = /^#(\d+)\s+\[([^\]]+)\]\s*(.*)$/;
+const MAX_PREVIEW_LINES = 3;
+const MAX_PREVIEW_CHARS = 240;
+
+/** Previews are prose, not code: runs of spaces are log padding, not alignment. */
+function squeeze(text: string): string {
+  return text.trim().replace(/[ \t]+/g, " ");
+}
 const ISO_TIME = /^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s+([\s\S]*)$/;
 const ELISION = /^\.\.\.\(\d+ lines? below\)$/;
 
@@ -77,7 +82,7 @@ export function parseRecallOutput(output: string | undefined | null): RecallResu
         index: Number.parseInt(entry[1] ?? "", 10),
         kind: entry[2] ?? "",
         ...(time?.[1] ? { time: time[1] } : {}),
-        preview: compactText((time?.[2] ?? rest).trim(), 160) ?? "",
+        preview: squeeze((time?.[2] ?? rest)).slice(0, MAX_PREVIEW_CHARS),
       };
       result.entries.push(current);
       continue;
@@ -91,6 +96,20 @@ export function parseRecallOutput(output: string | undefined | null): RecallResu
 
     if (ELISION.test(line.trim()) && current) {
       current.note = line.trim();
+      continue;
+    }
+
+    // A hit's own following lines are its content: a tool result's interesting
+    // line is rarely its first. Keep up to three, which is what the row shows.
+    if (current) {
+      const lines = current.preview ? current.preview.split("\n") : [];
+      if (lines.length < MAX_PREVIEW_LINES) {
+        const joined = [...lines, squeeze(line)].join("\n");
+        current.preview =
+          joined.length > MAX_PREVIEW_CHARS
+            ? `${joined.slice(0, MAX_PREVIEW_CHARS - 1)}…`
+            : joined;
+      }
     }
   }
 

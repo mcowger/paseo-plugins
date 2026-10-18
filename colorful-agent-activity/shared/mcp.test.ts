@@ -86,6 +86,26 @@ describe("recall results", () => {
     ]);
   });
 
+  it("keeps a hit's own continuation lines, up to what the row shows", () => {
+    const parsed = parseRecallOutput(
+      [
+        'Page 1/1 (2 total matches) for "x":',
+        "",
+        "#2000 [tool_result] first line",
+        "shared/presentation.ts:541: export function agentRowFacts(",
+        "second line of content",
+        "third line",
+        "fourth line that the row cannot show",
+        "",
+        "#114 [user] just one line",
+      ].join("\n"),
+    );
+    expect(parsed?.entries[0]?.preview).toBe(
+      "first line\nshared/presentation.ts:541: export function agentRowFacts(\nsecond line of content",
+    );
+    expect(parsed?.entries[1]?.preview).toBe("just one line");
+  });
+
   it("summarizes as counts, page, and query", () => {
     expect(recallSummary(parseRecallOutput(output)!)).toBe(
       '50 of 129 · page 1/10 · "unconsumed tool details"',

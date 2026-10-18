@@ -3,4 +3,4 @@
 // The hash of the client payload in server/client-payload.generated.ts. The
 // loader embeds it, so a payload change changes the catalog entry and Paseo
 // re-evaluates the plugin instead of keeping the previous installation.
-export const CLIENT_PAYLOAD_VERSION = "93aa5d496a2f";
+export const CLIENT_PAYLOAD_VERSION = "1069741fc985";
