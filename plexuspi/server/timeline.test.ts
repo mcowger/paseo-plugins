@@ -514,6 +514,50 @@ describe("createTimeline tools", () => {
       detail: { type: "write", filePath: "out.txt", content: "wrote out.txt" },
     });
   });
+
+  test("keeps the edit diff a toolResult carries in its details", () => {
+    const { timeline } = harness();
+    const patch = [
+      "--- /app/src/a.ts",
+      "+++ /app/src/a.ts",
+      "@@ -1,1 +1,1 @@",
+      "-const a = 1;",
+      "+const a = 2;",
+    ].join("\n");
+
+    timeline.accept({
+      type: "tool_execution_start",
+      toolCallId: "call-4",
+      toolName: "edit",
+      args: {
+        path: "/app/src/a.ts",
+        edits: [{ oldText: "const a = 1;", newText: "const a = 2;" }],
+      },
+    });
+    timeline.accept({
+      type: "message_end",
+      message: {
+        role: "toolResult",
+        toolCallId: "call-4",
+        toolName: "edit",
+        content: [{ type: "text", text: "Successfully replaced 1 block(s)" }],
+        details: { patch, diff: "    ...\n-1 const a = 1;\n+1 const a = 2;\n    ..." },
+        isError: false,
+      },
+    });
+
+    expect(findItem(timeline.items(), "tool:call-4")).toMatchObject({
+      type: "tool_call",
+      status: "completed",
+      detail: {
+        type: "edit",
+        filePath: "/app/src/a.ts",
+        oldString: "const a = 1;",
+        newString: "const a = 2;",
+        unifiedDiff: patch,
+      },
+    });
+  });
 });
 
 describe("createTimeline user correlation and replay", () => {
@@ -741,6 +785,38 @@ describe("createTimeline user correlation and replay", () => {
 });
 
 describe("mapToolDetail and mapUsage", () => {
+  test("carries the patch Pi reports on the tool result, not just the call arguments", () => {
+    const patch = [
+      "--- /app/src/a.ts",
+      "+++ /app/src/a.ts",
+      "@@ -1,1 +1,1 @@",
+      "-const a = 1;",
+      "+const a = 2;",
+    ].join("\n");
+    expect(
+      mapToolDetail(
+        "edit",
+        { path: "/app/src/a.ts", edits: [{ oldText: "const a = 1;", newText: "const a = 2;" }] },
+        "Successfully replaced 1 block(s)",
+        { patch },
+      ),
+    ).toEqual({
+      type: "edit",
+      filePath: "/app/src/a.ts",
+      oldString: "const a = 1;",
+      newString: "const a = 2;",
+      unifiedDiff: patch,
+    });
+  });
+
+  test("ignores Pi's trimmed diff view, which is not a unified diff", () => {
+    expect(
+      mapToolDetail("edit", { path: "a.ts", edits: [{ oldText: "x", newText: "y" }] }, "ok", {
+        diff: "    ...\n-13   old line\n+13   new line\n    ...",
+      }),
+    ).toEqual({ type: "edit", filePath: "a.ts", oldString: "x", newString: "y" });
+  });
+
   test("falls back to the unknown detail for unrecognized tools", () => {
     expect(mapToolDetail("mystery", { a: 1 }, "result")).toEqual({
       type: "unknown",

@@ -1869,6 +1869,37 @@ describe("toolCallHasBody", () => {
     ).toBe(true);
   });
 
+  it("expands a Pi edit carrying the patch its tool result reported", () => {
+    // The provider maps `details.patch` from the tool result onto the detail.
+    // Before it did, every Pi edit was a file path with no body: the row had no
+    // chevron and no +/- stats. This is a real patch, absolute paths and all.
+    const detail = {
+      type: "edit" as const,
+      filePath: "/app/package.json",
+      unifiedDiff: [
+        "--- /app/package.json",
+        "+++ /app/package.json",
+        "@@ -9,7 +9,7 @@",
+        '     "typecheck": "tsc --noEmit",',
+        '     "test": "vitest run"',
+        "   },",
+        '   "devDependencies": {',
+        '-    "@getpaseo/client": "0.10.0",',
+        '+    "@getpaseo/client": "0.11.4",',
+        '     "@tanstack/react-query": "^5.90.11",',
+        '     "@types/node": "^20.9.0",',
+        "   }",
+      ].join("\n"),
+    };
+    expect(toolCallHasBody("edit", detail, "package.json")).toBe(true);
+    expect(diffStatsForDetail(detail)).toEqual({ additions: 1, deletions: 1 });
+    const lines = diffLinesForDetail(detail);
+    expect(lines).toContainEqual({ kind: "add", text: '    "@getpaseo/client": "0.11.4",' });
+    expect(lines).toContainEqual({ kind: "remove", text: '    "@getpaseo/client": "0.10.0",' });
+    // The `---`/`+++` headers are hidden; the row title already carries the path.
+    expect(lines.some((line) => line.text.startsWith("--- "))).toBe(false);
+  });
+
   it("collapses Paseo action tools that only echo the header", () => {
     const cancel = (output: unknown) =>
       toolCallHasBody(

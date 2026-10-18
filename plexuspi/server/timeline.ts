@@ -345,6 +345,7 @@ export function createTimeline(input: {
     error: unknown,
     status: "running" | "completed" | "canceled" | "failed",
     timestamp: unknown,
+    resultDetails?: unknown,
   ): void {
     if (args !== undefined) toolArgs.set(callId, args);
     const resolvedArgs = args !== undefined ? args : toolArgs.get(callId);
@@ -357,7 +358,7 @@ export function createTimeline(input: {
         id: toolItemId(callId),
         callId,
         name: resolvedName,
-        detail: mapToolDetail(resolvedName, resolvedArgs, output),
+        detail: mapToolDetail(resolvedName, resolvedArgs, output, resultDetails),
         status,
         error: failed ? (error ?? { message: output ?? "Tool failed" }) : null,
       } as ProviderTimelineItem,
@@ -374,9 +375,10 @@ export function createTimeline(input: {
       asText(message.toolName),
       undefined,
       extractResultText(message),
-      isRecord(message.details) ? message.details : undefined,
+      undefined,
       failed ? "failed" : "completed",
       message.timestamp,
+      isRecord(message.details) ? message.details : undefined,
     );
   }
 
@@ -417,9 +419,10 @@ export function createTimeline(input: {
       asText(record.toolName),
       record.args,
       extractResultText(record.result),
-      isRecord(record.details) ? record.details : undefined,
+      record.error,
       failed ? "failed" : "completed",
       undefined,
+      isRecord(record.details) ? record.details : undefined,
     );
   }
 
@@ -538,6 +541,7 @@ export function mapToolDetail(
   name: string,
   args: unknown,
   output?: string,
+  resultDetails?: unknown,
 ): ProviderToolCallDetail {
   const record = isRecord(args) ? args : {};
   const tool = name.toLowerCase();
@@ -560,9 +564,25 @@ export function mapToolDetail(
     };
   }
   if (tool === "edit" || tool === "apply_patch" || tool === "str_replace") {
-    const oldString = asText(record.oldText) || asText(record.old_string);
-    const newString = asText(record.newText) || asText(record.new_string);
-    const unifiedDiff = asText(record.diff) || asText(record.unifiedDiff);
+    // Pi's edit tool takes `edits: [{ oldText, newText }, ...]` and reports the
+    // applied change on the tool result as a unified `patch`. Reading only the
+    // arguments left the row with a file path and nothing to expand.
+    const edits = Array.isArray(record.edits) ? record.edits : [];
+    // A single edit can stand in as an old/new pair; several cannot, because one
+    // pair would report a smaller diff than the call actually made.
+    const onlyEdit = edits.length === 1 && isRecord(edits[0]) ? edits[0] : {};
+    const oldString =
+      asText(record.oldText) || asText(record.old_string) || asText(onlyEdit.oldText);
+    const newString =
+      asText(record.newText) || asText(record.new_string) || asText(onlyEdit.newText);
+    const details = isRecord(resultDetails) ? resultDetails : {};
+    // `details.diff` is Pi's trimmed view with line-number prefixes, not a
+    // unified diff: only `patch` (or an explicit unified diff) can be rendered.
+    const unifiedDiff =
+      asText(record.diff) ||
+      asText(record.unifiedDiff) ||
+      asText(details.patch) ||
+      asText(details.unifiedDiff);
     return {
       type: "edit",
       filePath,

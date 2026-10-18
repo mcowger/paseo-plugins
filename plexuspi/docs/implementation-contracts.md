@@ -159,6 +159,14 @@ interface Timeline {
 - Tool details: Pi tool name/args/result are mapped to the standard
   `ProviderToolCallDetail` variants (shell/read/edit/write/search/fetch/
   sub_agent/plain_text/plan) with an `unknown` fallback.
+  - Tool-result `details` are part of that input: they are where Pi puts what a
+    call actually did. An `edit` call carries `edits: [{ oldText, newText }]` in
+    its args and the applied change as a unified `patch` on its result, so the
+    result is what fills `detail.unifiedDiff`. Reading only the args left every
+    edit row with a file path and nothing to expand. `details.diff` is Pi's
+    trimmed view with line-number prefixes, not a unified diff, and is ignored.
+    A lone `edits[0]` stands in as an old/new pair when no patch was reported;
+    several edits do not, because one pair would understate the diff.
 - `replay` resets active history and folds an authoritative Pi message array
   into the same identities, without emitting usage. Root restoration reads the
   owned transcript incrementally and selects active ancestry. Lifetime RPC
