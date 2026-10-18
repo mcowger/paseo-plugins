@@ -1103,6 +1103,29 @@ describe("tool details nothing interprets", () => {
     });
   });
 
+  test("reports each unhandled tool separately, not just the first one", () => {
+    // Every tool without a branch shares one kind, so deduplicating by kind let the
+    // first unknown tool silence every later one.
+    const diagnostics: ToolDetailDiagnostic[] = [];
+    const { timeline } = harness(diagnostics);
+    for (const [callId, tool] of [
+      ["call-1", "codemode"],
+      ["call-2", "mcp__unraid__unraid"],
+    ] as const) {
+      timeline.accept({
+        type: "tool_execution_end",
+        toolCallId: callId,
+        toolName: tool,
+        result: { content: [{ type: "text", text: "ok" }] },
+        details: { calls: [] },
+      });
+    }
+    expect(diagnostics.map((diagnostic) => diagnostic.tool)).toEqual([
+      "codemode",
+      "mcp__unraid__unraid",
+    ]);
+  });
+
   test("reports a tool once per session, not once per call", () => {
     const diagnostics: ToolDetailDiagnostic[] = [];
     const { timeline } = harness(diagnostics);

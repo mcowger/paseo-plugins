@@ -44,7 +44,9 @@ export function createTimeline(input: {
   const toolNames = new Map<string, string>();
   // One report per tool name per session: a diagnostic is a prompt to write a
   // parser, not a per-call event.
-  const diagnosedTools = new Set<ToolDetailKind>();
+  // Keyed by tool name, not by branch: every tool without a branch shares one
+  // kind, so keying by kind reported the first such tool and silenced the rest.
+  const diagnosedTools = new Set<string>();
   let stream: StreamingTurn | null = null;
   let activeTurnId: string | undefined;
   let lastUsage: ProviderUsage | null = null;
@@ -400,11 +402,11 @@ export function createTimeline(input: {
   /** Tells the host which detail keys of a tool the mapping has no use for. */
   function reportUnreadDetails(tool: string, details: unknown): void {
     if (!onDiagnostic) return;
-    const kind = toolDetailKind(tool);
-    if (diagnosedTools.has(kind)) return;
+    const key = tool.trim().toLowerCase();
+    if (diagnosedTools.has(key)) return;
     const diagnostic = toolDetailDiagnostic(tool, details);
     if (!diagnostic) return;
-    diagnosedTools.add(kind);
+    diagnosedTools.add(key);
     onDiagnostic(diagnostic);
   }
 
