@@ -568,14 +568,42 @@ export function toolDetailKind(name: string): ToolDetailKind {
 }
 
 /**
- * Result-detail keys each branch actually reads. Everything else in a tool's
- * details is unread, which is what the diagnostic reports: a tool whose details
- * are mostly unread is a candidate for a real mapping.
+ * What each branch does with a tool's result details.
+ *
+ * The diagnostic reports the leftovers, which only means something if the
+ * leftovers are things nobody has looked at. A key dropped on purpose is recorded
+ * here with its reason, so the log stays a list of gaps instead of a list of
+ * decisions the reader has to re-litigate every session.
  */
-const CONSUMED_DETAIL_KEYS: Partial<Record<ToolDetailKind, readonly string[]>> = {
-  edit: ["patch", "unifiedDiff"],
-  agent: ["agentId", "sessionId"],
-  todo: ["tasks"],
+interface DetailUsage {
+  /** Keys whose content reaches the timeline item. */
+  consumed: readonly string[];
+  /** Keys dropped on purpose, and why. */
+  ignored: Readonly<Record<string, string>>;
+}
+
+const DETAIL_USAGE: Partial<Record<ToolDetailKind, DetailUsage>> = {
+  edit: {
+    consumed: ["patch", "unifiedDiff"],
+    ignored: {
+      diff: "Pi's trimmed view: line-number prefixes and … elisions, not a unified diff",
+      firstChangedLine: "no rendering use",
+    },
+  },
+  agent: {
+    // description and subagentType also land on the item, mapped from the call's
+    // arguments; the result's copy of them adds nothing.
+    consumed: ["agentId", "sessionId", "description", "subagentType"],
+    ignored: { displayName: "repeats subagentType" },
+  },
+  todo: {
+    consumed: ["tasks"],
+    ignored: {
+      action: "the task card already depicts the request",
+      params: "same as action",
+      nextId: "internal bookkeeping",
+    },
+  },
 };
 
 const MAX_DETAIL_FIELDS = 12;
@@ -650,8 +678,12 @@ export interface ToolDetailDiagnostic {
 export function toolDetailDiagnostic(tool: string, details: unknown): ToolDetailDiagnostic | null {
   if (!isRecord(details)) return null;
   const kind = toolDetailKind(tool);
-  const consumed = CONSUMED_DETAIL_KEYS[kind] ?? [];
-  const unconsumed = Object.keys(details).filter((key) => !consumed.includes(key));
+  const usage = DETAIL_USAGE[kind];
+  const consumed = usage?.consumed ?? [];
+  const ignored = Object.keys(usage?.ignored ?? {});
+  const unconsumed = Object.keys(details).filter(
+    (key) => !consumed.includes(key) && !ignored.includes(key),
+  );
   if (unconsumed.length === 0) return null;
   return { tool, kind, consumed: [...consumed], unconsumed };
 }

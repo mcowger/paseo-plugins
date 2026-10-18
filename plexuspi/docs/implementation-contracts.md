@@ -188,9 +188,12 @@ interface Timeline {
 - Every tool whose result details are left unread is logged once per session, with
   key names and never values:
   `unconsumed tool details for "Agent" (agent): status, tokens, …`. This is the
-  signal that a tool has structured output worth a real mapping; `CONSUMED_DETAIL_KEYS`
-  in `server/timeline.ts` is where a mapping declares what it reads. The diagnostic
-  is deliberately not a timeline item: it is a note to the maintainer, not content.
+  signal that a tool has structured output worth a real mapping. `DETAIL_USAGE` in
+  `server/timeline.ts` is where a mapping declares what it reads (`consumed`) and
+  what it drops on purpose (`ignored`, with a reason per key). Ignored keys stay
+  out of the log: a log that reports decisions the maintainer already made stops
+  being read, and then the line that matters goes unnoticed. The diagnostic is
+  deliberately not a timeline item: it is a note to the maintainer, not content.
 - The `todo` tool is not a tool row. Its result reports the whole list
   (`details.tasks`), which is emitted as a `type: "todo"` timeline item under
   `todo:<callId>`, the way Paseo's own providers present a checklist. A running

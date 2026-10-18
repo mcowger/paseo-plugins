@@ -932,6 +932,9 @@ describe("tool details nothing interprets", () => {
     expect(
       toolDetailDiagnostic("Agent", {
         agentId: "a1",
+        description: "Audit",
+        subagentType: "worker",
+        displayName: "worker",
         status: "background",
         tokens: "",
         toolUses: 0,
@@ -939,17 +942,18 @@ describe("tool details nothing interprets", () => {
     ).toEqual({
       tool: "Agent",
       kind: "agent",
-      consumed: ["agentId", "sessionId"],
+      consumed: ["agentId", "sessionId", "description", "subagentType"],
       unconsumed: ["status", "tokens", "toolUses"],
     });
-    expect(toolDetailDiagnostic("edit", { patch: "x", diff: "y", firstChangedLine: 3 })).toEqual({
-      tool: "edit",
-      kind: "edit",
-      consumed: ["patch", "unifiedDiff"],
-      unconsumed: ["diff", "firstChangedLine"],
+    // A key dropped on purpose is a decision, not a gap: it stays out of the log.
+    expect(toolDetailDiagnostic("edit", { patch: "x", diff: "y", firstChangedLine: 3 })).toBeNull();
+    expect(
+      toolDetailDiagnostic("todo", { tasks: [], action: "create", params: {}, nextId: 2 }),
+    ).toBeNull();
+    // A key nobody has accounted for still reports.
+    expect(toolDetailDiagnostic("edit", { patch: "x", somethingNew: 1 })).toMatchObject({
+      unconsumed: ["somethingNew"],
     });
-    // Nothing left over means nothing to report.
-    expect(toolDetailDiagnostic("todo", { tasks: [] })).toBeNull();
     expect(toolDetailDiagnostic("bash", null)).toBeNull();
   });
 
