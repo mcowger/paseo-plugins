@@ -164,6 +164,17 @@ Three settings looked inert in the dashboard; all three were real bugs:
   rather than host markdown. The preview now shows the plain rendering when the setting is off and
   the styled chips and code card when it is on, captioned with which is which.
 
+## Thinking-block follow fixes
+
+- **The follow gave up partway.** It stopped when the distance to the bottom exceeded 32 px, but
+  text can arrive faster than the scroll lands, so one lagging frame read as "the reader scrolled
+  away" and the tail was unreachable without scrolling. Only upward movement now stops the follow;
+  reaching the bottom resumes it.
+- **A live block reset to its start.** Following was gated on `phase === "streaming"`, so a block that
+  finished (or remounted after a reload) opened at step 1. Following is now gated on the block being
+  the newest one (`streaming || isLatest`), which keeps a just-finished block at its end; older
+  blocks still open at their start, where reading begins.
+
 ## Follow-ups
 
 - Refresh `README.md` screenshots; they predate the dashboard, code cards, and quiet rows.

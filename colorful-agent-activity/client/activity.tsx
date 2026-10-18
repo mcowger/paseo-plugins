@@ -2317,12 +2317,15 @@ function ReasoningStep({
 function ReasoningText({
   text,
   phase,
+  live,
   theme,
   palette,
   styles,
 }: {
   text: string;
   phase: ReasoningData["phase"];
+  /** The newest thinking block: follow its tail while it streams and stays open. */
+  live: boolean;
   theme: Theme;
   palette: ActivityPalette;
   styles: ReturnType<typeof useActivityStyles>;
@@ -2336,14 +2339,22 @@ function ReasoningText({
   const revealedText = useRevealedText(shownText, phase);
   const steps = useMemo(() => splitReasoningSteps(revealedText), [revealedText]);
   const scrollRef = useRef<NativeScrollView | null>(null);
-  const isNearBottom = useRef(true);
+  const following = useRef(true);
+  const lastOffset = useRef(0);
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    isNearBottom.current = layoutMeasurement.height + contentOffset.y >= contentSize.height - 32;
+    const distance = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    // Only the reader scrolling up stops the follow. Distance alone cannot: text
+    // can arrive faster than the scroll lands, and treating that as "the reader
+    // scrolled away" is what used to leave the tail unreachable.
+    if (contentOffset.y < lastOffset.current - 16) following.current = false;
+    else if (distance <= 32) following.current = true;
+    lastOffset.current = contentOffset.y;
   }, []);
-  // Pinning only makes sense while text is arriving; a finished block opens at its start.
+  // The newest block follows its tail until it stops being the newest; a finished
+  // block that is now history opens at its start.
   const followTail = useCallback(() => {
-    if (!isStreaming || !isNearBottom.current) return;
+    if (!live || !following.current) return;
     const scroll = () => scrollRef.current?.scrollToEnd({ animated: false });
     // After the frame that laid the new text out: react-native-web does not
     // report content-size changes reliably, so this cannot ride on that event.
@@ -2352,7 +2363,7 @@ function ReasoningText({
     ).requestAnimationFrame;
     if (frame) frame(scroll);
     else scroll();
-  }, [isStreaming]);
+  }, [live]);
   const handleContentSizeChange = useCallback(() => followTail(), [followTail]);
   useEffect(() => {
     followTail();
@@ -2554,6 +2565,7 @@ export function ColorfulReasoning({
           <ReasoningText
             text={item.data.text}
             phase={item.data.phase}
+            live={isStreaming || isLatest}
             theme={theme}
             palette={palette}
             styles={styles}
