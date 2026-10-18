@@ -73,6 +73,7 @@ import {
   paseoToolLeafName,
   previewText,
   readErrorMessage,
+  readRangeLabel,
   relativeToRoot,
   resolveActivityPalette,
   resolveSearchCounts,
@@ -1702,6 +1703,7 @@ function DetailBody({
         );
       }
       if (!shouldAttemptImageLoad(detail.filePath, detail.content)) {
+        const range = readRangeLabel(detail.offset, detail.limit);
         return (
           <>
             <PathRow
@@ -1709,6 +1711,7 @@ function DetailBody({
               path={detail.filePath}
               styles={styles}
             />
+            {range ? <Text style={styles.mutedText}>{range}</Text> : null}
             {detail.content ? (
               <HighlightedCodeBlock
                 code={detail.content}

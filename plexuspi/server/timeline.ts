@@ -602,7 +602,16 @@ export function mapToolDetail(
     asText(record.file_path) ||
     asText(record.filename);
   if (tool === "read") {
-    return { type: "read", filePath, content: output };
+    const offset = numberValue(record.offset);
+    const limit = numberValue(record.limit);
+    return {
+      type: "read",
+      filePath,
+      ...(output !== undefined ? { content: output } : {}),
+      // A slice of a file that does not say it is a slice reads as the whole file.
+      ...(offset !== undefined && offset > 0 ? { offset } : {}),
+      ...(limit !== undefined && limit > 0 ? { limit } : {}),
+    };
   }
   if (tool === "bash" || tool === "shell" || tool === "execute" || tool === "run") {
     const exitCode = numberValue(record.exitCode);

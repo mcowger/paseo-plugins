@@ -1570,6 +1570,19 @@ export function previewText(
   };
 }
 
+/**
+ * The slice a read returned, when the call asked for one: a partial file that
+ * does not say so reads as the whole file.
+ */
+export function readRangeLabel(offset?: number, limit?: number): string | undefined {
+  if (limit !== undefined && limit > 0) {
+    if (offset === undefined || offset <= 1) return `First ${limit.toLocaleString()} lines`;
+    return `Lines ${offset.toLocaleString()}–${(offset + limit - 1).toLocaleString()}`;
+  }
+  if (offset !== undefined && offset > 1) return `From line ${offset.toLocaleString()}`;
+  return undefined;
+}
+
 export interface TailPreview {
   text: string;
   /** Lines that fell off the top, for the "earlier content hidden" note. */

@@ -63,6 +63,7 @@ import {
   prettyJson,
   previewText,
   readErrorMessage,
+  readRangeLabel,
   relativeToRoot,
   resolveActivityPalette,
   resolveSearchCounts,
@@ -987,6 +988,21 @@ describe("colorful activity presentation", () => {
     const capped = previewText(huge, 0);
     expect(capped.truncated).toBe(true);
     expect(capped.text.length).toBe(MAX_PREVIEW_CHARS);
+  });
+});
+
+describe("readRangeLabel", () => {
+  it("names the slice a read returned", () => {
+    expect(readRangeLabel(501, 100)).toBe("Lines 501–600");
+    expect(readRangeLabel(1, 200)).toBe("First 200 lines");
+    expect(readRangeLabel(undefined, 200)).toBe("First 200 lines");
+    expect(readRangeLabel(501)).toBe("From line 501");
+  });
+
+  it("says nothing when the read was not a slice", () => {
+    expect(readRangeLabel()).toBeUndefined();
+    expect(readRangeLabel(1)).toBeUndefined();
+    expect(readRangeLabel(0, 0)).toBeUndefined();
   });
 });
 

@@ -861,6 +861,22 @@ describe("createTimeline user correlation and replay", () => {
 });
 
 describe("mapToolDetail and mapUsage", () => {
+  test("carries the slice a read asked for", () => {
+    expect(mapToolDetail("read", { path: "a.ts", offset: 501, limit: 100 }, "body")).toEqual({
+      type: "read",
+      filePath: "a.ts",
+      content: "body",
+      offset: 501,
+      limit: 100,
+    });
+    // A whole-file read carries neither, so the row need not explain itself.
+    expect(mapToolDetail("read", { path: "a.ts" }, "body")).toEqual({
+      type: "read",
+      filePath: "a.ts",
+      content: "body",
+    });
+  });
+
   test("renders the written file, not the tool's confirmation line", () => {
     // Pi reports only "Successfully wrote to <path>" on the result; the payload is
     // on the call. Using the result put that confirmation in the file body.
