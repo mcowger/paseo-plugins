@@ -174,6 +174,10 @@ Three settings looked inert in the dashboard; all three were real bugs:
   finished (or remounted after a reload) opened at step 1. Following is now gated on the block being
   the newest one (`streaming || isLatest`), which keeps a just-finished block at its end; older
   blocks still open at their start, where reading begins.
+- **Tool details never followed at all.** A running shell's newest output sat below the fold. The
+  follow is now a shared hook (`useTailFollow`): a running call's detail behaves like a terminal and
+  pins to its tail, a finished call's detail opens at its start, and the same rule that stops on
+  upward movement applies.
 
 ## Follow-ups
 

@@ -2314,6 +2314,39 @@ function ReasoningStep({
   );
 }
 
+/**
+ * Keeps a scroll region pinned to its tail while `live`, until the reader scrolls
+ * up. Growth alone never stops it: revealed or streamed content can arrive faster
+ * than the scroll lands, and treating that as "the reader scrolled away" is what
+ * used to leave the tail unreachable.
+ */
+function useTailFollow(live: boolean) {
+  const ref = useRef<NativeScrollView | null>(null);
+  const following = useRef(true);
+  const lastOffset = useRef(0);
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distance = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    // Only the reader scrolling up stops the follow.
+    if (contentOffset.y < lastOffset.current - 16) following.current = false;
+    else if (distance <= 32) following.current = true;
+    lastOffset.current = contentOffset.y;
+  }, []);
+  const follow = useCallback(() => {
+    if (!live || !following.current) return;
+    const scroll = () => ref.current?.scrollToEnd({ animated: false });
+    // After the frame that laid the new content out: react-native-web does not
+    // report content-size changes reliably, so this cannot ride on that event.
+    const frame = (
+      globalThis as { requestAnimationFrame?: (callback: () => void) => unknown }
+    ).requestAnimationFrame;
+    if (frame) frame(scroll);
+    else scroll();
+  }, [live]);
+  const handleContentSizeChange = useCallback(() => follow(), [follow]);
+  return { ref, follow, handleScroll, handleContentSizeChange };
+}
+
 function ReasoningText({
   text,
   phase,
@@ -2338,44 +2371,20 @@ function ReasoningText({
   const shownText = overflow && !showAll ? text.slice(-MAX_REASONING_CHARS) : text;
   const revealedText = useRevealedText(shownText, phase);
   const steps = useMemo(() => splitReasoningSteps(revealedText), [revealedText]);
-  const scrollRef = useRef<NativeScrollView | null>(null);
-  const following = useRef(true);
-  const lastOffset = useRef(0);
-  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const distance = contentSize.height - layoutMeasurement.height - contentOffset.y;
-    // Only the reader scrolling up stops the follow. Distance alone cannot: text
-    // can arrive faster than the scroll lands, and treating that as "the reader
-    // scrolled away" is what used to leave the tail unreachable.
-    if (contentOffset.y < lastOffset.current - 16) following.current = false;
-    else if (distance <= 32) following.current = true;
-    lastOffset.current = contentOffset.y;
-  }, []);
   // The newest block follows its tail until it stops being the newest; a finished
   // block that is now history opens at its start.
-  const followTail = useCallback(() => {
-    if (!live || !following.current) return;
-    const scroll = () => scrollRef.current?.scrollToEnd({ animated: false });
-    // After the frame that laid the new text out: react-native-web does not
-    // report content-size changes reliably, so this cannot ride on that event.
-    const frame = (
-      globalThis as { requestAnimationFrame?: (callback: () => void) => unknown }
-    ).requestAnimationFrame;
-    if (frame) frame(scroll);
-    else scroll();
-  }, [live]);
-  const handleContentSizeChange = useCallback(() => followTail(), [followTail]);
+  const tail = useTailFollow(live);
   useEffect(() => {
-    followTail();
-  }, [revealedText, followTail]);
+    tail.follow();
+  }, [revealedText, tail.follow]);
 
   return (
     <View>
       <ScrollView
-        ref={scrollRef}
+        ref={tail.ref}
         nestedScrollEnabled
-        onContentSizeChange={handleContentSizeChange}
-        onScroll={handleScroll}
+        onContentSizeChange={tail.handleContentSizeChange}
+        onScroll={tail.handleScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator
         style={styles.detailsScroll}
@@ -2665,6 +2674,12 @@ function ToolCallCard({
       : item.data.presentation.summary;
   const prefs = useActivityPrefs();
   const quiet = useQuietRow(!expanded && item.data.status === "completed");
+  // A running call's detail follows its tail like a terminal, and stops when the
+  // reader scrolls up. A finished call's detail opens at its start.
+  const tail = useTailFollow(expanded && isRunning);
+  useEffect(() => {
+    tail.follow();
+  }, [item.data.detail, expanded, tail.follow]);
   useReplyCodeStyles(theme);
   // A shell row colors its command once expanded (or always, per settings); collapsed rows stay quiet.
   const coloredCommand =
@@ -2716,9 +2731,13 @@ function ToolCallCard({
       {expandable && expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
           <ScrollView
+            ref={tail.ref}
             style={styles.detailsScroll}
             contentContainerStyle={styles.detailsContent}
             nestedScrollEnabled
+            onContentSizeChange={tail.handleContentSizeChange}
+            onScroll={tail.handleScroll}
+            scrollEventThrottle={16}
             showsVerticalScrollIndicator
           >
             {hasBody ? (
