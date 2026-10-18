@@ -150,6 +150,20 @@ repeated transfer dominated startup, so the client entry was split in two:
 Measured against a live 0.11.4 daemon: the catalog entry for this plugin went from 513.5 KB to
 3.4 KB, the payload RPC returns 241 KB (232 KB of code), and a warm reconnect sends neither.
 
+## Dashboard fidelity fixes
+
+Three settings looked inert in the dashboard; all three were real bugs:
+
+- **High contrast and soft rendered identically.** `resolveActivityPalette` computed a `borderWidth`
+  that nothing consumed, and guides came from the theme border regardless of mode. Palettes now carry
+  `railAlpha` and `borderWidth`, `useActivityStyles` applies both to every guide, and the palette
+  tiles draw the guide and status dot that differ.
+- **Wrap/Scroll looked like it did nothing** because every sample diff line was short enough to fit.
+  The sample edit now includes a line long enough to wrap.
+- **Restyle reply code changed nothing in the preview**, which renders the plugin's own components
+  rather than host markdown. The preview now shows the plain rendering when the setting is off and
+  the styled chips and code card when it is on, captioned with which is which.
+
 ## Follow-ups
 
 - Refresh `README.md` screenshots; they predate the dashboard, code cards, and quiet rows.

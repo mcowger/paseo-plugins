@@ -45,4 +45,11 @@ describe("dashboard preview samples", () => {
     expect(detail?.exitCode).toBe(1);
     expect(detail?.output).toContain("no-unused-vars");
   });
+
+  it("keeps a diff line long enough to show wrapping in the preview", () => {
+    // With only short lines, the Wrap/Scroll setting would look like it did nothing.
+    const detail = SAMPLE_EDIT.detail as { unifiedDiff?: string } | null;
+    const longest = Math.max(...(detail?.unifiedDiff ?? "").split("\n").map((line) => line.length));
+    expect(longest).toBeGreaterThan(80);
+  });
 });

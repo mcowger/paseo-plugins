@@ -1,10 +1,10 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginHostProps } from "@getpaseo/plugin/client";
 import { useMemo, useState, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import type { ActivitySettings } from "../../shared/settings";
 import { CodeCard, ColorfulReasoning, ColorfulTodo, ColorfulToolCall } from "../activity";
-import { PrefsOverride } from "../prefs";
+import { useActivityPrefs, PrefsOverride } from "../prefs";
 import { Segmented, useDashboardStyles } from "./controls";
 import {
   SAMPLE_CODE,
@@ -100,7 +100,14 @@ export function DashboardPreview({
   );
 }
 
-/** The reply below the activity: prose with an inline code chip, then a code card. */
+/**
+ * The reply below the activity: prose with an inline code span, then a code block.
+ *
+ * It follows the **Replies** page: with the restyle on it shows the plugin's chip
+ * and code card, with it off it shows the plain rendering Paseo uses, so the
+ * toggle has a visible effect here even though the real restyle only reaches
+ * host-rendered replies on desktop and web.
+ */
 function ReplySample({
   theme,
   styles,
@@ -108,6 +115,7 @@ function ReplySample({
   theme: PluginTheme;
   styles: ReturnType<typeof useDashboardStyles>;
 }): ReactNode {
+  const restyled = useActivityPrefs().replyCode === "on";
   const sentences = SAMPLE_REPLY.split(SAMPLE_REPLY_INLINE);
   return (
     <View style={{ gap: 8, paddingTop: 2 }}>
@@ -115,19 +123,52 @@ function ReplySample({
         {sentences[0]}
         <Text
           style={{
-            backgroundColor: styles.colors.surface2,
-            borderRadius: 3,
+            ...(restyled
+              ? {
+                  backgroundColor: styles.colors.surface2,
+                  borderRadius: 3,
+                  paddingHorizontal: 3,
+                }
+              : null),
             color: styles.colors.foreground,
             fontFamily: styles.mono,
             fontSize: 12,
           }}
         >
-          {" "}
-          {SAMPLE_REPLY_INLINE}{" "}
+          {SAMPLE_REPLY_INLINE}
         </Text>
         {sentences[1]}
       </Text>
-      <CodeCard code={SAMPLE_CODE} language="typescript" theme={theme} />
+      {restyled ? (
+        <CodeCard code={SAMPLE_CODE} language="typescript" theme={theme} />
+      ) : (
+        <View
+          style={{
+            backgroundColor: styles.colors.surface0,
+            borderColor: styles.colors.border,
+            borderRadius: 8,
+            borderWidth: StyleSheet.hairlineWidth,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+          }}
+        >
+          <Text
+            style={{
+              color: styles.colors.foreground,
+              fontFamily: styles.mono,
+              fontSize: 11.5,
+              lineHeight: 17,
+            }}
+          >
+            {SAMPLE_CODE}
+          </Text>
+        </View>
+      )}
+      <Text style={styles.small}>
+        {restyled
+          ? "Restyle on: inline chips and a language header on code blocks."
+          : "Restyle off: Paseo's own reply rendering."}
+      </Text>
     </View>
   );
 }

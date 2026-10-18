@@ -71,44 +71,70 @@ const PRESETS: { id: string; label: string; expansion: Expansion }[] = [
   { id: "none", label: "Everything collapsed", expansion: expansionPreset("never") },
 ];
 
-/** A miniature activity row: icon dot, label, muted summary. */
+/**
+ * A miniature activity row: category dot, label, muted summary, status dot, and
+ * the guide that the palette controls. The divider is the point: soft draws it
+ * faint and thin, vivid at the normal weight, high contrast bright and doubled.
+ */
 function MiniRow({
   palette,
   styles,
   quiet = 1,
+  divider = false,
 }: {
   palette: ActivityPalette;
   styles: ReturnType<typeof useDashboardStyles>;
   quiet?: number;
+  divider?: boolean;
 }) {
   return (
-    <View style={{ alignItems: "center", flexDirection: "row", gap: 6, opacity: quiet }}>
-      <View
-        style={{
-          backgroundColor: palette.categoryColors.shell,
-          borderRadius: 3,
-          height: 11,
-          width: 11,
-        }}
-      />
-      <View
-        style={{
-          backgroundColor: styles.colors.foreground,
-          borderRadius: 2,
-          height: 6,
-          opacity: 0.85,
-          width: 58,
-        }}
-      />
-      <View
-        style={{
-          backgroundColor: styles.colors.foregroundMuted,
-          borderRadius: 2,
-          height: 6,
-          opacity: 0.7,
-          width: 74,
-        }}
-      />
+    <View style={{ gap: 6, opacity: quiet }}>
+      <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
+        <View
+          style={{
+            backgroundColor: palette.categoryColors.file,
+            borderRadius: 3,
+            height: 11,
+            width: 11,
+          }}
+        />
+        <View
+          style={{
+            backgroundColor: styles.colors.foreground,
+            borderRadius: 2,
+            height: 6,
+            opacity: 0.85,
+            width: 58,
+          }}
+        />
+        <View
+          style={{
+            backgroundColor: styles.colors.foregroundMuted,
+            borderRadius: 2,
+            height: 6,
+            opacity: 0.7,
+            width: 34,
+          }}
+        />
+        <View style={{ flex: 1 }} />
+        <View
+          style={{
+            backgroundColor: palette.statusColors.completed,
+            borderRadius: 3,
+            height: 7,
+            width: 7,
+          }}
+        />
+      </View>
+      {divider ? (
+        <View
+          style={{
+            backgroundColor: alpha(styles.colors.border, palette.railAlpha),
+            height: palette.borderWidth,
+            width: "100%",
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -132,7 +158,11 @@ function ActivityPage({ prefs, change, theme }: PageProps) {
               onPress={() => change({ palette: option.value })}
               styles={styles}
             >
-              <MiniRow palette={resolveActivityPalette(option.value, activityColors)} styles={styles} />
+              <MiniRow
+                divider
+                palette={resolveActivityPalette(option.value, activityColors)}
+                styles={styles}
+              />
             </Tile>
           ))}
         </View>

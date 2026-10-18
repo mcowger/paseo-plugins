@@ -57,12 +57,13 @@ export const SAMPLE_EDIT = createToolCallData(
     type: "edit",
     filePath: "/Users/dev/app/src/middleware/requireAuth.ts",
     oldString: "  if (!ok) return deny(401);",
-    newString: "  if (!ok) return deny(403);",
+    newString:
+      '  if (!ok) return deny(403, { reason: "token expired", retryAfterSeconds: 30, requestId: req.id });',
     unifiedDiff: [
       "@@ -12,4 +12,4 @@ export function requireAuth(req, next) {",
       "   const ok = verifyToken(req);",
       "-  if (!ok) return deny(401);",
-      "+  if (!ok) return deny(403);",
+      '+  if (!ok) return deny(403, { reason: "token expired", retryAfterSeconds: 30, requestId: req.id });',
       "   next();",
     ].join("\n"),
   }),

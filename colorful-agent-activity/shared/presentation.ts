@@ -91,7 +91,10 @@ export interface ActivityPalette {
     failed: string;
     canceled: string;
   };
+  /** Width of guides and dividers. */
   borderWidth: number;
+  /** Opacity of guides and dividers against the theme's border token. */
+  railAlpha: number;
 }
 
 const EXTENSION_LANGUAGE: Record<string, string> = {
@@ -2756,7 +2759,10 @@ export function resolveActivityPalette(
     categoryBackgrounds,
     statusColors,
     statusBackgrounds,
+    // High contrast strengthens a row's structure; soft makes it recede. Both are
+    // consumed by useActivityStyles, so the choice is visible, not cosmetic.
     borderWidth: mode === "high_contrast" ? 2 : 1,
+    railAlpha: mode === "high_contrast" ? 0.9 : mode === "soft" ? 0.4 : 0.6,
   };
 }
 

@@ -298,7 +298,8 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
   // washes for changed diff lines. Kept here so every renderer shares them.
   const c = theme.colors;
   const codeSurface = sunken(c.surface0);
-  const rail = rule(c.border);
+  const rail = rule(c.border, palette.railAlpha);
+  const railWidth = palette.borderWidth;
   const gutter = alpha(c.foregroundMuted, 0.6);
   const diffAdded = tint(palette.statusColors.completed, 0.12);
   const diffRemoved = tint(palette.statusColors.failed, 0.12);
@@ -394,7 +395,7 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       } satisfies TextStyle,
       details: {
         borderLeftColor: rail,
-        borderLeftWidth: 1,
+        borderLeftWidth: railWidth,
         flexShrink: 1,
         marginLeft: LABEL_INSET - 9,
         minWidth: 0,
@@ -690,7 +691,7 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       } satisfies ViewStyle,
       reasoningQuote: {
         borderLeftColor: rail,
-        borderLeftWidth: 1,
+        borderLeftWidth: railWidth,
         color: theme.colors.foregroundMuted,
         fontFamily: "monospace",
         fontSize: 12,
@@ -710,7 +711,7 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       } satisfies ViewStyle,
       subAgentProgress: {
         borderLeftColor: rail,
-        borderLeftWidth: 1,
+        borderLeftWidth: railWidth,
         gap: 1,
         paddingBottom: 2,
         paddingLeft: NEST_INSET,
@@ -789,7 +790,7 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       } satisfies ViewStyle,
       childTimelineList: {
         borderLeftColor: rail,
-        borderLeftWidth: 1,
+        borderLeftWidth: railWidth,
         gap: 1,
         paddingLeft: NEST_INSET,
       } satisfies ViewStyle,
@@ -841,7 +842,7 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       } satisfies ViewStyle,
       paseoHero: {
         borderLeftColor: rail,
-        borderLeftWidth: 2,
+        borderLeftWidth: railWidth + 1,
         paddingHorizontal: 6,
         paddingVertical: 2,
       } satisfies ViewStyle,
@@ -978,6 +979,7 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       gutter,
       palette,
       rail,
+      railWidth,
       theme,
     ],
   );

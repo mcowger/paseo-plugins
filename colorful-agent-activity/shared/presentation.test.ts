@@ -574,6 +574,27 @@ describe("colorful activity presentation", () => {
     expect(palette.borderWidth).toBe(2);
   });
 
+  it("makes each palette mode structurally distinct, not just differently labeled", () => {
+    const vivid = resolveActivityPalette("vivid", colors);
+    const soft = resolveActivityPalette("soft", colors);
+    const high = resolveActivityPalette("high_contrast", colors);
+
+    // High contrast strengthens guides; soft lets them recede.
+    expect(high.borderWidth).toBeGreaterThan(vivid.borderWidth);
+    expect(high.railAlpha).toBeGreaterThan(vivid.railAlpha);
+    expect(soft.railAlpha).toBeLessThan(vivid.railAlpha);
+    expect(new Set([vivid.railAlpha, soft.railAlpha, high.railAlpha]).size).toBe(3);
+
+    // Vivid spends category color; the other two keep icons neutral.
+    expect(vivid.categoryColors.file).toBe(colors.accent);
+    expect(soft.categoryColors.file).toBe(colors.foregroundMuted);
+    expect(high.categoryColors.file).toBe(colors.foregroundMuted);
+
+    // Soft and high contrast still differ from each other.
+    expect(high.railAlpha).not.toBe(soft.railAlpha);
+    expect(high.borderWidth).not.toBe(soft.borderWidth);
+  });
+
   it("uses valid Activity icon for get_agent_activity", () => {
     expect(PASEO_TOOL_ICONS.get_agent_activity).toBe("Activity");
     expect(paseoToolIcon("mcp_paseo_get_agent_activity")).toBe("Activity");
