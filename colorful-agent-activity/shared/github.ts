@@ -157,6 +157,15 @@ export function githubOutputText(value: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * The payload behind an MCP result, which arrives in one of two shapes.
+ *
+ * Paseo's own MCP path sends `{ content, structuredContent }`. A plugin provider
+ * cannot: Pi's `ToolResultMessage` has no `structuredContent` field, and Pi folds
+ * it into a text block only when the server returned no content blocks — so for
+ * us the payload is always text, and the envelope branch below is for the host's
+ * own path. Do not add a provider-side field for it; there is nothing to carry.
+ */
 export function githubOutputValue(value: unknown): unknown {
   const record = asRecord(value);
   if (!record) {

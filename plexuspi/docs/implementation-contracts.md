@@ -208,6 +208,14 @@ interface Timeline {
     present the facts already (the supervisor view, the question/answer list).
   - shell truncation and the full-output path are reduced to the note the shell
     row renders.
+- `structuredContent` does not reach a plugin provider, and needs no envelope to
+  carry it. Pi's documented `ToolResultMessage` is `{content, details, isError, …}`
+  with no such field, and its MCP client (`toLlmContent`) serializes structured
+  content into a text block only when the server returned no content blocks. So:
+  when structured content exists alone, it already arrives as text; when text
+  exists, the text is the payload. Paseo's own MCP path does send
+  `{content, structuredContent}`, which is why a renderer may handle that shape —
+  that branch is not ours to feed.
 - `server/tool-detail.fixtures.test.ts` replays one captured result per tool and
   asserts two things: the payload the row needs survives the mapping, and no
   detail key goes unaccounted for. A Pi shape change therefore fails a test and
