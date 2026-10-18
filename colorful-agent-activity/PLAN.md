@@ -178,6 +178,12 @@ Three settings looked inert in the dashboard; all three were real bugs:
   follow is now a shared hook (`useTailFollow`): a running call's detail behaves like a terminal and
   pins to its tail, a finished call's detail opens at its start, and the same rule that stops on
   upward movement applies.
+- **Shell output was cut to the code preview's 20 lines**, so the follow chased content that was never
+  rendered and "Show all" sat below the fold. Shell output now renders in full up to a 1,000-line /
+  100,000-char guard, which keeps the tail rather than the head when it trips and reports the hidden
+  lines instead of offering an expander. Other code blocks (file contents, JSON, reasoning fences)
+  keep the 20-line preview and its "Show all": there the content is not streamed and a whole file
+  should not render by default.
 
 ## Follow-ups
 

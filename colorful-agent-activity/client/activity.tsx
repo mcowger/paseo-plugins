@@ -135,6 +135,25 @@ const MAX_DETAIL_HEIGHT = 420;
  * rendered, so a runaway block cannot stall layout.
  */
 const MAX_REASONING_CHARS = 32_000;
+/**
+ * Shell output is streamed and read from its tail, so it is never cut to the code
+ * preview's 20 lines: the newest output has to exist for the follow to reach it.
+ * This guard only keeps a pathological dump from stalling layout, and when it
+ * trips the newest output is what survives.
+ */
+const MAX_SHELL_OUTPUT_LINES = 1_000;
+const MAX_SHELL_OUTPUT_CHARS = 100_000;
+
+/** The part of a shell result worth rendering, and how much fell off the top. */
+function shellOutputWindow(output: string): { text: string; hiddenLines: number } {
+  const lines = output.split("\n");
+  if (lines.length <= MAX_SHELL_OUTPUT_LINES && output.length <= MAX_SHELL_OUTPUT_CHARS) {
+    return { text: output, hiddenLines: 0 };
+  }
+  const kept = lines.slice(-MAX_SHELL_OUTPUT_LINES).join("\n").slice(-MAX_SHELL_OUTPUT_CHARS);
+  const keptLines = kept.split("\n").length;
+  return { text: kept, hiddenLines: Math.max(0, lines.length - keptLines) };
+}
 
 // Paseo spaces consecutive activity rows by applying its inter-row gap to the row
 // that still has a newer neighbor. On the native inverted timeline the newest live
@@ -1577,11 +1596,9 @@ function ShellCommandBlock({
   theme: Theme;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
-  const [showAll, setShowAll] = useState(false);
   const output = detail.output ?? "";
-  const preview = useMemo(() => previewText(output), [output]);
-  const displayOutput = showAll ? output : preview.text;
-  const tokens = useHighlightTokens(displayOutput, "ansi", theme.colors);
+  const window = useMemo(() => shellOutputWindow(output), [output]);
+  const tokens = useHighlightTokens(window.text, "ansi", theme.colors);
   const failed = typeof detail.exitCode === "number" && detail.exitCode !== 0;
   return (
     <View {...cmonoViewEscape} style={styles.section}>
@@ -1608,32 +1625,26 @@ function ShellCommandBlock({
           <CopyCodeButton code={detail.command} theme={theme} styles={styles} />
         </View>
         {output ? (
-          <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
-            <View style={styles.codeSurface}>
-              {tokens ? (
-                <TokenizedLines lines={tokens} styles={styles} />
-              ) : (
-                <Text selectable style={[styles.codeLine, styles.shellOutput]}>
-                  {displayOutput || " "}
-                </Text>
-              )}
-            </View>
-          </ScrollView>
+          <>
+            {window.hiddenLines > 0 ? (
+              <Text style={[styles.mutedText, styles.codeSurface]}>
+                …earlier output hidden ({window.hiddenLines.toLocaleString()} lines)
+              </Text>
+            ) : null}
+            <ScrollView horizontal nestedScrollEnabled style={styles.codeScroll}>
+              <View style={styles.codeSurface}>
+                {tokens ? (
+                  <TokenizedLines lines={tokens} styles={styles} />
+                ) : (
+                  <Text selectable style={[styles.codeLine, styles.shellOutput]}>
+                    {window.text || " "}
+                  </Text>
+                )}
+              </View>
+            </ScrollView>
+          </>
         ) : null}
       </View>
-      {preview.truncated ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setShowAll(!showAll)}
-          style={styles.showMoreButton}
-        >
-          <Text style={styles.showMoreText}>
-            {showAll
-              ? "Show less"
-              : `Show all (${preview.totalLines} lines, ${preview.totalChars.toLocaleString()} chars)`}
-          </Text>
-        </Pressable>
-      ) : null}
       {detail.exitCode !== undefined && detail.exitCode !== null ? (
         <Text style={failed ? styles.shellExitFailed : styles.mutedText}>
           Exit code {detail.exitCode}
