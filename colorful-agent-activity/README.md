@@ -128,12 +128,13 @@ restores every value. Four pages:
 
 - **Activity** - palette (vivid, soft, high contrast) and quiet-row strength (dim, faded, soft, full).
 - **Rows** - start state for each collapsible row (Always / Latest / Never), with *Newest only*,
-  *Everything open*, and *Everything collapsed* presets.
+  *Everything open*, and *Everything collapsed* presets, plus the line budget for long blocks:
+  thinking (kept at its tail) and file contents and diffs (kept at their start).
 - **Code & commands** - when shell commands are colored (expanded, always, never), the code-block
   frame (header bar, bare, or header + line-number gutter), and whether long diff lines wrap or scroll.
 - **Replies** - restyle Paseo's own reply code. Desktop and web only; see Limitations.
 
-Stored settings are schema version 2 and migrate from version 1 in place.
+Stored settings are schema version 3 and migrate from versions 1 and 2 in place.
 
 Reload after installation or source changes:
 

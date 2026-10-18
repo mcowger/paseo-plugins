@@ -1506,6 +1506,8 @@ export function normalizeToolCallDetail(detail: ToolCallDetail, name?: string): 
 
 export const PREVIEW_LINES = 20;
 export const PREVIEW_CHARS = 4_000;
+/** Ceiling for a preview that asks for no line limit: still finite, so a runaway payload cannot stall layout. */
+export const MAX_PREVIEW_CHARS = 100_000;
 export const MAX_FORMAT_CHARS = 100_000;
 export const MAX_DIFF_CHARS = 100_000;
 
@@ -1516,22 +1518,36 @@ export interface TextPreview {
   totalChars: number;
 }
 
+/**
+ * The head of a block, for content that is read from its start: file contents,
+ * diffs, JSON payloads.
+ *
+ * `maxLines` of 0 means "no line limit", which still honours `maxChars`.
+ */
 export function previewText(
   text: string,
   maxLines = PREVIEW_LINES,
-  maxChars = PREVIEW_CHARS,
+  maxChars?: number,
 ): TextPreview {
+  const lineLimit = maxLines > 0 ? maxLines : Number.POSITIVE_INFINITY;
+  // A wider window needs room for its lines: a fixed 4,000 characters would cut
+  // an 80-line preview back to roughly half of what was asked for.
+  const charLimit =
+    maxChars ??
+    (maxLines > 0
+      ? Math.min(MAX_PREVIEW_CHARS, Math.max(PREVIEW_CHARS, maxLines * 200))
+      : MAX_PREVIEW_CHARS);
   const lines = text.split("\n");
   const totalLines = lines.length;
   const totalChars = text.length;
 
-  if (totalLines <= maxLines && totalChars <= maxChars) {
+  if (totalLines <= lineLimit && totalChars <= charLimit) {
     return { text, truncated: false, totalLines, totalChars };
   }
 
-  const candidate = text.slice(0, maxChars + 1);
+  const candidate = text.slice(0, charLimit + 1);
   const candidateLines = candidate.split("\n");
-  let preview = candidateLines.slice(0, maxLines).join("\n").slice(0, maxChars);
+  let preview = candidateLines.slice(0, lineLimit).join("\n").slice(0, charLimit);
 
   // Guard against splitting a UTF-16 surrogate pair
   const last = preview.charCodeAt(preview.length - 1);
@@ -1552,6 +1568,29 @@ export function previewText(
     totalLines,
     totalChars,
   };
+}
+
+export interface TailPreview {
+  text: string;
+  /** Lines that fell off the top, for the "earlier content hidden" note. */
+  hiddenLines: number;
+}
+
+/**
+ * The tail of a block, for content that is read at its end: streaming output and
+ * thinking. A live block has to keep its newest lines, or following it means
+ * following something that was never rendered.
+ *
+ * `maxLines` of 0 keeps every line, still bounded by `maxChars`.
+ */
+export function tailPreview(text: string, maxLines: number, maxChars: number): TailPreview {
+  const lines = text.split("\n");
+  if ((maxLines <= 0 || lines.length <= maxLines) && text.length <= maxChars) {
+    return { text, hiddenLines: 0 };
+  }
+  const window = maxLines > 0 ? lines.slice(-maxLines).join("\n") : text;
+  const kept = window.slice(-maxChars);
+  return { text: kept, hiddenLines: Math.max(0, lines.length - kept.split("\n").length) };
 }
 
 function looksLikeJson(source: string): boolean {

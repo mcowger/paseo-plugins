@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { activitySettings, DEFAULT_EXPANSION, EXPANSION_TARGETS } from "./settings";
 
 describe("activity settings", () => {
-  it("stays on schema version 2 with a migration for stored version 1 values", () => {
-    expect(activitySettings.version).toBe(2);
+  it("stays on schema version 3 with a migration for older stored values", () => {
+    expect(activitySettings.version).toBe(3);
     expect(activitySettings.migrate?.({ palette: "soft" }, 1)).toEqual({ palette: "soft" });
+    expect(activitySettings.migrate?.({ palette: "soft" }, 2)).toEqual({ palette: "soft" });
   });
 
   it("backfills expansion defaults for legacy stored values", () => {
@@ -21,6 +22,14 @@ describe("activity settings", () => {
     expect(parsed.codeChrome).toBe("header");
     expect(parsed.diffWrap).toBe("off");
     expect(parsed.replyCode).toBe("on");
+    expect(parsed.previewLines).toBe(20);
+    expect(parsed.thinkingLines).toBe(400);
+  });
+
+  it("accepts a zero line limit, and rejects a negative or fractional one", () => {
+    expect(activitySettings.schema.parse({ previewLines: 0 }).previewLines).toBe(0);
+    expect(activitySettings.schema.safeParse({ previewLines: -1 }).success).toBe(false);
+    expect(activitySettings.schema.safeParse({ thinkingLines: 1.5 }).success).toBe(false);
   });
 
   it("fills presentation defaults for a version 1 payload", () => {

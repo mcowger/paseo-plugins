@@ -35,6 +35,7 @@ import {
   languageForFilePath,
   MAX_DIFF_CHARS,
   MAX_FORMAT_CHARS,
+  MAX_PREVIEW_CHARS,
   normalizeToolCallDetail,
   notInHeader,
   ompWaitLabel,
@@ -54,8 +55,7 @@ import {
   parseSubagentSupervisorInput,
   parseTodoToolInput,
   parseTodoToolOutput,
-  paseoToolCategory,
-  paseoToolIcon,
+  paseoToolCategory,  paseoToolIcon,
   paseoToolLabel,
   paseoToolLeafName,
   paseoToolResult,
@@ -73,6 +73,7 @@ import {
   splitFileDisplay,
   splitReasoningSteps,
   stripLeadingCwdCd,
+  tailPreview,
   subagentSupervisorLabel,
   subagentSupervisorSummary,
   textAfterHeader,
@@ -967,6 +968,58 @@ describe("colorful activity presentation", () => {
     const lastChar = emojiPreview.text.charCodeAt(emojiPreview.text.length - 1);
     // Must not end on a high surrogate
     expect(lastChar >= 0xd800 && lastChar <= 0xdbff).toBe(false);
+  });
+
+  it("widens the character budget with the line budget, so a bigger preview is not silently cut", () => {
+    const denseLines = Array.from({ length: 80 }, (_, i) => `${i + 1} ${"y".repeat(90)}`).join("\n");
+    // 80 lines of ~93 characters: 4,000 characters would cut it to about 43 lines.
+    expect(previewText(denseLines, 80).text.split("\n").length).toBe(80);
+    expect(previewText(denseLines).text.split("\n").length).toBe(20);
+  });
+
+  it("treats a zero line limit as no limit, still bounded by the hard character ceiling", () => {
+    const long = Array.from({ length: 500 }, (_, i) => `line ${i + 1}`).join("\n");
+    const whole = previewText(long, 0);
+    expect(whole.truncated).toBe(false);
+    expect(whole.text.split("\n").length).toBe(500);
+
+    const huge = "z".repeat(MAX_PREVIEW_CHARS + 5_000);
+    const capped = previewText(huge, 0);
+    expect(capped.truncated).toBe(true);
+    expect(capped.text.length).toBe(MAX_PREVIEW_CHARS);
+  });
+});
+
+describe("tailPreview", () => {
+  it("keeps the newest lines and counts what fell off the top", () => {
+    const lines = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`).join("\n");
+    const window = tailPreview(lines, 10, 100_000);
+    expect(window.text.split("\n")).toEqual([
+      "line 31",
+      "line 32",
+      "line 33",
+      "line 34",
+      "line 35",
+      "line 36",
+      "line 37",
+      "line 38",
+      "line 39",
+      "line 40",
+    ]);
+    expect(window.hiddenLines).toBe(30);
+  });
+
+  it("leaves a block that fits untouched", () => {
+    expect(tailPreview("a\nb\nc", 10, 100_000)).toEqual({ text: "a\nb\nc", hiddenLines: 0 });
+  });
+
+  it("falls back to the character ceiling for a zero line limit", () => {
+    const lines = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join("\n");
+    expect(tailPreview(lines, 0, 100_000)).toEqual({ text: lines, hiddenLines: 0 });
+
+    const window = tailPreview(lines, 0, 40);
+    expect(window.text.length).toBe(40);
+    expect(window.hiddenLines).toBeGreaterThan(0);
   });
 });
 

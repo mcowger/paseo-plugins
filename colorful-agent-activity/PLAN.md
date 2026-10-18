@@ -185,6 +185,25 @@ Three settings looked inert in the dashboard; all three were real bugs:
   keep the 20-line preview and its "Show all": there the content is not streamed and a whole file
   should not render by default.
 
+## Block length is a setting
+
+Two line budgets, both saved settings, both with **All** to drop the cut:
+
+- **Thinking** defaults to 400 lines, which is what the old hard-coded 32,000-character cap
+  amounted to at a typical 80 characters per line. Thinking is read at its end, so the budget
+  keeps the tail; the "Earlier reasoning hidden" note reports hidden lines instead of characters.
+- **File contents and diffs** default to 20 lines and keep their head. The budget is per block type
+  because the two read in opposite directions, and one number could never serve both.
+
+`previewText` now widens its character budget with the line budget (`maxLines × 200`, capped at
+100,000). A fixed 4,000-character cap would have silently cut an 80-line preview back to about
+half of it, which would have made the control look broken above 20 lines. Shell output stays out of
+both budgets: it is streamed, so it keeps its own 1,000-line / 100,000-character ceiling.
+
+The settings dashboard gained a "Long blocks" group on the Rows page with one picker per budget,
+and `Segmented` now accepts numbers, so the steps are ordinary segments rather than a new control.
+Settings are schema version 3; older payloads fill the new keys from their defaults.
+
 ## Follow-ups
 
 - Refresh `README.md` screenshots; they predate the dashboard, code cards, and quiet rows.

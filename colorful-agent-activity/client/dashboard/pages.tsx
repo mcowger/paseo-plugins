@@ -72,6 +72,39 @@ const PRESETS: { id: string; label: string; expansion: Expansion }[] = [
 ];
 
 /**
+ * Line budgets for long blocks, as pickable steps. `0` is "All": the block renders
+ * whole and the Show all control disappears.
+ */
+const CODE_LINE_OPTIONS: { value: number; label: string }[] = [
+  { value: 10, label: "10" },
+  { value: 20, label: "20" },
+  { value: 40, label: "40" },
+  { value: 80, label: "80" },
+  { value: 0, label: "All" },
+];
+
+const THINKING_LINE_OPTIONS: { value: number; label: string }[] = [
+  { value: 50, label: "50" },
+  { value: 150, label: "150" },
+  { value: 400, label: "400" },
+  { value: 800, label: "800" },
+  { value: 0, label: "All" },
+];
+
+/** A value the picker does not carry still has to show up, or the row looks unset. */
+function withCurrent(
+  options: { value: number; label: string }[],
+  current: number,
+): { value: number; label: string }[] {
+  if (options.some((option) => option.value === current)) return options;
+  return [
+    ...options.slice(0, -1),
+    { value: current, label: current.toLocaleString() },
+    ...options.slice(-1),
+  ];
+}
+
+/**
  * A miniature activity row: category dot, label, muted summary, status dot, and
  * the guide that the palette controls. The divider is the point: soft draws it
  * faint and thin, vivid at the normal weight, high contrast bright and doubled.
@@ -256,6 +289,41 @@ function RowsPage({ prefs, change, theme, layout }: PageProps) {
             </ControlRow>
           ))}
         </View>
+      </Group>
+      <Group
+        title="Long blocks"
+        hint="Lines rendered before a block offers its Show all control. All renders the block whole."
+        styles={styles}
+      >
+        <ControlRow
+          label="Thinking"
+          hint="Read at its end, so the newest lines are the ones kept."
+          styles={styles}
+          stacked={stacked}
+          first
+        >
+          <Segmented<number>
+            accessibilityLabel="Thinking block lines"
+            value={prefs.thinkingLines}
+            options={withCurrent(THINKING_LINE_OPTIONS, prefs.thinkingLines)}
+            onChange={(value) => change({ thinkingLines: value })}
+            styles={styles}
+          />
+        </ControlRow>
+        <ControlRow
+          label="File contents & diffs"
+          hint="Read from their start, so the opening lines are the ones kept."
+          styles={styles}
+          stacked={stacked}
+        >
+          <Segmented<number>
+            accessibilityLabel="File and diff block lines"
+            value={prefs.previewLines}
+            options={withCurrent(CODE_LINE_OPTIONS, prefs.previewLines)}
+            onChange={(value) => change({ previewLines: value })}
+            styles={styles}
+          />
+        </ControlRow>
       </Group>
     </View>
   );

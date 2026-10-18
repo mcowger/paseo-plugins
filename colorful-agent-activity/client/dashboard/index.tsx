@@ -184,6 +184,8 @@ function sameSettings(left: ActivitySettings, right: ActivitySettings): boolean 
     left.codeChrome === right.codeChrome &&
     left.diffWrap === right.diffWrap &&
     left.replyCode === right.replyCode &&
+    left.previewLines === right.previewLines &&
+    left.thinkingLines === right.thinkingLines &&
     EXPANSION_KEYS.every((key) => left.expansion[key] === right.expansion[key])
   );
 }

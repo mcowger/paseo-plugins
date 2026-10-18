@@ -174,6 +174,9 @@ export function useDashboardStyles(theme: PluginTheme) {
         borderRadius: 7,
         borderWidth: StyleSheet.hairlineWidth,
         flexDirection: "row",
+        // A block-length picker carries five steps plus a custom value; wrapping
+        // keeps them readable instead of squeezing every segment.
+        flexWrap: "wrap",
         gap: 2,
         padding: 2,
       } satisfies ViewStyle,
@@ -326,7 +329,7 @@ export function Group({
 }
 
 /** A segmented control: one choice out of a few, always visible together. */
-export function Segmented<T extends string>({
+export function Segmented<T extends string | number>({
   value,
   options,
   onChange,
@@ -345,7 +348,7 @@ export function Segmented<T extends string>({
         const active = option.value === value;
         return (
           <Pressable
-            key={option.value}
+            key={String(option.value)}
             accessibilityRole="radio"
             accessibilityState={{ selected: active, disabled: !!option.disabled }}
             disabled={option.disabled}

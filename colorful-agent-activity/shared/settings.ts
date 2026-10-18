@@ -31,6 +31,13 @@ export const expansionModeSchema = z.enum(["always", "latest", "never"]);
 export type ExpansionMode = z.output<typeof expansionModeSchema>;
 
 /**
+ * How many lines of a long block render before its "Show all" control appears.
+ * `0` shows the whole block: the expander is the only escape hatch otherwise.
+ */
+export const previewLinesSchema = z.number().int().min(0).max(2_000);
+export const thinkingLinesSchema = z.number().int().min(0).max(20_000);
+
+/**
  * One expansion knob per collapsible row renderer. Defaults keep reads and
  * questions collapsed and open the newest task update and activity row.
  */
@@ -93,9 +100,10 @@ const expansionSettingsSchema = z.object({
 export const activitySettings = defineSettings({
   id: "display",
   scope: "host",
-  version: 2,
-  // v1 stored only the palette and row expansion; every v2 key has a default, so
-  // passing the old values through the current schema fills them in.
+  version: 3,
+  // v1 stored only the palette and row expansion; v2 added the display knobs; v3
+  // added the block-length limits. Every key has a default, so passing older
+  // values through the current schema fills the missing ones in.
   migrate: (values) => values,
   schema: z.object({
     palette: paletteModeSchema.default("vivid"),
@@ -105,6 +113,11 @@ export const activitySettings = defineSettings({
     codeChrome: codeChromeSchema.default("header"),
     diffWrap: diffWrapSchema.default("off"),
     replyCode: replyCodeSchema.default("on"),
+    // File contents, diffs, and JSON payloads: 20 lines is the historical cap.
+    previewLines: previewLinesSchema.default(20),
+    // Thinking is the main reading surface, so its default matches the old 32,000
+    // character cap it used to carry: plenty for a real block, finite for a runaway one.
+    thinkingLines: thinkingLinesSchema.default(400),
   }),
 });
 

@@ -94,8 +94,8 @@ manual toggles persist across later task updates.
 
 Shipped defaults: reads and questions start collapsed, task updates and everything else follow
 Latest. Saved Tasks settings are preserved, so set Tasks to Latest if an existing install still
-has it set to Always. Settings are schema version 2, with a migration from version 1 and fully
-defaulted keys.
+has it set to Always. Settings are schema version 3, with a migration from versions 1 and 2 and
+fully defaulted keys.
 
 ## Expanded activity
 
@@ -349,7 +349,12 @@ reusing the plugin's derived colors.
   layouts. Never a fixed-height inner scroller: the screen itself scrolls.
 - Every choice is a tile with its own miniature preview (palette, quiet strength, code frame,
   command color), so the effect is visible before it is selected. Segmented controls are for
-  two-or-three-way choices that need no picture.
+  two-or-three-way choices that need no picture, and for value pickers such as the long-block line
+  limits, where a picture of "40 lines" would not read any clearer than the number.
+- Long blocks stop at a line budget and offer **Show all** below the block: thinking keeps its tail
+  (400 lines by default, because it is read at its end), file contents and diffs keep their head
+  (20 lines, because they are read from their start). Both budgets are settings, and **All** drops
+  the cut; the shell-output ceiling stays fixed because output is streamed, not read.
 - The preview renders the real renderers over sample data produced by the real transforms, so it
   cannot drift from the timeline. It reads draft values through `PrefsOverride`, which is why a tap
   updates the preview on the same frame as the save leaves.

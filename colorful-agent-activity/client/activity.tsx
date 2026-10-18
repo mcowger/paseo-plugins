@@ -67,7 +67,6 @@ import {
   MAX_DIFF_CHARS,
   MAX_VISIBLE_SUBAGENT_ACTIONS,
   notInHeader,
-  PREVIEW_LINES,
   parseOpencodeSearchContent,
   parsePiLsOutput,
   parseSubAgentActionLog,
@@ -83,6 +82,7 @@ import {
   splitReasoningSteps,
   stripLeadingCwdCd,
   subAgentLogFullyShown,
+  tailPreview,
   todoTaskLabel,
   toolCallHasBody,
   truncateDirFront,
@@ -135,25 +135,7 @@ const MAX_DETAIL_HEIGHT = 420;
  * rendered, so a runaway block cannot stall layout.
  */
 const MAX_REASONING_CHARS = 32_000;
-/**
- * Shell output is streamed and read from its tail, so it is never cut to the code
- * preview's 20 lines: the newest output has to exist for the follow to reach it.
- * This guard only keeps a pathological dump from stalling layout, and when it
- * trips the newest output is what survives.
- */
-const MAX_SHELL_OUTPUT_LINES = 1_000;
-const MAX_SHELL_OUTPUT_CHARS = 100_000;
 
-/** The part of a shell result worth rendering, and how much fell off the top. */
-function shellOutputWindow(output: string): { text: string; hiddenLines: number } {
-  const lines = output.split("\n");
-  if (lines.length <= MAX_SHELL_OUTPUT_LINES && output.length <= MAX_SHELL_OUTPUT_CHARS) {
-    return { text: output, hiddenLines: 0 };
-  }
-  const kept = lines.slice(-MAX_SHELL_OUTPUT_LINES).join("\n").slice(-MAX_SHELL_OUTPUT_CHARS);
-  const keptLines = kept.split("\n").length;
-  return { text: kept, hiddenLines: Math.max(0, lines.length - keptLines) };
-}
 
 // Paseo spaces consecutive activity rows by applying its inter-row gap to the row
 // that still has a newer neighbor. On the native inverted timeline the newest live
@@ -1198,7 +1180,7 @@ function HighlightedCodeBlock({
   const prefs = useActivityPrefs();
   const frame = chrome ?? prefs.codeChrome;
   const [showAll, setShowAll] = useState(false);
-  const preview = useMemo(() => previewText(code), [code]);
+  const preview = useMemo(() => previewText(code, prefs.previewLines), [code, prefs.previewLines]);
   const displayCode = showAll ? code : preview.text;
   const tokens = useHighlightTokens(displayCode, language, theme.colors);
   const lineCount = displayCode.split("\n").length;
@@ -1382,10 +1364,13 @@ function DiffBlock({
   styles: ReturnType<typeof useActivityStyles>;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const wrap = useActivityPrefs().diffWrap === "on";
+  const prefs = useActivityPrefs();
+  const wrap = prefs.diffWrap === "on";
+  // 0 means the reader asked for whole blocks: never cut a diff they chose to see.
+  const limit = prefs.previewLines;
   const lines = useMemo(() => diffLinesForDetail(detail), [detail]);
-  const isTruncated = lines.length > PREVIEW_LINES;
-  const displayLines = showAll || !isTruncated ? lines : lines.slice(0, PREVIEW_LINES);
+  const isTruncated = limit > 0 && lines.length > limit;
+  const displayLines = showAll || !isTruncated ? lines : lines.slice(0, limit);
   const body = (
     <View style={styles.diffSurface}>
       {displayLines.length === 0 ? (
@@ -1584,6 +1569,15 @@ function SearchDetail({
  * A shell call as one surface: the command in the card's header, colored with the
  * bash grammar, then the output it produced and how the command exited.
  */
+/**
+ * Shell output is streamed and read from its tail, so it is not governed by the
+ * code-block line setting: a command that prints a hundred lines must keep the
+ * newest ones, or following it means following something that was never rendered.
+ * This ceiling only keeps a pathological dump from stalling layout.
+ */
+const MAX_SHELL_OUTPUT_LINES = 1_000;
+const MAX_SHELL_OUTPUT_CHARS = 100_000;
+
 function ShellCommandBlock({
   detail,
   theme,
@@ -1597,7 +1591,10 @@ function ShellCommandBlock({
   styles: ReturnType<typeof useActivityStyles>;
 }) {
   const output = detail.output ?? "";
-  const window = useMemo(() => shellOutputWindow(output), [output]);
+  const window = useMemo(
+    () => tailPreview(output, MAX_SHELL_OUTPUT_LINES, MAX_SHELL_OUTPUT_CHARS),
+    [output],
+  );
   const tokens = useHighlightTokens(window.text, "ansi", theme.colors);
   const failed = typeof detail.exitCode === "number" && detail.exitCode !== 0;
   return (
@@ -2374,12 +2371,14 @@ function ReasoningText({
   palette: ActivityPalette;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
+  const prefs = useActivityPrefs();
   const [showAll, setShowAll] = useState(false);
   const isStreaming = phase === "streaming";
-  // Whole text, not a preview: a truncated block would stop following the stream
-  // and hide the newest lines. Past the safety cap the tail is what matters.
-  const overflow = text.length > MAX_REASONING_CHARS;
-  const shownText = overflow && !showAll ? text.slice(-MAX_REASONING_CHARS) : text;
+  // Whole text, not a head preview: a truncated block would stop following the
+  // stream and hide the newest lines. The tail is what matters, and the cap that
+  // governs it is the thinking setting.
+  const window = tailPreview(text, prefs.thinkingLines, MAX_REASONING_CHARS);
+  const shownText = showAll ? text : window.text;
   const revealedText = useRevealedText(shownText, phase);
   const steps = useMemo(() => splitReasoningSteps(revealedText), [revealedText]);
   // The newest block follows its tail until it stops being the newest; a finished
@@ -2418,7 +2417,7 @@ function ReasoningText({
           </View>
         )}
       </ScrollView>
-      {overflow ? (
+      {window.hiddenLines > 0 ? (
         <Pressable
           accessibilityRole="button"
           onPress={() => setShowAll(!showAll)}
@@ -2427,7 +2426,7 @@ function ReasoningText({
           <Text style={styles.showMoreText}>
             {showAll
               ? "Show less"
-              : `Earlier reasoning hidden · ${text.length.toLocaleString()} chars`}
+              : `Earlier reasoning hidden · ${window.hiddenLines.toLocaleString()} lines`}
           </Text>
         </Pressable>
       ) : null}

@@ -59,12 +59,26 @@ export const SAMPLE_EDIT = createToolCallData(
     oldString: "  if (!ok) return deny(401);",
     newString:
       '  if (!ok) return deny(403, { reason: "token expired", retryAfterSeconds: 30, requestId: req.id });',
+    // Long enough that the smallest "lines before Show all" setting visibly cuts
+    // it: a four-line diff would make that control look inert in the preview.
     unifiedDiff: [
-      "@@ -12,4 +12,4 @@ export function requireAuth(req, next) {",
-      "   const ok = verifyToken(req);",
+      "@@ -12,16 +12,16 @@ export function requireAuth(req, next) {",
+      "   const token = readBearer(req);",
+      "   if (!token) return deny(401);",
+      "   const claims = verifyToken(token);",
+      "   if (!claims) return deny(401);",
+      "   const user = await lookupUser(claims.sub);",
+      "   if (!user) return deny(401);",
+      "   if (!user.active) return deny(403);",
+      "   const scopes = claims.scope?.split(' ') ?? [];",
+      "   const allowed = scopes.includes(req.route.scope);",
+      "   if (!allowed) return deny(403);",
+      "   req.auth = { user, scopes };",
+      "   const ok = allowed && user.active;",
       "-  if (!ok) return deny(401);",
       '+  if (!ok) return deny(403, { reason: "token expired", retryAfterSeconds: 30, requestId: req.id });',
-      "   next();",
+      "   return next();",
+      " }",
     ].join("\n"),
   }),
 );
