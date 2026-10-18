@@ -206,10 +206,8 @@ Settings are schema version 3; older payloads fill the new keys from their defau
 
 ## Follow-ups
 
-- Refresh `README.md` screenshots; they predate the dashboard, code cards, and quiet rows.
 - The plugin has no entry under Settings → Plugins any more: registration moved to a dashboard screen
   with a sidebar row and a command center item. Add a settings screen again if that discoverability
   matters more than matching chat-polish's shape.
 - Add Command Center toggles for quiet strength and command colors if wanted. They would need a saver
   that is always mounted; the activity renderers are always mounted when a chat is open.
-- Mobile smoke test on a device or emulator.
