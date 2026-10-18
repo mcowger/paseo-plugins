@@ -139,8 +139,10 @@ export function useDashboardStyles(theme: PluginTheme) {
         borderRadius: 8,
         borderWidth: StyleSheet.hairlineWidth,
         borderColor: c.border,
+        // Narrow intrinsic width on purpose: with a wider one, four tiles wrap to
+        // three plus a stretched orphan instead of sharing one row.
         flexGrow: 1,
-        minWidth: 132,
+        minWidth: 96,
         overflow: "hidden",
       } satisfies ViewStyle,
       tileActive: {

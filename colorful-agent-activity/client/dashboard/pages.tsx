@@ -104,19 +104,19 @@ function MiniRow({
             borderRadius: 2,
             height: 6,
             opacity: 0.85,
-            width: 58,
+            width: 40,
           }}
         />
         <View
           style={{
             backgroundColor: styles.colors.foregroundMuted,
             borderRadius: 2,
+            flex: 1,
             height: 6,
+            minWidth: 10,
             opacity: 0.7,
-            width: 34,
           }}
         />
-        <View style={{ flex: 1 }} />
         <View
           style={{
             backgroundColor: palette.statusColors.completed,
