@@ -311,6 +311,18 @@ The same command is highlighted in the row summary while the row is expanded (or
 Apply diff color to changed lines only, with the low-opacity `tint` washers. Added and removed lines
 read in their status color; context lines keep the highlight theme. Line wrapping is a setting.
 
+### Unparsed tool results
+
+A tool nobody has written a parser for shows the text the model saw, then a collapsed
+**Details (n)** disclosure of its scalar facts: muted label in mono, value beside it,
+`+N more fields` when the provider had to trim. Never a raw JSON block — an unparsed
+schema makes the reader decode it mid-scan.
+
+The same disclosure closes a gap in typed rows: a provider can attach facts its detail
+type has no field for (a sub-agent's token count, a shell's truncation), and they render
+here rather than being lost. A truncated shell shows its note inline instead, because
+that fact belongs with the output it describes.
+
 ## Reasoning
 
 Reasoning follows the same visual system as tool activity.

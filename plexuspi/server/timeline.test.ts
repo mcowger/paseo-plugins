@@ -957,6 +957,91 @@ describe("tool details nothing interprets", () => {
     expect(toolDetailDiagnostic("bash", null)).toBeNull();
   });
 
+  test("carries a typed tool's leftover facts on the item, since its detail cannot hold them", () => {
+    const { timeline } = harness();
+    timeline.accept({
+      type: "tool_execution_end",
+      toolCallId: "call-agent",
+      toolName: "Agent",
+      args: { description: "Audit", prompt: "go", subagent_type: "worker" },
+      result: { content: [{ type: "text", text: "Agent started in background." }] },
+      details: {
+        agentId: "df30",
+        subagentType: "worker",
+        description: "Audit",
+        status: "background",
+        tokens: "39.1k",
+        toolUses: 9,
+        durationMs: 55900,
+        modelName: "claude-haiku-5.5",
+        tags: ["thinking: high", "background"],
+        displayName: "worker",
+      },
+    });
+    const tool = findItem(timeline.items(), "tool:call-agent");
+    expect(tool.type === "tool_call" && tool.metadata).toEqual({
+      plexuspiFacts: {
+        status: "background",
+        tokens: "39.1k",
+        toolUses: 9,
+        durationMs: 55900,
+        modelName: "claude-haiku-5.5",
+        tags: "2 items",
+      },
+    });
+  });
+
+  test("reduces shell truncation to the facts a row can show", () => {
+    const { timeline } = harness();
+    timeline.accept({
+      type: "tool_execution_end",
+      toolCallId: "call-big",
+      toolName: "bash",
+      args: { command: "cat huge.log" },
+      result: { content: [{ type: "text", text: "first line" }] },
+      details: {
+        fullOutputPath: "/tmp/plexuspi/huge.log",
+        truncation: { truncated: true, totalBytes: 251031, totalLines: 8, outputLines: 0 },
+      },
+    });
+    const tool = findItem(timeline.items(), "tool:call-big");
+    expect(tool.type === "tool_call" && tool.metadata).toEqual({
+      plexuspiFacts: {
+        truncated: true,
+        totalBytes: 251031,
+        totalLines: 8,
+        fullOutputPath: "/tmp/plexuspi/huge.log",
+      },
+    });
+    // An ordinary command carries no facts and no metadata.
+    timeline.accept({
+      type: "tool_execution_end",
+      toolCallId: "call-plain",
+      toolName: "bash",
+      args: { command: "true" },
+      result: { content: [{ type: "text", text: "" }] },
+      details: null,
+    });
+    const plain = findItem(timeline.items(), "tool:call-plain");
+    expect(plain.type === "tool_call" && plain.metadata).toBeUndefined();
+  });
+
+  test("stays quiet for tools whose curated view already covers their details", () => {
+    expect(
+      toolDetailDiagnostic("get_subagent_result", {
+        agentId: "a1",
+        operation: "wait",
+        subagentType: "worker",
+        description: "Audit",
+        status: "completed",
+      }),
+    ).toBeNull();
+    expect(
+      toolDetailDiagnostic("ask_user_question", { answers: [{}], cancelled: false }),
+    ).toBeNull();
+    expect(toolDetailDiagnostic("bash", { truncation: {}, fullOutputPath: "/tmp/x" })).toBeNull();
+  });
+
   test("reports a tool once per session, not once per call", () => {
     const diagnostics: ToolDetailDiagnostic[] = [];
     const { timeline } = harness(diagnostics);

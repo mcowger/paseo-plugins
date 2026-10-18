@@ -25,6 +25,7 @@ import {
   hasMeaningfulUnknownValue,
   isApplyPatchTool,
   isAskTool,
+  parseAskAnswers,
   isBgWaitTool,
   isDirectoryRead,
   isOmpWaitTool,
@@ -1157,8 +1158,22 @@ describe("reasoning steps and header metadata", () => {
     expect(isAskTool("Ask")).toBe(true);
     expect(isAskTool("functions.ask")).toBe(true);
     expect(isAskTool("mcp__server__ask")).toBe(true);
+    // Pi and Claude spell the tool out; both are the same row.
+    expect(isAskTool("ask_user_question")).toBe(true);
+    expect(isAskTool("AskUserQuestion")).toBe(true);
     expect(isAskTool("task")).toBe(false);
     expect(isAskTool("")).toBe(false);
+  });
+
+  it("reads Pi's question and answer pairs out of the result text", () => {
+    const text = `User has answered your questions: "Where should the settings live?"="Match what chat-polish does". "How far should colorful go?"="Web restyle + code cards (Recommended)". You can now continue with the user's answers in mind.`;
+    expect(parseAskAnswers(text)).toEqual([
+      { question: "Where should the settings live?", answer: "Match what chat-polish does" },
+      { question: "How far should colorful go?", answer: "Web restyle + code cards (Recommended)" },
+    ]);
+    // Shapes that are not that text render as text, not as a broken list.
+    expect(parseAskAnswers("User cancelled the questions.")).toEqual([]);
+    expect(parseAskAnswers("")).toEqual([]);
   });
 
   it("projects ask tools as a question row", () => {

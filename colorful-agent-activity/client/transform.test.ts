@@ -63,7 +63,7 @@ describe("colorful activity timeline transforms", () => {
         {
           type: "plugin",
           kind: "colorful-tool-call",
-          version: 1,
+          version: 2,
           data: {
             name: "edit",
             status: "completed",

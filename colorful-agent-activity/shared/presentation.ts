@@ -507,7 +507,30 @@ export function isAskTool(toolName: string): boolean {
     .replace(/^(?:functions|tools)\./, "")
     .replace(/^mcp__.*?__/, "")
     .replace(/^mcp_/, "");
-  return normalized === "ask";
+  // Pi's tool is ask_user_question; Claude's is AskUserQuestion.
+  return normalized === "ask" || normalized === "ask_user_question" || normalized === "askuserquestion";
+}
+
+/** One question and the answer it got, as Pi reports them in the result text. */
+export interface AskAnswer {
+  question: string;
+  answer: string;
+}
+
+/**
+ * Pull the question/answer pairs out of an ask tool result.
+ *
+ * Pi writes them as `"<question>"="<answer>"` after a fixed prefix. Returns an
+ * empty list when the text is not that shape, so a row can fall back to the text
+ * rather than render a half-parsed list.
+ */
+export function parseAskAnswers(text: string): AskAnswer[] {
+  const body = text.replace(/^\s*user has answered your questions:\s*/i, "");
+  const answers: AskAnswer[] = [];
+  for (const match of body.matchAll(/"([^"]+)"\s*=\s*"([^"]*)"/g)) {
+    answers.push({ question: match[1] ?? "", answer: match[2] ?? "" });
+  }
+  return answers.filter((entry) => entry.question.length > 0);
 }
 
 export function paseoToolLeafName(toolName: string): string | null {

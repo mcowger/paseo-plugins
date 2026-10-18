@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createTodoData,
   createToolCallData,
+  toolCallFacts,
   isLatestTaskUpdate,
   resolveExpansion,
   resolveTaskUpdateExpansion,
@@ -34,6 +35,31 @@ function v2EditItem(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe("provider facts on a typed tool call", () => {
+  it("reads the scalar facts a provider attaches under metadata.plexuspiFacts", () => {
+    expect(toolCallFacts({ plexuspiFacts: { status: "background", toolUses: 9 } })).toEqual({
+      status: "background",
+      toolUses: 9,
+    });
+    expect(toolCallFacts({ plexuspiFacts: {} })).toBeUndefined();
+    expect(toolCallFacts({})).toBeUndefined();
+    expect(toolCallFacts(null)).toBeUndefined();
+    // Nested structure is not a fact a row can show; the provider must flatten.
+    expect(toolCallFacts({ plexuspiFacts: { truncation: { bytes: 1 } } })).toBeUndefined();
+  });
+
+  it("carries them onto the item so a typed detail can show what it cannot hold", () => {
+    const data = createToolCallData(
+      v2EditItem({
+        name: "Agent",
+        detail: { type: "sub_agent" as const, log: "started", childSessionId: "df30" },
+        metadata: { plexuspiFacts: { status: "background", tokens: "39.1k" } },
+      }),
+    );
+    expect(data.facts).toEqual({ status: "background", tokens: "39.1k" });
+  });
+});
 
 describe("opencode v2 edit metadata", () => {
   it("renders the diff and exact stats from metadata.files[].patch", () => {

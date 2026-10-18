@@ -369,6 +369,7 @@ export function createTimeline(input: {
       // A running call has no list yet, and a placeholder row would outlive it.
       if (status === "running") return;
     }
+    const metadata = metadataForTool(resolvedName, resultDetails);
     upsert(
       {
         type: "tool_call",
@@ -376,11 +377,24 @@ export function createTimeline(input: {
         callId,
         name: resolvedName,
         detail: mapToolDetail(resolvedName, resolvedArgs, output, resultDetails),
+        ...(metadata ? { metadata } : {}),
         status,
         error: failed ? (error ?? { message: output ?? "Tool failed" }) : null,
       } as ProviderTimelineItem,
       timestamp,
     );
+  }
+
+  /**
+   * The leftover detail facts for a tool with a typed detail, as a bounded
+   * `metadata.plexuspiFacts` object. A typed detail has fixed fields and the host
+   * strips anything else, so this is the only way a fact like a sub-agent's token
+   * count can reach the row.
+   */
+  function metadataForTool(tool: string, details: unknown): Record<string, unknown> | undefined {
+    if (toolDetailKind(tool) === "unknown") return undefined;
+    const facts = toolFacts(tool, details);
+    return facts ? { plexuspiFacts: facts } : undefined;
   }
 
   /** Tells the host which detail keys of a tool the mapping has no use for. */
@@ -604,7 +618,72 @@ const DETAIL_USAGE: Partial<Record<ToolDetailKind, DetailUsage>> = {
       nextId: "internal bookkeeping",
     },
   },
+  bash: {
+    consumed: [],
+    ignored: {
+      truncation: "reduced to the truncation note the row renders",
+      fullOutputPath: "carried by the same note",
+    },
+  },
 };
+
+/**
+ * Usage for tools with no branch of their own, keyed by name. These still report
+ * facts (the projection below shows them), but a curated view already exists for
+ * them, so they are not parser candidates.
+ */
+const TOOL_DETAIL_USAGE: Record<string, DetailUsage> = {
+  get_subagent_result: {
+    consumed: [],
+    ignored: {
+      agentId: "the row shows it from the result text",
+      description: "same",
+      operation: "same",
+      status: "same",
+      subagentType: "same",
+    },
+  },
+  ask_user_question: {
+    consumed: [],
+    ignored: {
+      answers: "the row renders the questions and answers from the result text",
+      cancelled: "same",
+    },
+  },
+};
+
+/**
+ * The facts a tool's result reports that nothing maps to a field, projected to the
+ * same bounded scalars as an unparsed tool's details. A shell reports truncation
+ * as a nested object, so it gets its own view.
+ */
+function toolFacts(tool: string, details: unknown): DetailProjection["fields"] | undefined {
+  if (!isRecord(details)) return undefined;
+  if (toolDetailKind(tool) === "bash") return shellFacts(details);
+  const usage = detailUsage(tool);
+  const accounted = [...(usage?.consumed ?? []), ...Object.keys(usage?.ignored ?? {})];
+  const leftover = Object.fromEntries(
+    Object.entries(details).filter(([key]) => !accounted.includes(key)),
+  );
+  return projectToolDetails(leftover)?.fields;
+}
+
+function shellFacts(details: Record<string, unknown>): DetailProjection["fields"] | undefined {
+  const truncation = isRecord(details.truncation) ? details.truncation : {};
+  const facts: DetailProjection["fields"] = {};
+  if (truncation.truncated === true) facts.truncated = true;
+  const totalBytes = numberValue(truncation.totalBytes);
+  if (totalBytes !== undefined) facts.totalBytes = totalBytes;
+  const totalLines = numberValue(truncation.totalLines);
+  if (totalLines !== undefined) facts.totalLines = totalLines;
+  const fullOutputPath = asText(details.fullOutputPath);
+  if (fullOutputPath) facts.fullOutputPath = fullOutputPath;
+  return Object.keys(facts).length > 0 ? facts : undefined;
+}
+
+function detailUsage(tool: string): DetailUsage | undefined {
+  return TOOL_DETAIL_USAGE[tool.trim().toLowerCase()] ?? DETAIL_USAGE[toolDetailKind(tool)];
+}
 
 const MAX_DETAIL_FIELDS = 12;
 const MAX_DETAIL_CHARS = 1_000;
@@ -678,7 +757,7 @@ export interface ToolDetailDiagnostic {
 export function toolDetailDiagnostic(tool: string, details: unknown): ToolDetailDiagnostic | null {
   if (!isRecord(details)) return null;
   const kind = toolDetailKind(tool);
-  const usage = DETAIL_USAGE[kind];
+  const usage = detailUsage(tool);
   const consumed = usage?.consumed ?? [];
   const ignored = Object.keys(usage?.ignored ?? {});
   const unconsumed = Object.keys(details).filter(

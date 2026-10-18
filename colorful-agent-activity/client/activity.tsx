@@ -44,6 +44,7 @@ import { isOmpFindTool } from "../shared/omp-find";
 import { parsePiSubagentCall, piSubagentOperation } from "../shared/pi-subagents";
 import {
   type ActivityPalette,
+  type AskAnswer,
   type ActivityThemeColors,
   compactText,
   type DiffLine,
@@ -53,11 +54,13 @@ import {
   estimateReasoningTokens,
   expansionTargetForToolCall,
   extractCodeInput,
+  extractPiToolText,
   fileIconForPath,
   formatReasoningMeta,
   formatUnknownValue,
   hasMeaningfulToolCallDetail,
   hasMeaningfulUnknownValue,
+  isAskTool,
   isBgWaitTool,
   isOmpWaitTool,
   isOpencodeSubagentTool,
@@ -67,6 +70,7 @@ import {
   MAX_DIFF_CHARS,
   MAX_VISIBLE_SUBAGENT_ACTIONS,
   notInHeader,
+  parseAskAnswers,
   parseOpencodeSearchContent,
   parsePiLsOutput,
   parseSubAgentActionLog,
@@ -470,6 +474,19 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
         fontSize: 10,
         fontWeight: "500",
         lineHeight: 14,
+      } satisfies TextStyle,
+      askPair: {
+        gap: 2,
+      } satisfies ViewStyle,
+      askQuestion: {
+        color: theme.colors.foregroundMuted,
+        fontSize: 11.5,
+        lineHeight: 17,
+      } satisfies TextStyle,
+      askAnswer: {
+        color: theme.colors.foreground,
+        fontSize: 12.5,
+        lineHeight: 18,
       } satisfies TextStyle,
       factRows: {
         gap: 4,
@@ -1714,8 +1731,22 @@ function DetailBody({
   }
 
   switch (detail.type) {
-    case "shell":
-      return <ShellCommandBlock detail={detail} theme={theme} styles={styles} />;
+    case "shell": {
+      // A provider's shell detail has no truncation fields, so the facts are where
+      // they arrive: say the row is incomplete, and where the rest is.
+      const fullOutputPath = data.facts?.fullOutputPath;
+      return (
+        <ShellCommandBlock
+          detail={{
+            ...detail,
+            truncated: data.facts?.truncated === true,
+            ...(typeof fullOutputPath === "string" ? { fullOutputPath } : {}),
+          }}
+          theme={theme}
+          styles={styles}
+        />
+      );
+    }
     case "read":
       if (readErrorMessage(detail.content) && data.errorText) {
         return (
@@ -2077,6 +2108,13 @@ function DetailBody({
           />
         );
       }
+      if (isAskTool(data.name)) {
+        const text = extractPiToolText(detail.output)?.text ?? "";
+        const answers = parseAskAnswers(text);
+        if (answers.length > 0) {
+          return <AskAnswersDetail answers={answers} styles={styles} />;
+        }
+      }
       const facts = toolDetailFacts(detail.output);
       if (facts) {
         return (
@@ -2141,6 +2179,28 @@ function DetailBody({
   }
 }
 
+/** An ask tool's result as the Q/A pairs it actually is, rather than one paragraph. */
+function AskAnswersDetail({
+  answers,
+  styles,
+}: {
+  answers: AskAnswer[];
+  styles: ReturnType<typeof useActivityStyles>;
+}) {
+  return (
+    <View style={styles.section}>
+      {answers.map((entry, index) => (
+        <View key={`${index}-${entry.question}`} style={styles.askPair}>
+          <Text style={styles.askQuestion}>{entry.question}</Text>
+          <Text selectable style={styles.askAnswer}>
+            {entry.answer}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /**
  * A tool nobody has written a parser for: the text the model saw, plus its scalar
  * facts behind a disclosure. The alternative was a JSON block that made the reader
@@ -2149,16 +2209,19 @@ function DetailBody({
 function ToolFactsDetail({
   text,
   facts,
-  omitted,
+  omitted = 0,
   styles,
 }: {
-  text: string;
-  facts: { label: string; value: string }[];
-  omitted: number;
+  text?: string;
+  facts: { label: string; value: string }[] | Record<string, string | number | boolean>;
+  omitted?: number;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
   const [open, setOpen] = useState(false);
-  const total = facts.length + omitted;
+  const rows = Array.isArray(facts)
+    ? facts
+    : Object.entries(facts).map(([label, value]) => ({ label, value: String(value) }));
+  const total = rows.length + omitted;
   return (
     <View style={styles.section}>
       {text ? (
@@ -2179,7 +2242,7 @@ function ToolFactsDetail({
       </Pressable>
       {open ? (
         <View style={styles.factRows}>
-          {facts.map((fact) => (
+          {rows.map((fact) => (
             <View key={fact.label} style={styles.factRow}>
               <Text style={styles.factLabel}>{fact.label}</Text>
               <Text selectable style={styles.factValue}>
@@ -2777,6 +2840,15 @@ function ToolCallCard({
       ? stripLeadingCwdCd(item.data.presentation.summary, cwd)
       : item.data.presentation.summary;
   const prefs = useActivityPrefs();
+  // A typed detail has no field for these; the provider attaches them as facts.
+  // A shell shows truncation inline, so the same two keys are not repeated here.
+  const facts = useMemo(() => {
+    const all = item.data.facts;
+    if (!all) return undefined;
+    const inline = detail?.type === "shell" ? ["truncated", "fullOutputPath"] : [];
+    const rest = Object.entries(all).filter(([key]) => !inline.includes(key));
+    return rest.length > 0 ? Object.fromEntries(rest) : undefined;
+  }, [item.data.facts, detail?.type]);
   const quiet = useQuietRow(!expanded && item.data.status === "completed");
   // A running call's detail follows its tail like a terminal, and stops when the
   // reader scrolls up. A finished call's detail opens at its start.
@@ -2862,6 +2934,7 @@ function ToolCallCard({
                 </Text>
               </View>
             ) : null}
+            {facts ? <ToolFactsDetail facts={facts} styles={styles} /> : null}
           </ScrollView>
         </View>
       ) : null}

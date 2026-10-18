@@ -194,6 +194,20 @@ interface Timeline {
   out of the log: a log that reports decisions the maintainer already made stops
   being read, and then the line that matters goes unnoticed. The diagnostic is
   deliberately not a timeline item: it is a note to the maintainer, not content.
+- A typed detail has fixed fields and the host strips anything else, so a fact with
+  no field travels as `metadata.plexuspiFacts` on the tool call: the same bounded
+  projection, restricted to keys nothing maps. That is how a sub-agent's status and
+  token count, or a shell's truncation, reach the row at all. A shell reports
+  truncation as a nested object, so it gets a view of its own
+  (`truncated`, `totalBytes`, `totalLines`, `fullOutputPath`).
+- The four detail shapes that `DETAIL_USAGE` and `TOOL_DETAIL_USAGE` account for,
+  and why they are not parser candidates:
+  - sub-agent: status, tokens, tool uses, duration, model name, and tags go out as
+    facts; there is no field for them on the `sub_agent` detail.
+  - `get_subagent_result` and `ask_user_question` have no branch, and their rows
+    present the facts already (the supervisor view, the question/answer list).
+  - shell truncation and the full-output path are reduced to the note the shell
+    row renders.
 - The `todo` tool is not a tool row. Its result reports the whole list
   (`details.tasks`), which is emitted as a `type: "todo"` timeline item under
   `todo:<callId>`, the way Paseo's own providers present a checklist. A running
