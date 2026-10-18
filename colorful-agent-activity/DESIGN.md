@@ -306,6 +306,12 @@ truncation note.
 The same command is highlighted in the row summary while the row is expanded (or always, per
 **Shell commands** in the dashboard). Collapsed rows keep a plain muted summary.
 
+Agents habitually open with a `cd`: to the workspace root, which is where the command already
+runs, or into a subdirectory. The display measures that target against the workspace, so
+`cd /home/me/proj && npm test` reads as `npm test` and `cd /home/me/proj/app && npm test` as
+`cd app && npm test`. Targets outside the workspace and already-relative ones are left exactly
+as written, and the copy control still copies the command as issued.
+
 ### Diffs
 
 Apply diff color to changed lines only, with the low-opacity `tint` washers. Added and removed lines

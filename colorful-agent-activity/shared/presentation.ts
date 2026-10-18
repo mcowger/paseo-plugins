@@ -2401,24 +2401,47 @@ function shellSummary(detail: Extract<ToolCallDetail, { type: "shell" }>): strin
  * hop adds noise to one-line titles, so drop it when it targets `cwd`.
  * Returns the input unchanged when there is nothing to strip.
  */
-export function stripLeadingCwdCd(command: string, cwd?: string | null): string {
-  if (!cwd || !command) {
-    return command;
-  }
+/**
+ * The leading `cd` of a command, with its target measured against the workspace.
+ *
+ * Agents routinely open by `cd`-ing to the workspace root, or to a subdirectory of
+ * it, before running anything. An absolute path there is pure noise: `cd
+ * /home/me/proj && npm test` reads better as `npm test`, and `cd
+ * /home/me/proj/app && npm test` as `cd app && npm test`. Anything outside the
+ * workspace, or already relative, is left exactly as it was — it carries meaning.
+ */
+export function relativizeLeadingCd(command: string, cwd?: string | null): string {
+  if (!cwd || !command) return command;
   const match = command.match(
-    /^\s*cd\s+(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(\S+))\s*(?:&&|;)\s*([\s\S]*)$/,
+    /^\s*cd\s+(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(\S+))\s*(&&|;)\s*([\s\S]*)$/,
   );
-  if (!match) {
-    return command;
+  if (!match) return command;
+  // A relative target is already as short as it gets.
+  const rawTarget = (match[1] ?? match[2] ?? match[3] ?? "").replace(/\\ /g, " ");
+  const operator = match[4] ?? "&&";
+  const rest = (match[5] ?? "").trim();
+  if (!rawTarget.startsWith("/") || !rest) return command;
+  const base = normalizePath(cwd);
+  const target = normalizePath(rawTarget);
+  if (target === base) return rest;
+  if (target.startsWith(`${base}/`)) {
+    return `cd ${target.slice(base.length + 1)} ${operator} ${rest}`;
   }
-  const rawTarget = match[1] ?? match[2] ?? match[3] ?? "";
-  const normalizedTarget = rawTarget.replace(/\\/g, "/").replace(/\/+$/, "");
-  const normalizedCwd = cwd.replace(/\\/g, "/").replace(/\/+$/, "");
-  if (!normalizedTarget || normalizedTarget !== normalizedCwd) {
-    return command;
+  return command;
+}
+
+/** Collapse `.`/`..` and separators without pulling in a path library the client cannot use. */
+function normalizePath(value: string): string {
+  const parts: string[] = [];
+  for (const segment of value.replace(/\\/g, "/").split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      parts.pop();
+      continue;
+    }
+    parts.push(segment);
   }
-  const rest = (match[4] ?? "").trim();
-  return rest ? rest : command;
+  return `/${parts.join("/")}`;
 }
 
 function detailFilePath(detail: ToolCallDetail): string | undefined {

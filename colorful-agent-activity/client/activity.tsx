@@ -88,7 +88,7 @@ import {
   skillNameForDetail,
   splitFileDisplay,
   splitReasoningSteps,
-  stripLeadingCwdCd,
+  relativizeLeadingCd,
   subAgentLogFullyShown,
   tailPreview,
   todoTaskLabel,
@@ -1670,6 +1670,7 @@ const MAX_SHELL_OUTPUT_CHARS = 100_000;
 
 function ShellCommandBlock({
   detail,
+  cwd,
   theme,
   styles,
 }: {
@@ -1677,6 +1678,7 @@ function ShellCommandBlock({
     truncated?: boolean;
     fullOutputPath?: string;
   };
+  cwd: string | null;
   theme: Theme;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
@@ -1701,7 +1703,10 @@ function ShellCommandBlock({
           </Text>
           <ScrollView horizontal nestedScrollEnabled style={styles.shellCommandScroll}>
             <Text selectable style={[styles.codeLine, styles.shellCommand]}>
-              <HighlightedCommand text={detail.command} theme={theme} />
+              <HighlightedCommand
+                text={relativizeLeadingCd(detail.command, cwd)}
+                theme={theme}
+              />
             </Text>
           </ScrollView>
           {detail.cwd ? (
@@ -1789,6 +1794,7 @@ function DetailBody({
             truncated: data.facts?.truncated === true,
             ...(typeof fullOutputPath === "string" ? { fullOutputPath } : {}),
           }}
+          cwd={cwd}
           theme={theme}
           styles={styles}
         />
@@ -2965,7 +2971,7 @@ function ToolCallCard({
   }, [cwd, item.data.presentation.filePath]);
   const headerSummary =
     detail?.type === "shell" && item.data.presentation.summary
-      ? stripLeadingCwdCd(item.data.presentation.summary, cwd)
+      ? relativizeLeadingCd(item.data.presentation.summary, cwd)
       : item.data.presentation.summary;
   const prefs = useActivityPrefs();
   // A typed detail has no field for these; the provider attaches them as facts.

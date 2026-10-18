@@ -77,7 +77,7 @@ import {
   skillNameForDetail,
   splitFileDisplay,
   splitReasoningSteps,
-  stripLeadingCwdCd,
+  relativizeLeadingCd,
   summaryWithModel,
   tailPreview,
   subagentSupervisorLabel,
@@ -313,19 +313,32 @@ describe("colorful activity presentation", () => {
 
   it("strips a leading cd to the session cwd from shell titles", () => {
     const cwd = "/home/matt.cowger/workspace/pi-stuff/pi-control";
-    expect(stripLeadingCwdCd(`cd ${cwd} && grep -rn foo src`, cwd)).toBe("grep -rn foo src");
-    expect(stripLeadingCwdCd(`cd "${cwd}" && ls`, cwd)).toBe("ls");
-    expect(stripLeadingCwdCd(`cd '${cwd}'; ls`, cwd)).toBe("ls");
-    expect(stripLeadingCwdCd(`cd ${cwd}/ && ls`, cwd)).toBe("ls");
+    expect(relativizeLeadingCd(`cd ${cwd} && grep -rn foo src`, cwd)).toBe("grep -rn foo src");
+    expect(relativizeLeadingCd(`cd "${cwd}" && ls`, cwd)).toBe("ls");
+    expect(relativizeLeadingCd(`cd '${cwd}'; ls`, cwd)).toBe("ls");
+    expect(relativizeLeadingCd(`cd ${cwd}/ && ls`, cwd)).toBe("ls");
+  });
+
+  it("shortens a leading cd into a subdirectory of the workspace", () => {
+    // Agents cd into a package before running anything; the absolute prefix is
+    // noise, but which subdirectory it moved to is not.
+    const cwd = "/home/matt.cowger/workspace/paseo-plugins";
+    expect(relativizeLeadingCd(`cd ${cwd}/colorful-agent-activity && python3 - x`, cwd)).toBe(
+      "cd colorful-agent-activity && python3 - x",
+    );
+    expect(relativizeLeadingCd(`cd "${cwd}/a b" && ls`, cwd)).toBe("cd a b && ls");
+    expect(relativizeLeadingCd(`cd ${cwd}/a/../b && ls`, cwd)).toBe("cd b && ls");
+    // Already relative, or targeting another tree: leave it exactly as written.
+    expect(relativizeLeadingCd("cd app && npm test", cwd)).toBe("cd app && npm test");
   });
 
   it("keeps shell titles when the leading cd targets another directory", () => {
     const cwd = "/home/matt.cowger/workspace/pi-stuff/pi-control";
     const command = "cd /tmp/other && grep -rn foo src";
-    expect(stripLeadingCwdCd(command, cwd)).toBe(command);
-    expect(stripLeadingCwdCd(`cd ${cwd}`, cwd)).toBe(`cd ${cwd}`);
-    expect(stripLeadingCwdCd("grep -rn foo src", cwd)).toBe("grep -rn foo src");
-    expect(stripLeadingCwdCd(`cd ${cwd} && grep`, undefined)).toBe(`cd ${cwd} && grep`);
+    expect(relativizeLeadingCd(command, cwd)).toBe(command);
+    expect(relativizeLeadingCd(`cd ${cwd}`, cwd)).toBe(`cd ${cwd}`);
+    expect(relativizeLeadingCd("grep -rn foo src", cwd)).toBe("grep -rn foo src");
+    expect(relativizeLeadingCd(`cd ${cwd} && grep`, undefined)).toBe(`cd ${cwd} && grep`);
   });
 
   it("parses Pi ls text envelopes into file entries", () => {
