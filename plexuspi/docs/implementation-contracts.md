@@ -208,6 +208,11 @@ interface Timeline {
     present the facts already (the supervisor view, the question/answer list).
   - shell truncation and the full-output path are reduced to the note the shell
     row renders.
+- `server/tool-detail.fixtures.test.ts` replays one captured result per tool and
+  asserts two things: the payload the row needs survives the mapping, and no
+  detail key goes unaccounted for. A Pi shape change therefore fails a test and
+  names the field, instead of quietly emptying a row — which is how the edit,
+  write and todo payloads were lost before.
 - The `todo` tool is not a tool row. Its result reports the whole list
   (`details.tasks`), which is emitted as a `type: "todo"` timeline item under
   `todo:<callId>`, the way Paseo's own providers present a checklist. A running
