@@ -32,8 +32,30 @@ describe("pi-subagents operations", () => {
       }),
     ).toMatchObject({
       label: "Wait for Agent",
-      summary: "reviewer · Review subagent display changes · running",
+      summary: "reviewer · Review subagent display changes",
     });
+  });
+
+  it("keeps the status word out of the summary, which the row's icon already shows", () => {
+    // It used to read "reviewer · Review … · completed" and then repeat the same
+    // word as a pill and again in the details.
+    expect(
+      resolveToolCallPresentation({
+        name: "get_subagent_result",
+        detail: { type: "sub_agent", log: waitResult },
+      }).summary,
+    ).toBe("reviewer · Review subagent display changes");
+    expect(
+      resolveToolCallPresentation({
+        name: "Agent",
+        detail: {
+          type: "sub_agent",
+          log: "Agent started in background.\nAgent ID: f4815d0d77b2\nType: reviewer\nDescription: Review changes",
+          description: "Review changes",
+          subAgentType: "reviewer",
+        },
+      }).summary,
+    ).toBe("reviewer · Review changes");
   });
 
   it("preserves wait identity and parses the new completion stats line", () => {
@@ -52,7 +74,7 @@ describe("pi-subagents operations", () => {
       }),
     ).toMatchObject({
       label: "Wait for Agent",
-      summary: "reviewer · Review subagent display changes · completed",
+      summary: "reviewer · Review subagent display changes",
     });
   });
 
@@ -69,7 +91,7 @@ describe("pi-subagents operations", () => {
         name: "get_subagent_result",
         detail: { type: "sub_agent", log: progress },
       }),
-    ).toMatchObject({ label: "Check Agent Result", summary: "reviewer · f4815d0d77b2 · running" });
+    ).toMatchObject({ label: "Check Agent Result", summary: "reviewer · f4815d0d77b2" });
     expect(
       resolveToolCallPresentation({
         name: "get_subagent_result",
@@ -82,7 +104,7 @@ describe("pi-subagents operations", () => {
           },
         },
       }),
-    ).toMatchObject({ summary: "reviewer · f4815d0d77b2 · running" });
+    ).toMatchObject({ summary: "reviewer · f4815d0d77b2" });
   });
 
   it("parses million-token completion metrics", () => {
@@ -240,7 +262,7 @@ describe("pi-subagents operations", () => {
   ])("labels unknown %s calls", (name, input, label, icon) => {
     expect(
       resolveToolCallPresentation({ name, detail: { type: "unknown", input, output: result } }),
-    ).toMatchObject({ category: "agent", label, icon, summary: "inspect payloads · completed" });
+    ).toMatchObject({ category: "agent", label, icon, summary: "explore · inspect payloads" });
   });
 
   it.each(["Agent", "get_subagent_result", "steer_subagent"])(
@@ -254,7 +276,7 @@ describe("pi-subagents operations", () => {
             : "Agent Result";
       expect(
         resolveToolCallPresentation({ name, detail: { type: "sub_agent", log: result } }),
-      ).toMatchObject({ label, summary: "inspect payloads · completed" });
+      ).toMatchObject({ label, summary: "explore · inspect payloads" });
       expect(resolveSubAgentActionPresentation(`functions.${name}`)).toMatchObject({ label });
       expect(expansionTargetForToolCall(`mcp__plugin__${name}`, "unknown")).toBe("sub_agent");
     },

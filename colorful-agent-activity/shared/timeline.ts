@@ -5,6 +5,7 @@ import {
   formatReasoningText,
   normalizeToolCallDetail,
   resolveToolCallPresentation,
+  summaryWithModel,
   toJsonValue,
   withMetadataEditDiff,
 } from "./presentation";
@@ -145,6 +146,7 @@ export function createToolCallData(
   const presentation = resolveToolCallPresentation({ name: item.name, detail });
   const errorText = formatError(item.error);
   const facts = toolCallFacts(item.metadata);
+  const summary = summaryWithModel(presentation.summary, facts?.modelName);
   return {
     name: item.name,
     status: item.status,
@@ -155,7 +157,7 @@ export function createToolCallData(
       category: presentation.category,
       icon: presentation.icon,
       label: presentation.label,
-      ...(presentation.summary ? { summary: presentation.summary } : {}),
+      ...(summary ? { summary } : {}),
       ...(presentation.filePath ? { filePath: presentation.filePath } : {}),
       ...(presentation.fileIcon ? { fileIcon: presentation.fileIcon } : {}),
       ...(presentation.language ? { language: presentation.language } : {}),

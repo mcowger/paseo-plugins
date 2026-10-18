@@ -49,58 +49,14 @@ function MessageBlock({
   );
 }
 
-export function PiSubagentToolDetail({
-  input,
-  output,
-  theme,
-  palette,
-  styles,
-  agentType,
-  description,
-  childSessionId,
-}: DetailProps) {
-  const parsed = parsePiSubagentCall(input, output);
+export function PiSubagentToolDetail({ output, theme, styles }: DetailProps) {
+  const parsed = parsePiSubagentCall(undefined, output);
+  // The row's header already carries the type, description, status and model, and
+  // its lifecycle line carries the usage. What is left is the content: the prompt
+  // this agent was given, a steering message, or its answer. Identifiers and the
+  // transcript path are details, not content.
   return (
     <View style={styles.paseoStack}>
-      <FieldsSection
-        title="Agent"
-        fields={[
-          ["Agent ID", parsed.agentId],
-          ["Type", agentType ?? parsed.agentType],
-          ["Description", parsed.description ?? description],
-          ["Session", childSessionId],
-          [
-            "Mode",
-            parsed.wait === true
-              ? "Blocking wait"
-              : parsed.wait === false
-                ? "Non-blocking result check"
-                : undefined,
-          ],
-        ]}
-        palette={palette}
-        styles={styles}
-      />
-      {parsed.status ? (
-        <StatusPill value={parsed.status} palette={palette} styles={styles} />
-      ) : null}
-      <FieldsSection
-        title="Usage"
-        fields={[
-          ["Tool uses", parsed.toolUses],
-          ["Tokens", parsed.tokens],
-          ["Context", parsed.context],
-          ["Duration", parsed.duration],
-        ]}
-        palette={palette}
-        styles={styles}
-      />
-      <FieldsSection
-        title="Transcript"
-        fields={[["Output file", parsed.outputFile]]}
-        palette={palette}
-        styles={styles}
-      />
       {parsed.error ? (
         <Section title="Error" styles={styles}>
           <Text selectable style={[styles.detailText, { color: theme.colors.statusDanger }]}>
@@ -122,7 +78,7 @@ export function PiSubagentToolDetail({
   );
 }
 
-export function PiSubagentLifecycleSummary({ output, theme, palette, styles }: DetailProps) {
+export function PiSubagentLifecycleSummary({ output, theme, styles }: DetailProps) {
   const parsed = parsePiSubagentCall(undefined, output);
   if (!parsed.lifecycle) return null;
   const usage = [
@@ -133,14 +89,14 @@ export function PiSubagentLifecycleSummary({ output, theme, palette, styles }: D
   ]
     .filter(Boolean)
     .join(" · ");
+  if (!usage && !parsed.error && !parsed.notice) return null;
   return (
     <View style={styles.subAgentProgress}>
-      <View style={styles.subAgentLine}>
-        {parsed.status ? (
-          <StatusPill value={parsed.status} palette={palette} styles={styles} />
-        ) : null}
-        {usage ? <Text style={styles.mutedText}>{usage}</Text> : null}
-      </View>
+      {usage ? (
+        <View style={styles.subAgentLine}>
+          <Text style={styles.mutedText}>{usage}</Text>
+        </View>
+      ) : null}
       {parsed.error ? (
         <Text style={[styles.detailText, { color: theme.colors.statusDanger }]}>
           {parsed.error}

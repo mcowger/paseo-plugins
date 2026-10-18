@@ -24,6 +24,7 @@ import {
   hasMeaningfulToolCallDetail,
   hasMeaningfulUnknownValue,
   isApplyPatchTool,
+  agentRowFacts,
   isAskTool,
   parseAskAnswers,
   isBgWaitTool,
@@ -75,6 +76,7 @@ import {
   splitFileDisplay,
   splitReasoningSteps,
   stripLeadingCwdCd,
+  summaryWithModel,
   tailPreview,
   subagentSupervisorLabel,
   subagentSupervisorSummary,
@@ -1024,6 +1026,46 @@ describe("toolDetailFacts", () => {
     expect(toolDetailFacts(undefined)).toBeUndefined();
     // A provider that sends structure we cannot show as rows stays a JSON block.
     expect(toolDetailFacts({ content: "x", details: { nested: { a: 1 } } })).toBeUndefined();
+  });
+});
+
+describe("agent row facts", () => {
+  it("drops what the header and lifecycle line already say", () => {
+    expect(
+      agentRowFacts({
+        status: "background",
+        modelName: "deepseek-v4.1-flash",
+        toolUses: 0,
+        durationMs: 0,
+        tags: "3 items",
+      }),
+    ).toEqual({ tags: "3 items" });
+    // A result row's facts are all restatements of its header.
+    expect(
+      agentRowFacts({
+        agentId: "87b979b09246",
+        operation: "wait",
+        subagentType: "explore",
+        description: "Render check",
+        status: "completed",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("keeps a count that is real", () => {
+    expect(agentRowFacts({ toolUses: 9, durationMs: 55900 })).toEqual({
+      toolUses: 9,
+      durationMs: 55900,
+    });
+  });
+
+  it("puts the model on the summary line, where it is worth reading", () => {
+    expect(summaryWithModel("explore · Render check", "deepseek-v4.1-flash")).toBe(
+      "explore · Render check · deepseek-v4.1-flash",
+    );
+    expect(summaryWithModel(undefined, "m")).toBe("m");
+    expect(summaryWithModel("explore", undefined)).toBe("explore");
+    expect(summaryWithModel(undefined, "")).toBeUndefined();
   });
 });
 

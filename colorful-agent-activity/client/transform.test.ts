@@ -26,7 +26,7 @@ describe("colorful activity timeline transforms", () => {
     expect(result?.items[0]?.data).toMatchObject({
       status: "running",
       detail: { type: "sub_agent", log },
-      presentation: { label, summary: "reviewer · Review changes · running" },
+      presentation: { label, summary: "reviewer · Review changes" },
     });
   });
 

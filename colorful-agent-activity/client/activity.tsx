@@ -43,6 +43,7 @@ import {
 import { isOmpFindTool } from "../shared/omp-find";
 import { parsePiSubagentCall, piSubagentOperation } from "../shared/pi-subagents";
 import {
+  agentRowFacts,
   type ActivityPalette,
   type AskAnswer,
   type ActivityThemeColors,
@@ -1924,9 +1925,6 @@ function DetailBody({
             toolName={data.name}
             input={undefined}
             output={detail.log}
-            agentType={detail.subAgentType}
-            description={detail.description}
-            childSessionId={detail.childSessionId}
             theme={theme}
             palette={palette}
             styles={styles}
@@ -1940,9 +1938,6 @@ function DetailBody({
           ) : null}
           {notInHeader(detail.description, data.presentation.summary) ? (
             <Text style={styles.mutedText}>{detail.description}</Text>
-          ) : null}
-          {detail.childSessionId ? (
-            <Text style={styles.mutedText}>Session {detail.childSessionId}</Text>
           ) : null}
           {detail.log && !subAgentLogFullyShown(detail) ? (
             <HighlightedCodeBlock
@@ -2843,12 +2838,24 @@ function ToolCallCard({
   // A typed detail has no field for these; the provider attaches them as facts.
   // A shell shows truncation inline, so the same two keys are not repeated here.
   const facts = useMemo(() => {
-    const all = item.data.facts;
-    if (!all) return undefined;
+    const all = item.data.facts ?? {};
     const inline = detail?.type === "shell" ? ["truncated", "fullOutputPath"] : [];
-    const rest = Object.entries(all).filter(([key]) => !inline.includes(key));
-    return rest.length > 0 ? Object.fromEntries(rest) : undefined;
-  }, [item.data.facts, detail?.type]);
+    const merged: Record<string, string | number | boolean> = Object.fromEntries(
+      Object.entries(all).filter(([key]) => !inline.includes(key)),
+    );
+    if (operation) {
+      const text =
+        detail?.type === "sub_agent"
+          ? detail.log
+          : detail?.type === "unknown"
+            ? detail.output
+            : undefined;
+      const outputFile = parsePiSubagentCall(undefined, text).outputFile;
+      if (outputFile) merged.outputFile = outputFile;
+      return agentRowFacts(merged);
+    }
+    return Object.keys(merged).length > 0 ? merged : undefined;
+  }, [item.data.facts, detail, operation]);
   const quiet = useQuietRow(!expanded && item.data.status === "completed");
   // A running call's detail follows its tail like a terminal, and stops when the
   // reader scrolls up. A finished call's detail opens at its start.

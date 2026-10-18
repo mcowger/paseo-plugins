@@ -511,6 +511,42 @@ export function isAskTool(toolName: string): boolean {
   return normalized === "ask" || normalized === "ask_user_question" || normalized === "askuserquestion";
 }
 
+/** The model an agent runs on belongs up front, beside what the row already says. */
+export function summaryWithModel(
+  summary: string | undefined,
+  model: unknown,
+): string | undefined {
+  const name = typeof model === "string" ? compactText(model.trim(), 60) : undefined;
+  if (!name) return summary;
+  const parts = [summary, name].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+/**
+ * Facts an agent row already states elsewhere, so the details disclosure does not
+ * repeat them: the header carries type, description, status and model; the
+ * lifecycle line carries usage; the child id is internal.
+ */
+const AGENT_ROW_STATED_FACTS = [
+  "status",
+  "modelName",
+  "agentId",
+  "sessionId",
+  "operation",
+  "subagentType",
+  "description",
+];
+
+/** Facts with nothing left to say are dropped, and so are counts that are still zero. */
+export function agentRowFacts(
+  facts: Record<string, string | number | boolean>,
+): Record<string, string | number | boolean> | undefined {
+  const rest = Object.entries(facts).filter(
+    ([key, value]) => !AGENT_ROW_STATED_FACTS.includes(key) && value !== 0,
+  );
+  return rest.length > 0 ? Object.fromEntries(rest) : undefined;
+}
+
 /** One question and the answer it got, as Pi reports them in the result text. */
 export interface AskAnswer {
   question: string;

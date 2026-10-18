@@ -154,12 +154,15 @@ export function piSubagentPresentation(
     (operation === "dispatch"
       ? (agentType ?? parsed.agentType)
       : (parsed.agentId ?? parsed.agentType));
-  const type = parsed.operation ? (parsed.agentType ?? agentType) : undefined;
+  // The type reads the same for a dispatch and for its result, so the two rows
+  // describing one child agree on what it was.
+  const type = parsed.agentType ?? agentType;
+  // The row's status shows as its icon, once. Repeating the word here made it
+  // appear three more times down the card.
   const summary =
     [
       type && type !== subject ? compactText(type) : undefined,
       subject ? compactText(subject, 120) : undefined,
-      parsed.status,
     ]
       .filter(Boolean)
       .join(" · ") || undefined;
