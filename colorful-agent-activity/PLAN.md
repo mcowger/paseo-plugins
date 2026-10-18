@@ -203,11 +203,3 @@ both budgets: it is streamed, so it keeps its own 1,000-line / 100,000-character
 The settings dashboard gained a "Long blocks" group on the Rows page with one picker per budget,
 and `Segmented` now accepts numbers, so the steps are ordinary segments rather than a new control.
 Settings are schema version 3; older payloads fill the new keys from their defaults.
-
-## Follow-ups
-
-- The plugin has no entry under Settings → Plugins any more: registration moved to a dashboard screen
-  with a sidebar row and a command center item. Add a settings screen again if that discoverability
-  matters more than matching chat-polish's shape.
-- Add Command Center toggles for quiet strength and command colors if wanted. They would need a saver
-  that is always mounted; the activity renderers are always mounted when a chat is open.
