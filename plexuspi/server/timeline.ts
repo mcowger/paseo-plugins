@@ -595,6 +595,9 @@ export function mapToolDetail(
   resultDetails?: unknown,
 ): ProviderToolCallDetail {
   const record = isRecord(args) ? args : {};
+  // What the call actually did lives on the result for several tools; the
+  // arguments only describe what was asked for.
+  const details = isRecord(resultDetails) ? resultDetails : {};
   const tool = name.toLowerCase();
   const filePath =
     asText(record.path) ||
@@ -635,7 +638,6 @@ export function mapToolDetail(
       asText(record.oldText) || asText(record.old_string) || asText(onlyEdit.oldText);
     const newString =
       asText(record.newText) || asText(record.new_string) || asText(onlyEdit.newText);
-    const details = isRecord(resultDetails) ? resultDetails : {};
     // `details.diff` is Pi's trimmed view with line-number prefixes, not a
     // unified diff: only `patch` (or an explicit unified diff) can be rendered.
     const unifiedDiff =
@@ -680,6 +682,9 @@ export function mapToolDetail(
     };
   }
   if (tool === "agent" || tool === "subagent" || tool === "task") {
+    // The result reports the child this call started. Reading it from the log text
+    // means parsing prose for an id Pi already states structurally.
+    const childSessionId = asText(details.agentId) || asText(details.sessionId);
     return {
       type: "sub_agent",
       ...(asText(record.subagent_type) || asText(record.agent)
@@ -688,6 +693,7 @@ export function mapToolDetail(
       ...(asText(record.description) || asText(record.prompt)
         ? { description: asText(record.description) || asText(record.prompt) }
         : {}),
+      ...(childSessionId ? { childSessionId } : {}),
       log: output ?? "",
     };
   }

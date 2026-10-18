@@ -861,6 +861,31 @@ describe("createTimeline user correlation and replay", () => {
 });
 
 describe("mapToolDetail and mapUsage", () => {
+  test("carries the child session the agent result names", () => {
+    // The log text says "Agent ID: df30…" too, but the details state it, and the
+    // sub_agent detail has a field for it.
+    expect(
+      mapToolDetail(
+        "Agent",
+        { description: "Audit rows", prompt: "go", subagent_type: "worker" },
+        "Agent started in background.\nAgent ID: df3047d8319c",
+        { agentId: "df3047d8319c", status: "background", tokens: "" },
+      ),
+    ).toEqual({
+      type: "sub_agent",
+      subAgentType: "worker",
+      description: "Audit rows",
+      childSessionId: "df3047d8319c",
+      log: "Agent started in background.\nAgent ID: df3047d8319c",
+    });
+    // Nothing to point at when the result names no child.
+    expect(mapToolDetail("agent", { description: "Audit" }, "started")).toEqual({
+      type: "sub_agent",
+      description: "Audit",
+      log: "started",
+    });
+  });
+
   test("carries the slice a read asked for", () => {
     expect(mapToolDetail("read", { path: "a.ts", offset: 501, limit: 100 }, "body")).toEqual({
       type: "read",
