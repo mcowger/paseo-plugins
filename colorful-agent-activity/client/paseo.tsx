@@ -4,10 +4,14 @@ import React, { type ReactNode, useMemo, useState } from "react";
 import { Pressable, Text, type TextStyle, View } from "react-native";
 import { extractPaseoChildAgentId } from "../shared/child-agent";
 import {
+  type ExaFetchedPage,
   type ExaSearchResult,
+  exaAgentFacts,
   exaOutputText,
   exaToolKind,
   exaToolSummary,
+  parseExaAgentRun,
+  parseExaFetchOutput,
   parseExaSearchResults,
 } from "../shared/exa";
 import {
@@ -2165,7 +2169,7 @@ function ExaResultList({
               </Text>
             ) : null}
             {result.highlights ? (
-              <Text selectable style={styles.paseoListItemMeta}>
+              <Text numberOfLines={2} style={styles.paseoListItemMeta}>
                 {result.highlights}
               </Text>
             ) : null}
@@ -2176,36 +2180,205 @@ function ExaResultList({
   );
 }
 
+function ExaFetchedPageView({
+  page,
+  palette,
+  renderMarkdown,
+  styles,
+}: {
+  page: ExaFetchedPage;
+  palette: ActivityPalette;
+  renderMarkdown?: (text: string) => ReactNode;
+  styles: ActivityStyles;
+}) {
+  return (
+    <View style={styles.paseoStack}>
+      <PaseoFields
+        fields={[
+          ["Page", page.title],
+          ["URL", page.url],
+        ]}
+        palette={palette}
+        styles={styles}
+      />
+      <Section title="Content" styles={styles}>
+        {renderMarkdown ? renderMarkdown(page.text) : <Text style={styles.empty}>{page.text}</Text>}
+      </Section>
+    </View>
+  );
+}
+
+function ExaAgentView({
+  output,
+  palette,
+  renderMarkdown,
+  styles,
+}: {
+  output: unknown;
+  palette: ActivityPalette;
+  renderMarkdown?: (text: string) => ReactNode;
+  styles: ActivityStyles;
+}) {
+  const run = parseExaAgentRun(output);
+  if (!run) return null;
+  const facts = exaAgentFacts(output);
+  return (
+    <View style={styles.paseoStack}>
+      <View style={styles.paseoRows}>
+        {run.status ? (
+          <View style={styles.paseoRow}>
+            <Text style={styles.paseoKey}>Status</Text>
+            <StatusPill value={run.status} palette={palette} styles={styles} />
+          </View>
+        ) : null}
+        <PaseoFields fields={facts} palette={palette} styles={styles} />
+      </View>
+      {run.text ? (
+        <Section title="Answer" styles={styles}>
+          {renderMarkdown ? (
+            renderMarkdown(run.text)
+          ) : (
+            <Text selectable style={styles.paseoValue}>
+              {run.text}
+            </Text>
+          )}
+        </Section>
+      ) : null}
+      {run.structured !== undefined ? (
+        <Section title="Structured output" styles={styles}>
+          <PaseoFieldValue value={run.structured} palette={palette} styles={styles} />
+        </Section>
+      ) : null}
+      {run.citations.length > 0 ? (
+        <Section title={`Sources (${run.citations.length})`} styles={styles}>
+          <View style={styles.paseoList}>
+            {run.citations.map((citation) => (
+              <View
+                key={`${citation.field ?? "source"}-${citation.sources.join(",")}`}
+                style={styles.paseoListItem}
+              >
+                <View style={styles.paseoListItemHeader}>
+                  <Text numberOfLines={1} style={styles.paseoListItemTitle}>
+                    {citation.field ?? "Source"}
+                  </Text>
+                  {citation.confidence ? (
+                    <Text style={styles.paseoListItemMeta}>{citation.confidence}</Text>
+                  ) : null}
+                </View>
+                {citation.sources.map((source) => (
+                  <Text
+                    key={source}
+                    selectable
+                    numberOfLines={1}
+                    style={styles.paseoListItemMeta}
+                  >
+                    {source}
+                  </Text>
+                ))}
+              </View>
+            ))}
+          </View>
+        </Section>
+      ) : null}
+    </View>
+  );
+}
+
 export function ExaToolDetail({
   toolName,
   input,
   output,
   theme,
+  palette,
   styles,
+  renderMarkdown,
 }: {
   toolName: string;
   input: unknown;
   output: unknown;
   theme: Theme;
+  palette: ActivityPalette;
   styles: ActivityStyles;
+  /** The description renderer, supplied by the container that owns it. */
+  renderMarkdown?: (text: string) => ReactNode;
 }) {
   const kind = exaToolKind(toolName);
   if (!kind) return null;
+  const inputRecord = asRecord(input);
+  const headerSummary = exaToolSummary(kind, input);
+  const query = notInHeader(fieldString(inputRecord, "query"), headerSummary);
+  const url =
+    notInHeader(fieldString(inputRecord, "url"), headerSummary) ??
+    firstInputUrl(inputRecord, headerSummary);
+  const prompt = notInHeader(fieldString(inputRecord, "prompt"), headerSummary);
+  const preamble = (
+    <>
+      {query ? <PromptBlock text={query} label="Query" styles={styles} /> : null}
+      {url ? <PromptBlock text={url} label="URL" styles={styles} /> : null}
+      {prompt ? <PromptBlock text={prompt} label="Prompt" styles={styles} /> : null}
+    </>
+  );
+
+  if (kind === "fetch") {
+    const pages = parseExaFetchOutput(output);
+    return (
+      <View style={styles.paseoStack}>
+        {preamble}
+        {pages.length > 0 ? (
+          pages.map((page) => (
+            <ExaFetchedPageView
+              key={page.url ?? page.text.slice(0, 32)}
+              page={page}
+              palette={palette}
+              renderMarkdown={renderMarkdown}
+              styles={styles}
+            />
+          ))
+        ) : (
+          <PaseoCodeBlock
+            code={formatUnknownValue(output)}
+            language="json"
+            label="Output"
+            theme={theme}
+            styles={styles}
+          />
+        )}
+      </View>
+    );
+  }
+  if (kind === "agent") {
+    const agent = parseExaAgentRun(output);
+    if (!agent) {
+      return (
+        <View style={styles.paseoStack}>
+          {preamble}
+          <PaseoCodeBlock
+            code={formatUnknownValue(output)}
+            language="json"
+            label="Output"
+            theme={theme}
+            styles={styles}
+          />
+        </View>
+      );
+    }
+    return (
+      <View style={styles.paseoStack}>
+        {preamble}
+        <ExaAgentView
+          output={output}
+          palette={palette}
+          renderMarkdown={renderMarkdown}
+          styles={styles}
+        />
+      </View>
+    );
+  }
   const results = kind === "search" ? parseExaSearchResults(output) : [];
   const outputText = exaOutputText(output);
-  const inputRecord = asRecord(input);
-  const query = fieldString(inputRecord, "query");
-  const url = fieldString(inputRecord, "url");
-  const prompt = fieldString(inputRecord, "prompt");
-  const headerSummary = exaToolSummary(kind, input);
-  const shownQuery = notInHeader(query, headerSummary);
-  const shownUrl = notInHeader(url, headerSummary);
-  const shownPrompt = notInHeader(prompt, headerSummary);
   return (
     <View style={styles.paseoStack}>
-      {shownQuery ? <PromptBlock text={shownQuery} label="Query" styles={styles} /> : null}
-      {shownUrl ? <PromptBlock text={shownUrl} label="URL" styles={styles} /> : null}
-      {shownPrompt ? <PromptBlock text={shownPrompt} label="Prompt" styles={styles} /> : null}
+      {preamble}
       {results.length > 0 ? (
         <ExaResultList results={results} styles={styles} />
       ) : outputText ? (
@@ -2227,6 +2400,15 @@ export function ExaToolDetail({
       )}
     </View>
   );
+}
+
+function firstInputUrl(record: JsonRecord | null, headerSummary: string | undefined): string | undefined {
+  const urls = record?.urls;
+  if (!Array.isArray(urls)) return undefined;
+  return urls
+    .filter((entry): entry is string => typeof entry === "string")
+    .filter((entry) => !headerSummary || !headerSummary.includes(entry))
+    .join("\n") || undefined;
 }
 
 function FallbackPaseo({

@@ -658,6 +658,17 @@ export function useActivityStyles(theme: Theme, palette: ActivityPalette) {
       codeScroll: {
         maxWidth: "100%",
       } satisfies ViewStyle,
+      /**
+       * A log scrolls inside its own window: a CI log is thousands of lines and the
+       * row is a place to read it, not a place to paste it.
+       */
+      logScroll: {
+        backgroundColor: codeSurface,
+        borderColor: rail,
+        borderRadius: 6,
+        borderWidth: 1,
+        maxHeight: 280,
+      } satisfies ViewStyle,
       codeLine: {
         color: theme.colors.foreground,
         fontFamily: "monospace",
@@ -2129,6 +2140,11 @@ function DetailBody({
             theme={theme}
             palette={palette}
             styles={styles}
+            // A pull request description is prose, so it gets the same limited
+            // markdown as a thinking block rather than a wall of raw source.
+            renderMarkdown={(text) => (
+              <ReasoningMarkdown text={text} theme={theme} styles={styles} />
+            )}
           />
         );
       }
@@ -2139,7 +2155,11 @@ function DetailBody({
             input={detail.input}
             output={detail.output}
             theme={theme}
+            palette={palette}
             styles={styles}
+            renderMarkdown={(text) => (
+              <ReasoningMarkdown text={text} theme={theme} styles={styles} />
+            )}
           />
         );
       }

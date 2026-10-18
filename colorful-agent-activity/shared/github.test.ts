@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   githubOutputText,
   githubOutputValue,
+  githubResultCount,
   githubToolIcon,
   githubToolKind,
   githubToolLabel,
@@ -28,6 +29,15 @@ describe("GitHub tool presentation", () => {
     );
   });
 
+  it("says how much of a match set a row is showing", () => {
+    // A three-row page under a bare "Total 146" reads as a bug; "3 of 146" reads as a preview.
+    expect(githubResultCount(3, 146)).toBe("3 of 146");
+    // A response that returned everything needs no ratio.
+    expect(githubResultCount(3, 3)).toBe("3");
+    expect(githubResultCount(3, undefined)).toBe("3");
+    expect(githubResultCount(3, 0)).toBe("3");
+  });
+
   it("unwraps structured and text MCP envelopes", () => {
     const output = {
       structuredContent: {
@@ -40,6 +50,24 @@ describe("GitHub tool presentation", () => {
     expect(githubOutputText({ content: [{ type: "text", text: "workflow logs" }] })).toBe(
       "workflow logs",
     );
+  });
+
+  it("reads a repository search out of Pi's text envelope", () => {
+    // Pi hands the payload back as a string next to its own bookkeeping; nothing here is
+    // `content: [{ type: "text" }]`, which is why the row used to report zero results.
+    const output = {
+      content: JSON.stringify({
+        total_count: 146,
+        incomplete_results: false,
+        items: [{ full_name: "omercnet/paseo-plugins", stargazers_count: 23 }],
+      }),
+      details: { server: "github", tool: "search_repositories" },
+    };
+    expect(githubOutputValue(output)).toEqual({
+      total_count: 146,
+      incomplete_results: false,
+      items: [{ full_name: "omercnet/paseo-plugins", stargazers_count: 23 }],
+    });
   });
 
   it("parses JSON embedded in MCP text", () => {
