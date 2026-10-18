@@ -226,31 +226,35 @@ See `colorful-agent-activity/client/bundle.test.ts` for the reference test imple
 
 Never run `cora` or `cora-code` unless the user explicitly requests that specific Cora action in the current turn. A request to commit, test, review, stage, push, or open a PR does not grant Cora permission.
 
-## SuperPi development handoff
+## PlexusPi development handoff
 
-Future Superpi work runs through SuperPi itself. Read `superpi/README.md` and
-`superpi/docs/README.md` first; they distinguish current behavior from historical
+Future PlexusPi work runs through PlexusPi itself. Read `plexuspi/README.md` and
+`plexuspi/docs/README.md` first; they distinguish current behavior from historical
 research and original acceptance goals.
 
-- `superpi/` is the Paseo plugin. `superpi-companion/` is a separate Pi extension
-  running inside the root Pi subprocess, not subject to Paseo runtime entry layout.
+- `plexuspi/` is the Paseo plugin. The Pi-side control is the `plexus-pi` extension
+  in `~/workspace/pi-stuff/plexus-agent-plugins/packages/plexus-pi`, loaded by Pi
+  as a normal package. It is not a separate Paseo plugin and is not copied or synced
+  by PlexusPi; its command contract is `plexuspi-control` with `plexuspi:v1:`,
+  `plexuspi:state:v1:`, and `plexuspi:child:v1:` prefixes.
 - Keep the root integration on subprocess JSONL RPC. Do not embed Pi's SDK or
   modify Pi/Paseo core. Owned `pi-subagents` child execution is a separate boundary.
 - SDK pins remain `0.10.0`; the isolated tested host is `0.11.0-beta.3` and the
   tested Pi build is `1.0.0+local`. Neither changes the repository baseline.
 - Plexus publishes exact per-model tier choices and short/max context budgets.
   Do not restore a fixed tier enum, hardcoded expanded budget, or backend matrix.
-- Run lint, typecheck, and tests in both packages, plus root `npm run sdk:check`.
-  Follow `superpi/docs/testing.md` for isolated runtime/browser checks.
-- Reloading Superpi tears down its owned Pi processes. Do not reload/remove the
+- Run lint, typecheck, and tests in `plexuspi/`, plus root `npm run sdk:check`.
+  Changes to `plexus-pi` are checked in its own package under `pi-stuff`.
+  Follow `plexuspi/docs/testing.md` for isolated runtime/browser checks.
+- Reloading PlexusPi tears down its owned Pi processes. Do not reload/remove the
   provider or stop the daemon hosting this conversation from within the same
   development session. Test against the separate daemon first; use a separate
   terminal for the eventual active-host reload after saving the handoff.
-- Companion changes affect newly launched Pi processes, not already loaded
-  extensions. Sync the isolated copy before opening a fresh test conversation.
+- Extension changes affect newly launched Pi processes, not already loaded
+  extensions. Start a fresh test conversation after changing `plexus-pi`.
 - Pi rewind works, but Paseo can retain abandoned visible rows. Mobile runtime
   smoke and Windows descendant cleanup remain unverified/unsupported respectively.
-  See `superpi/docs/PaseoShortcomings.md`; do not claim full V1 acceptance.
+  See `plexuspi/docs/PaseoShortcomings.md`; do not claim full V1 acceptance.
 - Update current docs when behavior changes. Keep source-snapshot research labeled
   historical rather than rewriting its evidence to describe untested releases.
 

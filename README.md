@@ -12,16 +12,16 @@ when contributing changes.
 - [Colorful agent activity](./colorful-agent-activity/README.md)
 - [Skill picker](./skill-picker/README.md)
 - [Super tasks](./super-tasks/README.md)
-- [Superpi](./superpi/README.md): Pi subprocess provider with native child views,
-  durable history, and Plexus-discovered context/service-tier controls.
-  [Superpi companion](./superpi-companion/README.md) is its required Pi extension,
-  not a separate Paseo plugin.
+- [PlexusPi](./plexuspi/README.md): Pi subprocess provider with native child views,
+  durable history, and Plexus-discovered context/service-tier controls. It requires
+  the `plexus-pi` Pi extension, which is installed in Pi rather than shipped as a
+  separate Paseo plugin.
 
-## Continuing development through SuperPi
+## Continuing development through PlexusPi
 
-Future work on Superpi will use SuperPi itself. Start with its
-[development workflow](./superpi/README.md#developing-through-superpi) and
-[current docs index](./superpi/docs/README.md). Use the isolated daemon for changes
+Future work on PlexusPi will use PlexusPi itself. Start with its
+[development workflow](./plexuspi/README.md#developing-through-plexuspi) and
+[current docs index](./plexuspi/docs/README.md). Use the isolated daemon for changes
 that would reload or stop the provider running your development conversation.
 
 ## Reference index and community registry
