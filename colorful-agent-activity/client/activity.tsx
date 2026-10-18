@@ -131,10 +131,11 @@ const MAX_DETAIL_HEIGHT = 420;
 /**
  * Reasoning is shown whole while it streams, because truncating it to a preview
  * would cut off the newest text and leave the block frozen on its opening lines.
- * The scroll region caps the height instead. Above this size only the tail is
- * rendered, so a runaway block cannot stall layout.
+ * The scroll region caps the height instead. The **Thinking** line budget decides
+ * where the cut is; this is the character ceiling behind it, so a thinking block
+ * of pathological width cannot stall layout either.
  */
-const MAX_REASONING_CHARS = 32_000;
+const MAX_REASONING_TAIL_CHARS = 32_000;
 
 
 // Paseo spaces consecutive activity rows by applying its inter-row gap to the row
@@ -2377,7 +2378,7 @@ function ReasoningText({
   // Whole text, not a head preview: a truncated block would stop following the
   // stream and hide the newest lines. The tail is what matters, and the cap that
   // governs it is the thinking setting.
-  const window = tailPreview(text, prefs.thinkingLines, MAX_REASONING_CHARS);
+  const window = tailPreview(text, prefs.thinkingLines, MAX_REASONING_TAIL_CHARS);
   const shownText = showAll ? text : window.text;
   const revealedText = useRevealedText(shownText, phase);
   const steps = useMemo(() => splitReasoningSteps(revealedText), [revealedText]);

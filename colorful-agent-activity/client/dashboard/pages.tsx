@@ -292,7 +292,7 @@ function RowsPage({ prefs, change, theme, layout }: PageProps) {
       </Group>
       <Group
         title="Long blocks"
-        hint="Lines rendered before a block offers its Show all control. All renders the block whole."
+        hint="Lines rendered before a block offers its Show all control. All drops the cut, apart from a 100,000-character ceiling that keeps a runaway payload from stalling layout."
         styles={styles}
       >
         <ControlRow
