@@ -10,6 +10,8 @@ when contributing changes.
 ## Plugins in this repository
 
 - [Colorful agent activity](./colorful-agent-activity/README.md)
+- [Plexus activity](./plexus-activity/README.md): live Plexus request activity in the Explorer dock,
+  fed by Plexus's SSE event stream and scoped optionally to one API key.
 - [Skill picker](./skill-picker/README.md)
 - [Super tasks](./super-tasks/README.md)
 - [PlexusPi](./plexuspi/README.md): Pi subprocess provider with native child views,

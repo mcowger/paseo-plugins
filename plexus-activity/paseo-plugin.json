@@ -1,0 +1,4 @@
+{
+  "id": "plexus-activity",
+  "requirements": { "paseo": ">=0.10.0" }
+}
