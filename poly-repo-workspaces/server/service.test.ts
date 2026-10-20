@@ -96,6 +96,91 @@ describe("createVirtualWorkspace", () => {
     expect(listed[0]?.constituents).toHaveLength(2);
   });
 
+  it("preserves the friendly name but sanitizes branches and folder names", async () => {
+    const { deps, fs, git, workspaces } = depsFor(project());
+    const feature = "SIG: ABSCD - Fix My Stuff";
+    const branch = "sig-abscd-fix-my-stuff";
+    const root = `/paseo/poly-workspaces/uber-${branch}`;
+
+    const result = await createVirtualWorkspace(deps, { uberProjectId: "uber", feature });
+
+    expect(result.ok).toBe(true);
+    expect(workspaces.created).toEqual([{ path: root, title: `Uber / ${feature}` }]);
+    expect(await fs.readFile(`${root}/AGENTS.md`)).toContain(feature);
+    const manifest = await readManifest(fs, root);
+    expect(manifest?.feature).toBe(feature);
+    expect(manifest?.branch).toBe(branch);
+    expect(manifest?.constituents.map((item) => item.worktreePath)).toEqual([
+      `${root}/frontend_${branch}`,
+      `${root}/app_${branch}`,
+    ]);
+    const adds = (git.script.log ?? []).filter((args) => args.includes("add"));
+    expect(adds).toHaveLength(2);
+    expect(adds.every((args) => args[4] === branch)).toBe(true);
+    expect((await listVirtualWorkspaces(deps))[0]?.feature).toBe(feature);
+  });
+
+  it("resumes a failed creation using the same friendly name and sanitized paths", async () => {
+    const { deps, fs, git } = depsFor(project());
+    const input = { uberProjectId: "uber", feature: "SIG: ABSCD - Fix My Stuff" };
+    const root = "/paseo/poly-workspaces/uber-sig-abscd-fix-my-stuff";
+    const appPath = `${root}/app_sig-abscd-fix-my-stuff`;
+    git.script.failOn = [{ match: ["worktree", "add", appPath], message: "disk exploded" }];
+    expect((await createVirtualWorkspace(deps, input)).ok).toBe(false);
+    const before = await readManifest(fs, root);
+    expect(before?.constituents.map((item) => item.state)).toEqual(["created", "pending"]);
+    git.script.failOn = [];
+    expect((await createVirtualWorkspace(deps, { ...input, resume: true })).ok).toBe(true);
+    const after = await readManifest(fs, root);
+    expect(after?.rootPath).toBe(before?.rootPath);
+    expect(after?.branch).toBe(before?.branch);
+    expect(after?.constituents.map((item) => item.worktreePath)).toEqual(
+      before?.constituents.map((item) => item.worktreePath),
+    );
+    expect(after?.constituents.every((item) => item.state === "created")).toBe(true);
+    const adds = (git.script.log ?? []).filter((args) => args.includes("add"));
+    expect(
+      adds.filter((args) => args.includes(`${root}/frontend_sig-abscd-fix-my-stuff`)),
+    ).toHaveLength(1);
+    expect(adds.filter((args) => args.includes(appPath))).toHaveLength(2);
+  });
+
+  it.each([
+    ["feature", "修 复"],
+    ["Fix my stuff", "Fix: my stuff"],
+  ])("refuses to resume %j as a different name %j", async (original, alias) => {
+    const { deps, git } = depsFor(project());
+    git.script.failOn = [gitFailedWith("disk exploded")];
+    await createVirtualWorkspace(deps, { uberProjectId: "uber", feature: original });
+    git.script.failOn = [];
+    const result = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: alias,
+      resume: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("different feature name");
+    const listed = await listVirtualWorkspaces(deps);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.feature).toBe(original);
+    expect(listed[0]?.state).toBe("creating");
+  });
+
+  it("does not overwrite a workspace when two friendly names sanitize to the same path", async () => {
+    const { deps, git } = depsFor(project());
+    expect(
+      (await createVirtualWorkspace(deps, { uberProjectId: "uber", feature: "Fix: my stuff" })).ok,
+    ).toBe(true);
+    const addsBefore = (git.script.log ?? []).filter((args) => args.includes("add")).length;
+    const duplicate = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "Fix my stuff!",
+    });
+    expect(duplicate.ok).toBe(false);
+    expect(duplicate.error).toContain("already exists");
+    expect((git.script.log ?? []).filter((args) => args.includes("add"))).toHaveLength(addsBefore);
+  });
+
   it("creates per-repo terminals when requested", async () => {
     const p = project();
     const { deps, workspaces } = depsFor(p);
@@ -198,7 +283,7 @@ describe("createVirtualWorkspace", () => {
     const p = project();
     const { deps } = depsFor(p);
 
-    const invalid = await createVirtualWorkspace(deps, { uberProjectId: "uber", feature: "a..b" });
+    const invalid = await createVirtualWorkspace(deps, { uberProjectId: "uber", feature: "   " });
     expect(invalid.ok).toBe(false);
     expect(invalid.error).toContain("invalid feature name");
 

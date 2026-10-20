@@ -13,16 +13,46 @@ export function renderTemplate(template: string, vars: TemplateVars): string {
     .replaceAll("{repo}", vars.repo);
 }
 
+/** Keep existing Git-safe names stable so older workspaces can still resume. */
+export function sanitizeFeatureName(feature: string): string {
+  const segments = feature.split("/");
+  if (
+    feature.length > 0 &&
+    !feature.startsWith("-") &&
+    !/[\s~^:?*{}[\]\\]/.test(feature) &&
+    !/[\p{Cc}\p{Cf}]/u.test(feature) &&
+    feature !== "@" &&
+    feature !== "HEAD" &&
+    !feature.includes("..") &&
+    !feature.endsWith(".") &&
+    segments.every(
+      (segment) => segment.length > 0 && !segment.startsWith(".") && !segment.endsWith(".lock"),
+    )
+  ) {
+    return feature;
+  }
+  const slug = feature
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "feature";
+}
+
 export function renderBranchName(
   branchTemplate: string,
   input: { uberProjectId: string; feature: string },
 ): string {
-  return renderTemplate(branchTemplate, {
-    uberProject: input.uberProjectId,
-    feature: input.feature,
-    branch: input.feature,
-    repo: "",
-  });
+  const feature = sanitizeFeatureName(input.feature);
+  return sanitizeFeatureName(
+    renderTemplate(branchTemplate, {
+      uberProject: input.uberProjectId,
+      feature,
+      branch: feature,
+      repo: "",
+    }),
+  );
 }
 
 export function renderRootDirName(
@@ -31,7 +61,7 @@ export function renderRootDirName(
 ): string {
   return renderTemplate(rootDirTemplate, {
     uberProject: input.uberProjectId,
-    feature: input.feature,
+    feature: sanitizeFeatureName(input.feature),
     branch: input.branch,
     repo: "",
   });
@@ -43,7 +73,7 @@ export function renderConstituentDirName(
 ): string {
   return renderTemplate(dirTemplate, {
     uberProject: input.uberProjectId,
-    feature: input.feature,
+    feature: sanitizeFeatureName(input.feature),
     branch: input.branch,
     repo: input.repoId,
   });

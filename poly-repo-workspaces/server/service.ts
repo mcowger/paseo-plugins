@@ -273,6 +273,16 @@ export async function createVirtualWorkspace(
   if (manifest && !input.resume) {
     return failure(`virtual workspace already exists at ${rootPath}; archive it first`);
   }
+  if (
+    manifest &&
+    (manifest.virtualId !== virtualId ||
+      manifest.uberProjectId !== project.id ||
+      manifest.feature !== input.feature)
+  ) {
+    return failure(
+      `workspace at ${rootPath} belongs to a different feature name; cannot resume it`,
+    );
+  }
   if (manifest && manifest.state !== "creating") {
     return failure(`only a workspace stuck in creating can be resumed (state: ${manifest.state})`);
   }

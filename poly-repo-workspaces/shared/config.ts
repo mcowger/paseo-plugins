@@ -38,30 +38,12 @@ export const PluginSettingsSchema = z.object({
 
 export type PluginSettings = z.infer<typeof PluginSettingsSchema>;
 
-const RESERVED_SEGMENTS = new Set([".", ".."]);
-
 export function validateFeatureName(feature: string): string | null {
-  if (feature.length === 0 || feature.length > 128) {
+  if (feature.trim().length === 0 || feature.length > 128) {
     return "feature name must be 1-128 characters";
   }
-  if (
-    /[\s~^:?*@{}]/.test(feature) ||
-    feature.includes("[") ||
-    feature.includes("]") ||
-    feature.includes("\\")
-  ) {
-    return "feature name contains characters git forbids in branch names";
-  }
-  if (feature.includes("..") || feature.includes("//")) {
-    return "feature name must not contain .. or //";
-  }
-  if (feature.startsWith("/") || feature.endsWith("/") || feature.endsWith(".lock")) {
-    return "feature name must not start with /, end with /, or end with .lock";
-  }
-  for (const segment of feature.split("/")) {
-    if (RESERVED_SEGMENTS.has(segment) || segment.endsWith(".lock")) {
-      return `feature name has a reserved path segment: ${segment}`;
-    }
+  if (/[\p{Cc}\p{Cf}]/u.test(feature)) {
+    return "feature name must not contain control or invisible formatting characters";
   }
   return null;
 }

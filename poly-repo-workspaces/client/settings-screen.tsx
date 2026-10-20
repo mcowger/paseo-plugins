@@ -454,7 +454,7 @@ export function PolyRepoSettingsScreen({
               />
               <SettingsInput
                 label="Branch template"
-                hint={`Branch created in every repo. {feature} is the feature name typed at creation time. Leave empty for ${DEFAULT_BRANCH_TEMPLATE}.`}
+                hint={`Branch created in every repo. {feature} is the feature name with Git-unsafe characters sanitized. Leave empty for ${DEFAULT_BRANCH_TEMPLATE}.`}
                 initialValue={form.branchTemplate}
                 onChangeText={(value) => patchForm({ branchTemplate: value })}
                 placeholder={DEFAULT_BRANCH_TEMPLATE}

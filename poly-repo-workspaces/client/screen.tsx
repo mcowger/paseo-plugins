@@ -3,8 +3,17 @@ import type { PluginScreenProps } from "@getpaseo/plugin/client";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/react-native";
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, TextInput, type TextStyle, View, type ViewStyle } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  TextInput,
+  type TextStyle,
+  View,
+  type ViewStyle,
+} from "react-native";
 import type { UberProject } from "../shared/config";
+import { renderBranchName } from "../shared/names";
 import {
   archiveVirtualWorkspace,
   cleanupVirtualWorkspace,
@@ -34,6 +43,8 @@ interface ScreenStyles {
   readonly buttonDisabled: ViewStyle;
   readonly empty: TextStyle;
   readonly section: ViewStyle;
+  readonly progress: ViewStyle;
+  readonly progressText: ViewStyle;
 }
 
 function createStyles(theme: PluginTheme, compact: boolean): ScreenStyles {
@@ -69,6 +80,8 @@ function createStyles(theme: PluginTheme, compact: boolean): ScreenStyles {
     buttonDisabled: { opacity: 0.5 },
     empty: { color: theme.colors.foregroundMuted, fontSize: small },
     section: { gap: 6 },
+    progress: { flexDirection: "row", alignItems: "center", gap: 8 },
+    progressText: { flex: 1, gap: 6 },
   };
 }
 
@@ -108,6 +121,11 @@ export function PolyRepoScreen({
   const [feature, setFeature] = useState("");
   const [withTerminals, setWithTerminals] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [creation, setCreation] = useState<{
+    uberProjectId: string;
+    feature: string;
+    resuming: boolean;
+  } | null>(null);
   const [issues, setIssues] = useState<readonly PreflightIssue[]>([]);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -137,9 +155,22 @@ export function PolyRepoScreen({
     [items, params],
   );
 
+  const selectedProjectConfig = projects.find((item) => item.id === selectedProject);
+  const branchPreview =
+    selectedProjectConfig && feature.trim()
+      ? renderBranchName(selectedProjectConfig.branchTemplate, {
+          uberProjectId: selectedProjectConfig.id,
+          feature: feature.trim(),
+        })
+      : null;
+  const createDisabled = busy || !selectedProject || feature.trim().length === 0;
+  const creationRepoCount = projects.find((item) => item.id === creation?.uberProjectId)?.repos
+    .length;
+
   const handleCreate = useCallback(async () => {
     if (busy || !selectedProject || feature.trim().length === 0) return;
     setBusy(true);
+    setCreation({ uberProjectId: selectedProject, feature: feature.trim(), resuming: false });
     setIssues([]);
     setCreateError(null);
     try {
@@ -151,7 +182,6 @@ export function PolyRepoScreen({
       if (result.ok) {
         toast.show(`Created ${feature.trim()}`);
         setFeature("");
-        refresh();
         return;
       }
       if (result.preflight.length > 0) {
@@ -163,7 +193,9 @@ export function PolyRepoScreen({
     } catch (unknownError) {
       setCreateError(unknownError instanceof Error ? unknownError.message : "Create failed");
     } finally {
+      setCreation(null);
       setBusy(false);
+      refresh();
     }
   }, [busy, callCreate, feature, refresh, selectedProject, toast, withTerminals]);
 
@@ -175,17 +207,20 @@ export function PolyRepoScreen({
     setWithTerminals((prev) => !prev);
   }, []);
 
-  const terminalsAccessibilityState = useMemo(() => ({ checked: withTerminals }), [withTerminals]);
+  const terminalsAccessibilityState = useMemo(
+    () => ({ checked: withTerminals, disabled: busy }),
+    [busy, withTerminals],
+  );
 
   const doResume = useCallback(
     async (uberProjectId: string, itemFeature: string) => {
       if (busy) return;
       setBusy(true);
+      setCreation({ uberProjectId, feature: itemFeature, resuming: true });
       try {
         const result = await callCreate({ uberProjectId, feature: itemFeature, resume: true });
         if (result.ok) {
           toast.show(`Resumed ${itemFeature}`);
-          refresh();
         } else if (result.preflight.length > 0) {
           toast.error("Preflight still failing; resolve and retry");
         } else {
@@ -194,7 +229,9 @@ export function PolyRepoScreen({
       } catch (unknownError) {
         toast.error(unknownError instanceof Error ? unknownError.message : "Resume failed");
       } finally {
+        setCreation(null);
         setBusy(false);
+        refresh();
       }
     },
     [busy, callCreate, refresh, toast],
@@ -407,13 +444,15 @@ export function PolyRepoScreen({
           key={project.id}
           accessibilityRole="button"
           accessibilityLabel={`Use ${project.displayName}`}
+          accessibilityState={{ disabled: busy }}
+          disabled={busy}
           onPress={selectHandlers.get(project.id)}
           style={[styles.button, project.id === selectedProject ? null : styles.buttonDisabled]}
         >
           <Text style={styles.buttonText}>{project.displayName}</Text>
         </Pressable>
       )),
-    [projects, selectHandlers, selectedProject, styles],
+    [busy, projects, selectHandlers, selectedProject, styles],
   );
 
   return (
@@ -432,24 +471,34 @@ export function PolyRepoScreen({
               placeholder="featureA"
               value={feature}
               onChangeText={setFeature}
+              editable={!busy}
+              maxLength={128}
               style={styles.input}
               autoCapitalize="none"
               autoCorrect={false}
             />
+            {branchPreview ? <Text style={styles.meta}>Branch: {branchPreview}</Text> : null}
             <View style={styles.actions}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Create virtual workspace"
+                accessibilityState={{
+                  disabled: createDisabled,
+                  busy: creation !== null && !creation.resuming,
+                }}
                 onPress={handleCreatePress}
-                style={styles.button}
-                disabled={busy}
+                style={[styles.button, createDisabled ? styles.buttonDisabled : null]}
+                disabled={createDisabled}
               >
-                <Text style={styles.buttonText}>Create</Text>
+                <Text style={styles.buttonText}>
+                  {creation && !creation.resuming ? "Creating..." : "Create"}
+                </Text>
               </Pressable>
               <Pressable
                 accessibilityRole="checkbox"
                 accessibilityLabel="Open a terminal in each repo after creation"
                 accessibilityState={terminalsAccessibilityState}
+                disabled={busy}
                 onPress={toggleTerminals}
                 style={styles.button}
               >
@@ -460,6 +509,25 @@ export function PolyRepoScreen({
             </View>
           </>
         )}
+        {creation ? (
+          <View style={styles.progress}>
+            <ActivityIndicator
+              size="small"
+              color={theme.colors.foregroundMuted}
+              accessibilityLabel="Workspace creation in progress"
+              accessibilityRole="progressbar"
+            />
+            <View style={styles.progressText}>
+              <Text style={styles.meta} accessibilityLiveRegion="polite">
+                {creation.resuming ? "Resuming" : "Creating"} {creation.feature}...
+              </Text>
+              <Text style={styles.meta}>
+                Setting up {creationRepoCount ?? "the"} repo worktrees. Large repos can take a
+                while.
+              </Text>
+            </View>
+          </View>
+        ) : null}
         {createError ? <Text style={styles.issue}>{createError}</Text> : null}
         {issues.map((issue) => (
           <Text key={`${issue.repoId}-${issue.code}`} style={styles.issue}>

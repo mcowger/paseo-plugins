@@ -28,6 +28,12 @@ is not under the daemon's worktrees root.
 
 - Sidebar rows and the Poly-repo screen list managed workspaces; the screen
   also creates them (feature name + uber-project).
+- Feature names can be descriptive, like `SIG: ABSCD - Fix My Stuff`. The
+  visible name stays as entered; branches and folder templates use
+  `sig-abscd-fix-my-stuff`. Existing Git-safe names stay unchanged, including
+  their case. The create form previews the branch before you submit.
+- Creation and resume show a spinner and a status message while the repo
+  worktrees are being set up. The form stays disabled until the request finishes.
 - The Poly-repo workspace panel shows per-repo branch/dirty/ahead status,
   regenerates `REPOMAP.md`, and archives with a dirty/ahead preflight.
 - Archiving removes the constituent worktrees and the root directory.

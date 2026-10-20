@@ -6,27 +6,83 @@ import {
   renderConstituentDirName,
   renderRootDirName,
   resolveRootBase,
+  sanitizeFeatureName,
 } from "./names";
 import { buildRepomap, renderAgentsTemplate } from "./repomap";
 
 describe("validateFeatureName", () => {
-  it("accepts ordinary names", () => {
+  it("accepts ordinary and friendly display names", () => {
     expect(validateFeatureName("featureA")).toBeNull();
     expect(validateFeatureName("feat/login-flow")).toBeNull();
     expect(validateFeatureName("a")).toBeNull();
+    expect(validateFeatureName("SIG: ABSCD - Fix My Stuff")).toBeNull();
+    expect(validateFeatureName("a..b")).toBeNull();
+    expect(validateFeatureName("has space")).toBeNull();
+    expect(validateFeatureName("trail.lock")).toBeNull();
   });
 
-  it("rejects git-unsafe and path-unsafe names", () => {
+  it("rejects empty and oversized display names", () => {
     expect(validateFeatureName("")).not.toBeNull();
-    expect(validateFeatureName("a..b")).not.toBeNull();
-    expect(validateFeatureName("has space")).not.toBeNull();
-    expect(validateFeatureName("trail.lock")).not.toBeNull();
-    expect(validateFeatureName("/lead")).not.toBeNull();
-    expect(validateFeatureName("a~b")).not.toBeNull();
+    expect(validateFeatureName("   ")).not.toBeNull();
+    expect(validateFeatureName("a".repeat(129))).not.toBeNull();
+  });
+
+  it.each(["line\nbreak", "tab\tname", "nul\u0000name", "rtl\u202ename", "zero\u200bwidth"])(
+    "rejects control and invisible characters in %j",
+    (feature) => expect(validateFeatureName(feature)).not.toBeNull(),
+  );
+
+  it("allows ordinary Unicode display names", () => {
+    expect(validateFeatureName("修复登录")).toBeNull();
+  });
+});
+
+describe("sanitizeFeatureName", () => {
+  it.each([
+    ["SIG: ABSCD - Fix My Stuff", "sig-abscd-fix-my-stuff"],
+    ["  Café: fix [login]?!  ", "cafe-fix-login"],
+    ["a..b", "a-b"],
+    ["../outside", "outside"],
+    ["/lead/", "lead"],
+    ["a//b", "a-b"],
+    ["a/.hidden", "a-hidden"],
+    ["trail.lock", "trail-lock"],
+    ["-option", "option"],
+    ["HEAD", "head"],
+    ["@{}\\\\bad", "bad"],
+    ["???", "feature"],
+    ["!!!", "!!!"],
+    ["修 复", "feature"],
+    ["修复", "修复"],
+    ["réparer", "réparer"],
+    ["featureA", "featureA"],
+    ["feat/login-flow", "feat/login-flow"],
+    ["release_1.2", "release_1.2"],
+    ["a@x", "a@x"],
+    ["@", "feature"],
+    ["a\u202eb", "a-b"],
+    ["a\u0085b", "a-b"],
+  ])("sanitizes %j to %j", (input, expected) => {
+    expect(sanitizeFeatureName(input)).toBe(expected);
+    expect(sanitizeFeatureName(expected)).toBe(expected);
   });
 });
 
 describe("templates", () => {
+  it("sanitizes friendly names in branches and directories, not display text", () => {
+    const input = { uberProjectId: "uber", feature: "SIG: ABSCD - Fix My Stuff" };
+    const branch = renderBranchName("feat/{feature}", input);
+    expect(branch).toBe("feat/sig-abscd-fix-my-stuff");
+    expect(renderBranchName("{feature}", input)).toBe("sig-abscd-fix-my-stuff");
+    expect(renderBranchName("Work: {feature}", input)).toBe("work-sig-abscd-fix-my-stuff");
+    expect(renderBranchName("{feature}@x", { ...input, feature: "featureA" })).toBe("featureA@x");
+    expect(renderRootDirName("{uberProject}-{feature}", { ...input, branch })).toBe(
+      "uber-sig-abscd-fix-my-stuff",
+    );
+    expect(renderConstituentDirName("{repo}_{feature}", { ...input, branch, repoId: "app" })).toBe(
+      "app_sig-abscd-fix-my-stuff",
+    );
+  });
   it("renders names from templates", () => {
     expect(renderBranchName("{feature}", { uberProjectId: "uber", feature: "featureA" })).toBe(
       "featureA",
