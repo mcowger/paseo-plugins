@@ -1,7 +1,7 @@
 # Paseo plugins
 
-Plugins and local experiments for [Paseo](https://paseo.sh/), targeting the Paseo 0.10 plugin API and
-`@getpaseo/*` SDK `0.10.0`.
+Plugins and local experiments for [Paseo](https://paseo.sh/), targeting the Paseo 0.12 plugin API and
+`@getpaseo/*` SDK `0.12.0`.
 
 Plugins use separate `index.client.tsx` and `index.server.ts` entries with strict `client/`,
 `server/`, and `shared/` boundaries. See Paseo's [plugin guide](https://paseo.sh/docs/plugins.md)

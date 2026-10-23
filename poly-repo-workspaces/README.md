@@ -1,6 +1,6 @@
 # poly-repo-workspaces
 
-A Paseo plugin (targeting Paseo 0.11+, SDK `0.11.4`) that manages virtual
+A Paseo plugin (targeting Paseo 0.12+, SDK `0.12.0`) that manages virtual
 workspaces spanning multiple git repos. See [DESIGN.md](./DESIGN.md) for the
 full design.
 

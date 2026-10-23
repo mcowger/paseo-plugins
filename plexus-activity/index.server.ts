@@ -6,7 +6,7 @@ import { plexusConfig } from "./shared/settings";
 import { keysInputSchema, snapshotInputSchema, verifyInputSchema } from "./shared/view";
 
 /**
- * There is no startup lifecycle event and no server-to-client push in the 0.10.0 plugin API: the
+ * There is no startup lifecycle event and no server-to-client push in the 0.12.0 plugin API: the
  * service starts here and the returned cleanup stops it on reload, disable, removal, or daemon exit.
  */
 export default function contribute(server: PluginServerContext) {

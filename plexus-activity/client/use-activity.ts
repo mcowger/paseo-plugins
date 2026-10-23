@@ -7,7 +7,7 @@ import type { ConnectionStatus, KeysOutput, SnapshotOutput, UsageRow } from "../
 /**
  * Polls the plugin server for activity deltas.
  *
- * 0.10.0 exposes no server-to-client push, so this is the transport. The interval is short only while
+ * 0.12.0 exposes no server-to-client push, so this is the transport. The interval is short only while
  * something is in flight; in-flight durations are ticked locally at 4 Hz between polls, which is what
  * makes the feed look continuous.
  */

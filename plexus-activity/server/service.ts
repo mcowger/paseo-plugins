@@ -21,7 +21,7 @@ import { createSseParser, type SseFrame } from "./sse";
 /**
  * Owns the single Plexus SSE connection and the store the panel polls.
  *
- * Paseo 0.10.0 has no server-to-client push channel, so the server keeps the connection warm and the
+ * Paseo 0.12.0 has no server-to-client push channel, so the server keeps the connection warm and the
  * panel asks for deltas. Startup is the body of `contribute(server)`; shutdown is the returned
  * cleanup, so `stop()` must release every timer and socket.
  */

@@ -482,8 +482,8 @@ placeholder `••••••••` when one is already stored; "Clear key" r
 
 ```
 plexus-activity/
-  paseo-plugin.json        { "id": "plexus-activity", "requirements": { "paseo": ">=0.10.0" } }
-  package.json             @getpaseo/* pinned 0.10.0 (sdk:check enforced)
+  paseo-plugin.json        { "id": "plexus-activity", "requirements": { "paseo": ">=0.12.0" } }
+  package.json             @getpaseo/* pinned 0.12.0 (sdk:check enforced)
   tsconfig.json            lib: ["ES2023"] — no DOM, noUncheckedIndexedAccess
   vitest.config.ts         aliases the host-provided @getpaseo/* modules to a stub
   index.client.tsx         panel + surface + sidebar item + settings screen + commands

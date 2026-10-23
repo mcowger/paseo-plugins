@@ -1,9 +1,9 @@
 # Poly-repo virtual workspaces
 
-Status: design only. No implementation yet.
-Target: Paseo 0.11+. Plugin id (proposed): `poly-repo-workspaces`.
-SDK pin (Phase 0 confirmed): `@getpaseo/client`, `@getpaseo/plugin`,
-`@getpaseo/protocol` at exactly `0.11.4` (latest 0.11 patch, tag `v0.11.4`).
+Status: implemented.
+Target: Paseo 0.12+. Plugin id: `poly-repo-workspaces`.
+SDK pin: `@getpaseo/client`, `@getpaseo/plugin`, `@getpaseo/protocol` at exactly
+`0.12.0`, the repo-wide baseline.
 
 ## Problem
 
@@ -49,7 +49,7 @@ These are settled. Implementation should not re-open them without a reason.
 | Failure handling | Repair-first. A failed create leaves worktrees and manifest in place for resume or manual teardown. No auto-rollback. |
 | Archive policy | Plugin archive action preflights each repo. Dirty or ahead-of-upstream constituents block worktree removal and leave the tree marked `teardown-blocked`. Branches are never deleted. |
 | Virtual root location | Default `$PASEO_HOME/poly-workspaces/`. Host setting can override it to any absolute path. Per-uber-project override wins over the host setting. Never under `worktrees.root`. |
-| Platform target | Paseo 0.11+. `paseo-plugin.json` declares `requirements: { "paseo": ">=0.11.0" }`. SDK pins at exactly `0.11.4` (this deviates from the repo-wide 0.10.0 baseline on purpose). |
+| Platform target | Paseo 0.12+. `paseo-plugin.json` declares `requirements: { "paseo": ">=0.12.0" }`. SDK pins at exactly `0.12.0`, the repo-wide baseline. |
 
 ## Why this shape
 
@@ -488,10 +488,11 @@ on an isolated daemon, not the one hosting the dev conversation.
 
 ### Phase 0: verification spike
 
-Code-level verification done against tag `v0.11.4` (all confirmed, see
+Code-level verification done against tag `v0.11.4` and re-checked by the 0.12.0 test
+suite (all confirmed, see
 Phase 0 exit note below). Live spike against an isolated daemon still open.
 
-- [x] Exact 0.11.x SDK version to pin: `0.11.4` (latest 0.11 patch).
+- [x] Exact SDK version to pin: `0.12.0` (moved with the repo baseline).
 - Plugin handler can call `paseo.workspaces.create` with a directory source
   over a pre-made non-git directory.
 - Agent created in that workspace runs with cwd at the root and picks up the
@@ -538,8 +539,8 @@ daemon, never the daemon hosting the dev session.
 
 ### Phase 1: MVP
 
-- Plugin skeleton: `paseo-plugin.json` (`requirements.paseo: ">=0.11.0"`),
-  0.11.x SDK pins, strict `client/`/`server/`/`shared/` layout.
+- Plugin skeleton: `paseo-plugin.json` (`requirements.paseo: ">=0.12.0"`),
+  0.12.x SDK pins, strict `client/`/`server/`/`shared/` layout.
 - Uber-project config: settings screen with repo list, template paths,
   virtual root override. Persistence through host plugin settings
   (`defineSettings` + `server.registerSettings`).

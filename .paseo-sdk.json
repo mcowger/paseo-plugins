@@ -1,8 +1,5 @@
 {
-  "version": "0.10.0",
-  "pluginVersions": {
-    "colorful-agent-activity": "0.12.0"
-  },
+  "version": "0.12.0",
   "localRepository": "~/workspace/paseo",
   "packages": {
     "@getpaseo/protocol": "packages/protocol",
@@ -20,6 +17,7 @@
     "skill-picker",
     "super-tasks",
     "plexuspi",
-    "plexus-activity"
+    "plexus-activity",
+    "poly-repo-workspaces"
   ]
 }

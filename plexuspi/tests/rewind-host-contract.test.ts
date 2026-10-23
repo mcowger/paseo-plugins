@@ -1,8 +1,8 @@
 /**
  * Rewind history-replacement contract probe.
  *
- * Runs the installed Paseo host adapter (`@getpaseo/server` 0.11.0-beta.3 in the
- * isolated npm env) against a mocked *public* `ProviderRegistration`. It proves
+ * Runs the installed Paseo host adapter (`@getpaseo/server` from the isolated npm
+ * env) against a mocked *public* `ProviderRegistration`. It proves
  * the append-only behavior behind the Stage 5 rewind blocker: after
  * `revertConversation` succeeds, `PluginAgentSession.streamHistory()` still
  * yields the abandoned future rows, so the host's forced hydration
