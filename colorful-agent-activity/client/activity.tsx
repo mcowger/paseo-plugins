@@ -9,7 +9,6 @@ import {
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import React, {
   Fragment,
-  type ComponentType,
   type ReactNode,
   useCallback,
   useEffect,
@@ -119,7 +118,6 @@ import {
 import { CodeModeToolDetail } from "./codemode";
 import { GithubToolDetail } from "./github";
 import { type HighlightToken, useHighlightTokens } from "./highlight";
-import { HostMarkdown } from "./host-markdown";
 import { commandColorEnabled, quietOpacity, useActivityPrefs, useReplyCodeStyles } from "./prefs";
 import { usePacedText } from "./reveal";
 import { OmpFindToolDetail } from "./omp-find";
@@ -2582,31 +2580,6 @@ function ReasoningBlockList({
   );
 }
 
-interface ReasoningBodyProps {
-  text: string;
-  /** Keys the local block list; ignored by the host renderer. */
-  keyPrefix: string;
-  theme: Theme;
-  styles: ReturnType<typeof useActivityStyles>;
-}
-
-/** Paseo's own Markdown renderer, when the host exposes one (0.13 or later). */
-function HostReasoningBody({ text }: ReasoningBodyProps) {
-  if (!HostMarkdown) return null;
-  return <HostMarkdown>{text}</HostMarkdown>;
-}
-
-function LocalReasoningBody({ text, keyPrefix, theme, styles }: ReasoningBodyProps) {
-  const blocks = useMemo(() => parseReasoningMarkdown(text), [text]);
-  return (
-    <ReasoningBlockList blocks={blocks} keyPrefix={keyPrefix} theme={theme} styles={styles} />
-  );
-}
-
-const ReasoningBody: ComponentType<ReasoningBodyProps> = HostMarkdown
-  ? HostReasoningBody
-  : LocalReasoningBody;
-
 export function ReasoningMarkdown({
   text,
   theme,
@@ -2616,9 +2589,10 @@ export function ReasoningMarkdown({
   theme: Theme;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
+  const blocks = useMemo(() => parseReasoningMarkdown(text), [text]);
   return (
     <View {...cuiViewEscape} style={styles.reasoningBody}>
-      <ReasoningBody text={text} keyPrefix="reasoning" theme={theme} styles={styles} />
+      <ReasoningBlockList blocks={blocks} keyPrefix="reasoning" theme={theme} styles={styles} />
     </View>
   );
 }
@@ -2638,6 +2612,7 @@ function ReasoningStep({
   palette: ActivityPalette;
   styles: ReturnType<typeof useActivityStyles>;
 }) {
+  const blocks = useMemo(() => parseReasoningMarkdown(text), [text]);
   return (
     <View style={styles.section}>
       <View style={styles.stepHeader}>
@@ -2649,7 +2624,12 @@ function ReasoningStep({
         <Text style={styles.detailLabel}>Step {index + 1}</Text>
       </View>
       <View style={styles.stepBody}>
-        <ReasoningBody text={text} keyPrefix={`step-${index}`} theme={theme} styles={styles} />
+        <ReasoningBlockList
+          blocks={blocks}
+          keyPrefix={`step-${index}`}
+          theme={theme}
+          styles={styles}
+        />
       </View>
     </View>
   );
