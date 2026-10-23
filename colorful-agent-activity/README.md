@@ -6,7 +6,8 @@ thinking block and latest tool call open, shows useful details on demand, and us
 code output.
 
 Requires Paseo `>=0.12.0`. Works on 0.13, where paced text comes from the plugin
-(`useRevealedText` is gone from the host).
+(`useRevealedText` is gone from the host) and reasoning renders through Paseo's own
+Markdown renderer, falling back to the plugin's block renderer on 0.12.
 
 ## Screenshots
 
