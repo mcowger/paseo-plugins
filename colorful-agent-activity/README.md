@@ -5,7 +5,8 @@ IDE-style activity rows across desktop, web, and native mobile (iOS and Android)
 thinking block and latest tool call open, shows useful details on demand, and uses Prism for shell and
 code output.
 
-Requires Paseo `>=0.11.4`.
+Requires Paseo `>=0.12.0`. Works on 0.13, where paced text comes from the plugin
+(`useRevealedText` is gone from the host).
 
 ## Screenshots
 
@@ -196,7 +197,7 @@ npm test
 npm run build:client   # after changing client/ sources
 ```
 
-The plugin uses separate Paseo v0.11.4 client and server entries. The server entry registers the
+The plugin uses separate Paseo v0.12.0-or-later client and server entries. The server entry registers the
 host-scoped settings, serves image files back to the client for inline read previews, and serves the
 client payload; timeline rendering runs in the client bundle.
 

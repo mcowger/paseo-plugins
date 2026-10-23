@@ -1,7 +1,7 @@
 {
   "version": "0.10.0",
   "pluginVersions": {
-    "colorful-agent-activity": "0.11.4"
+    "colorful-agent-activity": "0.12.0"
   },
   "localRepository": "~/workspace/paseo",
   "packages": {

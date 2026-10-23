@@ -4,7 +4,6 @@ import {
   copyText,
   Icon,
   ScrollView,
-  useRevealedText,
   useToast,
 } from "@getpaseo/plugin/client/react-native";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
@@ -120,6 +119,7 @@ import { CodeModeToolDetail } from "./codemode";
 import { GithubToolDetail } from "./github";
 import { type HighlightToken, useHighlightTokens } from "./highlight";
 import { commandColorEnabled, quietOpacity, useActivityPrefs, useReplyCodeStyles } from "./prefs";
+import { usePacedText } from "./reveal";
 import { OmpFindToolDetail } from "./omp-find";
 import { OmpWaitToolDetail } from "./omp-wait";
 import { OpencodeSubagentToolDetail } from "./opencode-subagent";
@@ -2696,7 +2696,7 @@ function ReasoningText({
   // governs it is the thinking setting.
   const window = tailPreview(text, 0, MAX_REASONING_TAIL_CHARS);
   const shownText = showAll ? text : window.text;
-  const revealedText = useRevealedText(shownText, phase);
+  const revealedText = usePacedText(shownText, phase);
   const steps = useMemo(() => splitReasoningSteps(revealedText), [revealedText]);
   // The newest block follows its tail until it stops being the newest; a finished
   // block that is now history opens at its start.

@@ -9,7 +9,7 @@ The current target host and SDK baseline is **Paseo v0.10.0**. Pin `@getpaseo/cl
 
 Per-plugin exceptions live in `.paseo-sdk.json` under `pluginVersions`, and both `npm run sdk:check`
 and `npm run sdk:install` honor them (installing, packing, and verifying each plugin at the version
-it pins). Current exception: **colorful-agent-activity** targets `>=0.11.4`, so it can use
+it pins). Current exception: **colorful-agent-activity** targets `>=0.12.0`, so it can use
 `addScreen` / `addSidebarHeaderItem`; keep its `requirements.paseo`, its three dependency pins, and
 the override in step. `plexuspi` stays on 0.10.0.
 
@@ -70,7 +70,9 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
 - Import from host-provided module paths:
   - `@getpaseo/plugin`: shared contracts (`defineRpc`, `defineAttachmentSource`, `RpcInput`, `RpcOutput`).
   - `@getpaseo/plugin/client`: client contexts, contribution types, hooks, and navigation (`PluginClientContext`, `useRpc`, `usePaseo`, `useWorkspace`, `useAgent`).
-  - `@getpaseo/plugin/client/react-native`: Paseo React Native UI components (`Icon`, `Modal`, `useToast`, `useRevealedText`).
+  - `@getpaseo/plugin/client/react-native`: Paseo React Native UI components (`Icon`, `Modal`, `useToast`).
+    The entry is deprecated in 0.13 in favor of `/client/ui`, but only `react-native` serves 0.12 hosts,
+    and it is the path that carries the `useRevealedText` compatibility export.
   - `@getpaseo/plugin/server`: server contexts and handler-only types such as `PluginHandlerContext`.
   - Provider-only imports (`@getpaseo/plugin/server/provider`, `@getpaseo/plugin/server/acp`)
     are documented in the local Paseo checkout at `~/workspace/paseo/packages/plugin`.
@@ -155,8 +157,10 @@ Patterns observed across Paseo plugins:
     tool calls or reasoning, and `"complete"` otherwise.
   - Paseo memoizes transformer output by source-item reference and derives replacement keys from the source
     item identity, preserving mounted component identity across streaming deltas.
-  - Use `useRevealedText(text, phase)` from `@getpaseo/plugin/client/react-native` to pace custom streaming text
-    smoothly, matching Paseo's built-in assistant message behavior.
+  - Paseo through 0.12 exports `useRevealedText(text, phase)` for paced timeline text; 0.13 replaces it
+    with `<StreamedText text phase>` from `/client/ui`, which cannot serve a renderer that splits the
+    revealed string. Read the hook off the host module and pace locally when it is missing (see
+    `colorful-agent-activity/client/reveal.ts`).
   - Timeline notifications: Pi extension `ctx.ui.notify()` and OpenCode notices are unified as first-class
     `type: "notification"` timeline items with log levels (info, warning, error) mapped to activity log styling.
     Transformers can target `query: { itemType: "notification" }`.
