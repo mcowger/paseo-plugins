@@ -9,9 +9,9 @@ The current target host and SDK baseline is **Paseo v0.12.0**. Pin `@getpaseo/cl
 
 Per-plugin exceptions live in `.paseo-sdk.json` under `pluginVersions`, and both `npm run sdk:check`
 and `npm run sdk:install` honor them (installing, packing, and verifying each plugin at the version
-it pins). There are no exceptions today; every plugin pins 0.12.0. Add one only when a plugin needs a
-newer host than the baseline, and keep its `requirements.paseo`, its three dependency pins, and the
-override in step.
+it pins). `paseo-worktrunk` is the current exception, requiring 0.15.0-beta.1 for worktree hooks.
+Add an exception only when a plugin needs a newer host than the baseline, and keep its
+`requirements.paseo`, its three dependency pins, and the override in step.
 
 When researching Paseo contracts (plugin SDK types, protocol, examples), use the local
 Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
