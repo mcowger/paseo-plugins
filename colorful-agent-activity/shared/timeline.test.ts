@@ -6,6 +6,7 @@ import {
   isLatestTaskUpdate,
   resolveExpansion,
   resolveTaskUpdateExpansion,
+  resolveToolCallExpansion,
 } from "./timeline";
 
 // Captured from a live opencode v2.0.18 session on daemon 0.10.0 (+PR 5603).
@@ -205,6 +206,34 @@ describe("row expansion", () => {
     expect(resolveExpansion("never", false, true)).toBe(true);
     expect(resolveExpansion("latest", false, true)).toBe(true);
     expect(resolveExpansion("latest", true, false)).toBe(false);
+  });
+});
+
+describe("codemode wrapper expansion", () => {
+  it.each(["codemode", "functions.codemode", "tools.codemode", "execute", "tools.execute"])(
+    "keeps %s collapsed even when it is the latest running or completed call",
+    (name) => {
+      for (const mode of ["always", "latest", "never"] as const) {
+        expect(resolveToolCallExpansion(name, mode, true, null)).toBe(false);
+        expect(resolveToolCallExpansion(name, mode, false, null)).toBe(false);
+        expect(resolveToolCallExpansion(name, mode, true, true)).toBe(true);
+        expect(resolveToolCallExpansion(name, mode, true, false)).toBe(false);
+      }
+    },
+  );
+
+  it("preserves the called tools' expansion settings and manual toggles", () => {
+    for (const name of ["bash", "read", "mcp__github__search_code"]) {
+      for (const mode of ["always", "latest", "never"] as const) {
+        for (const isLatest of [true, false]) {
+          for (const userExpanded of [null, true, false]) {
+            expect(resolveToolCallExpansion(name, mode, isLatest, userExpanded)).toBe(
+              resolveExpansion(mode, isLatest, userExpanded),
+            );
+          }
+        }
+      }
+    }
   });
 });
 

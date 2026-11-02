@@ -1,5 +1,6 @@
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { z } from "zod";
+import { isCodeModeWrapper } from "./codemode";
 import {
   formatError,
   formatReasoningText,
@@ -78,6 +79,15 @@ export function resolveExpansion(
   if (mode === "always") return true;
   if (mode === "never") return false;
   return isLatest;
+}
+
+export function resolveToolCallExpansion(
+  toolName: string,
+  mode: ExpansionMode,
+  isLatest: boolean,
+  userExpanded: boolean | null,
+): boolean {
+  return resolveExpansion(isCodeModeWrapper(toolName) ? "never" : mode, isLatest, userExpanded);
 }
 
 export function isLatestTaskUpdate(timestamp: number, latestTimestamp: number): boolean {

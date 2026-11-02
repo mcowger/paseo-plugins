@@ -20,6 +20,10 @@ export function isCodeModeTool(toolName: string): boolean {
   return normalizeToolName(toolName) === "execute";
 }
 
+export function isCodeModeWrapper(toolName: string): boolean {
+  return isCodeModeTool(toolName) || normalizeToolName(toolName) === "codemode";
+}
+
 function parseJsonInput(value: string): unknown {
   try {
     return JSON.parse(value) as unknown;

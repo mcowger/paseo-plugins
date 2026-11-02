@@ -51,7 +51,9 @@ File edit with colored line diff:
 - Markdown reasoning support for headings, inline bold/italic/code, ordered and unordered lists,
   blockquotes, blank-line spacing, and fenced code blocks.
 - The newest thinking block stays open until a newer thinking block starts, including while tools run.
-- The newest tool call stays open until a newer tool call appears.
+- The newest tool call stays open until a newer tool call appears. Codemode wrappers (`codemode`
+  and Opencode `execute`) start collapsed regardless of row settings; open them manually to inspect
+  the script. Called-tool rows keep their normal expansion settings.
 - Shell commands and terminal output highlighted with Prism.
 - Extension-aware file icons for reads, writes, edits, and search results.
 - Image reads render inline as thumbnails (tap to expand) instead of the `Read image file [...]` placeholder.
