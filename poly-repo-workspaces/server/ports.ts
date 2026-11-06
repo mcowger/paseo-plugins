@@ -37,11 +37,33 @@ export interface GitPort {
 export interface HostWorkspaceRef {
   id: string;
   cwd: string;
+  projectId: string | null;
+  /** Resolved display name: the title when one is set, else the derived name. */
+  name: string | null;
+}
+
+export interface CreateDirectoryWorkspaceInput {
+  path: string;
+  title: string;
+  /**
+   * Host project that owns the new workspace. The virtual root's project makes
+   * the constituent repos render as one collapsible sidebar section.
+   */
+  projectId?: string;
+}
+
+export interface CreateDirectoryWorkspaceResult {
+  workspaceId: string;
+  /** Project the host attached the workspace to; null when it reported none. */
+  projectId: string | null;
 }
 
 export interface WorkspacesPort {
-  createDirectoryWorkspace(input: { path: string; title: string }): Promise<string>;
+  createDirectoryWorkspace(
+    input: CreateDirectoryWorkspaceInput,
+  ): Promise<CreateDirectoryWorkspaceResult>;
   archiveWorkspace(workspaceId: string): Promise<void>;
+  renameWorkspace(workspaceId: string, title: string): Promise<void>;
   listWorkspaces(): Promise<HostWorkspaceRef[]>;
   createTerminal(workspaceId: string, input: { cwd?: string; name?: string }): Promise<void>;
 }

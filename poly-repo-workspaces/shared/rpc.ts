@@ -132,6 +132,10 @@ export const ReconcileReportSchema = z.object({
   finishedTeardown: z.array(z.string().min(1)),
   relinked: z.array(z.string().min(1)),
   workspaceCleared: z.array(z.string().min(1)),
+  /** `${virtualId}/${repoId}` pairs re-registered as host workspaces. */
+  repoWorkspacesCreated: z.array(z.string().min(1)),
+  /** `${virtualId}/${repoId}` pairs whose host workspace the daemon no longer had. */
+  repoWorkspacesCleared: z.array(z.string().min(1)),
   orphaned: z.array(z.string().min(1)),
   invalid: z.array(z.string().min(1)),
 });
@@ -144,6 +148,8 @@ export function emptyReconcileReport(): ReconcileReport {
     finishedTeardown: [],
     relinked: [],
     workspaceCleared: [],
+    repoWorkspacesCreated: [],
+    repoWorkspacesCleared: [],
     orphaned: [],
     invalid: [],
   };

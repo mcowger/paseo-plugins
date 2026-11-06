@@ -4,7 +4,12 @@ import type { PaseoApi } from "@getpaseo/client";
 import type { PluginHandlerContext, PluginServerContext } from "@getpaseo/plugin/server";
 import { createFsPort } from "./server/files";
 import { createGitPort } from "./server/git";
-import type { WorkspacesPort } from "./server/ports";
+import type {
+  CreateDirectoryWorkspaceInput,
+  CreateDirectoryWorkspaceResult,
+  HostWorkspaceRef,
+  WorkspacesPort,
+} from "./server/ports";
 import {
   archiveVirtualWorkspace,
   cleanupVirtualWorkspace,
@@ -43,21 +48,32 @@ function resolvePaseoHome(): string {
 
 function createWorkspacesPort(paseo: PaseoApi): WorkspacesPort {
   return {
-    async createDirectoryWorkspace(input: { path: string; title: string }): Promise<string> {
+    async createDirectoryWorkspace(
+      input: CreateDirectoryWorkspaceInput,
+    ): Promise<CreateDirectoryWorkspaceResult> {
       const handle = await paseo.workspaces.create({
-        source: { kind: "directory", path: input.path },
+        source: {
+          kind: "directory",
+          path: input.path,
+          ...(input.projectId ? { projectId: input.projectId } : {}),
+        },
         title: input.title,
       });
-      return handle.id;
+      return { workspaceId: handle.id, projectId: handle.projectId };
     },
     async archiveWorkspace(workspaceId: string): Promise<void> {
       await paseo.workspaces.archive(workspaceId);
     },
-    async listWorkspaces(): Promise<Array<{ id: string; cwd: string }>> {
+    async renameWorkspace(workspaceId: string, title: string): Promise<void> {
+      await paseo.workspaces.ref(workspaceId).setTitle(title);
+    },
+    async listWorkspaces(): Promise<HostWorkspaceRef[]> {
       const listed = await paseo.workspaces.list();
       return listed.entries.map((entry) => ({
         id: entry.id,
         cwd: entry.workspaceDirectory ?? entry.projectRootPath,
+        projectId: entry.projectId ?? null,
+        name: entry.name ?? null,
       }));
     },
     async createTerminal(

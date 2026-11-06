@@ -77,6 +77,61 @@ In current Paseo, an agent created with a `workspaceId` has its cwd forced to
 the workspace root, so agents land in the right place by default. Terminals
 take an explicit cwd, so per-repo terminals work too.
 
+### Per-repo workspaces under one sidebar section
+
+The root is the agent's cwd. The review surface is per repo, because that is the
+only shape where the host's git panel works: it runs `rev-parse --show-toplevel`
+from the workspace cwd and walks up, never down.
+
+So each constituent worktree is registered as its own directory workspace:
+
+```ts
+paseo.workspaces.create({
+  source: { kind: "directory", path: worktreePath, projectId: rootProjectId },
+  title: dirName,
+});
+```
+
+Passing the root's `projectId` is what builds the hierarchy. Paseo's sidebar
+project grouping buckets workspaces by `workspace.projectId`
+(`buildWorkspaceStructureProjects`, `packages/app/src/projects/workspace-structure.ts`)
+and renders collapsible project sections from it. One project therefore reads as
+one folder holding the virtual root plus its repo rows. `projectId` also stops
+the daemon from minting a separate project per repo
+(`workspace-provisioning-service.ts`, the `projectId` short-circuit).
+
+The rows are plain checkouts: directory workspaces only require the path to
+
+exist, and a linked-worktree cwd resolves as an ordinary checkout with branch,
+upstream, and forge lookups. `isPaseoOwnedWorktree` stays false, so Paseo never
+manages or auto-deletes them.
+
+Naming: rows are titled `<feature> / Root` and `<feature> / <repo>`. Reconcile
+rewrites the old `<uberProject> / <feature>` root title and the old
+`<repo>_<branch>` repo titles once, and only while a row still says exactly
+that; a title the user set is never touched.
+
+Ordering is not name-based. The app persists a per-project workspace order in
+`sidebar-order-store` and prepends newly seen workspace keys
+(`prependMissingOrderKeys`), so rows appear in reverse creation order and a
+rename cannot move one. The root is created first (it mints the project the rows
+join), which leaves it last until the user drags it. Plugins have no API for that
+store, and pinning (`workspace.pin.set`) is not exposed on `PaseoApi`, so the
+plugin cannot place a row.
+
+Consequences worth knowing:
+
+- Registration is best-effort. Worktrees plus the manifest are the durable
+  state, so a failed `create` leaves the id null and Resync retries it. Without
+  a project id the repo rows are skipped rather than registered into fresh
+  projects, which would scatter them across the sidebar.
+- Archiving the root archives the repo rows first, so no row outlives its
+  directory. A repo row archived by hand is forgotten from the manifest and
+  re-created on Resync while the worktree is still there.
+- The agent's own conversation workspace still reports `not a git repository`,
+  because its cwd is the multi-repo root. Review moves to the repo rows rather
+  than pretending the root has a diff.
+
 ### Alternatives considered
 
 - One native worktree workspace per repo, grouped only in plugin UI. Native git
@@ -85,6 +140,13 @@ take an explicit cwd, so per-repo terminals work too.
 - A meta-repo plus `paseo.json` `worktree.setup` scripts that create the
   sub-worktrees. Indirect, hard to error-handle, needs a repo that only exists
   to hold scripts.
+- Fake umbrella git repo at the virtual root (synthetic baseline commit plus
+  `objects/info/alternates` into each repo). Makes the host's diff pane work on
+  the root, but the root becomes a repo whose commit/discard actions lie about
+  the real repos, and base-branch comparison can't be expressed. Rejected.
+- Plugin-rendered diff pane over per-repo `git diff`. Fully supported, but it
+  re-implements the review UI and loses inline review, agent file links, and the
+  app-wide change counts.
 - DOM injection to group native sidebar rows (the `paseo-plugin-clusters`
   technique). Desktop/web only, depends on `data-testid` attributes, breaks
   when the sidebar changes. Maybe later as an optional extra. Not the base.
@@ -226,13 +288,14 @@ directory.
 
 ```ts
 Manifest {
-  version: 1
+  version: 2
   virtualId: string
   uberProjectId: string
   feature: string               // "featureA"
   branch: string                // rendered branch name, same on all repos
   rootPath: string              // absolute
-  workspaceId: string | null    // Paseo workspace, set after registration
+  workspaceId: string | null    // Paseo workspace for the root, set after registration
+  projectId: string | null      // project that owns the root; repo rows join it
   state: "creating" | "ready" | "archiving" | "teardown-blocked" | "archived"
   constituents: [{
     repoId: string
@@ -240,12 +303,18 @@ Manifest {
     worktreePath: string        // absolute
     branch: string
     baseBranch: string
+    workspaceId: string | null  // Paseo workspace for this worktree
     state: "pending" | "created" | "removed"
   }]
   createdAt: string
   updatedAt: string
 }
 ```
+
+`version: 1` roots (written before per-repo workspaces existed) are upgraded on
+read: `projectId` and every constituent `workspaceId` default to null, so the
+root stays manageable and the next Resync registers its repo rows. Nothing
+rewrites the file until the plugin has something to change.
 
 ### Server index
 
@@ -339,10 +408,12 @@ Triggered from the command center, the screen, or the sidebar. One RPC,
    what makes a mid-flow failure resumable: repair re-runs only the pending
    constituents, after re-running preflight for them.
 5. Render `AGENTS.md` from the template file. Generate `REPOMAP.md`.
-6. Register the workspace:
+6. Register the workspaces:
    `paseo.workspaces.create({ source: { kind: "directory", path: rootPath }, title })`.
-   Store the returned workspace id in the manifest and index. Set
-   `state: "ready"`.
+   Store the returned workspace id and `projectId` in the manifest and index,
+   then repeat per created constituent with
+   `{ path: worktreePath, title: dirName, projectId }` so every repo row lands
+   in the same sidebar section. Set `state: "ready"`.
 7. Optional, behind create-form checkboxes: create the first agent
    (`workspace.agents.create(...)`, cwd lands at the root) and one terminal
    per repo (explicit per-repo cwd).
@@ -401,10 +472,10 @@ veto it.
    user commits/pushes themselves (out of scope for the plugin) or confirms
    per-repo force removal knowing uncommitted work would be lost. Default is
    stop.
-3. Clean (or confirmed): mark manifest `archiving`, then
-   `paseo.workspaces.archive(workspaceId)`. Paseo archives the agents and
-   kills the terminals. It will not delete the directory (directory
-   workspace, not Paseo-owned).
+3. Clean (or confirmed): mark manifest `archiving`, archive the repo row
+   workspaces, then `paseo.workspaces.archive(workspaceId)` for the root.
+   Paseo archives the agents and kills the terminals. It will not delete the
+   directory (directory workspace, not Paseo-owned).
 4. The `workspace.archived` hook fires and runs the cascade below.
 
 ### Cascade (hook, also the native-archive path)
@@ -414,6 +485,8 @@ managed root:
 
 1. Re-check each constituent. A native archive skipped preflight, so this
    check is the safety net.
+2. Archive the repo row workspaces (best-effort; a row that fails to archive
+   must not strand the teardown).
 2. Clean constituents: `git -C <sourcePath> worktree remove <worktreePath>`,
    then `worktree prune`. Branches are left alone.
 3. Dirty constituents: skip removal, mark the manifest `teardown-blocked`,
@@ -426,13 +499,9 @@ The cascade is idempotent. Running it twice, or running it after a partial
 manual cleanup, lands in the same place. Constituent states in the manifest
 drive what's left to do.
 
-One related case: a constituent opened as its own workspace (the panel's
-escape hatch) and then archived. Because roots live outside `worktrees.root`,
-Paseo won't delete that directory on archive. The workspace record goes away,
-the worktree stays, and reconciliation (below) notices the mismatch only if
-we recorded that extra workspace id. MVP stance: the escape hatch opens the
-workspace but the plugin doesn't track it. If the user deletes the worktree
-by hand, the panel shows that constituent as missing with a repair action.
+One related case: a constituent row archived from the host. The
+`workspace.archived` hook drops that constituent's `workspaceId`, the worktree
+stays, and Resync re-registers the row. Nothing is deleted.
 
 ## Reconciliation
 
@@ -449,7 +518,11 @@ On server start, and on a slow periodic backstop while running:
   ignore it if not.
 - Constituent worktree missing on disk: panel-level missing state with
   repair (re-run the `worktree add` for that constituent, checkout mode
-  since the branch should already exist).
+  since the branch should already exist). Repair also registers the repo
+  workspace if the row was missing.
+- Repo row id the host no longer knows: drop it, then re-register the row from
+  the remembered `projectId`. Root workspace live but a different project:
+  adopt the host's project id before touching rows.
 
 Live updates ride on `workspaces.subscribe` plus query invalidation after
 mutations. The periodic pass is a recovery backstop, not the main mechanism.

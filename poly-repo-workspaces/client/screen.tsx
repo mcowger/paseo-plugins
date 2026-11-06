@@ -270,6 +270,10 @@ export function PolyRepoScreen({
       if (report.finishedTeardown.length > 0)
         parts.push(`finished ${report.finishedTeardown.length}`);
       if (report.relinked.length > 0) parts.push(`relinked ${report.relinked.length}`);
+      if (report.repoWorkspacesCreated.length > 0)
+        parts.push(`registered ${report.repoWorkspacesCreated.length} repos`);
+      if (report.repoWorkspacesCleared.length > 0)
+        parts.push(`unregistered ${report.repoWorkspacesCleared.length} repos`);
       if (report.workspaceCleared.length > 0)
         parts.push(`detached ${report.workspaceCleared.length}`);
       if (report.orphaned.length > 0) parts.push(`${report.orphaned.length} orphaned`);

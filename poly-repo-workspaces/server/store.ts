@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MANIFEST_FILENAME } from "../shared/config";
-import { ManifestSchema, type VirtualWorkspaceManifest } from "../shared/manifest";
+import { normalizeManifest, type VirtualWorkspaceManifest } from "../shared/manifest";
 import { joinSegments } from "./paths";
 import type { FsPort } from "./ports";
 
@@ -66,10 +66,7 @@ export async function readManifest(
   const raw = await fs.readFile(manifestPath(rootPath));
   if (!raw) return null;
   try {
-    const parsed: unknown = JSON.parse(raw);
-    const result = ManifestSchema.safeParse(parsed);
-    if (!result.success) return null;
-    return result.data;
+    return normalizeManifest(JSON.parse(raw));
   } catch {
     return null;
   }

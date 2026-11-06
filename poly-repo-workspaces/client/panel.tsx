@@ -262,11 +262,14 @@ export function PolyRepoPanel({
   );
 
   const openRepoWorkspace = useCallback(
-    async (repoId: string, cwd: string) => {
+    async (repoId: string, cwd: string, repoWorkspaceId: string | null) => {
       if (busy) return;
       setBusy(true);
       try {
-        const handle = await paseo.workspaces.open(cwd);
+        // Prefer the row the plugin already registered: it carries the virtual
+        // root's project, so it opens inside the group instead of minting a
+        // workspace in the repo's own project.
+        const handle = repoWorkspaceId ? { id: repoWorkspaceId } : await paseo.workspaces.open(cwd);
         if (navigation) navigation.openWorkspace({ workspaceId: handle.id });
         else toast.show(`Opened ${repoId} as its own workspace`);
       } catch (unknownError) {
@@ -309,7 +312,11 @@ export function PolyRepoPanel({
         (match?.constituents ?? []).map((constituent) => [
           constituent.repoId,
           () => {
-            void openRepoWorkspace(constituent.repoId, constituent.worktreePath);
+            void openRepoWorkspace(
+              constituent.repoId,
+              constituent.worktreePath,
+              constituent.workspaceId,
+            );
           },
         ]),
       ),

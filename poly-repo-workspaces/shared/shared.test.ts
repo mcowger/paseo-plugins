@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateFeatureName } from "./config";
-import { normalizeManifest } from "./manifest";
+import { MANIFEST_VERSION, normalizeManifest } from "./manifest";
 import {
   renderBranchName,
   renderConstituentDirName,
@@ -152,6 +152,35 @@ describe("normalizeManifest", () => {
   it("rejects malformed manifests", () => {
     expect(normalizeManifest(null)).toBeNull();
     expect(normalizeManifest({ version: 2 })).toBeNull();
-    expect(normalizeManifest({ version: 1, state: "bogus" })).toBeNull();
+    expect(normalizeManifest({ version: 2, state: "bogus" })).toBeNull();
+  });
+
+  it("upgrades a v1 manifest instead of stranding it", () => {
+    const upgraded = normalizeManifest({
+      version: 1,
+      virtualId: "uber-featurea",
+      uberProjectId: "uber",
+      feature: "featureA",
+      branch: "featureA",
+      rootPath: "/poly/uber-featureA",
+      workspaceId: "wks_legacy",
+      state: "ready",
+      constituents: [
+        {
+          repoId: "frontend",
+          sourcePath: "/src/frontend",
+          worktreePath: "/poly/uber-featureA/frontend_featureA",
+          branch: "featureA",
+          baseBranch: "main",
+          state: "created",
+        },
+      ],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(upgraded?.version).toBe(MANIFEST_VERSION);
+    expect(upgraded?.projectId).toBeNull();
+    expect(upgraded?.constituents[0]?.workspaceId).toBeNull();
   });
 });

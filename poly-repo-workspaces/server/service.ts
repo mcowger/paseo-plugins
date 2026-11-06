@@ -36,7 +36,13 @@ import {
   upstreamRef,
 } from "./git";
 import { isSameOrInside, joinSegments, normalizeAbsolute } from "./paths";
-import { type FsPort, type GitPort, isGitFailure, type WorkspacesPort } from "./ports";
+import {
+  type FsPort,
+  type GitPort,
+  type HostWorkspaceRef,
+  isGitFailure,
+  type WorkspacesPort,
+} from "./ports";
 import {
   emptyIndex,
   type IndexEntry,
@@ -94,6 +100,25 @@ export interface ArchiveResult {
 }
 
 const FRAGMENT_CHARS = 4000;
+
+/**
+ * Workspace titles read as `<feature> / <row>` so every row of one virtual
+ * workspace carries the feature it belongs to, and the root is named rather than
+ * looking like another repo. Sidebar order is a persisted per-user list, so these
+ * titles never decide position.
+ */
+function rootWorkspaceTitle(feature: string): string {
+  return `${feature} / Root`;
+}
+
+function repoWorkspaceTitle(feature: string, repoId: string): string {
+  return `${feature} / ${repoId}`;
+}
+
+/** The root title older versions wrote, kept only to recognize it. */
+function legacyRootWorkspaceTitle(uberProjectName: string, feature: string): string {
+  return `${uberProjectName} / ${feature}`;
+}
 
 function gitMessage(error: unknown): string {
   if (isGitFailure(error)) {
@@ -219,6 +244,124 @@ function failure(
   };
 }
 
+function lastSegment(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  return index >= 0 ? trimmed.slice(index + 1) : trimmed;
+}
+
+/**
+ * The project the virtual root workspace landed in. Constituent workspaces join
+ * it, which is what makes the host render one sidebar section holding every
+ * repo. Read from the host rather than derived locally: only the host owns
+ * project identity.
+ */
+async function lookupRootProjectId(
+  deps: ServiceDeps,
+  manifest: VirtualWorkspaceManifest,
+): Promise<string | null> {
+  if (!manifest.workspaceId) return null;
+  try {
+    const listed = await deps.workspaces.listWorkspaces();
+    return listed.find((entry) => entry.id === manifest.workspaceId)?.projectId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Registers one directory workspace per created constituent worktree. Each one
+ * is a real checkout with the host's full git surface (changes, branch, PR);
+ * only the grouping is virtual.
+ *
+ * Best-effort by design: the worktrees and manifest are the durable state, so a
+ * failed registration leaves the id null and the reconcile RPC retries it.
+ * Without a project id the workspace is skipped rather than registered into a
+ * fresh project, which would scatter the repos across the sidebar.
+ */
+async function registerConstituentWorkspaces(
+  deps: ServiceDeps,
+  manifest: VirtualWorkspaceManifest,
+): Promise<void> {
+  const projectId = manifest.projectId ?? (await lookupRootProjectId(deps, manifest));
+  if (!projectId) return;
+  // A worktree the host already has a workspace for is adopted, never duplicated:
+  // two workspaces on one directory would show up as two rows for one repo.
+  const existing = new Map<string, HostWorkspaceRef>();
+  try {
+    for (const entry of await deps.workspaces.listWorkspaces()) {
+      existing.set(normalizeAbsolute(entry.cwd), entry);
+    }
+  } catch {
+    // Registration below still works; reconcile adopts anything left behind.
+  }
+  let changed = false;
+  if (manifest.projectId !== projectId) {
+    manifest.projectId = projectId;
+    changed = true;
+  }
+  for (const constituent of manifest.constituents) {
+    if (constituent.state !== "created" || constituent.workspaceId) continue;
+    const adopted = existing.get(normalizeAbsolute(constituent.worktreePath));
+    if (adopted) {
+      constituent.workspaceId = adopted.id;
+      changed = true;
+      continue;
+    }
+    if (!(await deps.fs.isDirectory(constituent.worktreePath))) continue;
+    try {
+      const created = await deps.workspaces.createDirectoryWorkspace({
+        path: constituent.worktreePath,
+        title: repoWorkspaceTitle(manifest.feature, constituent.repoId),
+        projectId,
+      });
+      constituent.workspaceId = created.workspaceId;
+      changed = true;
+    } catch {
+      // Reconcile retries; creation must not fail over a sidebar row.
+    }
+  }
+  if (changed) {
+    manifest.updatedAt = deps.now();
+    await writeManifest(deps.fs, manifest);
+  }
+}
+
+/**
+ * Archives the per-repo workspaces before their worktrees go away, so no host
+ * row outlives the directory it points at. A workspace the host already dropped
+ * counts as archived.
+ */
+async function archiveConstituentWorkspaces(
+  deps: ServiceDeps,
+  manifest: VirtualWorkspaceManifest,
+): Promise<{ error: string | null }> {
+  let changed = false;
+  for (const constituent of manifest.constituents) {
+    const workspaceId = constituent.workspaceId;
+    if (!workspaceId) continue;
+    try {
+      await deps.workspaces.archiveWorkspace(workspaceId);
+    } catch (error) {
+      if (!isMissingWorkspace(error)) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        if (changed) {
+          manifest.updatedAt = deps.now();
+          await writeManifest(deps.fs, manifest);
+        }
+        return { error: `repo workspace archive failed: ${message}` };
+      }
+    }
+    constituent.workspaceId = null;
+    changed = true;
+  }
+  if (changed) {
+    manifest.updatedAt = deps.now();
+    await writeManifest(deps.fs, manifest);
+  }
+  return { error: null };
+}
+
 export async function createVirtualWorkspace(
   deps: ServiceDeps,
   input: CreateInput,
@@ -319,13 +462,14 @@ export async function createVirtualWorkspace(
   const timestamp = deps.now();
   if (!manifest) {
     manifest = {
-      version: 1,
+      version: 2,
       virtualId,
       uberProjectId: project.id,
       feature: input.feature,
       branch,
       rootPath,
       workspaceId: null,
+      projectId: null,
       state: "creating",
       constituents: planned.map((p) => ({
         repoId: p.repo.id,
@@ -333,6 +477,7 @@ export async function createVirtualWorkspace(
         worktreePath: p.worktreePath,
         branch,
         baseBranch: "",
+        workspaceId: null,
         state: "pending" as const,
       })),
       createdAt: timestamp,
@@ -464,11 +609,12 @@ export async function createVirtualWorkspace(
 
   if (!active.workspaceId) {
     try {
-      const workspaceId = await deps.workspaces.createDirectoryWorkspace({
+      const created = await deps.workspaces.createDirectoryWorkspace({
         path: rootPath,
-        title: `${project.displayName} / ${input.feature}`,
+        title: rootWorkspaceTitle(input.feature),
       });
-      active.workspaceId = workspaceId;
+      active.workspaceId = created.workspaceId;
+      active.projectId = created.projectId;
     } catch (error) {
       active.updatedAt = deps.now();
       await writeManifest(deps.fs, active);
@@ -482,6 +628,8 @@ export async function createVirtualWorkspace(
       };
     }
   }
+
+  await registerConstituentWorkspaces(deps, active);
 
   active.state = "ready";
   active.updatedAt = deps.now();
@@ -771,6 +919,11 @@ export async function archiveVirtualWorkspace(
   current.updatedAt = deps.now();
   await writeManifest(deps.fs, current);
 
+  const repoArchive = await archiveConstituentWorkspaces(deps, current);
+  if (repoArchive.error) {
+    return { ok: false, error: repoArchive.error, blocked: [] };
+  }
+
   if (current.workspaceId) {
     try {
       await deps.workspaces.archiveWorkspace(current.workspaceId);
@@ -805,6 +958,20 @@ export async function handleWorkspaceArchived(
 ): Promise<void> {
   const index = await loadIndex(deps.fs, deps.paseoHome);
   const wantedCwd = normalizeAbsolute(event.cwd);
+
+  // A constituent row archived from the host drops its registration; the next
+  // reconcile re-registers it if the worktree is still there.
+  for (const entry of Object.values(index.virtual)) {
+    if (!(await deps.fs.isDirectory(entry.rootPath))) continue;
+    const candidate = await readManifest(deps.fs, entry.rootPath);
+    const constituent = candidate?.constituents.find((c) => c.workspaceId === event.id);
+    if (!candidate || !constituent) continue;
+    constituent.workspaceId = null;
+    candidate.updatedAt = deps.now();
+    await writeManifest(deps.fs, candidate);
+    return;
+  }
+
   let virtualId: string | null = null;
   for (const [id, entry] of Object.entries(index.virtual)) {
     if (entry.workspaceId === event.id || normalizeAbsolute(entry.rootPath) === wantedCwd) {
@@ -833,6 +1000,10 @@ export async function handleWorkspaceArchived(
     });
     return;
   }
+
+  // Best-effort: the root workspace is already gone, so a repo row that fails to
+  // archive must not strand the teardown.
+  await archiveConstituentWorkspaces(deps, manifest);
 
   const teardown = await teardownConstituents(deps, manifest, new Set());
   if (teardown.blocked.length > 0) {
@@ -947,15 +1118,15 @@ export async function reconcileVirtualWorkspaces(deps: ServiceDeps): Promise<{
 }> {
   const report = emptyReconcileReport();
   const snapshot = await deps.settings.snapshot();
-  let host: Array<{ id: string; cwd: string }>;
+  let host: HostWorkspaceRef[];
   try {
     host = await deps.workspaces.listWorkspaces();
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     return { ok: false, error: `cannot list host workspaces: ${message}`, report };
   }
-  const hostById = new Map(host.map((entry) => [entry.id, normalizeAbsolute(entry.cwd)]));
-  const hostByCwd = new Map(host.map((entry) => [normalizeAbsolute(entry.cwd), entry.id]));
+  const hostById = new Map(host.map((entry) => [entry.id, entry]));
+  const hostByCwd = new Map(host.map((entry) => [normalizeAbsolute(entry.cwd), entry]));
 
   const index = await loadIndex(deps.fs, deps.paseoHome);
   report.adopted.push(
@@ -982,6 +1153,7 @@ export async function reconcileVirtualWorkspaces(deps: ServiceDeps): Promise<{
     if (manifest.state === "archiving") {
       // Crash window: the host-side archive may or may not have happened.
       // Re-issuing it is safe; the archived hook skips manifests already marked archiving.
+      await archiveConstituentWorkspaces(deps, manifest);
       if (manifest.workspaceId && hostById.has(manifest.workspaceId)) {
         try {
           await deps.workspaces.archiveWorkspace(manifest.workspaceId);
@@ -1007,23 +1179,130 @@ export async function reconcileVirtualWorkspaces(deps: ServiceDeps): Promise<{
       report.workspaceCleared.push(virtualId);
     }
     if (!manifest.workspaceId) {
-      const hostId = hostByCwd.get(normalizeAbsolute(manifest.rootPath));
-      if (hostId) {
-        manifest.workspaceId = hostId;
+      const hostEntry = hostByCwd.get(normalizeAbsolute(manifest.rootPath));
+      if (hostEntry) {
+        manifest.workspaceId = hostEntry.id;
         manifest.updatedAt = deps.now();
         await writeManifest(deps.fs, manifest);
         await updateIndex(deps, (next) => {
           const record = next.virtual[virtualId];
           if (record) {
-            record.workspaceId = hostId;
+            record.workspaceId = hostEntry.id;
             record.updatedAt = deps.now();
           }
         });
         report.relinked.push(virtualId);
       }
     }
+    if (manifest.workspaceId) {
+      const liveProjectId = hostById.get(manifest.workspaceId)?.projectId ?? null;
+      if (liveProjectId && liveProjectId !== manifest.projectId) {
+        manifest.projectId = liveProjectId;
+        manifest.updatedAt = deps.now();
+        await writeManifest(deps.fs, manifest);
+      }
+    }
+    await syncWorkspaceTitles(deps, manifest, snapshot, hostById);
+    await reconcileConstituentWorkspaces(deps, manifest, hostById, hostByCwd, report);
   }
   return { ok: true, error: null, report };
+}
+
+/**
+ * Moves rows off the titles older versions wrote and onto `<feature> / <row>`:
+ * the root from `<uberProject> / <feature>`, each repo row from its directory
+ * name. A title the user set is never overwritten.
+ */
+async function syncWorkspaceTitles(
+  deps: ServiceDeps,
+  manifest: VirtualWorkspaceManifest,
+  snapshot: SettingsSnapshot,
+  hostById: Map<string, HostWorkspaceRef>,
+): Promise<void> {
+  const legacyRoot = legacyRootWorkspaceTitle(
+    lookupUberProjectName(snapshot, manifest.uberProjectId),
+    manifest.feature,
+  );
+  const renames: Array<{ workspaceId: string; title: string; from: string }> = [];
+
+  const rootWorkspaceId = manifest.workspaceId;
+  const liveRoot = rootWorkspaceId ? hostById.get(rootWorkspaceId) : undefined;
+  if (rootWorkspaceId && liveRoot?.name === legacyRoot) {
+    renames.push({
+      workspaceId: rootWorkspaceId,
+      title: rootWorkspaceTitle(manifest.feature),
+      from: legacyRoot,
+    });
+  }
+  for (const constituent of manifest.constituents) {
+    const workspaceId = constituent.workspaceId;
+    const live = workspaceId ? hostById.get(workspaceId) : undefined;
+    if (!workspaceId || !live) continue;
+    if (live.name !== lastSegment(constituent.worktreePath)) continue;
+    const title = repoWorkspaceTitle(manifest.feature, constituent.repoId);
+    if (live.name === title) continue;
+    renames.push({ workspaceId, title, from: live.name ?? "" });
+  }
+
+  for (const rename of renames) {
+    try {
+      await deps.workspaces.renameWorkspace(rename.workspaceId, rename.title);
+    } catch {
+      // Cosmetic: the next reconcile retries.
+    }
+  }
+}
+
+/**
+ * Keeps the per-repo rows aligned with the host: a row the user archived is
+ * re-registered while its worktree still exists, and an id the host no longer
+ * knows is dropped so nothing else trusts it.
+ */
+async function reconcileConstituentWorkspaces(
+  deps: ServiceDeps,
+  manifest: VirtualWorkspaceManifest,
+  hostById: Map<string, HostWorkspaceRef>,
+  hostByCwd: Map<string, HostWorkspaceRef>,
+  report: ReconcileReport,
+): Promise<void> {
+  let changed = false;
+  for (const constituent of manifest.constituents) {
+    if (constituent.state !== "created") continue;
+    const key = `${manifest.virtualId}/${constituent.repoId}`;
+    if (constituent.workspaceId) {
+      if (hostById.has(constituent.workspaceId)) continue;
+      constituent.workspaceId = null;
+      changed = true;
+      report.repoWorkspacesCleared.push(key);
+    }
+    // Adopt a workspace the host already opened on this worktree instead of
+    // stacking a second row on the same directory.
+    const adopted = hostByCwd.get(normalizeAbsolute(constituent.worktreePath));
+    if (adopted) {
+      constituent.workspaceId = adopted.id;
+      changed = true;
+      report.repoWorkspacesCreated.push(key);
+      continue;
+    }
+    if (!manifest.projectId) continue;
+    if (!(await deps.fs.isDirectory(constituent.worktreePath))) continue;
+    try {
+      const created = await deps.workspaces.createDirectoryWorkspace({
+        path: constituent.worktreePath,
+        title: repoWorkspaceTitle(manifest.feature, constituent.repoId),
+        projectId: manifest.projectId,
+      });
+      constituent.workspaceId = created.workspaceId;
+      changed = true;
+      report.repoWorkspacesCreated.push(key);
+    } catch {
+      // Leave it unregistered; the next reconcile retries.
+    }
+  }
+  if (changed) {
+    manifest.updatedAt = deps.now();
+    await writeManifest(deps.fs, manifest);
+  }
 }
 
 export async function forgetVirtualWorkspace(
@@ -1138,6 +1417,7 @@ export async function repairConstituent(
   constituent.state = "created";
   manifest.updatedAt = deps.now();
   await writeManifest(deps.fs, manifest);
+  await registerConstituentWorkspaces(deps, manifest);
   return { ok: true, error: null };
 }
 
@@ -1157,6 +1437,9 @@ export function newTestDeps(overrides: Partial<ServiceDeps> & { fs: FsPort }): S
         throw new Error("workspaces not stubbed");
       },
       archiveWorkspace: () => {
+        throw new Error("workspaces not stubbed");
+      },
+      renameWorkspace: () => {
         throw new Error("workspaces not stubbed");
       },
       listWorkspaces: () => {

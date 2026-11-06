@@ -167,28 +167,54 @@ export function gitFailedWith(message: string): { match: string[]; message: stri
 }
 
 export function createFakeWorkspaces(): WorkspacesPort & {
-  created: Array<{ path: string; title: string }>;
+  created: Array<{ path: string; title: string; projectId?: string }>;
   archived: string[];
+  renamed: Array<{ workspaceId: string; title: string }>;
   terminals: Array<{ workspaceId: string; cwd?: string; name?: string }>;
-  hostWorkspaces: Array<{ id: string; cwd: string }>;
+  hostWorkspaces: Array<{
+    id: string;
+    cwd: string;
+    projectId: string | null;
+    name: string | null;
+  }>;
 } {
-  const created: Array<{ path: string; title: string }> = [];
+  const created: Array<{ path: string; title: string; projectId?: string }> = [];
   const archived: string[] = [];
+  const renamed: Array<{ workspaceId: string; title: string }> = [];
   const terminals: Array<{ workspaceId: string; cwd?: string; name?: string }> = [];
-  const hostWorkspaces: Array<{ id: string; cwd: string }> = [];
+  const hostWorkspaces: Array<{
+    id: string;
+    cwd: string;
+    projectId: string | null;
+    name: string | null;
+  }> = [];
   let counter = 0;
   return {
     created,
     archived,
+    renamed,
     terminals,
     hostWorkspaces,
-    createDirectoryWorkspace: (input: { path: string; title: string }) => {
+    createDirectoryWorkspace: (input: { path: string; title: string; projectId?: string }) => {
       created.push(input);
       counter += 1;
-      return Promise.resolve(`wks_test${String(counter).padStart(2, "0")}`);
+      const workspaceId = `wks_test${String(counter).padStart(2, "0")}`;
+      // The host mints a project for a directory without one, and otherwise
+      // keeps the requested project.
+      const projectId = input.projectId ?? `proj_test${String(counter).padStart(2, "0")}`;
+      hostWorkspaces.push({ id: workspaceId, cwd: input.path, projectId, name: input.title });
+      return Promise.resolve({ workspaceId, projectId });
     },
     archiveWorkspace: (workspaceId: string) => {
       archived.push(workspaceId);
+      const index = hostWorkspaces.findIndex((entry) => entry.id === workspaceId);
+      if (index >= 0) hostWorkspaces.splice(index, 1);
+      return Promise.resolve();
+    },
+    renameWorkspace: (workspaceId: string, title: string) => {
+      renamed.push({ workspaceId, title });
+      const entry = hostWorkspaces.find((candidate) => candidate.id === workspaceId);
+      if (entry) entry.name = title;
       return Promise.resolve();
     },
     listWorkspaces: () => Promise.resolve([...hostWorkspaces]),

@@ -86,7 +86,17 @@ describe("createVirtualWorkspace", () => {
     expect(await fs.readFile(`${root}/AGENTS.md`)).toContain("frontend_featureA/");
     expect(await fs.readFile(`${root}/REPOMAP.md`)).toContain("## frontend");
     expect(await fs.readFile(`${root}/.polyrepo.json`)).toContain('"state": "ready"');
-    expect(workspaces.created).toEqual([{ path: root, title: "Uber / featureA" }]);
+    expect(workspaces.created).toEqual([
+      { path: root, title: "featureA / Root" },
+      { path: `${root}/frontend_featureA`, title: "featureA / frontend", projectId: "proj_test01" },
+      { path: `${root}/app_featureA`, title: "featureA / app", projectId: "proj_test01" },
+    ]);
+    const manifest = await readManifest(fs, root);
+    expect(manifest?.projectId).toBe("proj_test01");
+    expect(manifest?.constituents.map((item) => item.workspaceId)).toEqual([
+      "wks_test02",
+      "wks_test03",
+    ]);
     const adds = (git.script.log ?? []).filter((args) => args.includes("add"));
     expect(adds).toHaveLength(2);
 
@@ -105,7 +115,15 @@ describe("createVirtualWorkspace", () => {
     const result = await createVirtualWorkspace(deps, { uberProjectId: "uber", feature });
 
     expect(result.ok).toBe(true);
-    expect(workspaces.created).toEqual([{ path: root, title: `Uber / ${feature}` }]);
+    expect(workspaces.created).toEqual([
+      { path: root, title: `${feature} / Root` },
+      {
+        path: `${root}/frontend_${branch}`,
+        title: `${feature} / frontend`,
+        projectId: "proj_test01",
+      },
+      { path: `${root}/app_${branch}`, title: `${feature} / app`, projectId: "proj_test01" },
+    ]);
     expect(await fs.readFile(`${root}/AGENTS.md`)).toContain(feature);
     const manifest = await readManifest(fs, root);
     expect(manifest?.feature).toBe(feature);
@@ -314,7 +332,8 @@ describe("archiveVirtualWorkspace", () => {
     const result = await archiveVirtualWorkspace(deps, { virtualId });
 
     expect(result.ok).toBe(true);
-    expect(workspaces.archived).toEqual(["wks_test01"]);
+    // Repo rows leave with their worktrees; the root workspace goes last.
+    expect(workspaces.archived).toEqual(["wks_test02", "wks_test03", "wks_test01"]);
     const removes = (git.script.log ?? []).filter((args) => args.includes("remove"));
     expect(removes).toHaveLength(2);
     expect(await fs.exists("/paseo/poly-workspaces/uber-featureA")).toBe(false);
@@ -470,13 +489,14 @@ describe("reconcile and repair", () => {
     const rootB = "/paseo/poly-workspaces/uber-featureB";
     await fs.mkdirp(rootB);
     await writeManifest(deps.fs, {
-      version: 1,
+      version: 2,
       virtualId: "uber-featureb",
       uberProjectId: "uber",
       feature: "featureB",
       branch: "featureB",
       rootPath: rootB,
       workspaceId: null,
+      projectId: null,
       state: "ready",
       constituents: [],
       createdAt: "2026-01-01T00:00:00.000Z",
@@ -492,7 +512,6 @@ describe("reconcile and repair", () => {
 
   it("finishes a crash-window archive and re-archives the open workspace", async () => {
     const { deps, fs, workspaces, virtualId } = await created();
-    workspaces.hostWorkspaces.push({ id: "wks_test01", cwd: root });
     const manifest = await readManifest(deps.fs, root);
     expect(manifest).not.toBeNull();
     if (manifest) {
@@ -504,28 +523,126 @@ describe("reconcile and repair", () => {
 
     expect(result.ok).toBe(true);
     expect(result.report.finishedTeardown).toEqual([virtualId]);
-    expect(workspaces.archived).toEqual(["wks_test01"]);
+    expect(workspaces.archived).toEqual(["wks_test02", "wks_test03", "wks_test01"]);
     expect(await fs.exists(root)).toBe(false);
     expect(await listVirtualWorkspaces(deps)).toHaveLength(0);
   });
 
-  it("clears a dead workspace id and relinks a reopened workspace by cwd", async () => {
+  it("clears stale workspace ids and relinks a reopened root by cwd", async () => {
     const { deps, virtualId } = await created();
+    const fake = deps.workspaces as ReturnType<typeof createFakeWorkspaces>;
+    fake.hostWorkspaces.length = 0;
 
     const cleared = await reconcileVirtualWorkspaces(deps);
     expect(cleared.report.workspaceCleared).toEqual([virtualId]);
+    expect(cleared.report.repoWorkspacesCleared).toEqual([
+      `${virtualId}/frontend`,
+      `${virtualId}/app`,
+    ]);
+    // Both repo rows come back, still inside the recorded project.
+    expect(cleared.report.repoWorkspacesCreated).toEqual([
+      `${virtualId}/frontend`,
+      `${virtualId}/app`,
+    ]);
     const listed = await listVirtualWorkspaces(deps);
     expect(listed[0]?.workspaceId).toBeNull();
+    expect(listed[0]?.constituents.map((item) => item.workspaceId)).toEqual([
+      "wks_test04",
+      "wks_test05",
+    ]);
+    expect(fake.created.slice(3).map((item) => item.projectId)).toEqual([
+      "proj_test01",
+      "proj_test01",
+    ]);
 
-    const { workspaces } = deps;
-    expect(workspaces).toBeDefined();
-    const fake = workspaces as ReturnType<typeof createFakeWorkspaces>;
-    fake.hostWorkspaces.push({ id: "wks_reopened", cwd: root });
+    fake.hostWorkspaces.push({
+      id: "wks_reopened",
+      cwd: root,
+      projectId: "proj_relinked",
+      name: "featureA / Root",
+    });
 
     const relinked = await reconcileVirtualWorkspaces(deps);
     expect(relinked.report.relinked).toEqual([virtualId]);
     const relisted = await listVirtualWorkspaces(deps);
     expect(relisted[0]?.workspaceId).toBe("wks_reopened");
+  });
+
+  it("upgrades a v1 manifest and registers its repo rows on reconcile", async () => {
+    const { deps, fs, workspaces } = depsFor(project());
+    const rootB = "/paseo/poly-workspaces/uber-featureB";
+    await fs.mkdirp(`${rootB}/frontend_featureB`);
+    await fs.mkdirp(`${rootB}/app_featureB`);
+    await fs.writeFileAtomic(
+      `${rootB}/.polyrepo.json`,
+      JSON.stringify({
+        version: 1,
+        virtualId: "uber-featureb",
+        uberProjectId: "uber",
+        feature: "featureB",
+        branch: "featureB",
+        rootPath: rootB,
+        workspaceId: "wks_legacy",
+        state: "ready",
+        constituents: ["frontend", "app"].map((repoId) => ({
+          repoId,
+          sourcePath: `/src/${repoId}`,
+          worktreePath: `${rootB}/${repoId}_featureB`,
+          branch: "featureB",
+          baseBranch: "main",
+          state: "created",
+        })),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+    workspaces.hostWorkspaces.push({
+      id: "wks_legacy",
+      cwd: rootB,
+      projectId: "proj_legacy",
+      name: "featureB / Root",
+    });
+
+    // Adoption reads the manifest, so this is also the v1-accepted check.
+    const loaded = await reconcileOnLoad(deps);
+    expect(loaded.adopted).toEqual(["uber-featureb"]);
+    const listed = await listVirtualWorkspaces(deps);
+    expect(listed[0]).toMatchObject({ state: "ready", workspaceId: "wks_legacy" });
+
+    const result = await reconcileVirtualWorkspaces(deps);
+    expect(result.report.repoWorkspacesCreated).toEqual([
+      "uber-featureb/frontend",
+      "uber-featureb/app",
+    ]);
+    const manifest = await readManifest(fs, rootB);
+    expect(manifest?.version).toBe(2);
+    expect(manifest?.projectId).toBe("proj_legacy");
+    expect(manifest?.constituents.map((item) => item.workspaceId)).toEqual([
+      "wks_test01",
+      "wks_test02",
+    ]);
+  });
+
+  it("retitles legacy workspace names and leaves user renames alone", async () => {
+    const { deps, workspaces, virtualId } = await created();
+    const rootEntry = workspaces.hostWorkspaces.find((entry) => entry.id === "wks_test01");
+    const repoEntry = workspaces.hostWorkspaces.find((entry) => entry.id === "wks_test02");
+    expect(rootEntry?.name).toBe("featureA / Root");
+    expect(repoEntry?.name).toBe("featureA / frontend");
+
+    if (rootEntry) rootEntry.name = "Uber / featureA";
+    if (repoEntry) repoEntry.name = "frontend_featureA";
+    await reconcileVirtualWorkspaces(deps);
+    expect(workspaces.renamed).toEqual([
+      { workspaceId: "wks_test01", title: "featureA / Root" },
+      { workspaceId: "wks_test02", title: "featureA / frontend" },
+    ]);
+
+    if (rootEntry) rootEntry.name = "What I called it";
+    if (repoEntry) repoEntry.name = "frontend (mine)";
+    await reconcileVirtualWorkspaces(deps);
+    expect(workspaces.renamed).toHaveLength(2);
+    expect(virtualId).toContain("uber");
   });
 
   it("reports orphaned roots and forgets them", async () => {
@@ -565,6 +682,72 @@ describe("reconcile and repair", () => {
     expect(cleaned).toEqual({ ok: true, error: null });
     expect(await fs.exists(root)).toBe(false);
     expect(await listVirtualWorkspaces(deps)).toHaveLength(0);
+  });
+
+  it("drops a repo row archived from the host and re-registers it on reconcile", async () => {
+    const { deps, fs, workspaces, virtualId } = await created();
+    const frontend = `${root}/frontend_featureA`;
+
+    await workspaces.archiveWorkspace("wks_test02");
+    await handleWorkspaceArchived(deps, { id: "wks_test02", cwd: frontend });
+
+    const manifest = await readManifest(fs, root);
+    expect(manifest?.workspaceId).toBe("wks_test01");
+    expect(
+      manifest?.constituents.find((item) => item.repoId === "frontend")?.workspaceId,
+    ).toBeNull();
+    expect(await fs.exists(root)).toBe(true);
+
+    const result = await reconcileVirtualWorkspaces(deps);
+    expect(result.report.repoWorkspacesCreated).toEqual([`${virtualId}/frontend`]);
+    const listed = await listVirtualWorkspaces(deps);
+    expect(listed[0]?.constituents.find((item) => item.repoId === "frontend")?.workspaceId).toBe(
+      "wks_test04",
+    );
+  });
+
+  it("adopts a workspace opened by hand on a repo worktree instead of duplicating it", async () => {
+    const { deps, fs, workspaces, virtualId } = await created();
+    const frontend = `${root}/frontend_featureA`;
+    await workspaces.archiveWorkspace("wks_test02");
+    await handleWorkspaceArchived(deps, { id: "wks_test02", cwd: frontend });
+    // The panel's escape hatch opens the repo path, which mints its own project.
+    workspaces.hostWorkspaces.push({
+      id: "wks_handmade",
+      cwd: frontend,
+      projectId: "proj_frontend",
+      name: "frontend_featureA",
+    });
+    const createdBefore = workspaces.created.length;
+
+    const result = await reconcileVirtualWorkspaces(deps);
+    expect(result.report.repoWorkspacesCreated).toEqual([`${virtualId}/frontend`]);
+    const manifest = await readManifest(fs, root);
+    expect(manifest?.constituents.find((item) => item.repoId === "frontend")?.workspaceId).toBe(
+      "wks_handmade",
+    );
+    expect(workspaces.created.length).toBe(createdBefore);
+  });
+
+  it("registers a repo workspace when repairing a constituent", async () => {
+    const { deps, fs, git, workspaces, virtualId } = await created();
+    const frontend = `${root}/frontend_featureA`;
+    await workspaces.archiveWorkspace("wks_test02");
+    await handleWorkspaceArchived(deps, { id: "wks_test02", cwd: frontend });
+    fs.dirs.delete(frontend);
+    git.script.existingBranches = ["featureA"];
+
+    const repaired = await repairConstituent(deps, virtualId, "frontend");
+    expect(repaired).toEqual({ ok: true, error: null });
+    expect(workspaces.created.at(-1)).toEqual({
+      path: frontend,
+      title: "featureA / frontend",
+      projectId: "proj_test01",
+    });
+    const manifest = await readManifest(fs, root);
+    expect(manifest?.constituents.find((item) => item.repoId === "frontend")?.workspaceId).toBe(
+      "wks_test04",
+    );
   });
 
   it("repairs a missing worktree in checkout mode", async () => {
