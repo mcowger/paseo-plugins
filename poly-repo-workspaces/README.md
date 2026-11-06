@@ -56,5 +56,11 @@ is not under the daemon's worktrees root.
 - Archiving removes the constituent worktrees and the root directory.
   Branches are never deleted. Dirty or ahead repos block removal until
   resolved or explicitly forced.
+- If archiving fails, the management screen's **Force delete** action retries
+  teardown after confirmation. It removes dirty worktrees, including uncommitted
+  changes, and keeps branches. If Git cannot remove a worktree, it deletes the
+  directory and checks that Git pruned its metadata. Prune or filesystem errors
+  block cleanup and can be retried. Paseo workspace rows can remain if their
+  archive fails; remove those rows separately.
 
 Push and PR orchestration are out of scope by design.

@@ -103,6 +103,7 @@ export const archiveVirtualWorkspace = defineRpc({
   input: z.object({
     virtualId: z.string().min(1),
     forceRepoIds: z.array(z.string().min(1)).optional(),
+    force: z.boolean().optional(),
   }),
   output: z.object({
     ok: z.boolean(),

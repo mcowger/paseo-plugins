@@ -142,6 +142,7 @@ export function PolyRepoScreen({
   const [feature, setFeature] = useState("");
   const [withTerminals, setWithTerminals] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirmForceId, setConfirmForceId] = useState<string | null>(null);
   const [creation, setCreation] = useState<{
     uberProjectId: string;
     feature: string;
@@ -442,6 +443,57 @@ export function PolyRepoScreen({
     [doArchive, items],
   );
 
+  const forceHandlers = useMemo(
+    () =>
+      new Map(
+        items.map((item) => [
+          item.virtualId,
+          () => {
+            if (busy) return;
+            setConfirmForceId(item.virtualId);
+          },
+        ]),
+      ),
+    [busy, items],
+  );
+
+  const confirmForceHandlers = useMemo(
+    () =>
+      new Map(
+        items.map((item) => [
+          item.virtualId,
+          () => {
+            if (busy) return;
+            setBusy(true);
+            void (async () => {
+              try {
+                const result = await callArchive({ virtualId: item.virtualId, force: true });
+                if (result.ok) {
+                  setConfirmForceId(null);
+                  toast.show("Workspace removed. Check for remaining Paseo workspace rows.");
+                } else {
+                  toast.error(
+                    result.error ??
+                      result.blocked.map((repo) => repo.error ?? repo.repoId).join(", "),
+                  );
+                }
+              } catch (unknownError) {
+                toast.error(
+                  unknownError instanceof Error ? unknownError.message : "Force removal failed",
+                );
+              } finally {
+                refresh();
+                setBusy(false);
+              }
+            })();
+          },
+        ]),
+      ),
+    [busy, callArchive, items, refresh, toast],
+  );
+
+  const cancelForce = useCallback(() => setConfirmForceId(null), []);
+
   const openHandlers = useMemo(
     () =>
       new Map(
@@ -667,7 +719,47 @@ export function PolyRepoScreen({
                   <Text style={styles.buttonText}>Archive</Text>
                 </Pressable>
               )}
+              {item.state !== "orphaned" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Force delete ${item.feature}`}
+                  onPress={forceHandlers.get(item.virtualId)}
+                  style={styles.button}
+                  disabled={busy}
+                >
+                  <Text style={styles.buttonText}>Force delete</Text>
+                </Pressable>
+              ) : null}
             </View>
+            {confirmForceId === item.virtualId ? (
+              <View style={styles.section}>
+                <Text style={styles.issue}>
+                  Force delete removes all worktrees, including uncommitted changes. Unpushed
+                  commits may become harder to find. Branches are kept. If Paseo cannot archive a
+                  workspace, its sidebar row may remain.
+                </Text>
+                <View style={styles.actions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Confirm force delete ${item.feature}`}
+                    onPress={confirmForceHandlers.get(item.virtualId)}
+                    style={styles.button}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Confirm force delete</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Cancel force delete ${item.feature}`}
+                    onPress={cancelForce}
+                    style={styles.button}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Cancel</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
           </View>
         ))}
         {!loading && items.length === 0 ? (

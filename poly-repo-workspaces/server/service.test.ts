@@ -370,6 +370,99 @@ describe("archiveVirtualWorkspace", () => {
     expect(await listVirtualWorkspaces(deps)).toHaveLength(0);
   });
 
+  it("force removes dirty worktrees when host archive hooks fail", async () => {
+    const { deps, fs, git, workspaces, virtualId } = await created();
+    git.script.porcelain = () => " M dirty.ts\n";
+    workspaces.archiveWorkspace = () => Promise.reject(new Error("archive hook failed"));
+
+    const blocked = await archiveVirtualWorkspace(deps, { virtualId });
+    expect(blocked.ok).toBe(false);
+    expect(await fs.exists("/paseo/poly-workspaces/uber-featureA")).toBe(true);
+
+    const result = await archiveVirtualWorkspace(deps, { virtualId, force: true });
+    expect(result.ok).toBe(true);
+    const removes = (git.script.log ?? []).filter((args) => args.includes("remove"));
+    expect(removes).toHaveLength(2);
+    expect(removes.every((args) => args.includes("--force"))).toBe(true);
+    expect(await fs.exists("/paseo/poly-workspaces/uber-featureA")).toBe(false);
+    expect(await listVirtualWorkspaces(deps)).toHaveLength(0);
+  });
+
+  it("removes worktree directories and prunes when forced Git removal fails", async () => {
+    const { deps, fs, git, virtualId } = await created();
+    git.script.failOn = [{ match: ["worktree", "remove"], message: "git remove failed" }];
+    const result = await archiveVirtualWorkspace(deps, { virtualId, force: true });
+    expect(result.ok).toBe(true);
+    expect(await fs.exists("/paseo/poly-workspaces/uber-featureA")).toBe(false);
+    expect((git.script.log ?? []).some((args) => args.includes("--expire"))).toBe(true);
+    expect(await listVirtualWorkspaces(deps)).toHaveLength(0);
+  });
+
+  it("retains the index and reports filesystem removal failures", async () => {
+    const { deps, fs, git, virtualId } = await created();
+    const root = "/paseo/poly-workspaces/uber-featureA";
+    const remove = fs.removeRecursive;
+    fs.removeRecursive = (path) =>
+      path === `${root}/frontend_featureA`
+        ? Promise.reject(new Error("permission denied"))
+        : remove(path);
+    git.script.failOn = [{ match: ["worktree", "remove"], message: "git remove failed" }];
+    const result = await archiveVirtualWorkspace(deps, { virtualId, force: true });
+    expect(result.ok).toBe(false);
+    expect(result.blocked[0]?.error).toContain("permission denied");
+    expect(await fs.exists(root)).toBe(true);
+    expect(await listVirtualWorkspaces(deps)).toHaveLength(1);
+  });
+
+  it("retains the workspace on prune failure and retries missing worktrees", async () => {
+    const { deps, fs, git, virtualId } = await created();
+    git.script.failOn = [
+      { match: ["worktree", "remove"], message: "git remove failed" },
+      { match: ["worktree", "prune"], message: "git prune failed" },
+    ];
+    const first = await archiveVirtualWorkspace(deps, { virtualId, force: true });
+    expect(first.ok).toBe(false);
+    expect(first.blocked[0]?.error).toContain("git prune failed");
+    expect(await fs.exists("/paseo/poly-workspaces/uber-featureA")).toBe(true);
+    expect(await listVirtualWorkspaces(deps)).toHaveLength(1);
+
+    git.script.failOn = [];
+    const retry = await archiveVirtualWorkspace(deps, { virtualId, force: true });
+    expect(retry.ok).toBe(true);
+    expect(await listVirtualWorkspaces(deps)).toHaveLength(0);
+  });
+
+  it("keeps the workspace when a registered worktree survives pruning", async () => {
+    const { deps, fs, git, virtualId } = await created();
+    const root = "/paseo/poly-workspaces/uber-featureA";
+    git.script.failOn = [{ match: ["worktree", "remove"], message: "git remove failed" }];
+    const run = git.run;
+    git.run = (args, cwd) =>
+      args.includes("list") && args.includes("-z")
+        ? Promise.resolve({ stdout: `worktree ${root}/frontend_featureA\0locked\0`, stderr: "" })
+        : run(args, cwd);
+    const result = await archiveVirtualWorkspace(deps, { virtualId, force: true });
+    expect(result.ok).toBe(false);
+    expect(result.blocked[0]?.error).toContain("still lists worktree");
+    expect(await fs.exists(root)).toBe(true);
+    expect(await listVirtualWorkspaces(deps)).toHaveLength(1);
+  });
+
+  it("refuses to recursively remove a worktree outside the root", async () => {
+    const { deps, fs, git, virtualId } = await created();
+    const root = "/paseo/poly-workspaces/uber-featureA";
+    const manifest = await readManifest(fs, root);
+    const constituent = manifest?.constituents[0];
+    if (!manifest || !constituent) throw new Error("missing manifest or constituent");
+    constituent.worktreePath = "/src/frontend";
+    await writeManifest(fs, manifest);
+    git.script.failOn = [{ match: ["worktree", "remove"], message: "git remove failed" }];
+    const result = await archiveVirtualWorkspace(deps, { virtualId, force: true });
+    expect(result.ok).toBe(false);
+    expect(result.blocked[0]?.error).toContain("unsafe worktree path");
+    expect(await fs.isDirectory("/src/frontend")).toBe(true);
+  });
+
   it("ignores archives the plugin RPC already owns", async () => {
     const { deps, fs, git } = await created();
     const root = "/paseo/poly-workspaces/uber-featureA";

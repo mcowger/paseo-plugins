@@ -144,6 +144,7 @@ export default function contribute(server: PluginServerContext) {
     return archiveVirtualWorkspace(depsFor(context), {
       virtualId: input.virtualId,
       forceRepoIds: input.forceRepoIds,
+      force: input.force,
     });
   });
 

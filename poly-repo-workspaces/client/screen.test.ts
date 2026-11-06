@@ -16,6 +16,7 @@ const harness = vi.hoisted(() => ({
   effects: [] as Array<() => unknown>,
   items: [] as VirtualWorkspaceSummary[],
   create: vi.fn(),
+  archive: vi.fn(),
   refresh: vi.fn(),
   toast: { show: vi.fn(), error: vi.fn() },
 }));
@@ -59,16 +60,18 @@ vi.mock("@getpaseo/plugin/client", () => ({
   useRpc: (contract: { name: string }) =>
     contract.name === "polyrepo.virtual-workspaces.create"
       ? harness.create
-      : async () => ({
-          uberProjects: [
-            {
-              id: "uber",
-              displayName: "Uber",
-              branchTemplate: "{feature}",
-              repos: [{ id: "frontend" }, { id: "app" }],
-            },
-          ],
-        }),
+      : contract.name === "polyrepo.virtual-workspaces.archive"
+        ? harness.archive
+        : async () => ({
+            uberProjects: [
+              {
+                id: "uber",
+                displayName: "Uber",
+                branchTemplate: "{feature}",
+                repos: [{ id: "frontend" }, { id: "app" }],
+              },
+            ],
+          }),
 }));
 
 vi.mock("./use-virtual-workspaces", () => ({
@@ -161,6 +164,30 @@ beforeEach(() => {
 });
 
 describe("workspace creation feedback", () => {
+  it("requires confirmation before forcing removal", async () => {
+    harness.items = [
+      {
+        virtualId: "uber-fix",
+        uberProjectId: "uber",
+        feature: "Fix",
+        branch: "fix",
+        state: "teardown-blocked",
+        rootExists: true,
+        constituents: [],
+      } as unknown as VirtualWorkspaceSummary,
+    ];
+    harness.archive.mockResolvedValue({ ok: true, error: null, blocked: [] });
+    let tree = await ready();
+    control(tree, "Force delete Fix").onPress?.();
+    tree = render();
+    expect(text(tree)).toContain("uncommitted changes");
+    expect(harness.archive).not.toHaveBeenCalled();
+    control(tree, "Confirm force delete Fix").onPress?.();
+    await Promise.resolve();
+    expect(harness.archive).toHaveBeenCalledWith({ virtualId: "uber-fix", force: true });
+    expect(harness.refresh).toHaveBeenCalled();
+  });
+
   it("previews the sanitized branch, keeps the display name, and shows a spinner until completion", async () => {
     let tree = await ready();
     const feature = "SIG: ABSCD - Fix My Stuff";

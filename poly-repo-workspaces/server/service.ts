@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { type RepoConfig, type UberProject, validateFeatureName } from "../shared/config";
 import { normalizeManifest, type VirtualWorkspaceManifest } from "../shared/manifest";
 import {
@@ -335,6 +336,7 @@ async function registerConstituentWorkspaces(
 async function archiveConstituentWorkspaces(
   deps: ServiceDeps,
   manifest: VirtualWorkspaceManifest,
+  force = false,
 ): Promise<{ error: string | null }> {
   let changed = false;
   for (const constituent of manifest.constituents) {
@@ -343,6 +345,7 @@ async function archiveConstituentWorkspaces(
     try {
       await deps.workspaces.archiveWorkspace(workspaceId);
     } catch (error) {
+      if (force) continue;
       if (!isMissingWorkspace(error)) {
         const message = error instanceof Error ? error.message : "unknown error";
         if (changed) {
@@ -813,8 +816,10 @@ function isMissingWorkspace(error: unknown): boolean {
 async function finalizeRemoval(
   deps: ReconcileDeps,
   manifest: VirtualWorkspaceManifest,
+  strict = false,
 ): Promise<void> {
-  await deps.fs.removeRecursive(manifest.rootPath).catch(() => {});
+  if (strict) await deps.fs.removeRecursive(manifest.rootPath);
+  else await deps.fs.removeRecursive(manifest.rootPath).catch(() => {});
   await updateIndex(deps, (index: WorkspaceIndex) => {
     delete index.virtual[manifest.virtualId];
   });
@@ -828,6 +833,7 @@ export async function teardownConstituents(
   deps: ReconcileDeps,
   manifest: VirtualWorkspaceManifest,
   forceRepoIds: Set<string>,
+  forceCleanup = false,
 ): Promise<TeardownResult> {
   const statuses = await collectStatuses(deps, manifest);
   const blocked: RepoStatus[] = [];
@@ -838,21 +844,46 @@ export async function teardownConstituents(
     const status = statuses.find((s) => s.repoId === constituent.repoId);
     if (!status) continue;
     sources.add(constituent.sourcePath);
-    if (isMissingWorktreeError(status.error)) {
-      constituent.state = "removed";
-      continue;
-    }
+    const missing = isMissingWorktreeError(status.error);
     const forced = forceRepoIds.has(constituent.repoId);
-    const needsBlock = status.error !== null || status.dirty || (status.ahead ?? 0) > 0;
+    const needsBlock =
+      !missing && (status.error !== null || status.dirty || (status.ahead ?? 0) > 0);
     if (needsBlock && !forced) {
       blocked.push(status);
       continue;
     }
     try {
-      const args = forced
-        ? ["worktree", "remove", "--force", constituent.worktreePath]
-        : ["worktree", "remove", constituent.worktreePath];
-      await deps.git.run(args, constituent.sourcePath);
+      if (!missing) {
+        const args = forced
+          ? ["worktree", "remove", "--force", constituent.worktreePath]
+          : ["worktree", "remove", constituent.worktreePath];
+        try {
+          await deps.git.run(args, constituent.sourcePath);
+        } catch (error) {
+          if (!forceCleanup) throw error;
+          if (
+            normalizeAbsolute(dirname(constituent.worktreePath)) !==
+              normalizeAbsolute(manifest.rootPath) ||
+            isSameOrInside(constituent.worktreePath, constituent.sourcePath)
+          ) {
+            throw new Error(`Refusing to remove unsafe worktree path: ${constituent.worktreePath}`);
+          }
+          await deps.fs.removeRecursive(constituent.worktreePath);
+        }
+      }
+      if (forceCleanup || missing) {
+        await deps.git.run(["worktree", "prune", "--expire", "now"], constituent.sourcePath);
+        const listing = await deps.git.run(
+          ["worktree", "list", "--porcelain", "-z"],
+          constituent.sourcePath,
+        );
+        const stillRegistered = listing.stdout
+          .split("\0")
+          .some((record) => record === `worktree ${normalizeAbsolute(constituent.worktreePath)}`);
+        if (stillRegistered) {
+          throw new Error(`Git still lists worktree ${constituent.worktreePath} after pruning`);
+        }
+      }
       constituent.state = "removed";
     } catch (error) {
       blocked.push({ ...status, error: gitMessage(error) });
@@ -874,7 +905,7 @@ export async function teardownConstituents(
 
 export async function archiveVirtualWorkspace(
   deps: ServiceDeps,
-  input: { virtualId: string; forceRepoIds?: string[] },
+  input: { virtualId: string; forceRepoIds?: string[]; force?: boolean },
 ): Promise<ArchiveResult> {
   const index = await loadIndex(deps.fs, deps.paseoHome);
   const entry = index.virtual[input.virtualId];
@@ -905,6 +936,9 @@ export async function archiveVirtualWorkspace(
   if (current.state === "archived") return { ok: true, error: null, blocked: [] };
 
   const forced = new Set(input.forceRepoIds ?? []);
+  if (input.force) {
+    for (const constituent of current.constituents) forced.add(constituent.repoId);
+  }
   const statuses = await collectStatuses(deps, current);
   const blocked = statuses.filter((status) => {
     if (isMissingWorktreeError(status.error)) return false;
@@ -919,7 +953,7 @@ export async function archiveVirtualWorkspace(
   current.updatedAt = deps.now();
   await writeManifest(deps.fs, current);
 
-  const repoArchive = await archiveConstituentWorkspaces(deps, current);
+  const repoArchive = await archiveConstituentWorkspaces(deps, current, input.force);
   if (repoArchive.error) {
     return { ok: false, error: repoArchive.error, blocked: [] };
   }
@@ -928,7 +962,7 @@ export async function archiveVirtualWorkspace(
     try {
       await deps.workspaces.archiveWorkspace(current.workspaceId);
     } catch (error) {
-      if (!isMissingWorkspace(error)) {
+      if (!input.force && !isMissingWorkspace(error)) {
         const message = error instanceof Error ? error.message : "unknown error";
         return {
           ok: false,
@@ -939,7 +973,7 @@ export async function archiveVirtualWorkspace(
     }
   }
 
-  const teardown = await teardownConstituents(deps, current, forced);
+  const teardown = await teardownConstituents(deps, current, forced, input.force);
   if (teardown.blocked.length > 0) {
     current.state = "teardown-blocked";
     current.updatedAt = deps.now();
@@ -948,7 +982,7 @@ export async function archiveVirtualWorkspace(
   }
 
   current.state = "archived";
-  await finalizeRemoval(deps, current);
+  await finalizeRemoval(deps, current, input.force);
   return { ok: true, error: null, blocked: [] };
 }
 
