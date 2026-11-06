@@ -10,6 +10,7 @@ when contributing changes.
 
 ## Plugins in this repository
 
+- [Enterprise usage](./enterprise-usage/README.md): Claude and Codex spend limits in the sidebar.
 - [Colorful agent activity](./colorful-agent-activity/README.md)
 - [Paseo Worktrunk](./paseo-worktrunk/README.md): experimental Worktrunk placement and setup hooks.
 - [Plexus activity](./plexus-activity/README.md): live Plexus request activity in the Explorer dock,
