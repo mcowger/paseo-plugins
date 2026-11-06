@@ -258,6 +258,18 @@ function ActivityPage({ prefs, change, theme }: PageProps) {
         </Text>
       </Group>
       <Group
+        title="Timestamps"
+        hint="Show activity update times and record a timestamp at the end of each new turn. Existing turns are not backfilled."
+        styles={styles}
+      >
+        <ActionButton
+          label={prefs.timestamps ? "On" : "Off"}
+          icon={prefs.timestamps ? "Check" : "Clock"}
+          onPress={() => change({ timestamps: !prefs.timestamps })}
+          styles={styles}
+        />
+      </Group>
+      <Group
         title="Quiet rows"
         hint="Finished rows step back so the newest work stands out. Running, failed, hovered, and expanded rows stay at full strength."
         styles={styles}

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { activitySettings, DEFAULT_EXPANSION, EXPANSION_TARGETS } from "./settings";
 
 describe("activity settings", () => {
-  it("stays on schema version 4 with a migration for older stored values", () => {
-    expect(activitySettings.version).toBe(4);
+  it("migrates older stored values to schema version 5", () => {
+    expect(activitySettings.version).toBe(5);
     expect(activitySettings.migrate?.({ palette: "soft" }, 1)).toEqual({ palette: "soft" });
     expect(activitySettings.migrate?.({ palette: "soft" }, 2)).toEqual({ palette: "soft" });
   });
@@ -15,6 +15,7 @@ describe("activity settings", () => {
 
   it("defaults every value when nothing is stored", () => {
     const parsed = activitySettings.schema.parse({});
+    expect(parsed.timestamps).toBe(false);
     expect(parsed.palette).toBe("vivid");
     expect(parsed.expansion).toEqual(DEFAULT_EXPANSION);
     expect(parsed.quiet).toBe("faded");

@@ -183,6 +183,7 @@ function sameSettings(left: ActivitySettings, right: ActivitySettings): boolean 
     left.quiet === right.quiet &&
     left.commandColor === right.commandColor &&
     left.codeChrome === right.codeChrome &&
+    left.timestamps === right.timestamps &&
     left.diffWrap === right.diffWrap &&
     left.replyCode === right.replyCode &&
     BLOCK_HEIGHT_KINDS.every((kind) => left.blockHeights[kind] === right.blockHeights[kind]) &&

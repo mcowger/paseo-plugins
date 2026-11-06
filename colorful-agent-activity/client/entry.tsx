@@ -1,3 +1,5 @@
+import { TurnEndTime } from "./turn-end-time";
+import { TURN_END_KIND, turnEndSchema } from "../shared/activity-time";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { ColorfulReasoning, ColorfulTodo, ColorfulToolCall } from "./activity";
 import { Dashboard } from "./dashboard";
@@ -72,6 +74,7 @@ export default function contribute(client: PluginClientContext) {
     query: { itemType: "tool_call" },
     transform: transformToolCall,
   });
+  client.addTimelineRenderer({ kind: TURN_END_KIND, version: 1, schema: turnEndSchema, Component: TurnEndTime });
   client.addTimelineRenderer({
     kind: TODO_RENDERER_KIND,
     version: TODO_RENDERER_VERSION,

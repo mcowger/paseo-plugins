@@ -135,13 +135,14 @@ const expansionSettingsSchema = z.object({
 export const activitySettings = defineSettings({
   id: "display",
   scope: "host",
-  version: 4,
-  // v1 stored only the palette and row expansion; v2 added the display knobs; v3
+  version: 5,
+  // v5 adds optional activity and turn timestamps. v1 stored only the palette and row expansion; v2 added the display knobs; v3
   // added block-length limits; v4 replaced those line budgets with per-block heights.
   // Every key has a default, so passing older values through the current schema
   // fills the missing ones in and drops the retired ones.
   migrate: (values) => values,
   schema: z.object({
+    timestamps: z.boolean().default(false),
     palette: paletteModeSchema.default("vivid"),
     expansion: expansionSettingsSchema.default(DEFAULT_EXPANSION),
     quiet: quietStrengthSchema.default("faded"),

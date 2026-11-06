@@ -127,7 +127,10 @@ Open the dashboard from **Colorful Activity** in the sidebar, or from the comman
 (**Open Colorful Activity settings**). Changes preview live and save automatically; **Defaults**
 restores every value. Four pages:
 
-- **Activity** - palette (vivid, soft, high contrast) and quiet-row strength (dim, faded, soft, full).
+- **Activity** - palette (vivid, soft, high contrast), quiet-row strength (dim, faded, soft, full),
+  and optional timestamps. When enabled, thinking and tool rows show the timeline's latest update time
+  in the viewer's local time zone. A new timeline row records the end of each subsequent turn.
+  Existing turns are not backfilled; previously recorded turn markers remain if the setting is disabled.
 - **Rows** - start state for each collapsible row (Always / Latest / Never), with *Newest only*,
   *Everything open*, and *Everything collapsed* presets. The rows Paseo and the providers raise
   themselves (worktree setup, plain text, plans, unknown tools) sit in their own group, each with a
@@ -138,7 +141,7 @@ restores every value. Four pages:
   frame (header bar, bare, or header + line-number gutter), and whether long diff lines wrap or scroll.
 - **Replies** - restyle Paseo's own reply code. Desktop and web only; see Limitations.
 
-Stored settings are schema version 4 and migrate from earlier versions in place; the retired
+Stored settings are schema version 5 and migrate from earlier versions in place; the retired
 line-budget values are dropped.
 
 Reload after installation or source changes:
@@ -149,6 +152,9 @@ paseo plugin reload colorful-agent-activity
 
 ## Limitations
 
+- Activity timestamps are timeline update times, not guaranteed exact completion times; availability and
+  persistence follow the host timeline. Turn-end markers are appended asynchronously, so a rapidly
+  starting next turn can appear before its predecessor's marker.
 - The plugin sees public agent tool calls, not internal orchestrator calls.
 - Reply code restyling (inline chips, fenced-block headers) is desktop and web only: Paseo exposes
   no markdown contribution point, so a plugin cannot render assistant replies itself. It uses

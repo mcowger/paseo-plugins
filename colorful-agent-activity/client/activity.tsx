@@ -1,3 +1,4 @@
+import { formatActivityTime } from "../shared/activity-time";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useAgent, useRpc } from "@getpaseo/plugin/client";
 import {
@@ -2761,6 +2762,7 @@ function ActivityHeader({
   fileDisplay,
   status,
   statusColor,
+  time,
   stats,
   expanded,
   onPress,
@@ -2777,6 +2779,7 @@ function ActivityHeader({
   fileDisplay?: { dir?: string; base: string };
   status?: ToolCallData["status"];
   statusColor?: string;
+  time?: string;
   stats?: ToolCallData["presentation"]["diffStats"];
   expanded: boolean;
   onPress: () => void;
@@ -2818,6 +2821,7 @@ function ActivityHeader({
           <Icon name={statusIcon(status)} color={statusColor ?? styles.title.color} size={12} />
         </View>
       ) : null}
+      {time ? <Text style={{ color: styles.summary.color, fontSize: 11, flexShrink: 0 }}>{time}</Text> : null}
       {expandable ? (
         <Icon
           name={expanded ? "ChevronDown" : "ChevronRight"}
@@ -2842,7 +2846,7 @@ function ActivityHeader({
   }
   return (
     <Pressable
-      accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${title}`}
+      accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${title}${time ? `, updated ${time}` : ""}`}
       accessibilityRole="button"
       onPress={onPress}
       onHoverIn={onHoverChange ? () => onHoverChange(true) : undefined}
@@ -2864,6 +2868,7 @@ export function ColorfulReasoning({
   const palette = usePalette(theme);
   const styles = useActivityStyles(theme, palette);
   const isStreaming = item.data.phase === "streaming";
+  const showTimestamps = useActivityPrefs().timestamps;
   const isLatest = useIsLatestReasoning(agentId, timestamp, isStreaming);
   const isLiveTail = useIsLiveTail(agentId, timestamp, isStreaming, layout.platform);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
@@ -2890,6 +2895,7 @@ export function ColorfulReasoning({
         icon="Sparkles"
         iconColor={palette.categoryColors.reasoning}
         title="Thinking"
+        time={showTimestamps ? formatActivityTime(timestamp) : undefined}
         summary={meta}
         expanded={expanded}
         onPress={toggle}
@@ -3054,6 +3060,7 @@ function ToolCallCard({
         fileDisplay={headerFile ?? undefined}
         status={item.data.status}
         statusColor={statusColor}
+        time={prefs.timestamps ? formatActivityTime(timestamp) : undefined}
         stats={item.data.presentation.diffStats}
         expanded={expanded}
         onPress={toggle}
