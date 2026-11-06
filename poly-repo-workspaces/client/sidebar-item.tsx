@@ -14,8 +14,8 @@ function statusSuffix(item: VirtualWorkspaceSummary): string {
   return `${item.constituents.length} repos${dirty}${ahead}`;
 }
 
-export function PolyRepoSidebarItem({ openScreen }: PluginSidebarItemProps): ReactElement | null {
-  const { items, loading, error } = useVirtualWorkspaces();
+export function PolyRepoSidebarItem({ openScreen }: PluginSidebarItemProps): ReactElement {
+  const { items, error } = useVirtualWorkspaces();
 
   const openHandlers = useMemo(
     () =>
@@ -51,15 +51,12 @@ export function PolyRepoSidebarItem({ openScreen }: PluginSidebarItemProps): Rea
     [items, openHandlers, openList],
   );
 
-  if (loading && items.length === 0) return null;
-  if (error && items.length === 0) {
-    return <SidebarRow icon="FolderGit2" label="Poly-repo (unavailable)" onPress={openList} />;
-  }
-  if (items.length === 0) return null;
+  const label = error && items.length === 0 ? "Poly-repo (unavailable)" : "Poly-repo";
 
   return (
     <>
       <SidebarSeparator />
+      <SidebarRow icon="FolderGit2" label={label} onPress={openList} />
       {rows}
     </>
   );

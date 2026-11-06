@@ -32,8 +32,8 @@ is not under the daemon's worktrees root.
 
 ## Use
 
-- Sidebar rows and the Poly-repo screen list managed workspaces; the screen
-  also creates them (feature name + uber-project).
+- The Poly-repo sidebar entry opens the workspace screen, even when there are
+  no workspaces yet. The screen creates and lists managed workspaces.
 - Feature names can be descriptive, like `SIG: ABSCD - Fix My Stuff`. The
   visible name stays as entered; branches and folder templates use
   `sig-abscd-fix-my-stuff`. Existing Git-safe names stay unchanged, including
