@@ -311,9 +311,10 @@ export default function contribute(server: PluginServerContext) {
 
   return async () => {
     stopped = true;
-    archiveJobs.dispose();
-    createJobs.dispose();
     git.stop();
     await init.stop();
+    await Promise.all([createJobs.whenIdle(), archiveJobs.whenIdle()]);
+    archiveJobs.dispose();
+    createJobs.dispose();
   };
 }

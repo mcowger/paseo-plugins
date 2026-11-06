@@ -338,6 +338,7 @@ export function PolyRepoScreen({
         }
         if (result.preflight.length > 0) {
           setIssues(result.preflight);
+          if (result.error) setCreateError(result.error);
           toast.error("Preflight found problems; fix them and retry");
           return;
         }
