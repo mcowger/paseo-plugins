@@ -34,6 +34,8 @@ is not under the daemon's worktrees root.
 
 - The Poly-repo sidebar entry opens the workspace screen, even when there are
   no workspaces yet. The screen creates and lists managed workspaces.
+  The screen scrolls on smaller displays and keeps the create form and workspace
+  list in separate sections.
 - Feature names can be descriptive, like `SIG: ABSCD - Fix My Stuff`. The
   visible name stays as entered; branches and folder templates use
   `sig-abscd-fix-my-stuff`. Existing Git-safe names stay unchanged, including

@@ -6,6 +6,7 @@ import { type ReactElement, useCallback, useEffect, useMemo, useState } from "re
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   type TextStyle,
@@ -27,6 +28,7 @@ import {
 import { useVirtualWorkspaces } from "./use-virtual-workspaces";
 
 interface ScreenStyles {
+  readonly scroll: ViewStyle;
   readonly container: ViewStyle;
   readonly heading: TextStyle;
   readonly label: TextStyle;
@@ -48,10 +50,19 @@ interface ScreenStyles {
 }
 
 function createStyles(theme: PluginTheme, compact: boolean): ScreenStyles {
-  const fontSize = compact ? 12 : 13;
-  const small = compact ? 10 : 11;
+  const fontSize = compact ? 14 : 15;
+  const small = compact ? 13 : 14;
   return {
-    container: { gap: 10 },
+    scroll: { flex: 1 },
+    container: {
+      width: "100%",
+      maxWidth: 800,
+      alignSelf: "center",
+      paddingHorizontal: compact ? 16 : 24,
+      paddingTop: compact ? 16 : 24,
+      paddingBottom: 32,
+      gap: 20,
+    },
     heading: { color: theme.colors.foreground, fontSize: fontSize + 3, fontWeight: "700" },
     label: { color: theme.colors.foregroundMuted, fontSize: small, fontWeight: "600" },
     input: {
@@ -59,11 +70,12 @@ function createStyles(theme: PluginTheme, compact: boolean): ScreenStyles {
       fontSize,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      borderRadius: 6,
-      paddingVertical: 6,
-      paddingHorizontal: 10,
+      borderRadius: 8,
+      minHeight: 44,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
     },
-    row: { gap: 2, paddingVertical: 6, borderTopWidth: 1, borderTopColor: theme.colors.border },
+    row: { gap: 8, paddingVertical: 14, borderTopWidth: 1, borderTopColor: theme.colors.border },
     name: { color: theme.colors.foreground, fontSize, fontWeight: "600" },
     meta: { color: theme.colors.foregroundMuted, fontSize: small },
     state: { color: theme.colors.statusSuccess, fontSize: small },
@@ -71,15 +83,24 @@ function createStyles(theme: PluginTheme, compact: boolean): ScreenStyles {
     issue: { color: theme.colors.statusDanger, fontSize: small },
     actions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
     button: {
-      paddingVertical: 7,
-      paddingHorizontal: 12,
-      borderRadius: 6,
+      minHeight: 44,
+      justifyContent: "center",
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 8,
       backgroundColor: theme.colors.surface2,
     },
     buttonText: { color: theme.colors.foreground, fontSize: small, fontWeight: "600" },
     buttonDisabled: { opacity: 0.5 },
     empty: { color: theme.colors.foregroundMuted, fontSize: small },
-    section: { gap: 6 },
+    section: {
+      gap: 12,
+      padding: compact ? 16 : 20,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: 12,
+      backgroundColor: theme.colors.surface1,
+    },
     progress: { flexDirection: "row", alignItems: "center", gap: 8 },
     progressText: { flex: 1, gap: 6 },
   };
@@ -460,7 +481,11 @@ export function PolyRepoScreen({
   );
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.heading}>Poly-repo workspaces</Text>
 
       <View style={styles.section}>
@@ -649,6 +674,6 @@ export function PolyRepoScreen({
           <Text style={styles.empty}>No virtual workspaces yet.</Text>
         ) : null}
       </View>
-    </View>
+    </ScrollView>
   );
 }

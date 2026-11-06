@@ -45,6 +45,7 @@ vi.mock("react", async (importOriginal) => ({
 vi.mock("react-native", () => ({
   ActivityIndicator: "ActivityIndicator",
   Pressable: "Pressable",
+  ScrollView: "ScrollView",
   Text: "Text",
   TextInput: "TextInput",
   View: "View",
