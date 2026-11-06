@@ -16,6 +16,7 @@ export interface RepoDraft {
   readonly sourcePath: string;
   readonly dirTemplate: string;
   readonly baseBranch: string;
+  readonly initScript: string;
 }
 
 /** Editable uber-project form state. Blank optional fields fall back to defaults on save. */
@@ -50,7 +51,7 @@ export interface ProjectPreview {
 }
 
 export function emptyRepoDraft(key: string): RepoDraft {
-  return { key, id: "", sourcePath: "", dirTemplate: "", baseBranch: "" };
+  return { key, id: "", sourcePath: "", dirTemplate: "", baseBranch: "", initScript: "" };
 }
 
 export function emptyProjectDraft(): ProjectDraft {
@@ -79,6 +80,7 @@ export function projectDraftFrom(project: UberProject, keyPrefix: string): Proje
       sourcePath: repo.sourcePath,
       dirTemplate: repo.dirTemplate,
       baseBranch: repo.baseBranch ?? "",
+      initScript: repo.initScript ?? "",
     })),
   };
 }
@@ -182,6 +184,7 @@ export function projectFromDraft(draft: ProjectDraft): UberProject {
         sourcePath: repo.sourcePath.trim(),
         dirTemplate: repo.dirTemplate.trim() || DEFAULT_REPO_DIR_TEMPLATE,
         ...(baseBranch.length > 0 ? { baseBranch } : {}),
+        ...(repo.initScript.length > 0 ? { initScript: repo.initScript } : {}),
       };
     }),
     ...(virtualRootBase.length > 0 ? { virtualRootBase } : {}),

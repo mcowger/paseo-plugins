@@ -4,6 +4,7 @@ import type { PaseoApi } from "@getpaseo/client";
 import type { PluginHandlerContext, PluginServerContext } from "@getpaseo/plugin/server";
 import { createFsPort } from "./server/files";
 import { createGitPort } from "./server/git";
+import { createInitRunner } from "./server/init";
 import type {
   CreateDirectoryWorkspaceInput,
   CreateDirectoryWorkspaceResult,
@@ -91,6 +92,7 @@ export default function contribute(server: PluginServerContext) {
   const settings = server.registerSettings(polyrepoSettings);
   const fs = createFsPort();
   const git = createGitPort();
+  const init = createInitRunner();
   const paseoHome = resolvePaseoHome();
   const withIndexLock = createMutex();
 
@@ -98,6 +100,7 @@ export default function contribute(server: PluginServerContext) {
     return {
       fs,
       git,
+      init,
       workspaces: createWorkspacesPort(context.paseo),
       settings: {
         async snapshot() {
@@ -224,5 +227,5 @@ export default function contribute(server: PluginServerContext) {
     },
   );
 
-  return () => {};
+  return () => init.stop();
 }

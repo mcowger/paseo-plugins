@@ -15,6 +15,7 @@ export const RepoConfigSchema = z.object({
   sourcePath: z.string().min(1),
   dirTemplate: z.string().min(1).default("{repo}_{branch}"),
   baseBranch: z.string().min(1).optional(),
+  initScript: z.string().optional(),
 });
 
 export type RepoConfig = z.infer<typeof RepoConfigSchema>;

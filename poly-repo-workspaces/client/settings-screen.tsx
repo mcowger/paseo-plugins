@@ -9,7 +9,7 @@ import {
   SettingsSection,
 } from "@getpaseo/plugin/client/ui";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Text, type TextStyle, View, type ViewStyle } from "react-native";
+import { Pressable, Text, TextInput, type TextStyle, View, type ViewStyle } from "react-native";
 import type { UberProject } from "../shared/config";
 import { polyrepoSettings } from "../shared/settings";
 import {
@@ -519,6 +519,29 @@ export function PolyRepoSettingsScreen({
                       }
                     />
                   ))}
+                  <SettingsRow
+                    label={`${name} init script`}
+                    hint="Optional shell script run by your shell after the repo worktree is created. Script contents are saved exactly as entered."
+                  >
+                    <TextInput
+                      accessibilityLabel={`${name} init script`}
+                      multiline
+                      value={repo.initScript}
+                      onChangeText={(value) => patchRepo(repo.key, { initScript: value })}
+                      placeholder="#!/bin/sh"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      style={{
+                        minHeight: 96,
+                        padding: 8,
+                        color: theme.colors.foreground,
+                        backgroundColor: theme.colors.surface2,
+                        fontFamily: "monospace",
+                        textAlignVertical: "top",
+                      }}
+                    />
+                  </SettingsRow>
                   <SettingsAction
                     label={`Remove ${name}`}
                     hint={

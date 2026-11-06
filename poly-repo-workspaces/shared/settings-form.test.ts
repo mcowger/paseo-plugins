@@ -123,6 +123,16 @@ describe("projectFromDraft", () => {
     expect(saved.virtualRootBase).toBeUndefined();
     expect(saved.repos[0]?.baseBranch).toBeUndefined();
   });
+  it("preserves init script contents through draft loading and saving", () => {
+    const initScript = "#!/bin/sh\nprintf 'ready\\n'\n";
+    const initial = projectFromDraft(validDraft());
+    const repo = initial.repos[0];
+    if (!repo) throw new Error("missing repository");
+    const savedProject = { ...initial, repos: [{ ...repo, initScript }] };
+    const draft = projectDraftFrom(savedProject, "repo");
+    expect(draft.repos[0]?.initScript).toBe(initScript);
+    expect(projectFromDraft(draft).repos[0]?.initScript).toBe(initScript);
+  });
 });
 
 describe("previewProjectDraft", () => {

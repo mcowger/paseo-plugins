@@ -63,6 +63,7 @@ export interface SettingsSnapshot {
 export interface ServiceDeps {
   fs: FsPort;
   git: GitPort;
+  init: { run(script: string, cwd: string): Promise<void> };
   workspaces: WorkspacesPort;
   settings: { snapshot(): Promise<SettingsSnapshot> };
   paseoHome: string;
@@ -628,6 +629,7 @@ export async function createVirtualWorkspace(
         baseBranch: "",
         workspaceId: null,
         state: "pending" as const,
+        initState: p.repo.initScript?.trim() ? ("pending" as const) : undefined,
       })),
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -792,6 +794,27 @@ export async function createVirtualWorkspace(
       };
     }
     constituent.state = "created";
+    active.updatedAt = deps.now();
+    await writeManifest(deps.fs, active);
+  }
+
+  for (const item of planned) {
+    const constituent = active.constituents.find((c) => c.repoId === item.repo.id);
+    if (constituent?.initState !== "pending") continue;
+    try {
+      if (item.repo.initScript?.trim())
+        await deps.init.run(item.repo.initScript, item.worktreePath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      return {
+        ok: false,
+        virtualId,
+        workspaceId: null,
+        error: `init script failed for ${item.repo.id}: ${message}. Resume creation to retry.`,
+        preflight: [],
+      };
+    }
+    constituent.initState = "complete";
     active.updatedAt = deps.now();
     await writeManifest(deps.fs, active);
   }
@@ -1698,6 +1721,7 @@ export function newTestDeps(overrides: Partial<ServiceDeps> & { fs: FsPort }): S
         throw new Error("git not stubbed");
       },
     },
+    init: { run: () => Promise.resolve() },
     workspaces: {
       createDirectoryWorkspace: () => {
         throw new Error("workspaces not stubbed");

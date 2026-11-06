@@ -70,6 +70,42 @@ function depsFor(
   return { deps, fs, git, workspaces };
 }
 
+describe("repository initialization", () => {
+  it("runs scripts in created worktrees and retries only failed scripts on resume", async () => {
+    const p = project({
+      repos: [
+        {
+          id: "frontend",
+          sourcePath: "/src/frontend",
+          dirTemplate: "{repo}_{branch}",
+          initScript: "first",
+        },
+        { id: "app", sourcePath: "/src/app", dirTemplate: "{repo}_{branch}", initScript: "second" },
+      ],
+    });
+    const { deps, fs } = depsFor(p);
+    const calls: Array<[string, string]> = [];
+    let fail = true;
+    deps.init.run = async (script, cwd) => {
+      expect(await fs.isDirectory("/paseo/poly-workspaces/uber-feature/app_feature")).toBe(true);
+      calls.push([script, cwd]);
+      if (script === "second" && fail) throw new Error("exited with code 1");
+    };
+    const input = { uberProjectId: "uber", feature: "feature" };
+    const result = await createVirtualWorkspace(deps, input);
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("init script failed for app");
+    expect((await readManifest(fs, "/paseo/poly-workspaces/uber-feature"))?.state).toBe("creating");
+    fail = false;
+    expect((await createVirtualWorkspace(deps, { ...input, resume: true })).ok).toBe(true);
+    expect(calls).toEqual([
+      ["first", "/paseo/poly-workspaces/uber-feature/frontend_feature"],
+      ["second", "/paseo/poly-workspaces/uber-feature/app_feature"],
+      ["second", "/paseo/poly-workspaces/uber-feature/app_feature"],
+    ]);
+  });
+});
+
 describe("default branch imports", () => {
   it("imports mixed defaults and detaches a default already checked out elsewhere", async () => {
     const p = project({

@@ -30,6 +30,21 @@ templates, agents template file). The default virtual root is
 `$PASEO_HOME/poly-workspaces/` and can be overridden to any absolute path that
 is not under the daemon's worktrees root.
 
+Each repository can have an optional init script. After all worktrees exist,
+the plugin runs these scripts in repository order, each with its worktree as
+the current directory. On Unix it uses `$SHELL -lc` (or `/bin/sh` if `SHELL`
+is unset), so login startup files can load environment settings. It is
+non-interactive, not a Paseo terminal: prompts cannot be answered and
+interactive-only shell configuration may not be loaded. On Windows it uses
+`%ComSpec% /d /s /c`. Scripts run with the daemon user's permissions and
+environment; only configure commands you trust. Output is not displayed.
+
+An init failure leaves the workspace in creating state. Fix the script or its
+environment and use **Resume** to retry the failed script; scripts that already
+succeeded are not repeated. A script interrupted before success was recorded
+may run again, so scripts should tolerate retries. Setup also runs for imported
+workspaces. It does not run when reopening or repairing an existing worktree.
+
 ## Use
 
 - The Poly-repo sidebar entry opens the workspace screen, even when there are

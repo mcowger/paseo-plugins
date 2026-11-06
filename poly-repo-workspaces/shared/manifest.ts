@@ -18,6 +18,7 @@ export const ManifestConstituentSchema = z.object({
    */
   workspaceId: z.string().nullable(),
   state: ConstituentStateSchema,
+  initState: z.enum(["pending", "complete"]).optional(),
 });
 
 export type ManifestConstituent = z.infer<typeof ManifestConstituentSchema>;
