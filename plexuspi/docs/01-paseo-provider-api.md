@@ -2,7 +2,7 @@
 
 Historical source report from 2026-10-03. Version/line references below belong
 to that snapshot, not an arbitrary current checkout. Superpi now implements the
-provider; SDK pins remain 0.10.0 and runtime checks used 0.11.0-beta.3. Start with
+provider; the SDK pin is the repo baseline (now 0.12.0) and runtime checks used 0.11.0-beta.3. Start with
 [current behavior](../README.md) and [implementation contracts](implementation-contracts.md).
 
 Paseo exposes a direct provider protocol that is broad enough to represent a
@@ -19,9 +19,9 @@ permissions, history, and child sessions itself.
 
 Repository root: `~/workspace/paseo`.
 
-Verified source: `5293ddac3f17f35ea090b292447ec0498edafafe`. The project baseline
-remains Paseo and `@getpaseo/{client,plugin,protocol}` v0.10.0. A direct diff against
-the v0.10.0 tag establishes these provider-contract changes:
+Verified source: `5293ddac3f17f35ea090b292447ec0498edafafe`. At that snapshot the
+project baseline was Paseo and `@getpaseo/{client,plugin,protocol}` v0.10.0. A direct
+diff against the v0.10.0 tag establishes these provider-contract changes:
 
 | Contract | v0.10.0 | Verification snapshot |
 | --- | --- | --- |

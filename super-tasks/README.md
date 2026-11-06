@@ -2,7 +2,7 @@
 
 A Paseo plugin providing real-time workspace activity tracking with two primary panels: **Agent Monitor** and **Super Tasks**.
 
-> Forked from [ABorakati/paseo-workspace-activity](https://github.com/ABorakati/paseo-workspace-activity) (MIT) and ported to Paseo 0.10.0.
+> Forked from [ABorakati/paseo-workspace-activity](https://github.com/ABorakati/paseo-workspace-activity) (MIT) and ported to Paseo 0.12.0.
 
 ## Features
 
@@ -34,7 +34,7 @@ The Super Tasks panel provides real-time tracking of workspace todos and progres
 
 ## Install
 
-> **Requires Paseo v0.10.0 or newer.**
+> **Requires Paseo v0.12.0 or newer.**
 
 Plugin code is trusted and unsandboxed. Read a plugin before you install it.
 

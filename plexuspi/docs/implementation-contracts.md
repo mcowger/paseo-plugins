@@ -10,20 +10,21 @@ Adapter evidence was read from the local checkout at
 `~/workspace/paseo` (`v0.11.0-beta.3-13-g5293ddac3`, source report revision
 `5293ddac3f17f35ea090b292447ec0498edafafe`) and from the installed npm beta
 `@getpaseo/*@0.11.0-beta.3` in `plexuspi/.test-env/simple`. The repository dependency
-baseline remains `@getpaseo/{client,plugin,protocol}@0.10.0`.
+baseline is now `@getpaseo/{client,plugin,protocol}@0.12.0`.
 
 ## Version boundary
 
 | Surface | Version | Evidence |
 | --- | --- | --- |
-| Repository pins | `0.10.0` | root `.paseo-sdk.json`, plugin `package.json`s |
+| Repository pins | `0.12.0` | root `.paseo-sdk.json`, plugin `package.json`s |
 | Local adapter checkout | `v0.11.0-beta.3-13-g5293ddac3` | `~/workspace/paseo` `git describe` |
 | Installed npm beta (test env) | `0.11.0-beta.3` | `plexuspi/.test-env/simple/node_modules/@getpaseo/*/package.json` |
 
 The plugin SDK `ProviderEvent`/`ProviderTimelineItem`/`session.revert` union is
-protocol version `1` and is unchanged between the `0.10.0` pin and the beta in
-the inspected provider-file diff (report 1). The gates below only rely on
-contracts present at `0.10.0`.
+protocol version `1` and is unchanged between the `0.10.0` research snapshot and the
+beta in the inspected provider-file diff (report 1). The gates below only rely on
+contracts present at `0.10.0` and still present at `0.12.0`, which is the pin the
+plugin typechecks and tests against.
 
 ## Gate 1 — Pre-agent provider feature discovery: SUPPORTED
 

@@ -297,7 +297,7 @@ replace unresolved contracts with guesses:
 4. Pi navigation, branch persistence, guards, and queue clearing are implemented.
    R5's complete visible-history requirement is still blocked: abandoned rows
    can remain in Paseo after rewind/reload. See [verification](rewind-011-verification.md).
-5. SDK pins remain `0.10.0`; the tested host is `0.11.0-beta.3`, Pi `1.0.0+local`.
+5. SDK pins follow the repo baseline (`0.12.0`); the tested host is `0.11.0-beta.3`, Pi `1.0.0+local`.
    Preserve supported APIs and rerun host-contract checks before a host upgrade.
 6. Session-only automatic toggles remain deferred. Mobile smoke passed on iOS
    (2026-10-04); Android remains unverified. Windows descendant process-group

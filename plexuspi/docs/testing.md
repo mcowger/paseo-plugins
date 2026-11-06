@@ -9,7 +9,7 @@ node plexuspi/testing/start.mjs
 ```
 
 The first command copies the current Pi distribution and selected extension
-sources, installs `@getpaseo/cli@0.11.0-beta.3` from npm, and writes isolated Pi
+sources, installs `@getpaseo/cli@0.12.0` from npm, and writes isolated Pi
 and Paseo config files. Subsequent starts reuse them without overwriting state.
 The final command runs the test daemon in the foreground. Ctrl-C stops it.
 `--sync-resources` refreshes the copied extension sources (`pi-subagents`,

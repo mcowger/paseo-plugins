@@ -19,7 +19,7 @@ behavior and validation from the original research.
 - [Rewind verification](rewind-011-verification.md): executable evidence for the
   append-only host-history limitation.
 
-SDK dependencies remain pinned to `0.10.0`. Runtime checks used Paseo
+SDK dependencies follow the repo baseline, `0.12.0`. Runtime checks used Paseo
 `0.11.0-beta.3` and Pi `1.0.0+local`. The pre-rename implementation baseline was
 `1c13cae` (Plexus model policies), following `cd2e74c`
 (session controls/commands). Mobile smoke passed on iOS (2026-10-04); Android
@@ -82,7 +82,7 @@ No remote repository was modified or fetched as part of this documentation work.
 | --- | --- | --- |
 | Paseo, initial research | `~/workspace/paseo` | `d070db15b3eb710b84dd001c29cbbdc8266e675a`, `v0.10.0-60-gd070db15b` |
 | Paseo, documentation verification | `~/workspace/paseo` | `5293ddac3f17f35ea090b292447ec0498edafafe`, `v0.11.0-beta.3-13-g5293ddac3` |
-| Paseo target baseline | Same repository, tag `v0.10.0` | `c481ecf3e101326e3758d419341bc4faaf5b4f98` |
+| Paseo research baseline (historical) | Same repository, tag `v0.10.0` | `c481ecf3e101326e3758d419341bc4faaf5b4f98` |
 | Pi source (`earendil-works/pi`) | `~/workspace/pi` | `86dfceec402ad77e563bf4feab5f26c42d5f5db6`, `v1.0.0-1-g86dfceec4` |
 | Active Pi build | `~/.local/share/path-overrides/pi-local` | Reports version `1.0.0+local`; not an exact git revision identifier |
 | omercnet plugins | `~/workspace/omercnet/paseo-plugins` | `5f38b18ebdfe541d450a327e4fda5e9ebcd38cda` |
@@ -92,7 +92,7 @@ No remote repository was modified or fetched as part of this documentation work.
 The Paseo checkout changed between the initial research and verification. Reports
 use the verification snapshot unless they explicitly describe the older revision
 or the v0.10.0 tag. Current source behavior is not automatically a promise about
-the project's pinned `@getpaseo/*` 0.10.0 baseline.
+the project's current `@getpaseo/*` 0.12.0 baseline.
 
 ## Reading the evidence
 

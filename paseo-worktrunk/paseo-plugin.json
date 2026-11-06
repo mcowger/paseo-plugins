@@ -1,0 +1,4 @@
+{
+  "id": "paseo-worktrunk",
+  "requirements": { "paseo": ">=0.15.0-beta.1" }
+}

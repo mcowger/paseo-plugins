@@ -1,7 +1,8 @@
 # Paseo plugins
 
-Plugins and local experiments for [Paseo](https://paseo.sh/), targeting the Paseo 0.10 plugin API and
-`@getpaseo/*` SDK `0.10.0`.
+Plugins and local experiments for [Paseo](https://paseo.sh/), targeting the Paseo 0.12 plugin API and
+`@getpaseo/*` SDK `0.12.0`. Plugins that need newer host APIs pin their own SDK version in
+`.paseo-sdk.json`.
 
 Plugins use separate `index.client.tsx` and `index.server.ts` entries with strict `client/`,
 `server/`, and `shared/` boundaries. See Paseo's [plugin guide](https://paseo.sh/docs/plugins.md)
@@ -10,6 +11,9 @@ when contributing changes.
 ## Plugins in this repository
 
 - [Colorful agent activity](./colorful-agent-activity/README.md)
+- [Paseo Worktrunk](./paseo-worktrunk/README.md): experimental Worktrunk placement and setup hooks.
+- [Plexus activity](./plexus-activity/README.md): live Plexus request activity in the Explorer dock,
+  fed by Plexus's SSE event stream and scoped optionally to one API key.
 - [Skill picker](./skill-picker/README.md)
 - [Super tasks](./super-tasks/README.md)
 - [PlexusPi](./plexuspi/README.md): Pi subprocess provider with native child views,

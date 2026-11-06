@@ -3,15 +3,15 @@
 This repository contains Paseo plugins. Use the following Paseo resources as the source of truth
 when creating or changing a plugin:
 
-The current target host and SDK baseline is **Paseo v0.10.0**. Pin `@getpaseo/client`,
-`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.10.0. Declare compatibility in
-`paseo-plugin.json` via `requirements: { "paseo": ">=0.10.0" }` to enforce version checks at startup.
+The current target host and SDK baseline is **Paseo v0.12.0**. Pin `@getpaseo/client`,
+`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.12.0. Declare compatibility in
+`paseo-plugin.json` via `requirements: { "paseo": ">=0.12.0" }` to enforce version checks at startup.
 
 Per-plugin exceptions live in `.paseo-sdk.json` under `pluginVersions`, and both `npm run sdk:check`
 and `npm run sdk:install` honor them (installing, packing, and verifying each plugin at the version
-it pins). Current exception: **colorful-agent-activity** targets `>=0.11.4`, so it can use
-`addScreen` / `addSidebarHeaderItem`; keep its `requirements.paseo`, its three dependency pins, and
-the override in step. `plexuspi` stays on 0.10.0.
+it pins). `paseo-worktrunk` is the current exception, requiring 0.15.0-beta.1 for worktree hooks.
+Add an exception only when a plugin needs a newer host than the baseline, and keep its
+`requirements.paseo`, its three dependency pins, and the override in step.
 
 When researching Paseo contracts (plugin SDK types, protocol, examples), use the local
 Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
@@ -23,7 +23,7 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
   components, SDK usage, RPC, themes, hosts, and troubleshooting.
 - [Runtime entry migration guide](https://paseo.sh/docs/plugins/migration.md): migrating from
   mixed root entries to explicit client and server runtime entries.
-- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.10.0/plugin-examples):
+- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.12.0/plugin-examples):
   working examples for panels and commands (`local-plugin`), RPC, attachment sources (`linear`),
   themes (`catppuccin`), and timeline items (`timeline-items`, `inline-thinking`).
   Provider examples (`provider-direct`, `provider-acp-transformer`) are included as well.
@@ -70,7 +70,9 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
 - Import from host-provided module paths:
   - `@getpaseo/plugin`: shared contracts (`defineRpc`, `defineAttachmentSource`, `RpcInput`, `RpcOutput`).
   - `@getpaseo/plugin/client`: client contexts, contribution types, hooks, and navigation (`PluginClientContext`, `useRpc`, `usePaseo`, `useWorkspace`, `useAgent`).
-  - `@getpaseo/plugin/client/react-native`: Paseo React Native UI components (`Icon`, `Modal`, `useToast`, `useRevealedText`).
+  - `@getpaseo/plugin/client/react-native`: Paseo React Native UI components (`Icon`, `Modal`, `useToast`).
+    The entry is deprecated in 0.13 in favor of `/client/ui`, but only `react-native` serves 0.12 hosts,
+    and it is the path that carries the `useRevealedText` compatibility export.
   - `@getpaseo/plugin/server`: server contexts and handler-only types such as `PluginHandlerContext`.
   - Provider-only imports (`@getpaseo/plugin/server/provider`, `@getpaseo/plugin/server/acp`)
     are documented in the local Paseo checkout at `~/workspace/paseo/packages/plugin`.
@@ -155,8 +157,10 @@ Patterns observed across Paseo plugins:
     tool calls or reasoning, and `"complete"` otherwise.
   - Paseo memoizes transformer output by source-item reference and derives replacement keys from the source
     item identity, preserving mounted component identity across streaming deltas.
-  - Use `useRevealedText(text, phase)` from `@getpaseo/plugin/client/react-native` to pace custom streaming text
-    smoothly, matching Paseo's built-in assistant message behavior.
+  - Paseo through 0.12 exports `useRevealedText(text, phase)` for paced timeline text; 0.13 replaces it
+    with `<StreamedText text phase>` from `/client/ui`, which cannot serve a renderer that splits the
+    revealed string. Read the hook off the host module and pace locally when it is missing (see
+    `colorful-agent-activity/client/reveal.ts`).
   - Timeline notifications: Pi extension `ctx.ui.notify()` and OpenCode notices are unified as first-class
     `type: "notification"` timeline items with log levels (info, warning, error) mapped to activity log styling.
     Transformers can target `query: { itemType: "notification" }`.
@@ -249,8 +253,8 @@ research and original acceptance goals.
   `plexuspi:state:v1:`, and `plexuspi:child:v1:` prefixes.
 - Keep the root integration on subprocess JSONL RPC. Do not embed Pi's SDK or
   modify Pi/Paseo core. Owned `pi-subagents` child execution is a separate boundary.
-- SDK pins remain `0.10.0`; the isolated tested host is `0.11.0-beta.3` and the
-  tested Pi build is `1.0.0+local`. Neither changes the repository baseline.
+- SDK pins follow the repository baseline, currently `0.12.0`; the isolated tested host is
+  `0.11.0-beta.3` and the tested Pi build is `1.0.0+local`. The test host does not move the baseline.
 - Plexus publishes exact per-model tier choices and short/max context budgets.
   Do not restore a fixed tier enum, hardcoded expanded budget, or backend matrix.
 - Run lint, typecheck, and tests in `plexuspi/`, plus root `npm run sdk:check`.
