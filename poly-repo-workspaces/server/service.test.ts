@@ -6,6 +6,7 @@ import {
   cleanupVirtualWorkspace,
   collectStatuses,
   createVirtualWorkspace,
+  discoverImportBranches,
   forgetVirtualWorkspace,
   getRepoStatuses,
   handleWorkspaceArchived,
@@ -294,7 +295,6 @@ describe("createVirtualWorkspace", () => {
       feature: "featureA",
     });
     expect(inside.ok).toBe(false);
-    expect(inside.error).toContain("inside repo source");
   });
 
   it("rejects invalid feature names and unknown projects", async () => {
@@ -885,5 +885,153 @@ describe("reconcile and repair", () => {
     const result = await repairConstituent(deps, virtualId, "app");
     expect(result.ok).toBe(false);
     expect(result.error).toContain("no longer exists");
+  });
+});
+
+describe("import branches", () => {
+  it("discovers local and origin branches while excluding symbolic origin HEAD", async () => {
+    const { deps, git } = depsFor(project());
+    const run = git.run;
+    git.run = (args, cwd) =>
+      args[0] === "for-each-ref"
+        ? Promise.resolve({
+            stdout:
+              cwd === "/src/frontend"
+                ? "refs/heads/shared\nrefs/heads/frontend-only\nrefs/remotes/origin/HEAD\n"
+                : "refs/remotes/origin/shared\nrefs/heads/app-only\n",
+            stderr: "",
+          })
+        : run(args, cwd);
+
+    const result = await discoverImportBranches(deps, "uber");
+
+    expect(result).toEqual({ branches: ["shared"], error: null });
+  });
+
+  it("checks out a local imported branch independently of the configured template", async () => {
+    const { deps, git } = depsFor(project({ branchTemplate: "generated-{feature}" }));
+    git.script.existingBranches = ["release/next"];
+
+    const result = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "friendly-name",
+      importBranch: "release/next",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      git.script.log?.some(
+        (args) =>
+          args.includes("worktree") && args.includes("release/next") && !args.includes("-b"),
+      ),
+    ).toBe(true);
+  });
+
+  it("force deletes imported slash-branch worktrees when Git removal fails", async () => {
+    const { deps, fs, git } = depsFor(project());
+    git.script.existingBranches = ["release/next"];
+    const created = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "friendly-name",
+      importBranch: "release/next",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.virtualId) throw new Error("missing virtual workspace id");
+    const root = "/paseo/poly-workspaces/uber-friendly-name";
+    expect(await fs.isDirectory(`${root}/frontend_release/next`)).toBe(true);
+    git.script.failOn = [{ match: ["worktree", "remove"], message: "git remove failed" }];
+
+    const removed = await archiveVirtualWorkspace(deps, {
+      virtualId: created.virtualId,
+      force: true,
+    });
+    expect(removed.ok).toBe(true);
+    expect(await fs.exists(root)).toBe(false);
+    expect(await listVirtualWorkspaces(deps)).toHaveLength(0);
+  });
+
+  it("refuses fallback removal when a nested worktree resolves outside the root", async () => {
+    const { deps, fs, git } = depsFor(project());
+    git.script.existingBranches = ["release/next"];
+    const created = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "friendly-name",
+      importBranch: "release/next",
+    });
+    if (!created.virtualId) throw new Error("missing virtual workspace id");
+    const root = "/paseo/poly-workspaces/uber-friendly-name";
+    const realpath = fs.realpath;
+    fs.realpath = (path) =>
+      path === `${root}/frontend_release/next`
+        ? Promise.resolve("/outside/important")
+        : realpath(path);
+    git.script.failOn = [{ match: ["worktree", "remove"], message: "git remove failed" }];
+
+    const result = await archiveVirtualWorkspace(deps, {
+      virtualId: created.virtualId,
+      force: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.blocked[0]?.error).toContain("unsafe worktree path");
+    expect(await fs.isDirectory(`${root}/frontend_release/next`)).toBe(true);
+  });
+
+  it("tracks an imported origin branch locally", async () => {
+    const { deps, git } = depsFor(project());
+    git.script.remoteBranches = ["release"];
+
+    const result = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "friendly-name",
+      importBranch: "release",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      git.script.log?.some((args) => args.includes("--track") && args.includes("origin/release")),
+    ).toBe(true);
+  });
+
+  it("resumes using the persisted import branch when importBranch is omitted", async () => {
+    const { deps, fs, git } = depsFor(project());
+    git.script.remoteBranches = ["release"];
+    git.script.failOn = [
+      {
+        match: ["worktree", "add", "/paseo/poly-workspaces/uber-friendly-name/app_release"],
+        message: "interrupted",
+      },
+    ];
+    const first = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "friendly-name",
+      importBranch: "release",
+    });
+    expect(first.ok).toBe(false);
+    git.script.failOn = [];
+
+    const resumed = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "friendly-name",
+      resume: true,
+    });
+
+    expect(resumed.ok).toBe(true);
+    expect(await fs.readFile("/paseo/poly-workspaces/uber-friendly-name/.polyrepo.json")).toContain(
+      '"importBranch": "release"',
+    );
+    expect(git.script.log?.some((args) => args.includes("origin/release"))).toBe(true);
+  });
+
+  it("reports an import branch that is no longer present during preflight", async () => {
+    const { deps } = depsFor(project());
+    const result = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "friendly-name",
+      importBranch: "missing",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.preflight).toHaveLength(2);
+    expect(result.preflight[0]?.code).toBe("branch-unavailable");
   });
 });

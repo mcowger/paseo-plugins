@@ -40,6 +40,13 @@ is not under the daemon's worktrees root.
   visible name stays as entered; branches and folder templates use
   `sig-abscd-fix-my-stuff`. Existing Git-safe names stay unchanged, including
   their case. The create form previews the branch before you submit.
+
+- To import a common branch, choose it from the management screen's branch
+  discovery list. Discovery considers branches already available locally and
+  `origin` remote-tracking branches; it does not fetch from the network.
+  Existing checked-out branches cannot be imported. The selected branch is
+  checked out in the new worktrees, while the workspace feature/display name
+  remains independently editable (initially populated from the chosen branch).
 - Creation and resume show a spinner and a status message while the repo
   worktrees are being set up. The form stays disabled until the request finishes.
 - The Poly-repo workspace panel shows per-repo branch/dirty/ahead status,
@@ -59,7 +66,8 @@ is not under the daemon's worktrees root.
 - If archiving fails, the management screen's **Force delete** action retries
   teardown after confirmation. It removes dirty worktrees, including uncommitted
   changes, and keeps branches. If Git cannot remove a worktree, it deletes the
-  directory and checks that Git pruned its metadata. Prune or filesystem errors
+  directory, including nested paths from branch names containing `/`, and checks
+  that Git pruned its metadata. Prune or filesystem errors
   block cleanup and can be retried. Paseo workspace rows can remain if their
   archive fails; remove those rows separately.
 

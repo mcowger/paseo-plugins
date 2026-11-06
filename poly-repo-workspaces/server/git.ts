@@ -85,6 +85,34 @@ export async function listWorktreeBranches(git: GitPort, sourcePath: string): Pr
   }
 }
 
+export async function listAvailableBranches(git: GitPort, sourcePath: string): Promise<string[]> {
+  const result = await git.run(
+    ["for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes/origin"],
+    sourcePath,
+  );
+  const branches = new Set<string>();
+  for (const line of result.stdout.split("\n")) {
+    if (line.startsWith("refs/heads/")) branches.add(line.slice("refs/heads/".length));
+    else if (line.startsWith("refs/remotes/origin/") && line !== "refs/remotes/origin/HEAD") {
+      branches.add(line.slice("refs/remotes/origin/".length));
+    }
+  }
+  return [...branches];
+}
+
+export async function remoteBranchExists(
+  git: GitPort,
+  sourcePath: string,
+  branch: string,
+): Promise<boolean> {
+  try {
+    await git.run(["show-ref", "--verify", `refs/remotes/origin/${branch}`], sourcePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function resolveBaseBranch(
   git: GitPort,
   sourcePath: string,

@@ -14,6 +14,7 @@ import {
   archiveVirtualWorkspace,
   cleanupVirtualWorkspace,
   createVirtualWorkspace,
+  discoverImportBranches,
   forgetVirtualWorkspace,
   getRepoStatuses,
   handleWorkspaceArchived,
@@ -32,6 +33,7 @@ import {
   forgetVirtualWorkspace as forgetVirtualWorkspaceRpc,
   getRepoStatuses as getRepoStatusesRpc,
   getSettingsSnapshot,
+  listImportBranches as listImportBranchesRpc,
   listUberProjects,
   listVirtualWorkspaces as listVirtualWorkspacesRpc,
   reconcileVirtualWorkspaces as reconcileVirtualWorkspacesRpc,
@@ -130,11 +132,16 @@ export default function contribute(server: PluginServerContext) {
     return { virtualWorkspaces: await listVirtualWorkspaces(depsFor(context)) };
   });
 
+  server.handle(listImportBranchesRpc, async (input, context) => {
+    return discoverImportBranches(depsFor(context), input.uberProjectId);
+  });
+
   server.handle(createVirtualWorkspaceRpc, async (input, context) => {
     return createVirtualWorkspace(depsFor(context), {
       uberProjectId: input.uberProjectId,
       feature: input.feature,
       baseBranchOverrides: input.baseBranchOverrides,
+      importBranch: input.importBranch,
       createTerminals: input.createTerminals,
       resume: input.resume,
     });

@@ -1,4 +1,3 @@
-import { dirname } from "node:path";
 import { type RepoConfig, type UberProject, validateFeatureName } from "../shared/config";
 import { normalizeManifest, type VirtualWorkspaceManifest } from "../shared/manifest";
 import {
@@ -30,13 +29,15 @@ import {
   currentBranch,
   diffShortStat,
   isGitRepo,
+  listAvailableBranches,
   listWorktreeBranches,
   localBranchExists,
+  remoteBranchExists,
   resolveBaseBranch,
   statusPorcelain,
   upstreamRef,
 } from "./git";
-import { isSameOrInside, joinSegments, normalizeAbsolute } from "./paths";
+import { isInside, isSameOrInside, joinSegments, normalizeAbsolute } from "./paths";
 import {
   type FsPort,
   type GitPort,
@@ -82,6 +83,7 @@ export interface CreateInput {
   uberProjectId: string;
   feature: string;
   baseBranchOverrides?: Record<string, string>;
+  importBranch?: string;
   createTerminals?: boolean;
   resume?: boolean;
 }
@@ -171,6 +173,37 @@ async function getWorktreesBaseRoot(deps: ServiceDeps): Promise<string> {
 
 function lookupUberProjectName(snapshot: SettingsSnapshot, uberProjectId: string): string {
   return snapshot.uberProjects.find((p) => p.id === uberProjectId)?.displayName ?? uberProjectId;
+}
+
+export async function discoverImportBranches(
+  deps: ServiceDeps,
+  uberProjectId: string,
+): Promise<{ branches: string[]; error: string | null }> {
+  const project = (await deps.settings.snapshot()).uberProjects.find(
+    (item) => item.id === uberProjectId,
+  );
+  if (!project) return { branches: [], error: `unknown uber-project: ${uberProjectId}` };
+  if (project.repos.length === 0)
+    return { branches: [], error: "uber-project has no repositories" };
+  try {
+    let common: Set<string> | null = null;
+    for (const repo of project.repos) {
+      const source = normalizeAbsolute(repo.sourcePath);
+      if (!(await deps.fs.isDirectory(source)) || !(await isGitRepo(deps.git, source))) {
+        return { branches: [], error: `source is not a git repo: ${repo.id}` };
+      }
+      const branches = new Set(await listAvailableBranches(deps.git, source));
+      if (common === null) common = branches;
+      else {
+        for (const branch of common as Set<string>) {
+          if (!branches.has(branch)) common.delete(branch);
+        }
+      }
+    }
+    return { branches: [...(common ?? [])].sort(), error: null };
+  } catch (error) {
+    return { branches: [], error: `branch discovery failed: ${gitMessage(error)}` };
+  }
 }
 
 export async function listVirtualWorkspaces(deps: ServiceDeps): Promise<VirtualWorkspaceSummary[]> {
@@ -376,10 +409,29 @@ export async function createVirtualWorkspace(
   const featureError = validateFeatureName(input.feature);
   if (featureError) return failure(`invalid feature name: ${featureError}`);
 
-  const branch = renderBranchName(project.branchTemplate, {
+  const generatedBranch = renderBranchName(project.branchTemplate, {
     uberProjectId: project.id,
     feature: input.feature,
   });
+  const virtualId = sanitizeVirtualId(project.id, input.feature);
+  const existingEntry = (await loadIndex(deps.fs, deps.paseoHome)).virtual[virtualId];
+  const existingManifest = existingEntry
+    ? await readManifest(deps.fs, existingEntry.rootPath)
+    : null;
+  if (
+    input.resume &&
+    existingManifest &&
+    input.importBranch !== undefined &&
+    input.importBranch !== (existingManifest.importBranch ?? undefined)
+  ) {
+    return failure("cannot change the branch selection while resuming");
+  }
+  const importBranch =
+    input.importBranch ??
+    (input.resume ? (existingManifest?.importBranch ?? undefined) : undefined);
+  const branch =
+    importBranch ??
+    (input.resume ? (existingManifest?.branch ?? generatedBranch) : generatedBranch);
   const rootBase = resolveRootBase({
     perProject: project.virtualRootBase,
     hostSetting: snapshot.virtualRootBase,
@@ -391,6 +443,9 @@ export async function createVirtualWorkspace(
     branch,
   });
   const rootPath = normalizeAbsolute(joinSegments(rootBase, rootDirName));
+  if (!isSameOrInside(rootBase, rootPath)) {
+    return failure("virtual root path escapes its configured root");
+  }
 
   const worktreesRoot = await getWorktreesBaseRoot(deps);
   if (isSameOrInside(worktreesRoot, rootPath)) {
@@ -401,12 +456,11 @@ export async function createVirtualWorkspace(
   }
   for (const repo of project.repos) {
     const sourcePath = normalizeAbsolute(repo.sourcePath);
-    if (isSameOrInside(sourcePath, rootPath)) {
-      return failure(`virtual root must not live inside repo source: ${repo.id}`);
+    if (isSameOrInside(sourcePath, rootPath) || isSameOrInside(rootPath, sourcePath)) {
+      return failure(`virtual root overlaps repo source: ${repo.id}`);
     }
   }
 
-  const virtualId = sanitizeVirtualId(project.id, input.feature);
   const existingIndex = await loadIndex(deps.fs, deps.paseoHome);
   const indexed = existingIndex.virtual[virtualId];
   if (indexed && normalizeAbsolute(indexed.rootPath) !== rootPath) {
@@ -461,6 +515,17 @@ export async function createVirtualWorkspace(
       baseBranch: "",
     };
   });
+  for (const item of planned) {
+    if (!isSameOrInside(rootPath, item.worktreePath)) {
+      return failure(`worktree path escapes virtual root for ${item.repo.id}`);
+    }
+    for (const repo of project.repos) {
+      const source = normalizeAbsolute(repo.sourcePath);
+      if (isSameOrInside(source, item.worktreePath) || isSameOrInside(item.worktreePath, source)) {
+        return failure(`worktree path overlaps repo source: ${item.repo.id}`);
+      }
+    }
+  }
 
   const timestamp = deps.now();
   if (!manifest) {
@@ -471,6 +536,7 @@ export async function createVirtualWorkspace(
       feature: input.feature,
       branch,
       rootPath,
+      importBranch: importBranch ?? null,
       workspaceId: null,
       projectId: null,
       state: "creating",
@@ -514,7 +580,7 @@ export async function createVirtualWorkspace(
       item.sourcePath,
       input.baseBranchOverrides?.[item.repo.id] ?? item.repo.baseBranch,
     );
-    if (!base) {
+    if (!base && !importBranch) {
       preflight.push({
         repoId: item.repo.id,
         code: "base-unresolvable",
@@ -522,22 +588,34 @@ export async function createVirtualWorkspace(
       });
       continue;
     }
-    item.baseBranch = base;
-    if (constituent) constituent.baseBranch = base;
-    if (await localBranchExists(deps.git, item.sourcePath, branch)) {
-      preflight.push({
-        repoId: item.repo.id,
-        code: "branch-exists",
-        message: `branch ${branch} already exists in ${item.repo.id}`,
-      });
-      continue;
-    }
+    item.baseBranch = base ?? importBranch ?? "";
+    if (constituent) constituent.baseBranch = item.baseBranch;
     const checkedOut = await listWorktreeBranches(deps.git, item.sourcePath);
     if (checkedOut.includes(branch)) {
       preflight.push({
         repoId: item.repo.id,
         code: "branch-checked-out",
         message: `branch ${branch} is already checked out in ${item.repo.id}`,
+      });
+      continue;
+    }
+    const localExists = await localBranchExists(deps.git, item.sourcePath, branch);
+    const remoteExists = importBranch
+      ? await remoteBranchExists(deps.git, item.sourcePath, importBranch)
+      : false;
+    if (importBranch && !localExists && !remoteExists) {
+      preflight.push({
+        repoId: item.repo.id,
+        code: "branch-unavailable",
+        message: `branch ${importBranch} is not available locally or on origin in ${item.repo.id}`,
+      });
+      continue;
+    }
+    if (!importBranch && localExists) {
+      preflight.push({
+        repoId: item.repo.id,
+        code: "branch-exists",
+        message: `branch ${branch} already exists in ${item.repo.id}`,
       });
       continue;
     }
@@ -572,10 +650,30 @@ export async function createVirtualWorkspace(
     const constituent = active.constituents.find((c) => c.repoId === item.repo.id);
     if (!constituent || constituent.state === "created") continue;
     try {
-      await deps.git.run(
-        ["worktree", "add", "-b", branch, item.worktreePath, item.baseBranch],
-        item.sourcePath,
-      );
+      const localImportExists = importBranch
+        ? await localBranchExists(deps.git, item.sourcePath, importBranch)
+        : false;
+      if (importBranch && localImportExists) {
+        await deps.git.run(["worktree", "add", item.worktreePath, importBranch], item.sourcePath);
+      } else if (importBranch) {
+        await deps.git.run(
+          [
+            "worktree",
+            "add",
+            "--track",
+            "-b",
+            importBranch,
+            item.worktreePath,
+            `origin/${importBranch}`,
+          ],
+          item.sourcePath,
+        );
+      } else {
+        await deps.git.run(
+          ["worktree", "add", "-b", branch, item.worktreePath, item.baseBranch],
+          item.sourcePath,
+        );
+      }
     } catch (error) {
       active.updatedAt = deps.now();
       await writeManifest(deps.fs, active);
@@ -861,10 +959,19 @@ export async function teardownConstituents(
           await deps.git.run(args, constituent.sourcePath);
         } catch (error) {
           if (!forceCleanup) throw error;
+          const canonicalRoot = await deps.fs.realpath(manifest.rootPath);
+          const canonicalWorktree = await deps.fs.realpath(constituent.worktreePath);
+          const canonicalSources = await Promise.all(
+            manifest.constituents.map((item) => deps.fs.realpath(item.sourcePath)),
+          );
           if (
-            normalizeAbsolute(dirname(constituent.worktreePath)) !==
-              normalizeAbsolute(manifest.rootPath) ||
-            isSameOrInside(constituent.worktreePath, constituent.sourcePath)
+            !isInside(manifest.rootPath, constituent.worktreePath) ||
+            !isInside(canonicalRoot, canonicalWorktree) ||
+            canonicalSources.some(
+              (source) =>
+                isSameOrInside(source, canonicalWorktree) ||
+                isSameOrInside(canonicalWorktree, source),
+            )
           ) {
             throw new Error(`Refusing to remove unsafe worktree path: ${constituent.worktreePath}`);
           }

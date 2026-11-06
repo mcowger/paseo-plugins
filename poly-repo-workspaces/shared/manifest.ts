@@ -38,6 +38,7 @@ export const ManifestSchema = z.object({
   virtualId: z.string().min(1),
   uberProjectId: z.string().min(1),
   feature: z.string().min(1),
+  importBranch: z.string().min(1).nullable().optional(),
   branch: z.string().min(1),
   rootPath: z.string().min(1),
   workspaceId: z.string().nullable(),

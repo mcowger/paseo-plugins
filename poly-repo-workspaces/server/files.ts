@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { FsPort } from "./ports";
 
@@ -60,6 +60,7 @@ export function createFsPort(): FsPort {
         throw error;
       }
     },
+    realpath,
     async removeRecursive(path: string): Promise<void> {
       await rm(path, { recursive: true, force: true });
     },

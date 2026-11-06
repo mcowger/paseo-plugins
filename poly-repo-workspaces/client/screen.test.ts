@@ -13,9 +13,12 @@ const harness = vi.hoisted(() => ({
   states: [] as unknown[],
   cursor: 0,
   mounted: false,
+  effectDeps: [] as unknown[][],
+  effectCursor: 0,
   effects: [] as Array<() => unknown>,
   items: [] as VirtualWorkspaceSummary[],
   create: vi.fn(),
+  branches: vi.fn(),
   archive: vi.fn(),
   refresh: vi.fn(),
   toast: { show: vi.fn(), error: vi.fn() },
@@ -38,8 +41,14 @@ vi.mock("react", async (importOriginal) => ({
   },
   useMemo: (factory: () => unknown) => factory(),
   useCallback: (callback: unknown) => callback,
-  useEffect: (effect: () => unknown) => {
-    if (!harness.mounted) harness.effects.push(effect);
+  useEffect: (effect: () => unknown, deps?: readonly unknown[]) => {
+    const index = harness.effectCursor++;
+    const previous = harness.effectDeps[index];
+    if (!previous || !deps || deps.some((value, i) => value !== previous[i])) {
+      harness.effectDeps[index] = deps ? [...deps] : [];
+      if (!harness.mounted) harness.effects.push(effect);
+      else effect();
+    }
   },
 }));
 
@@ -60,18 +69,20 @@ vi.mock("@getpaseo/plugin/client", () => ({
   useRpc: (contract: { name: string }) =>
     contract.name === "polyrepo.virtual-workspaces.create"
       ? harness.create
-      : contract.name === "polyrepo.virtual-workspaces.archive"
-        ? harness.archive
-        : async () => ({
-            uberProjects: [
-              {
-                id: "uber",
-                displayName: "Uber",
-                branchTemplate: "{feature}",
-                repos: [{ id: "frontend" }, { id: "app" }],
-              },
-            ],
-          }),
+      : contract.name === "polyrepo.virtual-workspaces.import-branches"
+        ? harness.branches
+        : contract.name === "polyrepo.virtual-workspaces.archive"
+          ? harness.archive
+          : async () => ({
+              uberProjects: [
+                {
+                  id: "uber",
+                  displayName: "Uber",
+                  branchTemplate: "{feature}",
+                  repos: [{ id: "frontend" }, { id: "app" }],
+                },
+              ],
+            }),
 }));
 
 vi.mock("./use-virtual-workspaces", () => ({
@@ -86,7 +97,7 @@ vi.mock("./use-virtual-workspaces", () => ({
 type ElementProps = {
   children?: ReactNode;
   accessibilityLabel?: string;
-  accessibilityState?: { busy?: boolean; disabled?: boolean };
+  accessibilityState?: { busy?: boolean; disabled?: boolean; selected?: boolean };
   disabled?: boolean;
   editable?: boolean;
   onPress?: () => void;
@@ -113,6 +124,7 @@ function control(tree: ReactNode, label: string): ElementProps {
 
 function render(): ReactElement {
   harness.cursor = 0;
+  harness.effectCursor = 0;
   const tree = PolyRepoScreen({
     theme: { colors: {} } as PluginScreenProps["theme"],
     layout: { compact: false } as PluginScreenProps["layout"],
@@ -157,9 +169,12 @@ const success: CreateResult = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  harness.branches.mockResolvedValue({ branches: ["main", "feature-x"], error: null });
   harness.states = [];
   harness.effects = [];
   harness.items = [];
+  harness.effectDeps = [];
+
   harness.mounted = false;
 });
 
@@ -217,6 +232,28 @@ describe("workspace creation feedback", () => {
     expect(control(tree, "Feature name").editable).toBe(true);
     expect(harness.toast.show).toHaveBeenCalledWith(`Created ${feature}`);
     expect(harness.refresh).toHaveBeenCalled();
+  });
+
+  it("imports a selected branch and clears it when changing projects", async () => {
+    let tree = await ready();
+    await Promise.resolve();
+    tree = render();
+    control(tree, "Import branch feature-x").onPress?.();
+    tree = render();
+    expect(control(tree, "Import branch feature-x").accessibilityState?.selected).toBe(true);
+    expect(text(tree)).toContain("Branch: feature-x");
+    expect(control(tree, "Feature name")).toBeDefined();
+    const pending = pendingCreate();
+    control(tree, "Create virtual workspace").onPress?.();
+    expect(harness.create).toHaveBeenCalledWith({
+      uberProjectId: "uber",
+      feature: "feature-x",
+      importBranch: "feature-x",
+      createTerminals: undefined,
+    });
+    pending.resolve(success);
+    await Promise.resolve();
+    render();
   });
 
   it.each(["preflight", "error", "exception"])(

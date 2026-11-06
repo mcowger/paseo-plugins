@@ -36,6 +36,7 @@ export const PreflightIssueSchema = z.object({
     "branch-checked-out",
     "base-unresolvable",
     "target-exists",
+    "branch-unavailable",
   ]),
   message: z.string(),
 });
@@ -80,12 +81,19 @@ export const listVirtualWorkspaces = defineRpc({
   }),
 });
 
+export const listImportBranches = defineRpc({
+  name: "polyrepo.virtual-workspaces.import-branches",
+  input: z.object({ uberProjectId: z.string().min(1) }),
+  output: z.object({ branches: z.array(z.string()), error: z.string().nullable() }),
+});
+
 export const createVirtualWorkspace = defineRpc({
   name: "polyrepo.virtual-workspaces.create",
   input: z.object({
     uberProjectId: z.string().min(1),
     feature: z.string().min(1).max(128),
     baseBranchOverrides: z.record(z.string(), z.string().min(1)).optional(),
+    importBranch: z.string().min(1).optional(),
     createTerminals: z.boolean().optional(),
     resume: z.boolean().optional(),
   }),

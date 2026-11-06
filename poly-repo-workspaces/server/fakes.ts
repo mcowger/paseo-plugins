@@ -61,6 +61,7 @@ export function createMemoryFs(seed: Record<string, string> = {}): FsPort & {
     },
     exists: (path: string) => Promise.resolve(files.has(path) || dirs.has(path)),
     isDirectory: (path: string) => Promise.resolve(dirs.has(path)),
+    realpath: (path: string) => Promise.resolve(path),
     removeRecursive: (path: string) => {
       const prefix = path === "/" ? "/" : `${path}/`;
       for (const file of files.keys()) {
@@ -77,6 +78,7 @@ export function createMemoryFs(seed: Record<string, string> = {}): FsPort & {
 export interface FakeGitScript {
   onWorktreeAdd?: (path: string) => void;
   existingBranches?: string[];
+  remoteBranches?: string[];
   worktreeBranches?: string[];
   originHead?: string | null;
   currentBranch?: string;
@@ -102,6 +104,16 @@ export function createFakeGit(script: FakeGitScript = {}): GitPort & { script: F
         if (rule.match.every((part) => args.includes(part))) fail(rule.message);
       }
       const [head, ...rest] = args;
+      if (head === "for-each-ref") {
+        const refs = [
+          ...(script.existingBranches ?? []).map((branch) => `refs/heads/${branch}`),
+          ...(script.remoteBranches ?? []).flatMap((branch) => [
+            `refs/remotes/origin/${branch}`,
+            "refs/remotes/origin/HEAD",
+          ]),
+        ];
+        return Promise.resolve({ stdout: `${refs.join("\n")}\n`, stderr: "" });
+      }
       if (head === "rev-parse" && rest[0] === "--git-dir")
         return Promise.resolve({ stdout: ".git\n", stderr: "" });
       if (head === "symbolic-ref") {
@@ -111,7 +123,12 @@ export function createFakeGit(script: FakeGitScript = {}): GitPort & { script: F
       if (head === "show-ref") {
         const ref = rest[rest.length - 1] ?? "";
         const branch = ref.replace(/^refs\/heads\//, "");
-        if ((script.existingBranches ?? []).includes(branch)) {
+        const remoteBranch = ref.replace(/^refs\/remotes\/origin\//, "");
+        if (
+          (ref.startsWith("refs/heads/") && (script.existingBranches ?? []).includes(branch)) ||
+          (ref.startsWith("refs/remotes/origin/") &&
+            (script.remoteBranches ?? []).includes(remoteBranch))
+        ) {
           return Promise.resolve({ stdout: `${"0".repeat(40)} ${ref}\n`, stderr: "" });
         }
         fail(`unknown revision ${ref}`);

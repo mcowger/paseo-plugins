@@ -7,6 +7,7 @@ export interface FsPort {
   readdir(path: string): Promise<string[] | null>;
   exists(path: string): Promise<boolean>;
   isDirectory(path: string): Promise<boolean>;
+  realpath(path: string): Promise<string>;
   removeRecursive(path: string): Promise<void>;
 }
 
