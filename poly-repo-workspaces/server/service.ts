@@ -84,6 +84,7 @@ export interface CreateInput {
   feature: string;
   baseBranchOverrides?: Record<string, string>;
   importBranch?: string;
+  importDefaults?: boolean;
   createTerminals?: boolean;
   resume?: boolean;
 }
@@ -175,35 +176,93 @@ function lookupUberProjectName(snapshot: SettingsSnapshot, uberProjectId: string
   return snapshot.uberProjects.find((p) => p.id === uberProjectId)?.displayName ?? uberProjectId;
 }
 
+async function resolveDefaultBranch(
+  deps: ServiceDeps,
+  sourcePath: string,
+  configured?: string,
+): Promise<string | null> {
+  if (configured) return configured;
+  try {
+    const head = await deps.git.run(["symbolic-ref", "refs/remotes/origin/HEAD"], sourcePath);
+    const match = /^refs\/remotes\/origin\/(.+)$/.exec(head.stdout.trim());
+    if (match?.[1]) return match[1];
+  } catch {
+    // Try the remote's advertised symbolic HEAD below.
+  }
+  try {
+    const remote = await deps.git.run(["remote", "get-url", "origin"], sourcePath);
+    const url = remote.stdout.trim();
+    const allowed =
+      /^https:\/\/github\.com\/[^/\s:?#]+\/[^/\s?#]+(?:\.git)?\/?$/.test(url) ||
+      /^git@github\.com:[^/\s:?#]+\/[^/\s?#]+(?:\.git)?$/.test(url) ||
+      /^ssh:\/\/git@github\.com\/[^/\s:?#]+\/[^/\s?#]+(?:\.git)?\/?$/.test(url);
+    if (!allowed) return null;
+    const result = await deps.git.run(["ls-remote", "--symref", "origin", "HEAD"], sourcePath);
+    const match = /^ref:\s+refs\/heads\/([^\s]+)\s+HEAD$/m.exec(result.stdout);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function discoverImportBranches(
   deps: ServiceDeps,
   uberProjectId: string,
-): Promise<{ branches: string[]; error: string | null }> {
+): Promise<{
+  branches: string[];
+  error: string | null;
+  defaults: Array<{ repoId: string; branch: string }>;
+  defaultError: string | null;
+}> {
   const project = (await deps.settings.snapshot()).uberProjects.find(
     (item) => item.id === uberProjectId,
   );
-  if (!project) return { branches: [], error: `unknown uber-project: ${uberProjectId}` };
+  if (!project)
+    return {
+      branches: [],
+      error: `unknown uber-project: ${uberProjectId}`,
+      defaults: [],
+      defaultError: `unknown uber-project: ${uberProjectId}`,
+    };
   if (project.repos.length === 0)
-    return { branches: [], error: "uber-project has no repositories" };
-  try {
-    let common: Set<string> | null = null;
-    for (const repo of project.repos) {
-      const source = normalizeAbsolute(repo.sourcePath);
-      if (!(await deps.fs.isDirectory(source)) || !(await isGitRepo(deps.git, source))) {
-        return { branches: [], error: `source is not a git repo: ${repo.id}` };
-      }
+    return {
+      branches: [],
+      error: "uber-project has no repositories",
+      defaults: [],
+      defaultError: "uber-project has no repositories",
+    };
+  let common: Set<string> | null = null;
+  const defaults: Array<{ repoId: string; branch: string }> = [];
+  let error: string | null = null;
+  let defaultError: string | null = null;
+  for (const repo of project.repos) {
+    const source = normalizeAbsolute(repo.sourcePath);
+    if (!(await deps.fs.isDirectory(source)) || !(await isGitRepo(deps.git, source))) {
+      error ??= `source is not a git repo: ${repo.id}`;
+      defaultError ??= `source is not a git repo: ${repo.id}`;
+      continue;
+    }
+    try {
       const branches = new Set(await listAvailableBranches(deps.git, source));
       if (common === null) common = branches;
-      else {
-        for (const branch of common as Set<string>) {
-          if (!branches.has(branch)) common.delete(branch);
-        }
-      }
+      else for (const branch of common) if (!branches.has(branch)) common.delete(branch);
+    } catch (cause) {
+      error ??= `branch discovery failed: ${gitMessage(cause)}`;
     }
-    return { branches: [...(common ?? [])].sort(), error: null };
-  } catch (error) {
-    return { branches: [], error: `branch discovery failed: ${gitMessage(error)}` };
+    try {
+      const branch = await resolveDefaultBranch(deps, source, repo.baseBranch);
+      if (
+        !branch ||
+        (!(await localBranchExists(deps.git, source, branch)) &&
+          !(await remoteBranchExists(deps.git, source, branch)))
+      ) {
+        defaultError ??= `cannot resolve available default branch for ${repo.id}; configure a base branch for this repo`;
+      } else defaults.push({ repoId: repo.id, branch });
+    } catch (cause) {
+      defaultError ??= `default branch discovery failed: ${gitMessage(cause)}`;
+    }
   }
+  return { branches: [...(common ?? [])].sort(), error, defaults, defaultError };
 }
 
 export async function listVirtualWorkspaces(deps: ServiceDeps): Promise<VirtualWorkspaceSummary[]> {
@@ -418,20 +477,39 @@ export async function createVirtualWorkspace(
   const existingManifest = existingEntry
     ? await readManifest(deps.fs, existingEntry.rootPath)
     : null;
+  if (input.importDefaults && input.importBranch) {
+    return failure("choose either default branches or a common branch");
+  }
   if (
     input.resume &&
     existingManifest &&
+    !existingManifest.importDefaults &&
     input.importBranch !== undefined &&
     input.importBranch !== (existingManifest.importBranch ?? undefined)
   ) {
     return failure("cannot change the branch selection while resuming");
   }
-  const importBranch =
-    input.importBranch ??
-    (input.resume ? (existingManifest?.importBranch ?? undefined) : undefined);
-  const branch =
-    importBranch ??
-    (input.resume ? (existingManifest?.branch ?? generatedBranch) : generatedBranch);
+  const resumeDefaults = input.resume && existingManifest?.importDefaults === true;
+  if (
+    input.resume &&
+    existingManifest &&
+    input.importDefaults !== undefined &&
+    input.importDefaults !== (existingManifest.importDefaults === true)
+  ) {
+    return failure("cannot change the branch selection while resuming");
+  }
+  if (input.resume && existingManifest?.importDefaults && input.importBranch !== undefined) {
+    return failure("cannot change the branch selection while resuming");
+  }
+  const importDefaults = input.importDefaults ?? resumeDefaults;
+  const importBranch = importDefaults
+    ? "default"
+    : (input.importBranch ??
+      (input.resume ? (existingManifest?.importBranch ?? undefined) : undefined));
+  const branch = importDefaults
+    ? "default"
+    : (importBranch ??
+      (input.resume ? (existingManifest?.branch ?? generatedBranch) : generatedBranch));
   const rootBase = resolveRootBase({
     perProject: project.virtualRootBase,
     hostSetting: snapshot.virtualRootBase,
@@ -537,6 +615,8 @@ export async function createVirtualWorkspace(
       branch,
       rootPath,
       importBranch: importBranch ?? null,
+      importDefaults,
+      importDefaultBranches: {},
       workspaceId: null,
       projectId: null,
       state: "creating",
@@ -575,23 +655,35 @@ export async function createVirtualWorkspace(
       });
       continue;
     }
-    const base = await resolveBaseBranch(
-      deps.git,
-      item.sourcePath,
-      input.baseBranchOverrides?.[item.repo.id] ?? item.repo.baseBranch,
-    );
-    if (!base && !importBranch) {
+    const base = importDefaults
+      ? (active.importDefaultBranches?.[item.repo.id] ??
+        (await resolveDefaultBranch(deps, item.sourcePath, item.repo.baseBranch)))
+      : await resolveBaseBranch(
+          deps.git,
+          item.sourcePath,
+          input.baseBranchOverrides?.[item.repo.id] ?? item.repo.baseBranch,
+        );
+    const validBase =
+      base &&
+      ((await localBranchExists(deps.git, item.sourcePath, base)) ||
+        (await remoteBranchExists(deps.git, item.sourcePath, base)));
+    if ((importDefaults && (!base || !validBase)) || (!base && !importBranch)) {
       preflight.push({
         repoId: item.repo.id,
         code: "base-unresolvable",
-        message: `cannot resolve base branch for ${item.repo.id}`,
+        message: `cannot resolve available default branch for ${item.repo.id}`,
       });
       continue;
     }
     item.baseBranch = base ?? importBranch ?? "";
     if (constituent) constituent.baseBranch = item.baseBranch;
+    if (constituent && importDefaults) constituent.branch = item.baseBranch;
+    if (importDefaults) {
+      active.importDefaultBranches ??= {};
+      active.importDefaultBranches[item.repo.id] = item.baseBranch;
+    }
     const checkedOut = await listWorktreeBranches(deps.git, item.sourcePath);
-    if (checkedOut.includes(branch)) {
+    if (!importDefaults && checkedOut.includes(branch)) {
       preflight.push({
         repoId: item.repo.id,
         code: "branch-checked-out",
@@ -599,19 +691,22 @@ export async function createVirtualWorkspace(
       });
       continue;
     }
-    const localExists = await localBranchExists(deps.git, item.sourcePath, branch);
-    const remoteExists = importBranch
-      ? await remoteBranchExists(deps.git, item.sourcePath, importBranch)
-      : false;
-    if (importBranch && !localExists && !remoteExists) {
+    const targetBranch = importDefaults ? item.baseBranch : branch;
+    const localExists = await localBranchExists(deps.git, item.sourcePath, targetBranch);
+    const remoteExists = importDefaults
+      ? await remoteBranchExists(deps.git, item.sourcePath, targetBranch)
+      : importBranch
+        ? await remoteBranchExists(deps.git, item.sourcePath, importBranch)
+        : false;
+    if ((importDefaults || importBranch) && !localExists && !remoteExists) {
       preflight.push({
         repoId: item.repo.id,
         code: "branch-unavailable",
-        message: `branch ${importBranch} is not available locally or on origin in ${item.repo.id}`,
+        message: `branch ${targetBranch} is not available locally or on origin in ${item.repo.id}`,
       });
       continue;
     }
-    if (!importBranch && localExists) {
+    if (!importDefaults && !importBranch && localExists) {
       preflight.push({
         repoId: item.repo.id,
         code: "branch-exists",
@@ -650,24 +745,35 @@ export async function createVirtualWorkspace(
     const constituent = active.constituents.find((c) => c.repoId === item.repo.id);
     if (!constituent || constituent.state === "created") continue;
     try {
-      const localImportExists = importBranch
-        ? await localBranchExists(deps.git, item.sourcePath, importBranch)
-        : false;
-      if (importBranch && localImportExists) {
-        await deps.git.run(["worktree", "add", item.worktreePath, importBranch], item.sourcePath);
-      } else if (importBranch) {
-        await deps.git.run(
-          [
-            "worktree",
-            "add",
-            "--track",
-            "-b",
-            importBranch,
-            item.worktreePath,
-            `origin/${importBranch}`,
-          ],
-          item.sourcePath,
+      if (importDefaults) {
+        const checkedOut = (await listWorktreeBranches(deps.git, item.sourcePath)).includes(
+          item.baseBranch,
         );
+        const local = await localBranchExists(deps.git, item.sourcePath, item.baseBranch);
+        const ref = local ? item.baseBranch : `origin/${item.baseBranch}`;
+        const args = checkedOut
+          ? ["worktree", "add", "--detach", item.worktreePath, ref]
+          : local
+            ? ["worktree", "add", item.worktreePath, item.baseBranch]
+            : ["worktree", "add", "--track", "-b", item.baseBranch, item.worktreePath, ref];
+        await deps.git.run(args, item.sourcePath);
+      } else if (importBranch) {
+        const localImportExists = await localBranchExists(deps.git, item.sourcePath, importBranch);
+        if (localImportExists)
+          await deps.git.run(["worktree", "add", item.worktreePath, importBranch], item.sourcePath);
+        else
+          await deps.git.run(
+            [
+              "worktree",
+              "add",
+              "--track",
+              "-b",
+              importBranch,
+              item.worktreePath,
+              `origin/${importBranch}`,
+            ],
+            item.sourcePath,
+          );
       } else {
         await deps.git.run(
           ["worktree", "add", "-b", branch, item.worktreePath, item.baseBranch],
@@ -824,11 +930,22 @@ export async function collectStatuses(
       continue;
     }
     try {
-      const branch =
-        (await currentBranch(deps.git, constituent.worktreePath)) ?? constituent.branch;
+      const current = await currentBranch(deps.git, constituent.worktreePath);
+      const branch = current ?? constituent.branch;
       const files = await statusPorcelain(deps.git, constituent.worktreePath);
       const upstream = await upstreamRef(deps.git, constituent.worktreePath);
+      const defaultDetached = manifest.importDefaults === true && current === null;
       const counts = upstream ? await aheadBehind(deps.git, constituent.worktreePath) : null;
+      const defaultAhead = defaultDetached
+        ? Number(
+            (
+              await deps.git.run(
+                ["rev-list", "--count", `${constituent.baseBranch}..HEAD`],
+                constituent.worktreePath,
+              )
+            ).stdout.trim(),
+          )
+        : null;
       const diffStat =
         files.length > 0 ? await diffShortStat(deps.git, constituent.worktreePath) : null;
       statuses.push({
@@ -838,7 +955,7 @@ export async function collectStatuses(
         dirty: files.length > 0,
         dirtyFileCount: files.length,
         diffStat,
-        ahead: counts?.ahead ?? null,
+        ahead: defaultAhead ?? counts?.ahead ?? null,
         behind: counts?.behind ?? null,
         upstreamRef: upstream,
         error: null,
@@ -1537,7 +1654,7 @@ export async function repairConstituent(
     // Pruning is best-effort; the checked-out guard below still applies.
   }
   const checkedOut = await listWorktreeBranches(deps.git, constituent.sourcePath);
-  if (checkedOut.includes(constituent.branch)) {
+  if (checkedOut.includes(constituent.branch) && !manifest.importDefaults) {
     return {
       ok: false,
       error: `branch ${constituent.branch} is already checked out in ${repoId}; remove that worktree first`,
@@ -1547,11 +1664,19 @@ export async function repairConstituent(
     return { ok: false, error: `target path already exists: ${constituent.worktreePath}` };
   }
   try {
-    // Checkout mode: the branch already exists, so no -b flag.
-    await deps.git.run(
-      ["worktree", "add", constituent.worktreePath, constituent.branch],
-      constituent.sourcePath,
-    );
+    if (manifest.importDefaults && checkedOut.includes(constituent.branch)) {
+      // A default import may share its source branch with an existing worktree.
+      await deps.git.run(
+        ["worktree", "add", "--detach", constituent.worktreePath, constituent.branch],
+        constituent.sourcePath,
+      );
+    } else {
+      // Checkout mode: the branch already exists, so no -b flag.
+      await deps.git.run(
+        ["worktree", "add", constituent.worktreePath, constituent.branch],
+        constituent.sourcePath,
+      );
+    }
   } catch (error) {
     return { ok: false, error: `git worktree add failed for ${repoId}: ${gitMessage(error)}` };
   }

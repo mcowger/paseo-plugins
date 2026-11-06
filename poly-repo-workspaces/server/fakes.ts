@@ -81,6 +81,8 @@ export interface FakeGitScript {
   remoteBranches?: string[];
   worktreeBranches?: string[];
   originHead?: string | null;
+  originUrl?: string;
+  remoteHead?: string | null;
   currentBranch?: string;
   porcelain?: string | ((cwd: string) => string);
   diffStat?: string;
@@ -119,6 +121,17 @@ export function createFakeGit(script: FakeGitScript = {}): GitPort & { script: F
       if (head === "symbolic-ref") {
         if (script.originHead === null || script.originHead === undefined) fail("no origin HEAD");
         return Promise.resolve({ stdout: `${script.originHead}\n`, stderr: "" });
+      }
+      if (head === "remote" && rest[0] === "get-url" && rest[1] === "origin") {
+        if (!script.originUrl) fail("no origin url");
+        return Promise.resolve({ stdout: `${script.originUrl}\n`, stderr: "" });
+      }
+      if (head === "ls-remote") {
+        if (!script.remoteHead) return Promise.resolve({ stdout: "", stderr: "" });
+        return Promise.resolve({
+          stdout: `ref: refs/heads/${script.remoteHead}\tHEAD\n${"0".repeat(40)}\tHEAD\n`,
+          stderr: "",
+        });
       }
       if (head === "show-ref") {
         const ref = rest[rest.length - 1] ?? "";

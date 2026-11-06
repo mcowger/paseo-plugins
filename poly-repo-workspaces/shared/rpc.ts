@@ -84,7 +84,12 @@ export const listVirtualWorkspaces = defineRpc({
 export const listImportBranches = defineRpc({
   name: "polyrepo.virtual-workspaces.import-branches",
   input: z.object({ uberProjectId: z.string().min(1) }),
-  output: z.object({ branches: z.array(z.string()), error: z.string().nullable() }),
+  output: z.object({
+    branches: z.array(z.string()),
+    error: z.string().nullable(),
+    defaults: z.array(z.object({ repoId: z.string(), branch: z.string() })),
+    defaultError: z.string().nullable(),
+  }),
 });
 
 export const createVirtualWorkspace = defineRpc({
@@ -94,6 +99,7 @@ export const createVirtualWorkspace = defineRpc({
     feature: z.string().min(1).max(128),
     baseBranchOverrides: z.record(z.string(), z.string().min(1)).optional(),
     importBranch: z.string().min(1).optional(),
+    importDefaults: z.boolean().optional(),
     createTerminals: z.boolean().optional(),
     resume: z.boolean().optional(),
   }),

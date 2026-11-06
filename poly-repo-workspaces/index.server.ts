@@ -142,6 +142,7 @@ export default function contribute(server: PluginServerContext) {
       feature: input.feature,
       baseBranchOverrides: input.baseBranchOverrides,
       importBranch: input.importBranch,
+      importDefaults: input.importDefaults,
       createTerminals: input.createTerminals,
       resume: input.resume,
     });

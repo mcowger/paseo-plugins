@@ -70,6 +70,269 @@ function depsFor(
   return { deps, fs, git, workspaces };
 }
 
+describe("default branch imports", () => {
+  it("imports mixed defaults and detaches a default already checked out elsewhere", async () => {
+    const p = project({
+      repos: [
+        {
+          id: "frontend",
+          sourcePath: "/src/frontend",
+          dirTemplate: "{repo}_{branch}",
+          baseBranch: "master",
+        },
+        { id: "app", sourcePath: "/src/app", dirTemplate: "{repo}_{branch}", baseBranch: "main" },
+      ],
+    });
+    const { deps, git, fs } = depsFor(p);
+    git.script.existingBranches = ["master", "main"];
+    git.script.remoteBranches = ["master", "main"];
+    git.script.worktreeBranches = ["master"];
+    const result = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "default",
+      importDefaults: true,
+    });
+    expect(result.ok).toBe(true);
+    const root = "/paseo/poly-workspaces/uber-default";
+    const manifest = await readManifest(fs, root);
+    expect(manifest?.branch).toBe("default");
+    expect(manifest?.constituents.map(({ repoId, branch }) => [repoId, branch])).toEqual([
+      ["frontend", "master"],
+      ["app", "main"],
+    ]);
+    expect(git.script.log).toContainEqual([
+      "/src/frontend",
+      "worktree",
+      "add",
+      "--detach",
+      `${root}/frontend_default`,
+      "master",
+    ]);
+  });
+  it("repairs a missing default import as detached when its branch is checked out", async () => {
+    const { deps, fs, git } = depsFor(
+      project({
+        repos: [
+          {
+            id: "frontend",
+            sourcePath: "/src/frontend",
+            dirTemplate: "{repo}_{branch}",
+            baseBranch: "main",
+          },
+        ],
+      }),
+    );
+    git.script.existingBranches = ["main"];
+    git.script.remoteBranches = ["main"];
+    const created = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "default",
+      importDefaults: true,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.virtualId) throw new Error("missing virtual workspace id");
+    const root = "/paseo/poly-workspaces/uber-default";
+    const worktree = `${root}/frontend_default`;
+    fs.dirs.delete(worktree);
+    git.script.worktreeBranches = ["main"];
+    const run = git.run;
+    git.run = (args, cwd) =>
+      args[0] === "worktree" && args[1] === "prune"
+        ? Promise.resolve({ stdout: "", stderr: "" })
+        : run(args, cwd);
+
+    const repaired = await repairConstituent(deps, created.virtualId, "frontend");
+    expect(repaired).toEqual({ ok: true, error: null });
+    expect(await fs.isDirectory(worktree)).toBe(true);
+  });
+
+  it("persists defaults on partial creation and resumes without the input flag", async () => {
+    const p = project({
+      repos: [
+        {
+          id: "frontend",
+          sourcePath: "/src/frontend",
+          dirTemplate: "{repo}_{branch}",
+          baseBranch: "master",
+        },
+        { id: "app", sourcePath: "/src/app", dirTemplate: "{repo}_{branch}", baseBranch: "main" },
+      ],
+    });
+    const { deps, git, fs } = depsFor(p);
+    git.script.existingBranches = ["master", "main"];
+    git.script.remoteBranches = ["master", "main"];
+    git.script.failOn = [
+      {
+        match: ["worktree", "add", "/paseo/poly-workspaces/uber-default/app_default"],
+        message: "simulated partial failure",
+      },
+    ];
+    const input = { uberProjectId: "uber", feature: "default", importDefaults: true };
+    expect((await createVirtualWorkspace(deps, input)).ok).toBe(false);
+    const root = "/paseo/poly-workspaces/uber-default";
+    const manifest = await readManifest(fs, root);
+    expect(manifest?.importDefaultBranches).toEqual({ frontend: "master", app: "main" });
+    git.script.failOn = [];
+    expect(
+      (
+        await createVirtualWorkspace(deps, {
+          uberProjectId: "uber",
+          feature: "default",
+          resume: true,
+        })
+      ).ok,
+    ).toBe(true);
+  });
+
+  it("rejects unavailable defaults and does not fall back to the current branch", async () => {
+    const p = project({
+      repos: [
+        {
+          id: "frontend",
+          sourcePath: "/src/frontend",
+          dirTemplate: "{repo}_{branch}",
+          baseBranch: "gone",
+        },
+      ],
+    });
+    const { deps } = depsFor(p);
+    const result = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "default",
+      importDefaults: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.preflight[0]?.code).toBe("base-unresolvable");
+  });
+  it("uses GitHub's advertised symbolic default when local origin/HEAD is missing", async () => {
+    const { deps, git } = depsFor(
+      project({
+        repos: [{ id: "frontend", sourcePath: "/src/frontend", dirTemplate: "{repo}_{branch}" }],
+      }),
+    );
+    git.script.originHead = null;
+    git.script.originUrl = "https://github.com/acme/frontend.git";
+    git.script.remoteHead = "master";
+    git.script.existingBranches = ["master"];
+    const result = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "default",
+      importDefaults: true,
+    });
+    expect(result.ok).toBe(true);
+    expect(git.script.log).toContainEqual([
+      "/src/frontend",
+      "ls-remote",
+      "--symref",
+      "origin",
+      "HEAD",
+    ]);
+  });
+
+  it("does not query an unsafe origin and does not use its error text", async () => {
+    const { deps, git } = depsFor(
+      project({
+        repos: [{ id: "frontend", sourcePath: "/src/frontend", dirTemplate: "{repo}_{branch}" }],
+      }),
+    );
+    git.script.originHead = null;
+    git.script.originUrl = "https://evil.example/acme/frontend";
+    git.script.remoteHead = "master";
+    const result = await createVirtualWorkspace(deps, {
+      uberProjectId: "uber",
+      feature: "default",
+      importDefaults: true,
+    });
+    expect(result.ok).toBe(false);
+    expect(git.script.log?.some((entry) => entry.includes("ls-remote"))).toBe(false);
+  });
+
+  it("rejects malformed symbolic HEAD and honors configured and cached defaults first", async () => {
+    const configured = depsFor(
+      project({
+        repos: [
+          {
+            id: "frontend",
+            sourcePath: "/src/frontend",
+            dirTemplate: "{repo}_{branch}",
+            baseBranch: "main",
+          },
+        ],
+      }),
+    );
+    configured.git.script.originHead = null;
+    configured.git.script.originUrl = "https://github.com/acme/frontend";
+    configured.git.script.remoteHead = "master";
+    configured.git.script.existingBranches = ["main", "master"];
+    await createVirtualWorkspace(configured.deps, {
+      uberProjectId: "uber",
+      feature: "cfg",
+      importDefaults: true,
+    });
+    expect(configured.git.script.log?.some((entry) => entry.includes("ls-remote"))).toBe(false);
+
+    const malformed = depsFor(
+      project({
+        repos: [{ id: "frontend", sourcePath: "/src/frontend", dirTemplate: "{repo}_{branch}" }],
+      }),
+    );
+    malformed.git.script.originHead = null;
+    malformed.git.script.originUrl = "https://github.com/acme/frontend";
+    malformed.git.script.remoteHead = "bad\nHEAD";
+    const result = await createVirtualWorkspace(malformed.deps, {
+      uberProjectId: "uber",
+      feature: "bad",
+      importDefaults: true,
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+it("does not infer defaults from a feature branch when origin/HEAD is missing", async () => {
+  const p = project({
+    repos: [{ id: "frontend", sourcePath: "/src/frontend", dirTemplate: "{repo}_{branch}" }],
+  });
+  const { deps, git } = depsFor(p);
+  git.script.originHead = null;
+  git.script.currentBranch = "feature/work";
+  const discovery = await discoverImportBranches(deps, "uber");
+  expect(discovery.defaults).toEqual([]);
+  expect(discovery.defaultError).toContain("cannot resolve available default branch");
+  const created = await createVirtualWorkspace(deps, {
+    uberProjectId: "uber",
+    feature: "default",
+    importDefaults: true,
+  });
+  expect(created.ok).toBe(false);
+  expect(created.preflight[0]?.code).toBe("base-unresolvable");
+});
+it("blocks archiving a detached default import with unreferenced commits", async () => {
+  const p = project({
+    repos: [
+      {
+        id: "frontend",
+        sourcePath: "/src/frontend",
+        dirTemplate: "{repo}_{branch}",
+        baseBranch: "main",
+      },
+    ],
+  });
+  const { deps, git } = depsFor(p);
+  git.script.existingBranches = ["main"];
+  git.script.worktreeBranches = ["main"];
+  git.script.currentBranch = "HEAD";
+  git.script.aheadBehind = "1";
+  const created = await createVirtualWorkspace(deps, {
+    uberProjectId: "uber",
+    feature: "default",
+    importDefaults: true,
+  });
+  expect(created.ok).toBe(true);
+  if (!created.virtualId) throw new Error("missing virtual workspace id");
+  const archived = await archiveVirtualWorkspace(deps, { virtualId: created.virtualId });
+  expect(archived.ok).toBe(false);
+  expect(archived.blocked[0]?.ahead).toBe(1);
+});
+
 describe("createVirtualWorkspace", () => {
   it("creates worktrees, files, and a workspace on the happy path", async () => {
     const p = project();
@@ -905,7 +1168,8 @@ describe("import branches", () => {
 
     const result = await discoverImportBranches(deps, "uber");
 
-    expect(result).toEqual({ branches: ["shared"], error: null });
+    expect(result.branches).toEqual(["shared"]);
+    expect(result.error).toBeNull();
   });
 
   it("checks out a local imported branch independently of the configured template", async () => {

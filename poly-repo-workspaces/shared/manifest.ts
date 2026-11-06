@@ -39,6 +39,8 @@ export const ManifestSchema = z.object({
   uberProjectId: z.string().min(1),
   feature: z.string().min(1),
   importBranch: z.string().min(1).nullable().optional(),
+  importDefaults: z.boolean().optional(),
+  importDefaultBranches: z.record(z.string(), z.string()).optional(),
   branch: z.string().min(1),
   rootPath: z.string().min(1),
   workspaceId: z.string().nullable(),

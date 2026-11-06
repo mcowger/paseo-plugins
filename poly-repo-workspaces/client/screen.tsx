@@ -143,8 +143,12 @@ export function PolyRepoScreen({
   const [feature, setFeature] = useState("");
   const callBranches = useRpc(listImportBranches);
   const [importBranches, setImportBranches] = useState<readonly string[]>([]);
+  const [defaultBranches, setDefaultBranches] = useState<
+    readonly { repoId: string; branch: string }[]
+  >([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [branchesError, setBranchesError] = useState<string | null>(null);
+  const [defaultError, setDefaultError] = useState<string | null>(null);
   const [importBranch, setImportBranch] = useState("");
   const [withTerminals, setWithTerminals] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -153,6 +157,7 @@ export function PolyRepoScreen({
     uberProjectId: string;
     feature: string;
     resuming: boolean;
+    defaults?: boolean;
   } | null>(null);
   const [issues, setIssues] = useState<readonly PreflightIssue[]>([]);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -181,8 +186,10 @@ export function PolyRepoScreen({
   useEffect(() => {
     let cancelled = false;
     setImportBranches([]);
+    setDefaultBranches([]);
     setImportBranch("");
     setBranchesError(null);
+    setDefaultError(null);
     if (!selectedProject) {
       setBranchesLoading(false);
       return () => {
@@ -196,12 +203,16 @@ export function PolyRepoScreen({
           if (cancelled) return;
           setImportBranches(result.branches);
           setBranchesError(result.error);
+          setDefaultBranches(result.defaults);
+          setDefaultError(result.defaultError);
         },
         (unknownError: unknown) => {
-          if (!cancelled)
-            setBranchesError(
-              unknownError instanceof Error ? unknownError.message : "Branch discovery failed",
-            );
+          if (!cancelled) {
+            const message =
+              unknownError instanceof Error ? unknownError.message : "Branch discovery failed";
+            setBranchesError(message);
+            setDefaultError(message);
+          }
         },
       )
       .finally(() => {
@@ -211,13 +222,13 @@ export function PolyRepoScreen({
       cancelled = true;
     };
   }, [callBranches, selectedProject]);
-
   const focused = useMemo(
     () => items.find((item) => item.virtualId === params.virtualId) ?? null,
     [items, params],
   );
 
   const selectedProjectConfig = projects.find((item) => item.id === selectedProject);
+  const selectedDefaultBranches = defaultBranches;
   const branchPreview =
     importBranch ||
     (selectedProjectConfig && feature.trim()
@@ -230,42 +241,58 @@ export function PolyRepoScreen({
   const creationRepoCount = projects.find((item) => item.id === creation?.uberProjectId)?.repos
     .length;
 
-  const handleCreate = useCallback(async () => {
-    if (busy || !selectedProject || feature.trim().length === 0) return;
-    setBusy(true);
-    setCreation({ uberProjectId: selectedProject, feature: feature.trim(), resuming: false });
-    setIssues([]);
-    setCreateError(null);
-    try {
-      const result = await callCreate({
+  const handleCreate = useCallback(
+    async (useDefaults = false) => {
+      const workspaceFeature = feature.trim() || (useDefaults ? "default" : "");
+      if (busy || !selectedProject || !workspaceFeature) return;
+      setBusy(true);
+      setCreation({
         uberProjectId: selectedProject,
-        feature: feature.trim(),
-        importBranch: importBranch || undefined,
-        createTerminals: withTerminals || undefined,
+        feature: workspaceFeature,
+        resuming: false,
+        defaults: useDefaults,
       });
-      if (result.ok) {
-        toast.show(`${importBranch ? "Imported" : "Created"} ${feature.trim()}`);
-        setFeature("");
-        setImportBranch("");
-        return;
+      setIssues([]);
+      setCreateError(null);
+      try {
+        const result = await callCreate({
+          uberProjectId: selectedProject,
+          feature: workspaceFeature,
+          importBranch: useDefaults ? undefined : importBranch || undefined,
+          importDefaults: useDefaults || undefined,
+          createTerminals: withTerminals || undefined,
+        });
+        if (result.ok) {
+          toast.show(
+            `${useDefaults ? "Imported default branches" : importBranch ? "Imported" : "Created"} ${workspaceFeature}`,
+          );
+          setFeature("");
+          setImportBranch("");
+          return;
+        }
+        if (result.preflight.length > 0) {
+          setIssues(result.preflight);
+          toast.error("Preflight found problems; fix them and retry");
+          return;
+        }
+        setCreateError(result.error ?? "Create failed");
+      } catch (unknownError) {
+        setCreateError(unknownError instanceof Error ? unknownError.message : "Create failed");
+      } finally {
+        setCreation(null);
+        setBusy(false);
+        refresh();
       }
-      if (result.preflight.length > 0) {
-        setIssues(result.preflight);
-        toast.error("Preflight found problems; fix them and retry");
-        return;
-      }
-      setCreateError(result.error ?? "Create failed");
-    } catch (unknownError) {
-      setCreateError(unknownError instanceof Error ? unknownError.message : "Create failed");
-    } finally {
-      setCreation(null);
-      setBusy(false);
-      refresh();
-    }
-  }, [busy, callCreate, feature, importBranch, refresh, selectedProject, toast, withTerminals]);
+    },
+    [busy, callCreate, feature, importBranch, refresh, selectedProject, toast, withTerminals],
+  );
 
   const handleCreatePress = useCallback(() => {
     void handleCreate();
+  }, [handleCreate]);
+
+  const handleImportDefaultsPress = useCallback(() => {
+    void handleCreate(true);
   }, [handleCreate]);
 
   const toggleTerminals = useCallback(() => {
@@ -560,8 +587,10 @@ export function PolyRepoScreen({
           () => {
             if (project.id === selectedProject) return;
             setImportBranches([]);
+            setDefaultBranches([]);
             setBranchesLoading(true);
             setBranchesError(null);
+            setDefaultError(null);
             setSelectedProject(project.id);
             setImportBranch("");
             setFeature("");
@@ -632,7 +661,7 @@ export function PolyRepoScreen({
                     accessibilityState={{ disabled: busy, selected: importBranch === branch }}
                     disabled={busy}
                     onPress={() => {
-                      setImportBranch(branch);
+                      setImportBranch(importBranch === branch ? "" : branch);
                       setFeature(branch.replaceAll("/", "-"));
                     }}
                     style={[styles.button, importBranch === branch ? null : styles.buttonDisabled]}
@@ -654,6 +683,52 @@ export function PolyRepoScreen({
                 <Text style={styles.buttonText}>Clear import branch</Text>
               </Pressable>
             ) : null}
+            <Text style={styles.label}>DEFAULT BRANCHES</Text>
+            {defaultError ? <Text style={styles.issue}>{defaultError}</Text> : null}
+            {!branchesLoading && !defaultError && selectedDefaultBranches.length === 0 ? (
+              <Text style={styles.meta}>No repository defaults available.</Text>
+            ) : null}
+            {selectedDefaultBranches.map(({ repoId, branch }) => (
+              <Text key={repoId} style={styles.meta}>
+                {repoId}: {branch}
+              </Text>
+            ))}
+            <Text style={styles.meta}>
+              If a default branch is already checked out elsewhere, its worktree uses a detached
+              HEAD. Create a branch to keep commits reachable.
+            </Text>
+            <Text style={styles.meta}>
+              Uses the feature name above, or "default" if left blank.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Create workspace from default branches"
+              accessibilityState={{
+                disabled:
+                  busy ||
+                  branchesLoading ||
+                  selectedDefaultBranches.length === 0 ||
+                  Boolean(defaultError),
+                busy: Boolean(creation?.defaults),
+              }}
+              disabled={
+                busy ||
+                branchesLoading ||
+                selectedDefaultBranches.length === 0 ||
+                Boolean(defaultError)
+              }
+              onPress={handleImportDefaultsPress}
+              style={[
+                styles.button,
+                busy || branchesLoading || selectedDefaultBranches.length === 0 || defaultError
+                  ? styles.buttonDisabled
+                  : null,
+              ]}
+            >
+              <Text style={styles.buttonText}>
+                {creation?.defaults ? "Creating from defaults..." : "Create from default branches"}
+              </Text>
+            </Pressable>
             <View style={styles.actions}>
               <Pressable
                 accessibilityRole="button"
@@ -667,7 +742,7 @@ export function PolyRepoScreen({
                 disabled={createDisabled}
               >
                 <Text style={styles.buttonText}>
-                  {creation && !creation.resuming
+                  {creation && !creation.resuming && !creation.defaults
                     ? importBranch
                       ? "Importing..."
                       : "Creating..."

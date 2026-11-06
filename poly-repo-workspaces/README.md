@@ -41,12 +41,22 @@ is not under the daemon's worktrees root.
   `sig-abscd-fix-my-stuff`. Existing Git-safe names stay unchanged, including
   their case. The create form previews the branch before you submit.
 
-- To import a common branch, choose it from the management screen's branch
-  discovery list. Discovery considers branches already available locally and
-  `origin` remote-tracking branches; it does not fetch from the network.
-  Existing checked-out branches cannot be imported. The selected branch is
-  checked out in the new worktrees, while the workspace feature/display name
-  remains independently editable (initially populated from the chosen branch).
+- To import a common branch, choose it from the management screen's branch list.
+  Discovery considers branches already available locally and `origin`
+  remote-tracking branches; it does not fetch from the network. Existing checked-
+  out branches cannot be imported. The selected branch is checked out in the new
+  worktrees, while the workspace feature/display name remains independently
+  editable (initially populated from the chosen branch).
+
+- Select **Create from default branches** to create a workspace from each repo's
+  default. The feature name defaults to `default` if left blank. Discovery uses
+  the configured branch first, then local `origin/HEAD`.
+  If that ref is missing, it may query `git ls-remote --symref origin HEAD`
+  for GitHub HTTPS/SSH origins only. It does not fetch refs or modify the
+  checkout, and the reported branch must already exist locally or as an
+  `origin` remote-tracking ref. Configure a per-repo base branch if lookup is
+  unavailable. If a default branch is already checked out elsewhere, the new
+  worktree uses detached HEAD. Create a branch there to keep commits reachable.
 - Creation and resume show a spinner and a status message while the repo
   worktrees are being set up. The form stays disabled until the request finishes.
 - The Poly-repo workspace panel shows per-repo branch/dirty/ahead status,

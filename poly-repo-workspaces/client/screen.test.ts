@@ -169,7 +169,15 @@ const success: CreateResult = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  harness.branches.mockResolvedValue({ branches: ["main", "feature-x"], error: null });
+  harness.branches.mockResolvedValue({
+    branches: ["main", "feature-x"],
+    error: null,
+    defaults: [
+      { repoId: "frontend", branch: "master" },
+      { repoId: "app", branch: "main" },
+    ],
+    defaultError: null,
+  });
   harness.states = [];
   harness.effects = [];
   harness.items = [];
@@ -232,6 +240,27 @@ describe("workspace creation feedback", () => {
     expect(control(tree, "Feature name").editable).toBe(true);
     expect(harness.toast.show).toHaveBeenCalledWith(`Created ${feature}`);
     expect(harness.refresh).toHaveBeenCalled();
+  });
+
+  it("imports each configured default branch", async () => {
+    let tree = await ready();
+    await Promise.resolve();
+    tree = render();
+    expect(text(tree)).toContain("frontend: master");
+    expect(text(tree)).toContain("app: main");
+    expect(text(tree)).toContain("Create a branch to keep commits reachable.");
+    const pending = pendingCreate();
+    expect(control(tree, "Create workspace from default branches").disabled).toBe(false);
+    control(tree, "Create workspace from default branches").onPress?.();
+    expect(harness.create).toHaveBeenCalledWith({
+      uberProjectId: "uber",
+      feature: "default",
+      importDefaults: true,
+      createTerminals: undefined,
+    });
+    pending.resolve(success);
+    await Promise.resolve();
+    render();
   });
 
   it("imports a selected branch and clears it when changing projects", async () => {
