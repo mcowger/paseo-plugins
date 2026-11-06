@@ -1,8 +1,8 @@
-import type { PluginTheme } from "@getpaseo/plugin";
+import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import type { PluginScreenProps } from "@getpaseo/plugin/client";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/react-native";
-import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -20,12 +20,14 @@ import {
   cleanupVirtualWorkspace,
   createVirtualWorkspace,
   forgetVirtualWorkspace,
+  getCreateJob,
   listImportBranches,
   listUberProjects,
   type PreflightIssue,
   reconcileVirtualWorkspaces,
   type VirtualWorkspaceSummary,
 } from "../shared/rpc";
+import { PolyRepoSettingsScreen } from "./settings-screen";
 import { useVirtualWorkspaces } from "./use-virtual-workspaces";
 
 interface ScreenStyles {
@@ -48,6 +50,9 @@ interface ScreenStyles {
   readonly section: ViewStyle;
   readonly progress: ViewStyle;
   readonly progressText: ViewStyle;
+  readonly tabSelected: ViewStyle;
+  readonly content: ViewStyle;
+  readonly hidden: ViewStyle;
 }
 
 function createStyles(theme: PluginTheme, compact: boolean): ScreenStyles {
@@ -103,6 +108,9 @@ function createStyles(theme: PluginTheme, compact: boolean): ScreenStyles {
       backgroundColor: theme.colors.surface1,
     },
     progress: { flexDirection: "row", alignItems: "center", gap: 8 },
+    tabSelected: { borderWidth: 1, borderColor: theme.colors.foreground },
+    content: { gap: 20 },
+    hidden: { display: "none" },
     progressText: { flex: 1, gap: 6 },
   };
 }
@@ -132,11 +140,27 @@ export function PolyRepoScreen({
   const { items, loading, error, refresh } = useVirtualWorkspaces();
   const callProjects = useRpc(listUberProjects);
   const callCreate = useRpc(createVirtualWorkspace);
+  const callCreateJob = useRpc(getCreateJob);
   const callArchive = useRpc(archiveVirtualWorkspace);
   const callReconcile = useRpc(reconcileVirtualWorkspaces);
   const callForget = useRpc(forgetVirtualWorkspace);
   const callCleanup = useRpc(cleanupVirtualWorkspace);
 
+  const mounted = useRef(true);
+  const createPoll = useRef<{ timer: ReturnType<typeof setTimeout>; resolve: () => void } | null>(
+    null,
+  );
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (createPoll.current) {
+        clearTimeout(createPoll.current.timer);
+        createPoll.current.resolve();
+        createPoll.current = null;
+      }
+    };
+  }, []);
   const paseo = usePaseo();
   const [projects, setProjects] = useState<readonly UberProject[]>([]);
   const [selectedProject, setSelectedProject] = useState("");
@@ -161,8 +185,10 @@ export function PolyRepoScreen({
   } | null>(null);
   const [issues, setIssues] = useState<readonly PreflightIssue[]>([]);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"workspaces" | "configuration">("workspaces");
 
   useEffect(() => {
+    if (tab !== "workspaces") return;
     let cancelled = false;
     const load = async (): Promise<void> => {
       try {
@@ -170,9 +196,9 @@ export function PolyRepoScreen({
         if (cancelled) return;
         setProjects(result.uberProjects);
         const firstId = result.uberProjects[0]?.id;
-        if (result.uberProjects.length > 0 && firstId) {
-          setSelectedProject((prev) => prev || firstId);
-        }
+        setSelectedProject((prev) =>
+          result.uberProjects.some((project) => project.id === prev) ? prev : (firstId ?? ""),
+        );
       } catch {
         if (!cancelled) setProjects([]);
       }
@@ -181,7 +207,7 @@ export function PolyRepoScreen({
     return () => {
       cancelled = true;
     };
-  }, [callProjects]);
+  }, [callProjects, tab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -190,7 +216,7 @@ export function PolyRepoScreen({
     setImportBranch("");
     setBranchesError(null);
     setDefaultError(null);
-    if (!selectedProject) {
+    if (!selectedProject || !projects.some((project) => project.id === selectedProject)) {
       setBranchesLoading(false);
       return () => {
         cancelled = true;
@@ -221,7 +247,7 @@ export function PolyRepoScreen({
     return () => {
       cancelled = true;
     };
-  }, [callBranches, selectedProject]);
+  }, [callBranches, selectedProject, projects]);
   const focused = useMemo(
     () => items.find((item) => item.virtualId === params.virtualId) ?? null,
     [items, params],
@@ -241,6 +267,35 @@ export function PolyRepoScreen({
   const creationRepoCount = projects.find((item) => item.id === creation?.uberProjectId)?.repos
     .length;
 
+  const waitForCreate = useCallback(
+    async (jobId: string) => {
+      while (true) {
+        if (!mounted.current) throw new Error("Screen closed");
+        let status: RpcOutput<typeof getCreateJob>;
+        try {
+          status = await callCreateJob({ jobId });
+        } catch (unknownError) {
+          const detail = unknownError instanceof Error ? `: ${unknownError.message}` : "";
+          throw new Error(`Could not check creation status; the job may still be running${detail}`);
+        }
+        if (!mounted.current) throw new Error("Screen closed");
+        if (status.state === "finished") return status.result;
+        if (status.state === "missing")
+          throw new Error(
+            "Create job was not found; it may have expired. Refresh and resume the workspace.",
+          );
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            createPoll.current = null;
+            resolve();
+          }, 500);
+          createPoll.current = { timer, resolve };
+        });
+      }
+    },
+    [callCreateJob],
+  );
+
   const handleCreate = useCallback(
     async (useDefaults = false) => {
       const workspaceFeature = feature.trim() || (useDefaults ? "default" : "");
@@ -255,13 +310,14 @@ export function PolyRepoScreen({
       setIssues([]);
       setCreateError(null);
       try {
-        const result = await callCreate({
+        const { jobId } = await callCreate({
           uberProjectId: selectedProject,
           feature: workspaceFeature,
           importBranch: useDefaults ? undefined : importBranch || undefined,
           importDefaults: useDefaults || undefined,
           createTerminals: withTerminals || undefined,
         });
+        const result = await waitForCreate(jobId);
         if (result.ok) {
           toast.show(
             `${useDefaults ? "Imported default branches" : importBranch ? "Imported" : "Created"} ${workspaceFeature}`,
@@ -277,14 +333,27 @@ export function PolyRepoScreen({
         }
         setCreateError(result.error ?? "Create failed");
       } catch (unknownError) {
-        setCreateError(unknownError instanceof Error ? unknownError.message : "Create failed");
+        if (mounted.current)
+          setCreateError(unknownError instanceof Error ? unknownError.message : "Create failed");
       } finally {
-        setCreation(null);
-        setBusy(false);
-        refresh();
+        if (mounted.current) {
+          setCreation(null);
+          setBusy(false);
+          refresh();
+        }
       }
     },
-    [busy, callCreate, feature, importBranch, refresh, selectedProject, toast, withTerminals],
+    [
+      busy,
+      callCreate,
+      feature,
+      importBranch,
+      refresh,
+      selectedProject,
+      toast,
+      waitForCreate,
+      withTerminals,
+    ],
   );
 
   const handleCreatePress = useCallback(() => {
@@ -310,7 +379,8 @@ export function PolyRepoScreen({
       setBusy(true);
       setCreation({ uberProjectId, feature: itemFeature, resuming: true });
       try {
-        const result = await callCreate({ uberProjectId, feature: itemFeature, resume: true });
+        const { jobId } = await callCreate({ uberProjectId, feature: itemFeature, resume: true });
+        const result = await waitForCreate(jobId);
         if (result.ok) {
           toast.show(`Resumed ${itemFeature}`);
         } else if (result.preflight.length > 0) {
@@ -319,14 +389,17 @@ export function PolyRepoScreen({
           toast.error(result.error ?? "Resume failed");
         }
       } catch (unknownError) {
-        toast.error(unknownError instanceof Error ? unknownError.message : "Resume failed");
+        if (mounted.current)
+          toast.error(unknownError instanceof Error ? unknownError.message : "Resume failed");
       } finally {
-        setCreation(null);
-        setBusy(false);
-        refresh();
+        if (mounted.current) {
+          setCreation(null);
+          setBusy(false);
+          refresh();
+        }
       }
     },
-    [busy, callCreate, refresh, toast],
+    [busy, callCreate, refresh, toast, waitForCreate],
   );
 
   const doReopen = useCallback(
@@ -625,322 +698,352 @@ export function PolyRepoScreen({
       keyboardShouldPersistTaps="handled"
     >
       <Text style={styles.heading}>Poly-repo workspaces</Text>
+      <View style={styles.actions} accessibilityRole="tablist">
+        <Pressable
+          accessibilityRole="tab"
+          accessibilityLabel="Workspaces"
+          accessibilityState={{ selected: tab === "workspaces" }}
+          onPress={() => setTab("workspaces")}
+          style={[styles.button, tab === "workspaces" ? styles.tabSelected : null]}
+        >
+          <Text style={styles.buttonText}>Workspaces</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="tab"
+          accessibilityLabel="Configuration"
+          accessibilityState={{ selected: tab === "configuration" }}
+          onPress={() => setTab("configuration")}
+          style={[styles.button, tab === "configuration" ? styles.tabSelected : null]}
+        >
+          <Text style={styles.buttonText}>Configuration</Text>
+        </Pressable>
+      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.label}>NEW VIRTUAL WORKSPACE</Text>
-        {projects.length === 0 ? (
-          <Text style={styles.empty}>No uber-projects yet. Add one in Settings → Poly-repo.</Text>
-        ) : (
-          <>
-            <View style={styles.actions}>{projectButtons}</View>
-            <TextInput
-              accessibilityLabel="Feature name"
-              placeholder="featureA"
-              value={feature}
-              onChangeText={setFeature}
-              editable={!busy}
-              maxLength={128}
-              style={styles.input}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {branchPreview ? <Text style={styles.meta}>Branch: {branchPreview}</Text> : null}
-            <Text style={styles.label}>IMPORT COMMON BRANCH</Text>
-            {branchesLoading ? <Text style={styles.meta}>Loading import branches...</Text> : null}
-            {branchesError ? <Text style={styles.issue}>{branchesError}</Text> : null}
-            {!branchesLoading && !branchesError && importBranches.length === 0 ? (
-              <Text style={styles.meta}>No common branches available to import.</Text>
-            ) : null}
-            {importBranches.length > 0 ? (
-              <View style={styles.actions}>
-                {importBranches.map((branch) => (
-                  <Pressable
-                    key={branch}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Import branch ${branch}`}
-                    accessibilityState={{ disabled: busy, selected: importBranch === branch }}
-                    disabled={busy}
-                    onPress={() => {
-                      setImportBranch(importBranch === branch ? "" : branch);
-                      setFeature(branch.replaceAll("/", "-"));
-                    }}
-                    style={[styles.button, importBranch === branch ? null : styles.buttonDisabled]}
-                  >
-                    <Text style={styles.buttonText}>{branch}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-            {importBranch ? (
+      <View style={[styles.content, tab !== "workspaces" ? styles.hidden : null]}>
+        <View style={styles.section}>
+          <Text style={styles.label}>NEW VIRTUAL WORKSPACE</Text>
+          {projects.length === 0 ? (
+            <Text style={styles.empty}>No uber-projects yet. Add one under Configuration.</Text>
+          ) : (
+            <>
+              <View style={styles.actions}>{projectButtons}</View>
+              <TextInput
+                accessibilityLabel="Feature name"
+                placeholder="featureA"
+                value={feature}
+                onChangeText={setFeature}
+                editable={!busy}
+                maxLength={128}
+                style={styles.input}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {branchPreview ? <Text style={styles.meta}>Branch: {branchPreview}</Text> : null}
+              <Text style={styles.label}>IMPORT COMMON BRANCH</Text>
+              {branchesLoading ? <Text style={styles.meta}>Loading import branches...</Text> : null}
+              {branchesError ? <Text style={styles.issue}>{branchesError}</Text> : null}
+              {!branchesLoading && !branchesError && importBranches.length === 0 ? (
+                <Text style={styles.meta}>No common branches available to import.</Text>
+              ) : null}
+              {importBranches.length > 0 ? (
+                <View style={styles.actions}>
+                  {importBranches.map((branch) => (
+                    <Pressable
+                      key={branch}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Import branch ${branch}`}
+                      accessibilityState={{ disabled: busy, selected: importBranch === branch }}
+                      disabled={busy}
+                      onPress={() => {
+                        setImportBranch(importBranch === branch ? "" : branch);
+                        setFeature(branch.replaceAll("/", "-"));
+                      }}
+                      style={[
+                        styles.button,
+                        importBranch === branch ? null : styles.buttonDisabled,
+                      ]}
+                    >
+                      <Text style={styles.buttonText}>{branch}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              {importBranch ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Use feature branch instead"
+                  accessibilityState={{ disabled: busy }}
+                  disabled={busy}
+                  onPress={() => setImportBranch("")}
+                  style={styles.button}
+                >
+                  <Text style={styles.buttonText}>Clear import branch</Text>
+                </Pressable>
+              ) : null}
+              <Text style={styles.label}>DEFAULT BRANCHES</Text>
+              {defaultError ? <Text style={styles.issue}>{defaultError}</Text> : null}
+              {!branchesLoading && !defaultError && selectedDefaultBranches.length === 0 ? (
+                <Text style={styles.meta}>No repository defaults available.</Text>
+              ) : null}
+              {selectedDefaultBranches.map(({ repoId, branch }) => (
+                <Text key={repoId} style={styles.meta}>
+                  {repoId}: {branch}
+                </Text>
+              ))}
+              <Text style={styles.meta}>
+                If a default branch is already checked out elsewhere, its worktree uses a detached
+                HEAD. Create a branch to keep commits reachable.
+              </Text>
+              <Text style={styles.meta}>
+                Uses the feature name above, or "default" if left blank.
+              </Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Use feature branch instead"
-                accessibilityState={{ disabled: busy }}
-                disabled={busy}
-                onPress={() => setImportBranch("")}
-                style={styles.button}
-              >
-                <Text style={styles.buttonText}>Clear import branch</Text>
-              </Pressable>
-            ) : null}
-            <Text style={styles.label}>DEFAULT BRANCHES</Text>
-            {defaultError ? <Text style={styles.issue}>{defaultError}</Text> : null}
-            {!branchesLoading && !defaultError && selectedDefaultBranches.length === 0 ? (
-              <Text style={styles.meta}>No repository defaults available.</Text>
-            ) : null}
-            {selectedDefaultBranches.map(({ repoId, branch }) => (
-              <Text key={repoId} style={styles.meta}>
-                {repoId}: {branch}
-              </Text>
-            ))}
-            <Text style={styles.meta}>
-              If a default branch is already checked out elsewhere, its worktree uses a detached
-              HEAD. Create a branch to keep commits reachable.
-            </Text>
-            <Text style={styles.meta}>
-              Uses the feature name above, or "default" if left blank.
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Create workspace from default branches"
-              accessibilityState={{
-                disabled:
+                accessibilityLabel="Create workspace from default branches"
+                accessibilityState={{
+                  disabled:
+                    busy ||
+                    branchesLoading ||
+                    selectedDefaultBranches.length === 0 ||
+                    Boolean(defaultError),
+                  busy: Boolean(creation?.defaults),
+                }}
+                disabled={
                   busy ||
                   branchesLoading ||
                   selectedDefaultBranches.length === 0 ||
-                  Boolean(defaultError),
-                busy: Boolean(creation?.defaults),
-              }}
-              disabled={
-                busy ||
-                branchesLoading ||
-                selectedDefaultBranches.length === 0 ||
-                Boolean(defaultError)
-              }
-              onPress={handleImportDefaultsPress}
-              style={[
-                styles.button,
-                busy || branchesLoading || selectedDefaultBranches.length === 0 || defaultError
-                  ? styles.buttonDisabled
-                  : null,
-              ]}
-            >
-              <Text style={styles.buttonText}>
-                {creation?.defaults ? "Creating from defaults..." : "Create from default branches"}
-              </Text>
-            </Pressable>
-            <View style={styles.actions}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Create virtual workspace"
-                accessibilityState={{
-                  disabled: createDisabled,
-                  busy: creation !== null && !creation.resuming,
-                }}
-                onPress={handleCreatePress}
-                style={[styles.button, createDisabled ? styles.buttonDisabled : null]}
-                disabled={createDisabled}
+                  Boolean(defaultError)
+                }
+                onPress={handleImportDefaultsPress}
+                style={[
+                  styles.button,
+                  busy || branchesLoading || selectedDefaultBranches.length === 0 || defaultError
+                    ? styles.buttonDisabled
+                    : null,
+                ]}
               >
                 <Text style={styles.buttonText}>
-                  {creation && !creation.resuming && !creation.defaults
-                    ? importBranch
-                      ? "Importing..."
-                      : "Creating..."
-                    : importBranch
-                      ? "Import"
-                      : "Create"}
+                  {creation?.defaults
+                    ? "Creating from defaults..."
+                    : "Create from default branches"}
                 </Text>
               </Pressable>
-              <Pressable
-                accessibilityRole="checkbox"
-                accessibilityLabel="Open a terminal in each repo after creation"
-                accessibilityState={terminalsAccessibilityState}
-                disabled={busy}
-                onPress={toggleTerminals}
-                style={styles.button}
-              >
-                <Text style={styles.buttonText}>
-                  {withTerminals ? "Terminals: on" : "Terminals: off"}
-                </Text>
-              </Pressable>
-            </View>
-          </>
-        )}
-        {creation ? (
-          <View style={styles.progress}>
-            <ActivityIndicator
-              size="small"
-              color={theme.colors.foregroundMuted}
-              accessibilityLabel="Workspace creation in progress"
-              accessibilityRole="progressbar"
-            />
-            <View style={styles.progressText}>
-              <Text style={styles.meta} accessibilityLiveRegion="polite">
-                {creation.resuming ? "Resuming" : "Creating"} {creation.feature}...
-              </Text>
-              <Text style={styles.meta}>
-                Setting up {creationRepoCount ?? "the"} repo worktrees. Large repos can take a
-                while.
-              </Text>
-            </View>
-          </View>
-        ) : null}
-        {createError ? <Text style={styles.issue}>{createError}</Text> : null}
-        {issues.map((issue) => (
-          <Text key={`${issue.repoId}-${issue.code}`} style={styles.issue}>
-            {issue.repoId}: {issue.message}
-          </Text>
-        ))}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.label}>MANAGED WORKSPACES</Text>
-        <View style={styles.actions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Resync with the filesystem and host"
-            onPress={handleResyncPress}
-            style={styles.button}
-            disabled={busy}
-          >
-            <Text style={styles.buttonText}>Resync</Text>
-          </Pressable>
-        </View>
-        {loading && items.length === 0 ? <Text style={styles.empty}>Loading...</Text> : null}
-        {error ? <Text style={styles.issue}>{error}</Text> : null}
-        {items.map((item) => (
-          <View key={item.virtualId} style={styles.row}>
-            <Text style={styles.name}>
-              {item.feature} · {item.branch}
-            </Text>
-            <Text style={item.state === "ready" ? styles.state : styles.stateBad}>
-              {stateLabel(item)}
-              {focused?.virtualId === item.virtualId ? " · selected" : ""}
-            </Text>
-            <Text style={styles.meta}>{item.rootPath}</Text>
-            <View style={styles.actions}>
-              {item.workspaceId ? (
+              <View style={styles.actions}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Open ${item.feature}`}
-                  onPress={openHandlers.get(item.virtualId)}
-                  style={styles.button}
+                  accessibilityLabel="Create virtual workspace"
+                  accessibilityState={{
+                    disabled: createDisabled,
+                    busy: creation !== null && !creation.resuming,
+                  }}
+                  onPress={handleCreatePress}
+                  style={[styles.button, createDisabled ? styles.buttonDisabled : null]}
+                  disabled={createDisabled}
                 >
-                  <Text style={styles.buttonText}>Open</Text>
+                  <Text style={styles.buttonText}>
+                    {creation && !creation.resuming && !creation.defaults
+                      ? importBranch
+                        ? "Importing..."
+                        : "Creating..."
+                      : importBranch
+                        ? "Import"
+                        : "Create"}
+                  </Text>
                 </Pressable>
-              ) : null}
-              {item.state === "creating" ? (
                 <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Resume ${item.feature}`}
-                  onPress={resumePressHandlers.get(item.virtualId)}
-                  style={styles.button}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel="Open a terminal in each repo after creation"
+                  accessibilityState={terminalsAccessibilityState}
                   disabled={busy}
-                >
-                  <Text style={styles.buttonText}>Resume</Text>
-                </Pressable>
-              ) : null}
-              {item.state === "creating" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Discard partially created ${item.feature}`}
-                  onPress={archiveHandlers.get(item.virtualId)}
+                  onPress={toggleTerminals}
                   style={styles.button}
-                  disabled={busy}
                 >
-                  <Text style={styles.buttonText}>Discard</Text>
+                  <Text style={styles.buttonText}>
+                    {withTerminals ? "Terminals: on" : "Terminals: off"}
+                  </Text>
                 </Pressable>
-              ) : null}
-              {!item.workspaceId && item.rootExists ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Reopen ${item.feature} root as a workspace`}
-                  onPress={reopenPressHandlers.get(item.virtualId)}
-                  style={styles.button}
-                  disabled={busy}
-                >
-                  <Text style={styles.buttonText}>Reopen</Text>
-                </Pressable>
-              ) : null}
-              {item.state === "orphaned" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Forget ${item.feature}`}
-                  onPress={forgetPressHandlers.get(item.virtualId)}
-                  style={styles.button}
-                  disabled={busy}
-                >
-                  <Text style={styles.buttonText}>Forget</Text>
-                </Pressable>
-              ) : null}
-              {item.state === "orphaned" && item.rootExists ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Delete ${item.feature} root and forget`}
-                  onPress={cleanupPressHandlers.get(item.virtualId)}
-                  style={styles.button}
-                  disabled={busy}
-                >
-                  <Text style={styles.buttonText}>Clean up</Text>
-                </Pressable>
-              ) : null}
-              {item.state === "creating" || item.state === "orphaned" ? null : (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Archive ${item.feature}`}
-                  onPress={archiveHandlers.get(item.virtualId)}
-                  style={styles.button}
-                  disabled={busy}
-                >
-                  <Text style={styles.buttonText}>Archive</Text>
-                </Pressable>
-              )}
-              {item.state !== "orphaned" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Force delete ${item.feature}`}
-                  onPress={forceHandlers.get(item.virtualId)}
-                  style={styles.button}
-                  disabled={busy}
-                >
-                  <Text style={styles.buttonText}>Force delete</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            {confirmForceId === item.virtualId ? (
-              <View style={styles.section}>
-                <Text style={styles.issue}>
-                  Force delete removes all worktrees, including uncommitted changes. Unpushed
-                  commits may become harder to find. Branches are kept. If Paseo cannot archive a
-                  workspace, its sidebar row may remain.
-                </Text>
-                <View style={styles.actions}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Confirm force delete ${item.feature}`}
-                    onPress={confirmForceHandlers.get(item.virtualId)}
-                    style={styles.button}
-                    disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Confirm force delete</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Cancel force delete ${item.feature}`}
-                    onPress={cancelForce}
-                    style={styles.button}
-                    disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Cancel</Text>
-                  </Pressable>
-                </View>
               </View>
-            ) : null}
+            </>
+          )}
+          {creation ? (
+            <View style={styles.progress}>
+              <ActivityIndicator
+                size="small"
+                color={theme.colors.foregroundMuted}
+                accessibilityLabel="Workspace creation in progress"
+                accessibilityRole="progressbar"
+              />
+              <View style={styles.progressText}>
+                <Text style={styles.meta} accessibilityLiveRegion="polite">
+                  {creation.resuming ? "Resuming" : "Creating"} {creation.feature}...
+                </Text>
+                <Text style={styles.meta}>
+                  Setting up {creationRepoCount ?? "the"} repo worktrees. Large repos can take a
+                  while.
+                </Text>
+              </View>
+            </View>
+          ) : null}
+          {createError ? <Text style={styles.issue}>{createError}</Text> : null}
+          {issues.map((issue) => (
+            <Text key={`${issue.repoId}-${issue.code}`} style={styles.issue}>
+              {issue.repoId}: {issue.message}
+            </Text>
+          ))}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>MANAGED WORKSPACES</Text>
+          <View style={styles.actions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Resync with the filesystem and host"
+              onPress={handleResyncPress}
+              style={styles.button}
+              disabled={busy}
+            >
+              <Text style={styles.buttonText}>Resync</Text>
+            </Pressable>
           </View>
-        ))}
-        {!loading && items.length === 0 ? (
-          <Text style={styles.empty}>No virtual workspaces yet.</Text>
-        ) : null}
+          {loading && items.length === 0 ? <Text style={styles.empty}>Loading...</Text> : null}
+          {error ? <Text style={styles.issue}>{error}</Text> : null}
+          {items.map((item) => (
+            <View key={item.virtualId} style={styles.row}>
+              <Text style={styles.name}>
+                {item.feature} · {item.branch}
+              </Text>
+              <Text style={item.state === "ready" ? styles.state : styles.stateBad}>
+                {stateLabel(item)}
+                {focused?.virtualId === item.virtualId ? " · selected" : ""}
+              </Text>
+              <Text style={styles.meta}>{item.rootPath}</Text>
+              <View style={styles.actions}>
+                {item.workspaceId ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${item.feature}`}
+                    onPress={openHandlers.get(item.virtualId)}
+                    style={styles.button}
+                  >
+                    <Text style={styles.buttonText}>Open</Text>
+                  </Pressable>
+                ) : null}
+                {item.state === "creating" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Resume ${item.feature}`}
+                    onPress={resumePressHandlers.get(item.virtualId)}
+                    style={styles.button}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Resume</Text>
+                  </Pressable>
+                ) : null}
+                {item.state === "creating" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Discard partially created ${item.feature}`}
+                    onPress={archiveHandlers.get(item.virtualId)}
+                    style={styles.button}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Discard</Text>
+                  </Pressable>
+                ) : null}
+                {!item.workspaceId && item.rootExists ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Reopen ${item.feature} root as a workspace`}
+                    onPress={reopenPressHandlers.get(item.virtualId)}
+                    style={styles.button}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Reopen</Text>
+                  </Pressable>
+                ) : null}
+                {item.state === "orphaned" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Forget ${item.feature}`}
+                    onPress={forgetPressHandlers.get(item.virtualId)}
+                    style={styles.button}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Forget</Text>
+                  </Pressable>
+                ) : null}
+                {item.state === "orphaned" && item.rootExists ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${item.feature} root and forget`}
+                    onPress={cleanupPressHandlers.get(item.virtualId)}
+                    style={styles.button}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Clean up</Text>
+                  </Pressable>
+                ) : null}
+                {item.state === "creating" || item.state === "orphaned" ? null : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Archive ${item.feature}`}
+                    onPress={archiveHandlers.get(item.virtualId)}
+                    style={styles.button}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Archive</Text>
+                  </Pressable>
+                )}
+                {item.state !== "orphaned" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Force delete ${item.feature}`}
+                    onPress={forceHandlers.get(item.virtualId)}
+                    style={styles.button}
+                    disabled={busy}
+                  >
+                    <Text style={styles.buttonText}>Force delete</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              {confirmForceId === item.virtualId ? (
+                <View style={styles.section}>
+                  <Text style={styles.issue}>
+                    Force delete removes all worktrees, including uncommitted changes. Unpushed
+                    commits may become harder to find. Branches are kept. If Paseo cannot archive a
+                    workspace, its sidebar row may remain.
+                  </Text>
+                  <View style={styles.actions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Confirm force delete ${item.feature}`}
+                      onPress={confirmForceHandlers.get(item.virtualId)}
+                      style={styles.button}
+                      disabled={busy}
+                    >
+                      <Text style={styles.buttonText}>Confirm force delete</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Cancel force delete ${item.feature}`}
+                      onPress={cancelForce}
+                      style={styles.button}
+                      disabled={busy}
+                    >
+                      <Text style={styles.buttonText}>Cancel</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          ))}
+          {!loading && items.length === 0 ? (
+            <Text style={styles.empty}>No virtual workspaces yet.</Text>
+          ) : null}
+        </View>
+      </View>
+      <View style={tab !== "configuration" ? styles.hidden : undefined}>
+        <PolyRepoSettingsScreen theme={theme} layout={layout} />
       </View>
     </ScrollView>
   );

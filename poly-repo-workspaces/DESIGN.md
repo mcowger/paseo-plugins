@@ -248,8 +248,8 @@ re-resolves and authorizes every path from its own records.
 What the user defines once per project group. This is a host-scoped plugin
 settings document, not a plugin-owned file: `shared/settings.ts` defines it with
 `defineSettings`, `index.server.ts` registers it with
-`server.registerSettings(polyrepoSettings)` for reads, and the settings screen
-writes it through `useSettings`. Paseo owns storage, schema versioning, atomic
+`server.registerSettings(polyrepoSettings)` for reads, and the management
+screen's Configuration tab writes it through `useSettings`. Paseo owns storage, schema versioning, atomic
 writes, and revision conflicts; the plugin supplies the Zod schema
 (`PluginSettingsSchema`: `virtualRootBase?` plus `uberProjects[]`) and its
 validation on top. The file is
@@ -614,7 +614,7 @@ daemon, never the daemon hosting the dev session.
 
 - Plugin skeleton: `paseo-plugin.json` (`requirements.paseo: ">=0.12.0"`),
   0.12.x SDK pins, strict `client/`/`server/`/`shared/` layout.
-- Uber-project config: settings screen with repo list, template paths,
+- Uber-project config: management screen Configuration tab with repo list, template paths,
   virtual root override. Persistence through host plugin settings
   (`defineSettings` + `server.registerSettings`).
 - Create RPC with preflight, materialization, manifest, workspace

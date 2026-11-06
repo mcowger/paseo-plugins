@@ -59,6 +59,11 @@ export interface CreateDirectoryWorkspaceResult {
   projectId: string | null;
 }
 
+export interface HostProjectRef {
+  id: string;
+  rootPath: string;
+}
+
 export interface WorkspacesPort {
   createDirectoryWorkspace(
     input: CreateDirectoryWorkspaceInput,
@@ -66,6 +71,8 @@ export interface WorkspacesPort {
   archiveWorkspace(workspaceId: string): Promise<void>;
   renameWorkspace(workspaceId: string, title: string): Promise<void>;
   listWorkspaces(): Promise<HostWorkspaceRef[]>;
+  listProjects(): Promise<HostProjectRef[]>;
+  deleteProject(projectId: string, paseoHome: string): Promise<void>;
   createTerminal(workspaceId: string, input: { cwd?: string; name?: string }): Promise<void>;
 }
 

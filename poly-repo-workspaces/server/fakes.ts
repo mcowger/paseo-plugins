@@ -201,12 +201,10 @@ export function createFakeWorkspaces(): WorkspacesPort & {
   archived: string[];
   renamed: Array<{ workspaceId: string; title: string }>;
   terminals: Array<{ workspaceId: string; cwd?: string; name?: string }>;
-  hostWorkspaces: Array<{
-    id: string;
-    cwd: string;
-    projectId: string | null;
-    name: string | null;
-  }>;
+  hostWorkspaces: Array<{ id: string; cwd: string; projectId: string | null; name: string | null }>;
+  hostProjects: Array<{ id: string; rootPath: string }>;
+  deletedProjects: Array<{ projectId: string; paseoHome: string }>;
+  deleteProjectError: Error | null;
 } {
   const created: Array<{ path: string; title: string; projectId?: string }> = [];
   const archived: string[] = [];
@@ -218,6 +216,9 @@ export function createFakeWorkspaces(): WorkspacesPort & {
     projectId: string | null;
     name: string | null;
   }> = [];
+  const hostProjects: Array<{ id: string; rootPath: string }> = [];
+  const deletedProjects: Array<{ projectId: string; paseoHome: string }> = [];
+  let deleteProjectError: Error | null = null;
   let counter = 0;
   return {
     created,
@@ -225,30 +226,45 @@ export function createFakeWorkspaces(): WorkspacesPort & {
     renamed,
     terminals,
     hostWorkspaces,
-    createDirectoryWorkspace: (input: { path: string; title: string; projectId?: string }) => {
+    hostProjects,
+    deletedProjects,
+    get deleteProjectError() {
+      return deleteProjectError;
+    },
+    set deleteProjectError(value: Error | null) {
+      deleteProjectError = value;
+    },
+    createDirectoryWorkspace: (input) => {
       created.push(input);
       counter += 1;
       const workspaceId = `wks_test${String(counter).padStart(2, "0")}`;
-      // The host mints a project for a directory without one, and otherwise
-      // keeps the requested project.
       const projectId = input.projectId ?? `proj_test${String(counter).padStart(2, "0")}`;
       hostWorkspaces.push({ id: workspaceId, cwd: input.path, projectId, name: input.title });
+      if (!input.projectId) hostProjects.push({ id: projectId, rootPath: input.path });
       return Promise.resolve({ workspaceId, projectId });
     },
-    archiveWorkspace: (workspaceId: string) => {
+    archiveWorkspace: (workspaceId) => {
       archived.push(workspaceId);
       const index = hostWorkspaces.findIndex((entry) => entry.id === workspaceId);
       if (index >= 0) hostWorkspaces.splice(index, 1);
       return Promise.resolve();
     },
-    renameWorkspace: (workspaceId: string, title: string) => {
+    renameWorkspace: (workspaceId, title) => {
       renamed.push({ workspaceId, title });
       const entry = hostWorkspaces.find((candidate) => candidate.id === workspaceId);
       if (entry) entry.name = title;
       return Promise.resolve();
     },
     listWorkspaces: () => Promise.resolve([...hostWorkspaces]),
-    createTerminal: (workspaceId: string, input: { cwd?: string; name?: string }) => {
+    listProjects: () => Promise.resolve([...hostProjects]),
+    deleteProject: (projectId, paseoHome) => {
+      deletedProjects.push({ projectId, paseoHome });
+      if (deleteProjectError) return Promise.reject(deleteProjectError);
+      const index = hostProjects.findIndex((item) => item.id === projectId);
+      if (index >= 0) hostProjects.splice(index, 1);
+      return Promise.resolve();
+    },
+    createTerminal: (workspaceId, input) => {
       terminals.push({ workspaceId, ...input });
       return Promise.resolve();
     },

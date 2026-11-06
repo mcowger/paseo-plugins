@@ -1,7 +1,6 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { PolyRepoPanel } from "./client/panel";
 import { PolyRepoScreen } from "./client/screen";
-import { PolyRepoSettingsScreen } from "./client/settings-screen";
 import { PolyRepoSidebarItem } from "./client/sidebar-item";
 
 export default function contribute(client: PluginClientContext) {
@@ -26,13 +25,6 @@ export default function contribute(client: PluginClientContext) {
     context: "workspace",
     locations: ["workspace", "explorer"],
     Component: PolyRepoPanel,
-  });
-
-  client.addSettingsScreen({
-    id: "polyrepo",
-    title: "Poly-repo",
-    icon: "FolderGit2",
-    Component: PolyRepoSettingsScreen,
   });
 
   client.addCommandCenterItem({

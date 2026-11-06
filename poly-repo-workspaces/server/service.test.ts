@@ -633,10 +633,51 @@ describe("archiveVirtualWorkspace", () => {
     expect(result.ok).toBe(true);
     // Repo rows leave with their worktrees; the root workspace goes last.
     expect(workspaces.archived).toEqual(["wks_test02", "wks_test03", "wks_test01"]);
+    expect(workspaces.deletedProjects).toEqual([{ projectId: "proj_test01", paseoHome: "/paseo" }]);
     const removes = (git.script.log ?? []).filter((args) => args.includes("remove"));
     expect(removes).toHaveLength(2);
     expect(await fs.exists("/paseo/poly-workspaces/uber-featureA")).toBe(false);
     expect(await listVirtualWorkspaces(deps)).toHaveLength(0);
+  });
+
+  it("preserves a project with an unrelated active workspace", async () => {
+    const { deps, workspaces, virtualId } = await created();
+    workspaces.hostWorkspaces.push({
+      id: "unrelated",
+      cwd: "/elsewhere",
+      projectId: "proj_test01",
+      name: "Other",
+    });
+    expect((await archiveVirtualWorkspace(deps, { virtualId })).ok).toBe(true);
+    expect(workspaces.deletedProjects).toEqual([]);
+    expect(workspaces.hostProjects).toContainEqual({
+      id: "proj_test01",
+      rootPath: "/paseo/poly-workspaces/uber-featureA",
+    });
+  });
+
+  it("retains cleanup state when project deletion fails and retries it", async () => {
+    const { deps, fs, workspaces, virtualId } = await created();
+    workspaces.deleteProjectError = new Error("CLI unavailable");
+    const failed = await archiveVirtualWorkspace(deps, { virtualId });
+    expect(failed.error).toContain("CLI unavailable");
+    expect(await fs.exists("/paseo/poly-workspaces/uber-featureA")).toBe(true);
+    workspaces.deleteProjectError = null;
+    expect((await archiveVirtualWorkspace(deps, { virtualId })).ok).toBe(true);
+    expect(workspaces.hostProjects).toEqual([]);
+  });
+
+  it("keeps the index when root removal fails", async () => {
+    const { deps, fs, virtualId } = await created();
+    const remove = fs.removeRecursive;
+    fs.removeRecursive = async () => {
+      throw new Error("permission denied");
+    };
+    const failed = await archiveVirtualWorkspace(deps, { virtualId });
+    expect(failed.error).toContain("permission denied");
+    expect((await listVirtualWorkspaces(deps)).map((item) => item.virtualId)).toContain(virtualId);
+    fs.removeRecursive = remove;
+    expect((await archiveVirtualWorkspace(deps, { virtualId })).ok).toBe(true);
   });
 
   it("blocks when a constituent is dirty and leaves the tree intact", async () => {

@@ -1,7 +1,12 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { PaseoApi } from "@getpaseo/client";
-import type { PluginHandlerContext, PluginServerContext } from "@getpaseo/plugin/server";
+import {
+  execCommand,
+  type PluginHandlerContext,
+  type PluginServerContext,
+} from "@getpaseo/plugin/server";
+import { createJobManager } from "./server/create-jobs";
 import { createFsPort } from "./server/files";
 import { createGitPort } from "./server/git";
 import { createInitRunner } from "./server/init";
@@ -25,6 +30,7 @@ import {
   regenerateRepomap,
   repairConstituent,
   type ServiceDeps,
+  sanitizeVirtualId,
 } from "./server/service";
 import { createMutex } from "./server/store";
 import {
@@ -32,6 +38,7 @@ import {
   cleanupVirtualWorkspace as cleanupVirtualWorkspaceRpc,
   createVirtualWorkspace as createVirtualWorkspaceRpc,
   forgetVirtualWorkspace as forgetVirtualWorkspaceRpc,
+  getCreateJob,
   getRepoStatuses as getRepoStatusesRpc,
   getSettingsSnapshot,
   listImportBranches as listImportBranchesRpc,
@@ -65,19 +72,44 @@ function createWorkspacesPort(paseo: PaseoApi): WorkspacesPort {
       return { workspaceId: handle.id, projectId: handle.projectId };
     },
     async archiveWorkspace(workspaceId: string): Promise<void> {
-      await paseo.workspaces.archive(workspaceId);
+      const result = await paseo.workspaces.archive(workspaceId);
+      if (result.error) throw new Error(result.error);
     },
     async renameWorkspace(workspaceId: string, title: string): Promise<void> {
       await paseo.workspaces.ref(workspaceId).setTitle(title);
     },
     async listWorkspaces(): Promise<HostWorkspaceRef[]> {
-      const listed = await paseo.workspaces.list();
-      return listed.entries.map((entry) => ({
-        id: entry.id,
-        cwd: entry.workspaceDirectory ?? entry.projectRootPath,
-        projectId: entry.projectId ?? null,
-        name: entry.name ?? null,
+      const entries: HostWorkspaceRef[] = [];
+      let cursor: string | undefined;
+      do {
+        const listed = await paseo.workspaces.list({
+          filter: { includeInternal: true, includeBackground: true },
+          page: { limit: 200, ...(cursor ? { cursor } : {}) },
+        });
+        entries.push(
+          ...listed.entries.map((entry) => ({
+            id: entry.id,
+            cwd: entry.workspaceDirectory ?? entry.projectRootPath,
+            projectId: entry.projectId ?? null,
+            name: entry.name ?? null,
+          })),
+        );
+        cursor = listed.pageInfo.hasMore ? (listed.pageInfo.nextCursor ?? undefined) : undefined;
+        if (listed.pageInfo.hasMore && !cursor) throw new Error("workspace listing is incomplete");
+      } while (cursor);
+      return entries;
+    },
+    async listProjects() {
+      const result = await paseo.projects.list();
+      return result.projects.map((project) => ({
+        id: project.projectId,
+        rootPath: project.projectRootPath,
       }));
+    },
+    async deleteProject(projectId, paseoHome) {
+      await execCommand("paseo", ["project", "delete", "--home", paseoHome, projectId], {
+        timeout: 60_000,
+      });
     },
     async createTerminal(
       workspaceId: string,
@@ -92,6 +124,7 @@ export default function contribute(server: PluginServerContext) {
   const settings = server.registerSettings(polyrepoSettings);
   const fs = createFsPort();
   const git = createGitPort();
+  const createJobs = createJobManager();
   const init = createInitRunner();
   const paseoHome = resolvePaseoHome();
   const withIndexLock = createMutex();
@@ -140,16 +173,21 @@ export default function contribute(server: PluginServerContext) {
   });
 
   server.handle(createVirtualWorkspaceRpc, async (input, context) => {
-    return createVirtualWorkspace(depsFor(context), {
-      uberProjectId: input.uberProjectId,
-      feature: input.feature,
-      baseBranchOverrides: input.baseBranchOverrides,
-      importBranch: input.importBranch,
-      importDefaults: input.importDefaults,
-      createTerminals: input.createTerminals,
-      resume: input.resume,
-    });
+    const jobId = createJobs.start(sanitizeVirtualId(input.uberProjectId, input.feature), () =>
+      createVirtualWorkspace(depsFor(context), {
+        uberProjectId: input.uberProjectId,
+        feature: input.feature,
+        baseBranchOverrides: input.baseBranchOverrides,
+        importBranch: input.importBranch,
+        importDefaults: input.importDefaults,
+        createTerminals: input.createTerminals,
+        resume: input.resume,
+      }),
+    );
+    return { jobId };
   });
+
+  server.handle(getCreateJob, (input) => Promise.resolve(createJobs.get(input.jobId)));
 
   server.handle(archiveVirtualWorkspaceRpc, async (input, context) => {
     return archiveVirtualWorkspace(depsFor(context), {
@@ -227,5 +265,8 @@ export default function contribute(server: PluginServerContext) {
     },
   );
 
-  return () => init.stop();
+  return async () => {
+    createJobs.dispose();
+    await init.stop();
+  };
 }

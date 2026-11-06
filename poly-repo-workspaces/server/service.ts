@@ -133,7 +133,7 @@ function gitMessage(error: unknown): string {
   return error instanceof Error ? error.message : "unknown error";
 }
 
-function sanitizeVirtualId(uberProjectId: string, feature: string): string {
+export function sanitizeVirtualId(uberProjectId: string, feature: string): string {
   const raw = `${uberProjectId}--${feature}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   const trimmed = raw.replace(/^-+|-+$/g, "").slice(0, 120);
   return trimmed.length > 0 ? trimmed : "virtual";
@@ -456,6 +456,28 @@ async function archiveConstituentWorkspaces(
     await writeManifest(deps.fs, manifest);
   }
   return { error: null };
+}
+
+// Project deletion also removes its workspace history. Only delete a project
+// whose creation we observed, whose root still matches, and which has no active rows.
+async function removeOwnedProject(
+  deps: ServiceDeps,
+  manifest: VirtualWorkspaceManifest,
+): Promise<string | null> {
+  if (!manifest.projectOwned || !manifest.projectId) return null;
+  try {
+    const project = (await deps.workspaces.listProjects()).find(
+      (item) => item.id === manifest.projectId,
+    );
+    if (!project) return null;
+    if (normalizeAbsolute(project.rootPath) !== normalizeAbsolute(manifest.rootPath)) return null;
+    const workspaces = await deps.workspaces.listWorkspaces();
+    if (workspaces.some((item) => item.projectId === project.id)) return null;
+    await deps.workspaces.deleteProject(project.id, deps.paseoHome);
+    return null;
+  } catch (error) {
+    return `project cleanup failed: ${error instanceof Error ? error.message : "unknown error"}`;
+  }
 }
 
 export async function createVirtualWorkspace(
@@ -838,6 +860,12 @@ export async function createVirtualWorkspace(
   }
 
   if (!active.workspaceId) {
+    let previousProjectIds: Set<string> | null = null;
+    try {
+      previousProjectIds = new Set((await deps.workspaces.listProjects()).map((item) => item.id));
+    } catch {
+      // Without a prior snapshot ownership cannot be established.
+    }
     try {
       const created = await deps.workspaces.createDirectoryWorkspace({
         path: rootPath,
@@ -845,6 +873,11 @@ export async function createVirtualWorkspace(
       });
       active.workspaceId = created.workspaceId;
       active.projectId = created.projectId;
+      active.projectOwned = Boolean(
+        created.projectId && previousProjectIds && !previousProjectIds.has(created.projectId),
+      );
+      active.updatedAt = deps.now();
+      await writeManifest(deps.fs, active);
     } catch (error) {
       active.updatedAt = deps.now();
       await writeManifest(deps.fs, active);
@@ -1054,10 +1087,8 @@ function isMissingWorkspace(error: unknown): boolean {
 async function finalizeRemoval(
   deps: ReconcileDeps,
   manifest: VirtualWorkspaceManifest,
-  strict = false,
 ): Promise<void> {
-  if (strict) await deps.fs.removeRecursive(manifest.rootPath);
-  else await deps.fs.removeRecursive(manifest.rootPath).catch(() => {});
+  await deps.fs.removeRecursive(manifest.rootPath);
   await updateIndex(deps, (index: WorkspaceIndex) => {
     delete index.virtual[manifest.virtualId];
   });
@@ -1227,9 +1258,19 @@ export async function archiveVirtualWorkspace(
     await writeManifest(deps.fs, current);
     return { ok: false, error: null, blocked: teardown.blocked };
   }
+  const projectError = await removeOwnedProject(deps, current);
+  if (projectError) return { ok: false, error: projectError, blocked: [] };
 
   current.state = "archived";
-  await finalizeRemoval(deps, current, input.force);
+  try {
+    await finalizeRemoval(deps, current);
+  } catch (error) {
+    return {
+      ok: false,
+      error: `virtual root cleanup failed: ${error instanceof Error ? error.message : "unknown error"}`,
+      blocked: [],
+    };
+  }
   return { ok: true, error: null, blocked: [] };
 }
 
@@ -1281,10 +1322,12 @@ export async function handleWorkspaceArchived(
     });
     return;
   }
+  manifest.state = "archiving";
+  manifest.updatedAt = deps.now();
+  await writeManifest(deps.fs, manifest);
 
-  // Best-effort: the root workspace is already gone, so a repo row that fails to
-  // archive must not strand the teardown.
-  await archiveConstituentWorkspaces(deps, manifest);
+  // Retry the cascade on reconcile if a repo workspace could not be archived.
+  if ((await archiveConstituentWorkspaces(deps, manifest)).error) return;
 
   const teardown = await teardownConstituents(deps, manifest, new Set());
   if (teardown.blocked.length > 0) {
@@ -1293,6 +1336,7 @@ export async function handleWorkspaceArchived(
     await writeManifest(deps.fs, manifest);
     return;
   }
+  if (await removeOwnedProject(deps, manifest)) return;
   manifest.state = "archived";
   await finalizeRemoval(deps, manifest);
 }
@@ -1377,7 +1421,7 @@ async function adoptFromScan(
 }
 
 async function finishArchivingCascade(
-  deps: ReconcileDeps,
+  deps: ServiceDeps,
   manifest: VirtualWorkspaceManifest,
 ): Promise<{ finished: boolean }> {
   const teardown = await teardownConstituents(deps, manifest, new Set());
@@ -1387,6 +1431,7 @@ async function finishArchivingCascade(
     await writeManifest(deps.fs, manifest);
     return { finished: false };
   }
+  if (await removeOwnedProject(deps, manifest)) return { finished: false };
   manifest.state = "archived";
   await finalizeRemoval(deps, manifest);
   return { finished: true };
@@ -1434,7 +1479,7 @@ export async function reconcileVirtualWorkspaces(deps: ServiceDeps): Promise<{
     if (manifest.state === "archiving") {
       // Crash window: the host-side archive may or may not have happened.
       // Re-issuing it is safe; the archived hook skips manifests already marked archiving.
-      await archiveConstituentWorkspaces(deps, manifest);
+      if ((await archiveConstituentWorkspaces(deps, manifest)).error) continue;
       if (manifest.workspaceId && hostById.has(manifest.workspaceId)) {
         try {
           await deps.workspaces.archiveWorkspace(manifest.workspaceId);
@@ -1479,6 +1524,7 @@ export async function reconcileVirtualWorkspaces(deps: ServiceDeps): Promise<{
       const liveProjectId = hostById.get(manifest.workspaceId)?.projectId ?? null;
       if (liveProjectId && liveProjectId !== manifest.projectId) {
         manifest.projectId = liveProjectId;
+        manifest.projectOwned = false;
         manifest.updatedAt = deps.now();
         await writeManifest(deps.fs, manifest);
       }
@@ -1735,6 +1781,8 @@ export function newTestDeps(overrides: Partial<ServiceDeps> & { fs: FsPort }): S
       listWorkspaces: () => {
         throw new Error("workspaces not stubbed");
       },
+      listProjects: () => Promise.resolve([]),
+      deleteProject: () => Promise.resolve(),
       createTerminal: () => Promise.resolve(),
     },
     settings: { snapshot: () => Promise.resolve(emptySettingsSnapshot()) },

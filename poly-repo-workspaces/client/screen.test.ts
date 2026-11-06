@@ -2,9 +2,9 @@ import type { RpcOutput } from "@getpaseo/plugin";
 import type { PluginScreenProps } from "@getpaseo/plugin/client";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { createVirtualWorkspace, VirtualWorkspaceSummary } from "../shared/rpc";
+import type { getCreateJob, VirtualWorkspaceSummary } from "../shared/rpc";
 
-type CreateResult = RpcOutput<typeof createVirtualWorkspace>;
+type CreateResult = Extract<RpcOutput<typeof getCreateJob>, { state: "finished" }>["result"];
 
 import { PolyRepoScreen } from "./screen";
 
@@ -15,13 +15,17 @@ const harness = vi.hoisted(() => ({
   mounted: false,
   effectDeps: [] as unknown[][],
   effectCursor: 0,
+  refCursor: 0,
   effects: [] as Array<() => unknown>,
   items: [] as VirtualWorkspaceSummary[],
   create: vi.fn(),
+  createJob: vi.fn(),
   branches: vi.fn(),
   archive: vi.fn(),
+  projects: vi.fn(),
   refresh: vi.fn(),
   toast: { show: vi.fn(), error: vi.fn() },
+  refs: [] as Array<{ current: ReturnType<typeof setTimeout> | null }>,
 }));
 
 vi.mock("react", async (importOriginal) => ({
@@ -38,6 +42,14 @@ vi.mock("react", async (importOriginal) => ({
             : next;
       },
     ];
+  },
+  useRef: <Value>(initial: Value) => {
+    const index = harness.refCursor++;
+    if (!harness.refs[index])
+      harness.refs[index] = { current: initial } as {
+        current: ReturnType<typeof setTimeout> | null;
+      };
+    return harness.refs[index] as { current: Value };
   },
   useMemo: (factory: () => unknown) => factory(),
   useCallback: (callback: unknown) => callback,
@@ -64,25 +76,19 @@ vi.mock("react-native", () => ({
 // Vitest maps all host SDK entry points to the same stub module.
 vi.mock("@getpaseo/plugin/client", () => ({
   defineRpc: (definition: unknown) => definition,
+  defineSettings: (definition: unknown) => definition,
   useToast: () => harness.toast,
   usePaseo: () => ({}),
   useRpc: (contract: { name: string }) =>
     contract.name === "polyrepo.virtual-workspaces.create"
       ? harness.create
-      : contract.name === "polyrepo.virtual-workspaces.import-branches"
-        ? harness.branches
-        : contract.name === "polyrepo.virtual-workspaces.archive"
-          ? harness.archive
-          : async () => ({
-              uberProjects: [
-                {
-                  id: "uber",
-                  displayName: "Uber",
-                  branchTemplate: "{feature}",
-                  repos: [{ id: "frontend" }, { id: "app" }],
-                },
-              ],
-            }),
+      : contract.name === "polyrepo.virtual-workspaces.create-status"
+        ? harness.createJob
+        : contract.name === "polyrepo.virtual-workspaces.import-branches"
+          ? harness.branches
+          : contract.name === "polyrepo.virtual-workspaces.archive"
+            ? harness.archive
+            : harness.projects,
 }));
 
 vi.mock("./use-virtual-workspaces", () => ({
@@ -124,6 +130,7 @@ function control(tree: ReactNode, label: string): ElementProps {
 
 function render(): ReactElement {
   harness.cursor = 0;
+  harness.refCursor = 0;
   harness.effectCursor = 0;
   const tree = PolyRepoScreen({
     theme: { colors: {} } as PluginScreenProps["theme"],
@@ -143,18 +150,25 @@ async function ready(): Promise<ReactElement> {
   return render();
 }
 
+async function flushAsync(): Promise<void> {
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+}
+
 function pendingCreate() {
-  let resolve: (result: CreateResult) => void = () => {};
+  let resolve: (result: { jobId: string }) => void = () => {};
   let reject: (error: Error) => void = () => {};
   harness.create.mockImplementationOnce(
     () =>
-      new Promise<CreateResult>((resolvePromise, rejectPromise) => {
+      new Promise<{ jobId: string }>((resolvePromise, rejectPromise) => {
         resolve = resolvePromise;
         reject = rejectPromise;
       }),
   );
   return {
-    resolve: (result: CreateResult) => resolve(result),
+    resolve: (result: CreateResult) => {
+      harness.createJob.mockResolvedValueOnce({ state: "finished", result });
+      resolve({ jobId: "job-1" });
+    },
     reject: (error: Error) => reject(error),
   };
 }
@@ -169,6 +183,20 @@ const success: CreateResult = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  harness.create.mockReset();
+  harness.createJob.mockReset();
+  harness.projects.mockReset();
+  harness.branches.mockReset();
+  harness.projects.mockResolvedValue({
+    uberProjects: [
+      {
+        id: "uber",
+        displayName: "Uber",
+        branchTemplate: "{feature}",
+        repos: [{ id: "frontend" }, { id: "app" }],
+      },
+    ],
+  });
   harness.branches.mockResolvedValue({
     branches: ["main", "feature-x"],
     error: null,
@@ -184,6 +212,28 @@ beforeEach(() => {
   harness.effectDeps = [];
 
   harness.mounted = false;
+  harness.create.mockResolvedValue({ jobId: "job-1" });
+  harness.createJob.mockResolvedValue({ state: "finished", result: success });
+  harness.refs = [];
+});
+
+it("refreshes project choices after returning from configuration", async () => {
+  let tree = await ready();
+  expect(control(tree, "Workspaces").accessibilityState?.selected).toBe(true);
+  control(tree, "Configuration").onPress?.();
+  tree = render();
+  expect(control(tree, "Configuration").accessibilityState?.selected).toBe(true);
+  harness.projects.mockResolvedValue({
+    uberProjects: [
+      { id: "new", displayName: "New project", branchTemplate: "{feature}", repos: [] },
+    ],
+  });
+  control(tree, "Workspaces").onPress?.();
+  render();
+  await Promise.resolve();
+  tree = render();
+  expect(control(tree, "Use New project")).toBeDefined();
+  expect(nodes(tree).some((node) => node.props.accessibilityLabel === "Use Uber")).toBe(false);
 });
 
 describe("workspace creation feedback", () => {
@@ -234,12 +284,34 @@ describe("workspace creation feedback", () => {
     expect(control(tree, "Open a terminal in each repo after creation").disabled).toBe(true);
 
     pending.resolve(success);
-    await Promise.resolve();
+    await flushAsync();
     tree = render();
     expect(nodes(tree).some((node) => node.type === "ActivityIndicator")).toBe(false);
     expect(control(tree, "Feature name").editable).toBe(true);
     expect(harness.toast.show).toHaveBeenCalledWith(`Created ${feature}`);
     expect(harness.refresh).toHaveBeenCalled();
+  });
+  it("polls a running create job until it finishes", async () => {
+    vi.useFakeTimers();
+    try {
+      let tree = await ready();
+      control(tree, "Feature name").onChangeText?.("Poll me");
+      tree = render();
+      harness.createJob
+        .mockResolvedValueOnce({ state: "running" })
+        .mockResolvedValueOnce({ state: "finished", result: success });
+      control(tree, "Create virtual workspace").onPress?.();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(harness.createJob).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(500);
+      await Promise.resolve();
+      expect(harness.createJob).toHaveBeenCalledTimes(2);
+      expect(harness.createJob).toHaveBeenLastCalledWith({ jobId: "job-1" });
+      expect(harness.toast.show).toHaveBeenCalledWith("Created Poll me");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("imports each configured default branch", async () => {
@@ -259,13 +331,13 @@ describe("workspace creation feedback", () => {
       createTerminals: undefined,
     });
     pending.resolve(success);
-    await Promise.resolve();
+    await flushAsync();
     render();
   });
 
   it("imports a selected branch and clears it when changing projects", async () => {
     let tree = await ready();
-    await Promise.resolve();
+    await flushAsync();
     tree = render();
     control(tree, "Import branch feature-x").onPress?.();
     tree = render();
@@ -281,7 +353,7 @@ describe("workspace creation feedback", () => {
       createTerminals: undefined,
     });
     pending.resolve(success);
-    await Promise.resolve();
+    await flushAsync();
     render();
   });
 
@@ -305,7 +377,7 @@ describe("workspace creation feedback", () => {
               : [],
         });
       }
-      await Promise.resolve();
+      await flushAsync();
       tree = render();
       expect(nodes(tree).some((node) => node.type === "ActivityIndicator")).toBe(false);
       expect(control(tree, "Create virtual workspace").disabled).toBe(false);
@@ -337,7 +409,7 @@ describe("workspace creation feedback", () => {
     expect(text(tree)).toContain("Resuming Fix my stuff...");
     expect(control(tree, "Workspace creation in progress")).toBeDefined();
     pending.resolve(success);
-    await Promise.resolve();
+    await flushAsync();
     expect(nodes(render()).some((node) => node.type === "ActivityIndicator")).toBe(false);
   });
 });

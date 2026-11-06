@@ -25,8 +25,9 @@ is virtual.
 
 ## Configure
 
-Settings → Poly-repo: add an uber-project (repo sources, branch and directory
-templates, agents template file). The default virtual root is
+Open **Poly-repo** from the sidebar or command center and choose **Configuration**.
+Add an uber-project (repo sources, branch and directory templates, agents template
+file). The default virtual root is
 `$PASEO_HOME/poly-workspaces/` and can be overridden to any absolute path that
 is not under the daemon's worktrees root.
 
@@ -72,8 +73,10 @@ workspaces. It does not run when reopening or repairing an existing worktree.
   `origin` remote-tracking ref. Configure a per-repo base branch if lookup is
   unavailable. If a default branch is already checked out elsewhere, the new
   worktree uses detached HEAD. Create a branch there to keep commits reachable.
-- Creation and resume show a spinner and a status message while the repo
-  worktrees are being set up. The form stays disabled until the request finishes.
+- Creation and resume run in the background and show progress while the
+  worktrees and init scripts are being set up. The form stays disabled until
+  the operation finishes. After a plugin reload, use Resume for a workspace
+  left in the creating state.
 - The Poly-repo workspace panel shows per-repo branch/dirty/ahead status,
   regenerates `REPOMAP.md`, and archives with a dirty/ahead preflight.
 - In the sidebar's project grouping mode, every virtual workspace is one
@@ -88,6 +91,11 @@ workspaces. It does not run when reopening or repairing an existing worktree.
 - Archiving removes the constituent worktrees and the root directory.
   Branches are never deleted. Dirty or ahead repos block removal until
   resolved or explicitly forced.
+  When the plugin created the Paseo project, it also removes that project if
+  it has no active workspaces. This uses `paseo project delete`, which also
+  removes archived workspace records; a workspace added between the check and
+  deletion can be removed too. Shared projects and older projects without
+  recorded ownership are left in place.
 - If archiving fails, the management screen's **Force delete** action retries
   teardown after confirmation. It removes dirty worktrees, including uncommitted
   changes, and keeps branches. If Git cannot remove a worktree, it deletes the

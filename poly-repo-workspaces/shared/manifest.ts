@@ -45,7 +45,8 @@ export const ManifestSchema = z.object({
   branch: z.string().min(1),
   rootPath: z.string().min(1),
   workspaceId: z.string().nullable(),
-  /** Project the root workspace created; constituent workspaces join it. */
+  /** True only when the plugin created this project and may safely remove it. */
+  projectOwned: z.boolean().optional(),
   projectId: z.string().nullable(),
   state: ManifestStateSchema,
   constituents: z.array(ManifestConstituentSchema),

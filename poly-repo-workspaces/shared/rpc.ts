@@ -91,6 +91,13 @@ export const listImportBranches = defineRpc({
     defaultError: z.string().nullable(),
   }),
 });
+export const CreateWorkspaceResultSchema = z.object({
+  ok: z.boolean(),
+  virtualId: z.string().nullable(),
+  workspaceId: z.string().nullable(),
+  error: z.string().nullable(),
+  preflight: z.array(PreflightIssueSchema),
+});
 
 export const createVirtualWorkspace = defineRpc({
   name: "polyrepo.virtual-workspaces.create",
@@ -103,13 +110,17 @@ export const createVirtualWorkspace = defineRpc({
     createTerminals: z.boolean().optional(),
     resume: z.boolean().optional(),
   }),
-  output: z.object({
-    ok: z.boolean(),
-    virtualId: z.string().nullable(),
-    workspaceId: z.string().nullable(),
-    error: z.string().nullable(),
-    preflight: z.array(PreflightIssueSchema),
-  }),
+  output: z.object({ jobId: z.string().min(1) }),
+});
+
+export const getCreateJob = defineRpc({
+  name: "polyrepo.virtual-workspaces.create-status",
+  input: z.object({ jobId: z.string().min(1) }),
+  output: z.discriminatedUnion("state", [
+    z.object({ state: z.literal("running") }),
+    z.object({ state: z.literal("finished"), result: CreateWorkspaceResultSchema }),
+    z.object({ state: z.literal("missing") }),
+  ]),
 });
 
 export const archiveVirtualWorkspace = defineRpc({
