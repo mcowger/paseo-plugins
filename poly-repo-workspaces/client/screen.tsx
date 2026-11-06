@@ -27,7 +27,9 @@ import {
   reconcileVirtualWorkspaces,
   type VirtualWorkspaceSummary,
 } from "../shared/rpc";
+import { setupLabel } from "../shared/setup-progress";
 import { PolyRepoSettingsScreen } from "./settings-screen";
+import { useArchiveJob } from "./use-archive-job";
 import { useVirtualWorkspaces } from "./use-virtual-workspaces";
 
 interface ScreenStyles {
@@ -142,6 +144,7 @@ export function PolyRepoScreen({
   const callCreate = useRpc(createVirtualWorkspace);
   const callCreateJob = useRpc(getCreateJob);
   const callArchive = useRpc(archiveVirtualWorkspace);
+  const waitForArchive = useArchiveJob();
   const callReconcile = useRpc(reconcileVirtualWorkspaces);
   const callForget = useRpc(forgetVirtualWorkspace);
   const callCleanup = useRpc(cleanupVirtualWorkspace);
@@ -186,6 +189,13 @@ export function PolyRepoScreen({
   const [issues, setIssues] = useState<readonly PreflightIssue[]>([]);
   const [createError, setCreateError] = useState<string | null>(null);
   const [tab, setTab] = useState<"workspaces" | "configuration">("workspaces");
+  const [archiving, setArchiving] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!creation) return;
+    const timer = setInterval(refresh, 2000);
+    return () => clearInterval(timer);
+  }, [creation, refresh]);
 
   useEffect(() => {
     if (tab !== "workspaces") return;
@@ -434,6 +444,8 @@ export function PolyRepoScreen({
       if (report.adopted.length > 0) parts.push(`adopted ${report.adopted.length}`);
       if (report.finishedTeardown.length > 0)
         parts.push(`finished ${report.finishedTeardown.length}`);
+      if (report.scheduledTeardown.length > 0)
+        parts.push(`resuming ${report.scheduledTeardown.length} archives`);
       if (report.relinked.length > 0) parts.push(`relinked ${report.relinked.length}`);
       if (report.repoWorkspacesCreated.length > 0)
         parts.push(`registered ${report.repoWorkspacesCreated.length} repos`);
@@ -551,26 +563,41 @@ export function PolyRepoScreen({
   );
 
   const doArchive = useCallback(
-    async (virtualId: string) => {
+    async (virtualId: string, force = false) => {
       if (busy) return;
       setBusy(true);
+      setArchiving(virtualId);
       try {
-        const result = await callArchive({ virtualId });
+        const { jobId } = await callArchive({ virtualId, force: force || undefined });
+        const result = await waitForArchive(jobId);
         if (result.ok) {
-          toast.show("Virtual workspace archived");
+          toast.show(
+            force
+              ? "Workspace removed. Check for remaining Paseo workspace rows."
+              : "Virtual workspace archived",
+          );
+          if (force) setConfirmForceId(null);
           refresh();
         } else if (result.blocked.length > 0) {
-          toast.error("Repos are dirty or ahead; open the workspace panel to resolve");
+          toast.error(
+            force
+              ? (result.error ?? result.blocked.map((repo) => repo.error ?? repo.repoId).join(", "))
+              : "Repos are dirty or ahead; open the workspace panel to resolve",
+          );
         } else {
-          toast.error(result.error ?? "Archive failed");
+          toast.error(result.error ?? (force ? "Force removal failed" : "Archive failed"));
         }
       } catch (unknownError) {
-        toast.error(unknownError instanceof Error ? unknownError.message : "Archive failed");
+        if (mounted.current)
+          toast.error(unknownError instanceof Error ? unknownError.message : "Archive failed");
       } finally {
-        setBusy(false);
+        if (mounted.current) {
+          setArchiving(null);
+          setBusy(false);
+        }
       }
     },
-    [busy, callArchive, refresh, toast],
+    [busy, callArchive, refresh, toast, waitForArchive],
   );
 
   const archiveHandlers = useMemo(
@@ -606,33 +633,11 @@ export function PolyRepoScreen({
         items.map((item) => [
           item.virtualId,
           () => {
-            if (busy) return;
-            setBusy(true);
-            void (async () => {
-              try {
-                const result = await callArchive({ virtualId: item.virtualId, force: true });
-                if (result.ok) {
-                  setConfirmForceId(null);
-                  toast.show("Workspace removed. Check for remaining Paseo workspace rows.");
-                } else {
-                  toast.error(
-                    result.error ??
-                      result.blocked.map((repo) => repo.error ?? repo.repoId).join(", "),
-                  );
-                }
-              } catch (unknownError) {
-                toast.error(
-                  unknownError instanceof Error ? unknownError.message : "Force removal failed",
-                );
-              } finally {
-                refresh();
-                setBusy(false);
-              }
-            })();
+            void doArchive(item.virtualId, true);
           },
         ]),
       ),
-    [busy, callArchive, items, refresh, toast],
+    [doArchive, items],
   );
 
   const cancelForce = useCallback(() => setConfirmForceId(null), []);
@@ -917,6 +922,16 @@ export function PolyRepoScreen({
                 {focused?.virtualId === item.virtualId ? " · selected" : ""}
               </Text>
               <Text style={styles.meta}>{item.rootPath}</Text>
+              {item.constituents.map((constituent) => (
+                <Text
+                  key={constituent.repoId}
+                  style={setupLabel(constituent) === "failed" ? styles.issue : styles.meta}
+                >
+                  {constituent.repoId}: {setupLabel(constituent)}
+                  {constituent.setupError ? ` · ${constituent.setupError}` : ""}
+                </Text>
+              ))}
+
               <View style={styles.actions}>
                 {item.workspaceId ? (
                   <Pressable
@@ -1004,6 +1019,19 @@ export function PolyRepoScreen({
                   >
                     <Text style={styles.buttonText}>Force delete</Text>
                   </Pressable>
+                ) : null}
+                {archiving === item.virtualId ? (
+                  <View style={styles.progress}>
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.colors.foregroundMuted}
+                      accessibilityLabel={`Archiving ${item.feature}`}
+                      accessibilityRole="progressbar"
+                    />
+                    <Text style={styles.meta} accessibilityLiveRegion="polite">
+                      Archiving {item.feature}; removing worktrees...
+                    </Text>
+                  </View>
                 ) : null}
               </View>
               {confirmForceId === item.virtualId ? (

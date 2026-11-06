@@ -6,20 +6,38 @@ export const ConstituentStateSchema = z.enum(["pending", "created", "removed", "
 
 export type ConstituentState = z.infer<typeof ConstituentStateSchema>;
 
-export const ManifestConstituentSchema = z.object({
-  repoId: z.string().min(1),
-  sourcePath: z.string().min(1),
-  worktreePath: z.string().min(1),
-  branch: z.string().min(1),
-  baseBranch: z.string().min(1),
-  /**
-   * Host workspace registered for this worktree. It inherits the virtual root's
-   * project so the repos group under one sidebar section.
-   */
-  workspaceId: z.string().nullable(),
-  state: ConstituentStateSchema,
-  initState: z.enum(["pending", "complete"]).optional(),
-});
+export const SetupStatusSchema = z.enum([
+  "pending",
+  "checking-out",
+  "checked-out",
+  "running-init",
+  "ready",
+  "failed",
+]);
+
+export type SetupStatus = z.infer<typeof SetupStatusSchema>;
+
+export const ManifestConstituentSchema = z
+  .object({
+    repoId: z.string().min(1),
+    sourcePath: z.string().min(1),
+    worktreePath: z.string().min(1),
+    branch: z.string().min(1),
+    baseBranch: z.string(),
+    /**
+     * Host workspace registered for this worktree. It inherits the virtual root's
+     * project so the repos group under one sidebar section.
+     */
+    workspaceId: z.string().nullable(),
+    state: ConstituentStateSchema,
+    initState: z.enum(["pending", "complete"]).optional(),
+    setupStatus: SetupStatusSchema.optional(),
+    setupError: z.string().nullable().optional(),
+  })
+  .refine((item) => item.state !== "created" || item.baseBranch.length > 0, {
+    path: ["baseBranch"],
+    message: "created worktrees require a base branch",
+  });
 
 export type ManifestConstituent = z.infer<typeof ManifestConstituentSchema>;
 

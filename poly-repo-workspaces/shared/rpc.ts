@@ -130,11 +130,24 @@ export const archiveVirtualWorkspace = defineRpc({
     forceRepoIds: z.array(z.string().min(1)).optional(),
     force: z.boolean().optional(),
   }),
-  output: z.object({
-    ok: z.boolean(),
-    error: z.string().nullable(),
-    blocked: z.array(RepoStatusSchema),
-  }),
+  output: z.object({ jobId: z.string().min(1) }),
+});
+
+export const getArchiveJob = defineRpc({
+  name: "polyrepo.virtual-workspaces.archive-status",
+  input: z.object({ jobId: z.string().min(1) }),
+  output: z.discriminatedUnion("state", [
+    z.object({ state: z.literal("running") }),
+    z.object({
+      state: z.literal("finished"),
+      result: z.object({
+        ok: z.boolean(),
+        error: z.string().nullable(),
+        blocked: z.array(RepoStatusSchema),
+      }),
+    }),
+    z.object({ state: z.literal("missing") }),
+  ]),
 });
 
 export const getRepoStatuses = defineRpc({
@@ -156,6 +169,7 @@ export const regenerateRepomap = defineRpc({
 export const ReconcileReportSchema = z.object({
   adopted: z.array(z.string().min(1)),
   finishedTeardown: z.array(z.string().min(1)),
+  scheduledTeardown: z.array(z.string().min(1)),
   relinked: z.array(z.string().min(1)),
   workspaceCleared: z.array(z.string().min(1)),
   /** `${virtualId}/${repoId}` pairs re-registered as host workspaces. */
@@ -172,6 +186,7 @@ export function emptyReconcileReport(): ReconcileReport {
   return {
     adopted: [],
     finishedTeardown: [],
+    scheduledTeardown: [],
     relinked: [],
     workspaceCleared: [],
     repoWorkspacesCreated: [],

@@ -376,18 +376,16 @@ async function lookupRootProjectId(
 async function registerConstituentWorkspaces(
   deps: ServiceDeps,
   manifest: VirtualWorkspaceManifest,
-): Promise<void> {
+  required = false,
+): Promise<string | null> {
   const projectId = manifest.projectId ?? (await lookupRootProjectId(deps, manifest));
-  if (!projectId) return;
-  // A worktree the host already has a workspace for is adopted, never duplicated:
-  // two workspaces on one directory would show up as two rows for one repo.
+  if (!projectId) return required ? "root workspace has no project id" : null;
   const existing = new Map<string, HostWorkspaceRef>();
   try {
-    for (const entry of await deps.workspaces.listWorkspaces()) {
+    for (const entry of await deps.workspaces.listWorkspaces())
       existing.set(normalizeAbsolute(entry.cwd), entry);
-    }
   } catch {
-    // Registration below still works; reconcile adopts anything left behind.
+    if (required) return "unable to list host workspaces";
   }
   let changed = false;
   if (manifest.projectId !== projectId) {
@@ -399,10 +397,17 @@ async function registerConstituentWorkspaces(
     const adopted = existing.get(normalizeAbsolute(constituent.worktreePath));
     if (adopted) {
       constituent.workspaceId = adopted.id;
+      if (required && constituent.setupStatus === "failed") {
+        constituent.setupStatus = constituent.initState === "pending" ? "checked-out" : "ready";
+        constituent.setupError = null;
+      }
       changed = true;
       continue;
     }
-    if (!(await deps.fs.isDirectory(constituent.worktreePath))) continue;
+    if (!(await deps.fs.isDirectory(constituent.worktreePath))) {
+      if (required) return `worktree missing for ${constituent.repoId}`;
+      continue;
+    }
     try {
       const created = await deps.workspaces.createDirectoryWorkspace({
         path: constituent.worktreePath,
@@ -410,15 +415,27 @@ async function registerConstituentWorkspaces(
         projectId,
       });
       constituent.workspaceId = created.workspaceId;
+      if (required && constituent.setupStatus === "failed") {
+        constituent.setupStatus = constituent.initState === "pending" ? "checked-out" : "ready";
+        constituent.setupError = null;
+      }
       changed = true;
-    } catch {
-      // Reconcile retries; creation must not fail over a sidebar row.
+    } catch (error) {
+      if (required) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        constituent.setupStatus = "failed";
+        constituent.setupError = `registration failed: ${message}`;
+        manifest.updatedAt = deps.now();
+        await writeManifest(deps.fs, manifest);
+        return `${constituent.repoId}: ${message}`;
+      }
     }
   }
   if (changed) {
     manifest.updatedAt = deps.now();
     await writeManifest(deps.fs, manifest);
   }
+  return null;
 }
 
 /**
@@ -651,6 +668,7 @@ export async function createVirtualWorkspace(
         baseBranch: "",
         workspaceId: null,
         state: "pending" as const,
+        setupStatus: "pending" as const,
         initState: p.repo.initScript?.trim() ? ("pending" as const) : undefined,
       })),
       createdAt: timestamp,
@@ -762,12 +780,25 @@ export async function createVirtualWorkspace(
   });
 
   if (preflight.length > 0) {
-    return { ok: false, virtualId, workspaceId: null, error: null, preflight };
+    for (const issue of preflight) {
+      const constituent = active.constituents.find((item) => item.repoId === issue.repoId);
+      if (constituent) {
+        constituent.setupStatus = "failed";
+        constituent.setupError = issue.message;
+      }
+    }
+    active.updatedAt = deps.now();
+    await writeManifest(deps.fs, active);
+    return { ok: false, virtualId, workspaceId: active.workspaceId, error: null, preflight };
   }
 
   for (const item of planned) {
     const constituent = active.constituents.find((c) => c.repoId === item.repo.id);
     if (!constituent || constituent.state === "created") continue;
+    constituent.setupStatus = "checking-out";
+    constituent.setupError = null;
+    active.updatedAt = deps.now();
+    await writeManifest(deps.fs, active);
     try {
       if (importDefaults) {
         const checkedOut = (await listWorktreeBranches(deps.git, item.sourcePath)).includes(
@@ -805,6 +836,8 @@ export async function createVirtualWorkspace(
         );
       }
     } catch (error) {
+      constituent.setupStatus = "failed";
+      constituent.setupError = `git worktree add failed: ${gitMessage(error)}`;
       active.updatedAt = deps.now();
       await writeManifest(deps.fs, active);
       return {
@@ -816,31 +849,10 @@ export async function createVirtualWorkspace(
       };
     }
     constituent.state = "created";
+    constituent.setupStatus = "checked-out";
     active.updatedAt = deps.now();
     await writeManifest(deps.fs, active);
   }
-
-  for (const item of planned) {
-    const constituent = active.constituents.find((c) => c.repoId === item.repo.id);
-    if (constituent?.initState !== "pending") continue;
-    try {
-      if (item.repo.initScript?.trim())
-        await deps.init.run(item.repo.initScript, item.worktreePath);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "unknown error";
-      return {
-        ok: false,
-        virtualId,
-        workspaceId: null,
-        error: `init script failed for ${item.repo.id}: ${message}. Resume creation to retry.`,
-        preflight: [],
-      };
-    }
-    constituent.initState = "complete";
-    active.updatedAt = deps.now();
-    await writeManifest(deps.fs, active);
-  }
-
   const agentsPath = joinSegments(rootPath, "AGENTS.md");
   if ((await deps.fs.readFile(agentsPath)) === null) {
     const rendered = renderAgentsTemplate(templateRaw, {
@@ -851,14 +863,6 @@ export async function createVirtualWorkspace(
     });
     await deps.fs.writeFileAtomic(agentsPath, rendered);
   }
-
-  try {
-    const repomap = await buildRepomapContent(deps, active, project.displayName);
-    await deps.fs.writeFileAtomic(joinSegments(rootPath, "REPOMAP.md"), repomap);
-  } catch {
-    // REPOMAP is a convenience file; a failure here must not fail creation.
-  }
-
   if (!active.workspaceId) {
     let previousProjectIds: Set<string> | null = null;
     try {
@@ -878,21 +882,78 @@ export async function createVirtualWorkspace(
       );
       active.updatedAt = deps.now();
       await writeManifest(deps.fs, active);
+      await updateIndex(deps, (index) => {
+        const entry = index.virtual[virtualId];
+        if (entry) entry.workspaceId = active.workspaceId;
+      });
     } catch (error) {
       active.updatedAt = deps.now();
       await writeManifest(deps.fs, active);
-      const message = error instanceof Error ? error.message : "unknown error";
       return {
         ok: false,
         virtualId,
-        workspaceId: null,
-        error: `workspace registration failed: ${message}`,
+        workspaceId: active.workspaceId,
+        error: `workspace registration failed: ${error instanceof Error ? error.message : "unknown error"}`,
         preflight: [],
       };
     }
   }
+  const registrationError = await registerConstituentWorkspaces(deps, active, true);
+  if (registrationError) {
+    return {
+      ok: false,
+      virtualId,
+      workspaceId: active.workspaceId,
+      error: `workspace registration failed: ${registrationError}`,
+      preflight: [],
+    };
+  }
+  for (const constituent of active.constituents) {
+    if (constituent.state === "created" && constituent.initState !== "pending") {
+      constituent.setupStatus = "ready";
+      constituent.setupError = null;
+    }
+  }
+  active.updatedAt = deps.now();
+  await writeManifest(deps.fs, active);
 
-  await registerConstituentWorkspaces(deps, active);
+  for (const item of planned) {
+    const constituent = active.constituents.find((c) => c.repoId === item.repo.id);
+    if (constituent?.initState !== "pending") continue;
+    constituent.setupStatus = "running-init";
+    constituent.setupError = null;
+    active.updatedAt = deps.now();
+    await writeManifest(deps.fs, active);
+    try {
+      if (item.repo.initScript?.trim())
+        await deps.init.run(item.repo.initScript, item.worktreePath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      constituent.setupStatus = "failed";
+      constituent.setupError = message;
+      active.updatedAt = deps.now();
+      await writeManifest(deps.fs, active);
+      return {
+        ok: false,
+        virtualId,
+        workspaceId: active.workspaceId,
+        error: `init script failed for ${item.repo.id}: ${message}. Resume creation to retry.`,
+        preflight: [],
+      };
+    }
+    constituent.initState = "complete";
+    constituent.setupStatus = "ready";
+    constituent.setupError = null;
+    active.updatedAt = deps.now();
+    await writeManifest(deps.fs, active);
+  }
+
+  try {
+    const repomap = await buildRepomapContent(deps, active, project.displayName);
+    await deps.fs.writeFileAtomic(joinSegments(rootPath, "REPOMAP.md"), repomap);
+  } catch {
+    // REPOMAP is a convenience file; a failure here must not fail creation.
+  }
 
   active.state = "ready";
   active.updatedAt = deps.now();
@@ -1352,6 +1413,22 @@ export async function reconcileOnLoad(
   for (const [virtualId, entry] of Object.entries(fresh.virtual)) {
     if (!(await deps.fs.isDirectory(entry.rootPath))) continue;
     const manifest = await readManifest(deps.fs, entry.rootPath);
+    if (manifest?.state === "creating") {
+      let changed = false;
+      for (const constituent of manifest.constituents) {
+        if (constituent.setupStatus === "checking-out") {
+          constituent.setupStatus = "pending";
+          changed = true;
+        } else if (constituent.setupStatus === "running-init") {
+          constituent.setupStatus = "checked-out";
+          changed = true;
+        }
+      }
+      if (changed) {
+        manifest.updatedAt = deps.now();
+        await writeManifest(deps.fs, manifest);
+      }
+    }
     if (manifest?.state !== "archived") continue;
     await finalizeRemoval(deps, manifest);
     finalized.push(virtualId);
@@ -1437,7 +1514,10 @@ async function finishArchivingCascade(
   return { finished: true };
 }
 
-export async function reconcileVirtualWorkspaces(deps: ServiceDeps): Promise<{
+export async function reconcileVirtualWorkspaces(
+  deps: ServiceDeps,
+  options?: { scheduleArchive(virtualId: string): void },
+): Promise<{
   ok: boolean;
   error: string | null;
   report: ReconcileReport;
@@ -1477,6 +1557,11 @@ export async function reconcileVirtualWorkspaces(deps: ServiceDeps): Promise<{
       continue;
     }
     if (manifest.state === "archiving") {
+      if (options) {
+        options.scheduleArchive(virtualId);
+        report.scheduledTeardown.push(virtualId);
+        continue;
+      }
       // Crash window: the host-side archive may or may not have happened.
       // Re-issuing it is safe; the archived hook skips manifests already marked archiving.
       if ((await archiveConstituentWorkspaces(deps, manifest)).error) continue;

@@ -6,6 +6,7 @@ import {
   type PluginHandlerContext,
   type PluginServerContext,
 } from "@getpaseo/plugin/server";
+import { createArchiveJobManager } from "./server/archive-jobs";
 import { createJobManager } from "./server/create-jobs";
 import { createFsPort } from "./server/files";
 import { createGitPort } from "./server/git";
@@ -37,7 +38,9 @@ import {
   archiveVirtualWorkspace as archiveVirtualWorkspaceRpc,
   cleanupVirtualWorkspace as cleanupVirtualWorkspaceRpc,
   createVirtualWorkspace as createVirtualWorkspaceRpc,
+  emptyReconcileReport,
   forgetVirtualWorkspace as forgetVirtualWorkspaceRpc,
+  getArchiveJob,
   getCreateJob,
   getRepoStatuses as getRepoStatusesRpc,
   getSettingsSnapshot,
@@ -124,10 +127,12 @@ export default function contribute(server: PluginServerContext) {
   const settings = server.registerSettings(polyrepoSettings);
   const fs = createFsPort();
   const git = createGitPort();
+  const archiveJobs = createArchiveJobManager();
   const createJobs = createJobManager();
   const init = createInitRunner();
   const paseoHome = resolvePaseoHome();
   const withIndexLock = createMutex();
+  let stopped = false;
 
   function depsFor(context: PluginHandlerContext): ServiceDeps {
     return {
@@ -173,16 +178,25 @@ export default function contribute(server: PluginServerContext) {
   });
 
   server.handle(createVirtualWorkspaceRpc, async (input, context) => {
-    const jobId = createJobs.start(sanitizeVirtualId(input.uberProjectId, input.feature), () =>
-      createVirtualWorkspace(depsFor(context), {
-        uberProjectId: input.uberProjectId,
-        feature: input.feature,
-        baseBranchOverrides: input.baseBranchOverrides,
-        importBranch: input.importBranch,
-        importDefaults: input.importDefaults,
-        createTerminals: input.createTerminals,
-        resume: input.resume,
-      }),
+    const virtualId = sanitizeVirtualId(input.uberProjectId, input.feature);
+    const jobId = createJobs.start(virtualId, () =>
+      archiveJobs.hasRunning(virtualId)
+        ? Promise.resolve({
+            ok: false,
+            virtualId,
+            workspaceId: null,
+            error: "Workspace archive is still running.",
+            preflight: [],
+          })
+        : createVirtualWorkspace(depsFor(context), {
+            uberProjectId: input.uberProjectId,
+            feature: input.feature,
+            baseBranchOverrides: input.baseBranchOverrides,
+            importBranch: input.importBranch,
+            importDefaults: input.importDefaults,
+            createTerminals: input.createTerminals,
+            resume: input.resume,
+          }),
     );
     return { jobId };
   });
@@ -190,12 +204,19 @@ export default function contribute(server: PluginServerContext) {
   server.handle(getCreateJob, (input) => Promise.resolve(createJobs.get(input.jobId)));
 
   server.handle(archiveVirtualWorkspaceRpc, async (input, context) => {
-    return archiveVirtualWorkspace(depsFor(context), {
-      virtualId: input.virtualId,
-      forceRepoIds: input.forceRepoIds,
-      force: input.force,
-    });
+    const jobId = archiveJobs.start(input.virtualId, () =>
+      createJobs.hasRunning(input.virtualId)
+        ? Promise.resolve({ ok: false, error: "Workspace creation is still running.", blocked: [] })
+        : archiveVirtualWorkspace(depsFor(context), {
+            virtualId: input.virtualId,
+            forceRepoIds: input.forceRepoIds,
+            force: input.force,
+          }),
+    );
+    return { jobId };
   });
+
+  server.handle(getArchiveJob, (input) => Promise.resolve(archiveJobs.get(input.jobId)));
 
   server.handle(getRepoStatusesRpc, async (input, context) => {
     return getRepoStatuses(depsFor(context), input.virtualId);
@@ -206,7 +227,20 @@ export default function contribute(server: PluginServerContext) {
   });
 
   server.handle(reconcileVirtualWorkspacesRpc, async (_input, context) => {
-    return reconcileVirtualWorkspaces(depsFor(context));
+    if (archiveJobs.hasRunning() || createJobs.hasRunning()) {
+      return {
+        ok: false,
+        error: "Wait for active workspace setup or archive to finish before resyncing.",
+        report: emptyReconcileReport(),
+      };
+    }
+    return reconcileVirtualWorkspaces(depsFor(context), {
+      scheduleArchive(virtualId) {
+        archiveJobs.start(virtualId, () =>
+          archiveVirtualWorkspace(depsFor(context), { virtualId }),
+        );
+      },
+    });
   });
 
   server.handle(forgetVirtualWorkspaceRpc, async (input, context) => {
@@ -226,7 +260,17 @@ export default function contribute(server: PluginServerContext) {
       ...depsFor(context),
       workspaces: createWorkspacesPort(context.paseo),
     };
-    await handleWorkspaceArchived(hookDeps, { id: event.workspace.id, cwd: event.workspace.cwd });
+    const archived = { id: event.workspace.id, cwd: event.workspace.cwd };
+    if (createJobs.hasRunning()) {
+      void (async () => {
+        while (!stopped && createJobs.hasRunning()) await createJobs.whenIdle();
+        if (!stopped) await handleWorkspaceArchived(hookDeps, archived);
+      })().catch((error: unknown) => {
+        console.warn("[poly-repo-workspaces] deferred archive failed", error);
+      });
+      return;
+    }
+    await handleWorkspaceArchived(hookDeps, archived);
   });
 
   // No startup lifecycle event exists, so reconcile when the plugin loads
@@ -266,7 +310,10 @@ export default function contribute(server: PluginServerContext) {
   );
 
   return async () => {
+    stopped = true;
+    archiveJobs.dispose();
     createJobs.dispose();
+    git.stop();
     await init.stop();
   };
 }

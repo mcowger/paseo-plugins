@@ -9,6 +9,7 @@ interface Job {
   key: string;
   result?: CreateResult;
   expiresAt?: number;
+  completion?: Promise<void>;
 }
 
 const RETENTION_MS = 30 * 60 * 1000;
@@ -33,7 +34,7 @@ export function createJobManager() {
       const job: Job = { key };
       jobs.set(jobId, job);
       activeByKey.set(key, jobId);
-      void Promise.resolve()
+      job.completion = Promise.resolve()
         .then(work)
         .catch(
           (error: unknown): CreateResult => ({
@@ -52,6 +53,13 @@ export function createJobManager() {
       return jobId;
     },
 
+    hasRunning(key?: string): boolean {
+      if (key !== undefined) return activeByKey.has(key);
+      return activeByKey.size > 0;
+    },
+    async whenIdle(): Promise<void> {
+      await Promise.all([...activeByKey.values()].map((id) => jobs.get(id)?.completion));
+    },
     get(jobId: string): CreateJob {
       evictExpired(Date.now());
       const job = jobs.get(jobId);

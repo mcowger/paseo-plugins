@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { UberProject } from "../shared/config";
+import { createArchiveJobManager } from "./archive-jobs";
 import { createFakeGit, createFakeWorkspaces, createMemoryFs, gitFailedWith } from "./fakes";
 import {
   archiveVirtualWorkspace,
@@ -71,6 +72,103 @@ function depsFor(
 }
 
 describe("repository initialization", () => {
+  it("registers the root and repos before a long init finishes", async () => {
+    const p = project({
+      repos: [
+        {
+          id: "frontend",
+          sourcePath: "/src/frontend",
+          dirTemplate: "{repo}_{branch}",
+          initScript: "setup",
+        },
+        { id: "app", sourcePath: "/src/app", dirTemplate: "{repo}_{branch}" },
+      ],
+    });
+    const { deps, fs, workspaces } = depsFor(p);
+    let release: () => void = () => {};
+    let signalStart: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      signalStart = resolve;
+    });
+    deps.init.run = async () => {
+      signalStart();
+      await gate;
+    };
+    const creation = createVirtualWorkspace(deps, { uberProjectId: "uber", feature: "feature" });
+    await started;
+    expect(workspaces.hostWorkspaces.map((entry) => entry.name)).toEqual([
+      "feature / Root",
+      "feature / frontend",
+      "feature / app",
+    ]);
+    expect(await fs.readFile("/paseo/poly-workspaces/uber-feature/AGENTS.md")).not.toBeNull();
+    const summary = (await listVirtualWorkspaces(deps))[0];
+    expect(summary?.workspaceId).toBe("wks_test01");
+    expect(summary?.state).toBe("creating");
+    expect(summary?.constituents.map((item) => item.setupStatus)).toEqual([
+      "running-init",
+      "ready",
+    ]);
+    release();
+    expect((await creation).ok).toBe(true);
+    expect(
+      (await readManifest(fs, "/paseo/poly-workspaces/uber-feature"))?.constituents.map(
+        (item) => item.setupStatus,
+      ),
+    ).toEqual(["ready", "ready"]);
+  });
+
+  it("retains per-repo preflight failures and resumes after a missing source is restored", async () => {
+    const { deps, fs } = depsFor(project());
+    await fs.removeRecursive("/src/app");
+    const input = { uberProjectId: "uber", feature: "feature" };
+    const result = await createVirtualWorkspace(deps, input);
+    expect(result.preflight[0]?.code).toBe("source-missing");
+    const summary = (await listVirtualWorkspaces(deps))[0];
+    expect(summary?.state).toBe("creating");
+    expect(summary?.constituents.find((repo) => repo.repoId === "app")?.setupStatus).toBe("failed");
+    await fs.mkdirp("/src/app/.git");
+    await fs.writeFileAtomic("/src/app/.git/HEAD", "ref: refs/heads/main\n");
+    expect((await createVirtualWorkspace(deps, { ...input, resume: true })).ok).toBe(true);
+  });
+
+  it("does not run init if a repo workspace cannot be registered, and resumes", async () => {
+    const p = project({
+      repos: [
+        {
+          id: "frontend",
+          sourcePath: "/src/frontend",
+          dirTemplate: "{repo}_{branch}",
+          initScript: "setup",
+        },
+      ],
+    });
+    const { deps, fs, workspaces } = depsFor(p);
+    const register = workspaces.createDirectoryWorkspace;
+    let fail = true;
+    workspaces.createDirectoryWorkspace = (workspaceInput) => {
+      if (fail && workspaceInput.projectId)
+        return Promise.reject(new Error("registration unavailable"));
+      return register(workspaceInput);
+    };
+    const runInit = vi.fn(async () => {});
+    deps.init.run = runInit;
+    const input = { uberProjectId: "uber", feature: "feature" };
+    const result = await createVirtualWorkspace(deps, input);
+    expect(result.error).toContain("registration unavailable");
+    expect(result.workspaceId).toBe("wks_test01");
+    expect(runInit).not.toHaveBeenCalled();
+    expect(
+      (await readManifest(fs, "/paseo/poly-workspaces/uber-feature"))?.constituents[0]?.setupStatus,
+    ).toBe("failed");
+    fail = false;
+    expect((await createVirtualWorkspace(deps, { ...input, resume: true })).ok).toBe(true);
+    expect(runInit).toHaveBeenCalledTimes(1);
+  });
+
   it("runs scripts in created worktrees and retries only failed scripts on resume", async () => {
     const p = project({
       repos: [
@@ -95,6 +193,13 @@ describe("repository initialization", () => {
     const result = await createVirtualWorkspace(deps, input);
     expect(result.ok).toBe(false);
     expect(result.error).toContain("init script failed for app");
+    expect(result.workspaceId).toBe("wks_test01");
+    const failedManifest = await readManifest(fs, "/paseo/poly-workspaces/uber-feature");
+    expect(failedManifest?.constituents.map((item) => item.setupStatus)).toEqual([
+      "ready",
+      "failed",
+    ]);
+    expect(failedManifest?.constituents[1]?.setupError).toContain("exited with code 1");
     expect((await readManifest(fs, "/paseo/poly-workspaces/uber-feature"))?.state).toBe("creating");
     fail = false;
     expect((await createVirtualWorkspace(deps, { ...input, resume: true })).ok).toBe(true);
@@ -916,6 +1021,24 @@ describe("reconcile and repair", () => {
     return { ...ctx, virtualId: result.virtualId as string };
   }
 
+  it("clears stale running setup labels after a plugin reload", async () => {
+    const { deps, fs } = await created();
+    const manifest = await readManifest(fs, root);
+    if (!manifest?.constituents[0] || !manifest.constituents[1])
+      throw new Error("missing manifest constituents");
+    manifest.state = "creating";
+    manifest.constituents[0].setupStatus = "running-init";
+    manifest.constituents[0].initState = "pending";
+    manifest.constituents[1].state = "pending";
+    manifest.constituents[1].setupStatus = "checking-out";
+    await writeManifest(fs, manifest);
+    await reconcileOnLoad(deps);
+    expect((await readManifest(fs, root))?.constituents.map((repo) => repo.setupStatus)).toEqual([
+      "checked-out",
+      "pending",
+    ]);
+  });
+
   it("adopts a manifest directory missing from the index", async () => {
     const p = project();
     const { deps, fs } = depsFor(p);
@@ -959,6 +1082,44 @@ describe("reconcile and repair", () => {
     expect(workspaces.archived).toEqual(["wks_test02", "wks_test03", "wks_test01"]);
     expect(await fs.exists(root)).toBe(false);
     expect(await listVirtualWorkspaces(deps)).toHaveLength(0);
+  });
+
+  it("schedules delayed archive recovery without holding resync open", async () => {
+    const { deps, fs, git, virtualId } = await created();
+    const manifest = await readManifest(fs, root);
+    if (!manifest) throw new Error("missing manifest");
+    manifest.state = "archiving";
+    await writeManifest(fs, manifest);
+    let release: () => void = () => {};
+    let signalStart: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      signalStart = resolve;
+    });
+    const run = git.run;
+    git.run = async (args, cwd) => {
+      if (args[0] === "worktree" && args[1] === "remove") {
+        signalStart();
+        await gate;
+      }
+      return run(args, cwd);
+    };
+    const jobs = createArchiveJobManager();
+    let jobId = "";
+    const result = await reconcileVirtualWorkspaces(deps, {
+      scheduleArchive(id) {
+        jobId = jobs.start(id, () => archiveVirtualWorkspace(deps, { virtualId: id }));
+      },
+    });
+    expect(result.report.scheduledTeardown).toEqual([virtualId]);
+    await started;
+    expect(jobs.get(jobId).state).toBe("running");
+    release();
+    await vi.waitFor(() => expect(jobs.get(jobId).state).toBe("finished"));
+    expect(jobs.get(jobId)).toMatchObject({ state: "finished", result: { ok: true } });
+    expect(await fs.exists(root)).toBe(false);
   });
 
   it("clears stale workspace ids and relinks a reopened root by cwd", async () => {

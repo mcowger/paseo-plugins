@@ -1,5 +1,5 @@
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listVirtualWorkspaces, type VirtualWorkspaceSummary } from "../shared/rpc";
 
 const TRANSITIONAL_STATES: ReadonlySet<string> = new Set([
@@ -23,38 +23,56 @@ export function useVirtualWorkspaces(): VirtualWorkspacesResult {
   const [items, setItems] = useState<readonly VirtualWorkspaceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
+  const mounted = useRef(true);
+  const requestInFlight = useRef(false);
+  const refreshQueued = useRef(false);
+  const generation = useRef(0);
+  const callListRef = useRef(callList);
+  callListRef.current = callList;
   const transitional = useMemo(
     () => items.some((item) => TRANSITIONAL_STATES.has(item.state)),
     [items],
   );
 
   const refresh = useCallback(() => {
-    setRevision((value) => value + 1);
+    if (!mounted.current) return;
+    if (requestInFlight.current) {
+      refreshQueued.current = true;
+      return;
+    }
+    requestInFlight.current = true;
+    setLoading(true);
+    void (async () => {
+      do {
+        refreshQueued.current = false;
+        const requestGeneration = generation.current;
+        try {
+          const result = await callListRef.current({});
+          if (mounted.current && requestGeneration === generation.current) {
+            setItems(result.virtualWorkspaces);
+            setError(null);
+          }
+        } catch (unknownError) {
+          if (mounted.current && requestGeneration === generation.current) {
+            setError(unknownError instanceof Error ? unknownError.message : "failed to load");
+          }
+        }
+      } while (mounted.current && refreshQueued.current);
+      requestInFlight.current = false;
+      if (mounted.current) setLoading(false);
+    })();
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: revision intentionally retriggers reloads via refresh()
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new RPC binding invalidates in-flight responses.
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    const load = async (): Promise<void> => {
-      try {
-        const result = await callList({});
-        if (cancelled) return;
-        setItems(result.virtualWorkspaces);
-        setError(null);
-      } catch (unknownError) {
-        if (cancelled) return;
-        setError(unknownError instanceof Error ? unknownError.message : "failed to load");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    void load();
+    mounted.current = true;
+    generation.current += 1;
+    refresh();
     return () => {
-      cancelled = true;
+      mounted.current = false;
+      generation.current += 1;
     };
-  }, [callList, revision]);
+  }, [callList, refresh]);
 
   useEffect(() => {
     const unsubscribe = paseo.workspaces.subscribe(() => {

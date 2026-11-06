@@ -22,6 +22,7 @@ const harness = vi.hoisted(() => ({
   createJob: vi.fn(),
   branches: vi.fn(),
   archive: vi.fn(),
+  archiveJob: vi.fn(),
   projects: vi.fn(),
   refresh: vi.fn(),
   toast: { show: vi.fn(), error: vi.fn() },
@@ -88,9 +89,10 @@ vi.mock("@getpaseo/plugin/client", () => ({
           ? harness.branches
           : contract.name === "polyrepo.virtual-workspaces.archive"
             ? harness.archive
-            : harness.projects,
+            : contract.name === "polyrepo.virtual-workspaces.archive-status"
+              ? harness.archiveJob
+              : harness.projects,
 }));
-
 vi.mock("./use-virtual-workspaces", () => ({
   useVirtualWorkspaces: () => ({
     items: harness.items,
@@ -185,7 +187,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   harness.create.mockReset();
   harness.createJob.mockReset();
-  harness.projects.mockReset();
+  harness.archive.mockReset();
   harness.branches.mockReset();
   harness.projects.mockResolvedValue({
     uberProjects: [
@@ -214,6 +216,11 @@ beforeEach(() => {
   harness.mounted = false;
   harness.create.mockResolvedValue({ jobId: "job-1" });
   harness.createJob.mockResolvedValue({ state: "finished", result: success });
+  harness.archive.mockResolvedValue({ jobId: "archive-job" });
+  harness.archiveJob.mockResolvedValue({
+    state: "finished",
+    result: { ok: true, error: null, blocked: [] },
+  });
   harness.refs = [];
 });
 
@@ -249,16 +256,42 @@ describe("workspace creation feedback", () => {
         constituents: [],
       } as unknown as VirtualWorkspaceSummary,
     ];
-    harness.archive.mockResolvedValue({ ok: true, error: null, blocked: [] });
+    harness.archiveJob.mockResolvedValue({
+      state: "finished",
+      result: { ok: true, error: null, blocked: [] },
+    });
     let tree = await ready();
     control(tree, "Force delete Fix").onPress?.();
     tree = render();
     expect(text(tree)).toContain("uncommitted changes");
     expect(harness.archive).not.toHaveBeenCalled();
     control(tree, "Confirm force delete Fix").onPress?.();
-    await Promise.resolve();
+    await flushAsync();
     expect(harness.archive).toHaveBeenCalledWith({ virtualId: "uber-fix", force: true });
+    expect(harness.archiveJob).toHaveBeenCalledWith({ jobId: "archive-job" });
     expect(harness.refresh).toHaveBeenCalled();
+  });
+
+  it("surfaces missing archive jobs instead of reporting success", async () => {
+    harness.items = [
+      {
+        virtualId: "uber-fix",
+        uberProjectId: "uber",
+        feature: "Fix",
+        branch: "fix",
+        state: "ready",
+        rootExists: true,
+        constituents: [],
+      } as unknown as VirtualWorkspaceSummary,
+    ];
+    harness.archiveJob.mockResolvedValue({ state: "missing" });
+    const tree = await ready();
+    control(tree, "Archive Fix").onPress?.();
+    await flushAsync();
+    expect(harness.toast.error).toHaveBeenCalledWith(
+      "Archive job was not found; it may have expired. Refresh and retry.",
+    );
+    expect(harness.refresh).not.toHaveBeenCalled();
   });
 
   it("previews the sanitized branch, keeps the display name, and shows a spinner until completion", async () => {
@@ -411,5 +444,38 @@ describe("workspace creation feedback", () => {
     pending.resolve(success);
     await flushAsync();
     expect(nodes(render()).some((node) => node.type === "ActivityIndicator")).toBe(false);
+  });
+  it("shows per-repo setup progress in managed workspace rows", async () => {
+    harness.items = [
+      {
+        virtualId: "uber-fix",
+        uberProjectId: "uber",
+        feature: "Fix",
+        branch: "fix",
+        state: "creating",
+        rootExists: true,
+        rootPath: "/work/fix",
+        workspaceId: "workspace",
+        constituents: [
+          {
+            repoId: "frontend",
+            worktreePath: "/work/fix/frontend",
+            state: "created",
+            setupStatus: "running-init",
+          },
+          {
+            repoId: "app",
+            worktreePath: "/work/fix/app",
+            state: "created",
+            setupStatus: "failed",
+            setupError: "init failed",
+          },
+        ],
+      } as unknown as VirtualWorkspaceSummary,
+    ];
+    const tree = await ready();
+    expect(text(tree)).toContain("frontend: running init");
+    expect(text(tree)).toContain("app: failed · init failed");
+    expect(control(tree, "Open Fix")).toBeDefined();
   });
 });

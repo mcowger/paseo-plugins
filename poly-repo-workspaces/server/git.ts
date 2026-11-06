@@ -32,13 +32,18 @@ function toFailure(error: unknown): GitFailure {
   };
 }
 
-export function createGitPort(): GitPort {
+export function createGitPort(): GitPort & { stop(): void } {
+  const controller = new AbortController();
   return {
+    stop() {
+      controller.abort();
+    },
     async run(args: string[], cwd: string): Promise<GitRunResult> {
       try {
         const result = await execCommand("git", args, {
           cwd,
-          timeout: GIT_TIMEOUT_MS,
+          signal: controller.signal,
+          ...(args[0] === "worktree" && args[1] === "remove" ? {} : { timeout: GIT_TIMEOUT_MS }),
         });
         return { stdout: result.stdout, stderr: result.stderr };
       } catch (error) {

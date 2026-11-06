@@ -32,8 +32,9 @@ file). The default virtual root is
 is not under the daemon's worktrees root.
 
 Each repository can have an optional init script. After all worktrees exist,
-the plugin runs these scripts in repository order, each with its worktree as
-the current directory. On Unix it uses `$SHELL -lc` (or `/bin/sh` if `SHELL`
+the plugin registers the root and repo workspaces before running the scripts
+in repository order, each with its worktree as the current directory. On Unix
+it uses `$SHELL -lc` (or `/bin/sh` if `SHELL`
 is unset), so login startup files can load environment settings. It is
 non-interactive, not a Paseo terminal: prompts cannot be answered and
 interactive-only shell configuration may not be loaded. On Windows it uses
@@ -73,12 +74,14 @@ workspaces. It does not run when reopening or repairing an existing worktree.
   `origin` remote-tracking ref. Configure a per-repo base branch if lookup is
   unavailable. If a default branch is already checked out elsewhere, the new
   worktree uses detached HEAD. Create a branch there to keep commits reachable.
-- Creation and resume run in the background and show progress while the
-  worktrees and init scripts are being set up. The form stays disabled until
-  the operation finishes. After a plugin reload, use Resume for a workspace
-  left in the creating state.
-- The Poly-repo workspace panel shows per-repo branch/dirty/ahead status,
-  regenerates `REPOMAP.md`, and archives with a dirty/ahead preflight.
+- Creation and resume run in the background. The workspace page and panel show
+  per-repo checkout and init status. Registered workspaces can be opened while
+  scripts run; setup is not complete until they finish. The form stays disabled
+  during creation. After a plugin reload, use Resume for a workspace left in
+  the creating state.
+- The Poly-repo workspace panel groups each repo's setup and Git status in a
+  scrollable card with terminal, open, and copy-path actions. It also regenerates
+  `REPOMAP.md` and archives with a dirty/ahead preflight.
 - In the sidebar's project grouping mode, every virtual workspace is one
   collapsible project section named after its root directory. Rows are titled
   `<feature> / Root` and `<feature> / <repo>`, so a row always names the feature
@@ -91,6 +94,9 @@ workspaces. It does not run when reopening or repairing an existing worktree.
 - Archiving removes the constituent worktrees and the root directory.
   Branches are never deleted. Dirty or ahead repos block removal until
   resolved or explicitly forced.
+  Archiving runs in the background, so large worktree removals can finish
+  without holding a single RPC open. After a plugin reload, use Resync to
+  continue an interrupted archive.
   When the plugin created the Paseo project, it also removes that project if
   it has no active workspaces. This uses `paseo project delete`, which also
   removes archived workspace records; a workspace added between the check and

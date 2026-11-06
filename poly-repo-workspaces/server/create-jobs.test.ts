@@ -22,10 +22,19 @@ describe("create job manager", () => {
     const second = manager.start("same", work);
     expect(second).toBe(first);
     expect(work).not.toHaveBeenCalled();
+    let idle = false;
+    const waiting = manager.whenIdle().then(() => {
+      idle = true;
+    });
+    expect(manager.hasRunning("same")).toBe(true);
+    expect(idle).toBe(false);
     expect(manager.get(first)).toEqual({ state: "running" });
     await Promise.resolve();
     expect(work).toHaveBeenCalledTimes(1);
     finish(success);
+    await waiting;
+    expect(idle).toBe(true);
+    expect(manager.hasRunning("same")).toBe(false);
     await vi.waitFor(() => expect(manager.get(first).state).toBe("finished"));
     expect(manager.get(first)).toEqual({ state: "finished", result: success });
     manager.dispose();
