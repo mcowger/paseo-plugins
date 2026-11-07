@@ -60,12 +60,12 @@ export function ClaudeUsageSidebar({ theme, host, openPopover }: PluginSidebarIt
     const item = summary(account);
     const stale = account.stale || query.isError;
     const status = stale ? "Stale" : account.status !== "available" ? "Unavailable" : null;
-    return <Interactive key={account.id} theme={theme} transparent accessibilityRole="button" accessibilityLabel={`Claude ${account.label}: ${item ? percent(item.value) : "Usage not reported"}${status ? `, ${status}` : ""}. Show usage details`} onPress={open} style={{ minHeight: 32, minWidth: 0, paddingHorizontal: 8, paddingVertical: 4, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 6 }}>
+    return <Interactive key={account.id} theme={theme} transparent accessibilityRole="button" accessibilityLabel={`Claude ${account.label}: ${item ? percent(item.value) : "Usage not reported"}${status ? `, ${status}` : ""}. Show usage details`} onPress={open} style={{ minHeight: 32, minWidth: 0, paddingHorizontal: 4, paddingVertical: 4, flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 6 }}>
       <Icon name="Gauge" size={14} color={theme.colors.foregroundMuted} />
       <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, flexShrink: 0 }}>Claude</Text>
-      {item?.value !== null && item?.value !== undefined ? <View style={{ flex: 1, minWidth: 12 }}><Meter value={item.value} theme={theme} label={item.label} quiet /></View> : null}
+      {item?.value !== null && item?.value !== undefined ? <View style={{ flex: 1, minWidth: 4 }}><Meter value={item.value} theme={theme} label={item.label} quiet /></View> : null}
       <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontSize: 12, fontVariant: ["tabular-nums"], flexShrink: 1 }}>{item?.value !== null && item?.value !== undefined ? percent(item.value) : item?.balance ? amount(item.balance.remaining) : status ?? "Not reported"}{item ? <Text style={{ color: theme.colors.foregroundMuted }}> {item.balance ? "mo" : ""}</Text> : null}</Text>
-      {status && item?.value !== null && item?.value !== undefined ? <Text style={{ color: theme.colors.statusWarning, fontSize: 11 }}>{status}</Text> : null}
+      {status && item?.value !== null && item?.value !== undefined ? <Text numberOfLines={1} style={{ color: theme.colors.statusWarning, fontSize: 11, flexShrink: 1 }}>{status}</Text> : null}
     </Interactive>;
   })}</View>;
 }
@@ -160,15 +160,15 @@ export function CodexUsageSidebar({ theme, host, openPopover }: PluginSidebarIte
     const money = item?.balance?.unit === "usd";
     const fallbackValue = item?.balance ? (item.balance.limit === null || displayAs === "remaining" ? item.balance.remaining : item.balance.used) : null;
     const fallback = item?.balance ? (money ? amount(fallbackValue) : credits(fallbackValue)) : status ?? "Not reported";
-    return <Interactive key={account.id} theme={theme} transparent accessibilityRole="button" accessibilityLabel={`Codex ${account.label}: ${item ? codexPercent(item.value, displayAs) ?? fallback : "Usage not reported"}${status ? `, ${status}` : ""}. Show usage details`} onPress={open} style={{ minHeight: 32, minWidth: 0, paddingHorizontal: 8, paddingVertical: 4, flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 6 }}>
+    return <Interactive key={account.id} theme={theme} transparent accessibilityRole="button" accessibilityLabel={`Codex ${account.label}: ${item ? codexPercent(item.value, displayAs) ?? fallback : "Usage not reported"}${status ? `, ${status}` : ""}. Show usage details`} onPress={open} style={{ minHeight: 32, minWidth: 0, paddingHorizontal: 4, paddingVertical: 4, flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 6 }}>
       <Icon name="Gauge" size={14} color={theme.colors.foregroundMuted} />
       <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, flexShrink: 0 }}>Codex</Text>
-      {value !== null ? <View style={{ flex: 1, minWidth: 12 }}><Meter value={value} theme={theme} label={item?.label ?? "Codex usage"} quiet /></View> : null}
+      {value !== null ? <View style={{ flex: 1, minWidth: 4 }}><Meter value={value} theme={theme} label={item?.label ?? "Codex usage"} quiet /></View> : null}
       <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontSize: 12, fontVariant: ["tabular-nums"], flexShrink: 1 }}>
         {value !== null && item ? codexPercent(item.value, displayAs) : fallback}
         {item?.balance && (value !== null || fallbackValue !== null) ? <Text style={{ color: theme.colors.foregroundMuted }}> {item.balance.id === "spend" ? "mo" : item.balance.unit === "credits" ? "cr" : ""}</Text> : null}
       </Text>
-      {status && value !== null ? <Text style={{ color: theme.colors.statusWarning, fontSize: 11 }}>{status}</Text> : null}
+      {status && value !== null ? <Text numberOfLines={1} style={{ color: theme.colors.statusWarning, fontSize: 11, flexShrink: 1 }}>{status}</Text> : null}
     </Interactive>;
   })}</View>;
 }
