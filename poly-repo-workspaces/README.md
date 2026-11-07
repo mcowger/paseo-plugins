@@ -53,8 +53,9 @@ workspaces. It does not run when reopening or repairing an existing worktree.
 
 - The Poly-repo sidebar entry opens the workspace screen, even when there are
   no workspaces yet. The screen creates and lists managed workspaces.
-  The screen scrolls on smaller displays and keeps the create form and workspace
-  list in separate sections.
+  Workspace rows show per-repo setup status and actions side by side when space
+  permits, and stack on compact screens. The full workspace path is selectable
+  and has a **Copy** action.
 - Feature names can be descriptive, like `SIG: ABSCD - Fix My Stuff`. The
   visible name stays as entered; branches and folder templates use
   `sig-abscd-fix-my-stuff`. Existing Git-safe names stay unchanged, including
