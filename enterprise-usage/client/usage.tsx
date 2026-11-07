@@ -64,8 +64,8 @@ export function ClaudeUsageSidebar({ theme, host, openPopover }: PluginSidebarIt
       <Icon name="Gauge" size={14} color={theme.colors.foregroundMuted} />
       <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, flexShrink: 0 }}>Claude</Text>
       {item?.value !== null && item?.value !== undefined ? <View style={{ flex: 1, minWidth: 4 }}><Meter value={item.value} theme={theme} label={item.label} quiet /></View> : null}
-      <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontSize: 12, fontVariant: ["tabular-nums"], flexShrink: 1 }}>{item?.value !== null && item?.value !== undefined ? percent(item.value) : item?.balance ? amount(item.balance.remaining) : status ?? "Not reported"}{item ? <Text style={{ color: theme.colors.foregroundMuted }}> {item.balance ? "mo" : ""}</Text> : null}</Text>
-      {status && item?.value !== null && item?.value !== undefined ? <Text numberOfLines={1} style={{ color: theme.colors.statusWarning, fontSize: 11, flexShrink: 1 }}>{status}</Text> : null}
+      <Text numberOfLines={1} style={{ color: stale ? theme.colors.statusWarning : theme.colors.foreground, fontSize: 12, fontVariant: ["tabular-nums"], flexShrink: 1 }}>{item?.value !== null && item?.value !== undefined ? percent(item.value) : item?.balance ? amount(item.balance.remaining) : status ?? "Not reported"}{item ? <Text style={{ color: theme.colors.foregroundMuted }}> {item.balance ? "mo" : ""}</Text> : null}</Text>
+      {!stale && status && item?.value !== null && item?.value !== undefined ? <Text numberOfLines={1} style={{ color: theme.colors.statusWarning, fontSize: 11, flexShrink: 1 }}>{status}</Text> : null}
     </Interactive>;
   })}</View>;
 }
@@ -156,7 +156,8 @@ export function CodexUsageSidebar({ theme, host, openPopover }: PluginSidebarIte
   return <View style={{ gap: 4 }}>{accounts.map((account) => {
     const item = summary(account);
     const value = item?.value === null || item?.value === undefined ? null : displayAs === "used" ? item.value : Math.max(0, 100 - item.value);
-    const status = account.stale || query.isError ? "Stale" : account.status !== "available" ? "Unavailable" : null;
+    const stale = account.stale || query.isError;
+    const status = stale ? "Stale" : account.status !== "available" ? "Unavailable" : null;
     const money = item?.balance?.unit === "usd";
     const fallbackValue = item?.balance ? (item.balance.limit === null || displayAs === "remaining" ? item.balance.remaining : item.balance.used) : null;
     const fallback = item?.balance ? (money ? amount(fallbackValue) : credits(fallbackValue)) : status ?? "Not reported";
@@ -164,11 +165,11 @@ export function CodexUsageSidebar({ theme, host, openPopover }: PluginSidebarIte
       <Icon name="Gauge" size={14} color={theme.colors.foregroundMuted} />
       <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, flexShrink: 0 }}>Codex</Text>
       {value !== null ? <View style={{ flex: 1, minWidth: 4 }}><Meter value={value} theme={theme} label={item?.label ?? "Codex usage"} quiet /></View> : null}
-      <Text numberOfLines={1} style={{ color: theme.colors.foreground, fontSize: 12, fontVariant: ["tabular-nums"], flexShrink: 1 }}>
+      <Text numberOfLines={1} style={{ color: stale ? theme.colors.statusWarning : theme.colors.foreground, fontSize: 12, fontVariant: ["tabular-nums"], flexShrink: 1 }}>
         {value !== null && item ? codexPercent(item.value, displayAs) : fallback}
         {item?.balance && (value !== null || fallbackValue !== null) ? <Text style={{ color: theme.colors.foregroundMuted }}> {item.balance.id === "spend" ? "mo" : item.balance.unit === "credits" ? "cr" : ""}</Text> : null}
       </Text>
-      {status && value !== null ? <Text numberOfLines={1} style={{ color: theme.colors.statusWarning, fontSize: 11, flexShrink: 1 }}>{status}</Text> : null}
+      {!stale && status && value !== null ? <Text numberOfLines={1} style={{ color: theme.colors.statusWarning, fontSize: 11, flexShrink: 1 }}>{status}</Text> : null}
     </Interactive>;
   })}</View>;
 }
