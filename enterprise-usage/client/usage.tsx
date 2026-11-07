@@ -274,12 +274,6 @@ export function ClaudeUsageSidebar({ theme, host, openPopover }: PluginSidebarIt
                 : item?.balance
                   ? amount(item.balance.remaining)
                   : (status ?? "Not reported")}
-              {item ? (
-                <Text style={{ color: theme.colors.foregroundMuted }}>
-                  {" "}
-                  {item.balance ? "mo" : ""}
-                </Text>
-              ) : null}
             </Text>
             {status && item?.value !== null && item?.value !== undefined ? (
               <Text style={{ color: theme.colors.statusWarning, fontSize: 11 }}>{status}</Text>
@@ -911,11 +905,10 @@ export function CodexUsageSidebar({ theme, host, openPopover }: PluginSidebarIte
               }}
             >
               {value !== null && item ? codexPercent(item.value, displayAs) : fallback}
-              {item?.balance && (value !== null || fallbackValue !== null) ? (
-                <Text style={{ color: theme.colors.foregroundMuted }}>
-                  {" "}
-                  {item.balance.id === "spend" ? "mo" : item.balance.unit === "credits" ? "cr" : ""}
-                </Text>
+              {item?.balance?.id !== "spend" &&
+              item?.balance?.unit === "credits" &&
+              (value !== null || fallbackValue !== null) ? (
+                <Text style={{ color: theme.colors.foregroundMuted }}> cr</Text>
               ) : null}
             </Text>
             {status && value !== null ? (
