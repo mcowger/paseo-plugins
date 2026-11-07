@@ -31,28 +31,31 @@ file). The default virtual root is
 `$PASEO_HOME/poly-workspaces/` and can be overridden to any absolute path that
 is not under the daemon's worktrees root.
 
-Each repository can have an optional init script. After all worktrees exist,
-the plugin registers the root and repo workspaces before running the scripts
-in repository order, each with its worktree as the current directory. On Unix
-it uses `$SHELL -lc` (or `/bin/sh` if `SHELL`
+Each repository can have an optional init script. After registering the root
+workspace, the plugin sets up repositories in parallel: each repo's worktree
+is checked out, registered, and then initialized without waiting for the other
+repos. Scripts run in their own worktree. Do not assume another repo's setup
+has finished. On Unix, the plugin uses `$SHELL -lc` (or `/bin/sh` if `SHELL`
 is unset), so login startup files can load environment settings. It is
 non-interactive, not a Paseo terminal: prompts cannot be answered and
 interactive-only shell configuration may not be loaded. On Windows it uses
 `%ComSpec% /d /s /c`. Scripts run with the daemon user's permissions and
 environment; only configure commands you trust. Output is not displayed.
 
-An init failure leaves the workspace in creating state. Fix the script or its
-environment and use **Resume** to retry the failed script; scripts that already
-succeeded are not repeated. A script interrupted before success was recorded
-may run again, so scripts should tolerate retries. Setup also runs for imported
+An init failure leaves the workspace in creating state, but the other repos
+continue setting up. Fix the script or its environment and use **Resume** to
+retry the failed script; scripts that already succeeded are not repeated.
+A script interrupted before success was recorded may run again, so scripts
+should tolerate retries. Setup also runs for imported
 workspaces. It does not run when reopening or repairing an existing worktree.
 
 ## Use
 
 - The Poly-repo sidebar entry opens the workspace screen, even when there are
   no workspaces yet. The screen creates and lists managed workspaces.
-  The screen scrolls on smaller displays and keeps the create form and workspace
-  list in separate sections.
+  Workspace rows show per-repo setup status and actions side by side when space
+  permits, and stack on compact screens. The full workspace path is selectable
+  and has a **Copy** action.
 - Feature names can be descriptive, like `SIG: ABSCD - Fix My Stuff`. The
   visible name stays as entered; branches and folder templates use
   `sig-abscd-fix-my-stuff`. Existing Git-safe names stay unchanged, including

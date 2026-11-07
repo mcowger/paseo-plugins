@@ -678,92 +678,6 @@ export async function createVirtualWorkspace(
   const active: VirtualWorkspaceManifest = manifest;
 
   const preflight: PreflightIssue[] = [];
-  for (const item of planned) {
-    const constituent = active.constituents.find((c) => c.repoId === item.repo.id);
-    if (constituent?.state === "created") continue;
-    if (!(await deps.fs.isDirectory(item.sourcePath))) {
-      preflight.push({
-        repoId: item.repo.id,
-        code: "source-missing",
-        message: `source is not a directory: ${item.sourcePath}`,
-      });
-      continue;
-    }
-    if (!(await isGitRepo(deps.git, item.sourcePath))) {
-      preflight.push({
-        repoId: item.repo.id,
-        code: "source-not-git",
-        message: `source is not a git repo: ${item.sourcePath}`,
-      });
-      continue;
-    }
-    const base = importDefaults
-      ? (active.importDefaultBranches?.[item.repo.id] ??
-        (await resolveDefaultBranch(deps, item.sourcePath, item.repo.baseBranch)))
-      : await resolveBaseBranch(
-          deps.git,
-          item.sourcePath,
-          input.baseBranchOverrides?.[item.repo.id] ?? item.repo.baseBranch,
-        );
-    const validBase =
-      base &&
-      ((await localBranchExists(deps.git, item.sourcePath, base)) ||
-        (await remoteBranchExists(deps.git, item.sourcePath, base)));
-    if ((importDefaults && (!base || !validBase)) || (!base && !importBranch)) {
-      preflight.push({
-        repoId: item.repo.id,
-        code: "base-unresolvable",
-        message: `cannot resolve available default branch for ${item.repo.id}`,
-      });
-      continue;
-    }
-    item.baseBranch = base ?? importBranch ?? "";
-    if (constituent) constituent.baseBranch = item.baseBranch;
-    if (constituent && importDefaults) constituent.branch = item.baseBranch;
-    if (importDefaults) {
-      active.importDefaultBranches ??= {};
-      active.importDefaultBranches[item.repo.id] = item.baseBranch;
-    }
-    const checkedOut = await listWorktreeBranches(deps.git, item.sourcePath);
-    if (!importDefaults && checkedOut.includes(branch)) {
-      preflight.push({
-        repoId: item.repo.id,
-        code: "branch-checked-out",
-        message: `branch ${branch} is already checked out in ${item.repo.id}`,
-      });
-      continue;
-    }
-    const targetBranch = importDefaults ? item.baseBranch : branch;
-    const localExists = await localBranchExists(deps.git, item.sourcePath, targetBranch);
-    const remoteExists = importDefaults
-      ? await remoteBranchExists(deps.git, item.sourcePath, targetBranch)
-      : importBranch
-        ? await remoteBranchExists(deps.git, item.sourcePath, importBranch)
-        : false;
-    if ((importDefaults || importBranch) && !localExists && !remoteExists) {
-      preflight.push({
-        repoId: item.repo.id,
-        code: "branch-unavailable",
-        message: `branch ${targetBranch} is not available locally or on origin in ${item.repo.id}`,
-      });
-      continue;
-    }
-    if (!importDefaults && !importBranch && localExists) {
-      preflight.push({
-        repoId: item.repo.id,
-        code: "branch-exists",
-        message: `branch ${branch} already exists in ${item.repo.id}`,
-      });
-      continue;
-    }
-    if (await deps.fs.exists(item.worktreePath)) {
-      preflight.push({
-        repoId: item.repo.id,
-        code: "target-exists",
-        message: `target path already exists: ${item.worktreePath}`,
-      });
-    }
-  }
 
   active.updatedAt = deps.now();
   await deps.fs.mkdirp(rootPath);
@@ -779,80 +693,80 @@ export async function createVirtualWorkspace(
     };
   });
 
-  if (preflight.length > 0) {
-    for (const issue of preflight) {
-      const constituent = active.constituents.find((item) => item.repoId === issue.repoId);
-      if (constituent) {
-        constituent.setupStatus = "failed";
-        constituent.setupError = issue.message;
-      }
-    }
-    active.updatedAt = deps.now();
-    await writeManifest(deps.fs, active);
-    return { ok: false, virtualId, workspaceId: active.workspaceId, error: null, preflight };
-  }
-
-  for (const item of planned) {
-    const constituent = active.constituents.find((c) => c.repoId === item.repo.id);
-    if (!constituent || constituent.state === "created") continue;
-    constituent.setupStatus = "checking-out";
-    constituent.setupError = null;
-    active.updatedAt = deps.now();
-    await writeManifest(deps.fs, active);
-    try {
-      if (importDefaults) {
-        const checkedOut = (await listWorktreeBranches(deps.git, item.sourcePath)).includes(
-          item.baseBranch,
-        );
-        const local = await localBranchExists(deps.git, item.sourcePath, item.baseBranch);
-        const ref = local ? item.baseBranch : `origin/${item.baseBranch}`;
-        const args = checkedOut
-          ? ["worktree", "add", "--detach", item.worktreePath, ref]
-          : local
-            ? ["worktree", "add", item.worktreePath, item.baseBranch]
-            : ["worktree", "add", "--track", "-b", item.baseBranch, item.worktreePath, ref];
-        await deps.git.run(args, item.sourcePath);
-      } else if (importBranch) {
-        const localImportExists = await localBranchExists(deps.git, item.sourcePath, importBranch);
-        if (localImportExists)
-          await deps.git.run(["worktree", "add", item.worktreePath, importBranch], item.sourcePath);
-        else
-          await deps.git.run(
-            [
-              "worktree",
-              "add",
-              "--track",
-              "-b",
-              importBranch,
-              item.worktreePath,
-              `origin/${importBranch}`,
-            ],
-            item.sourcePath,
-          );
-      } else {
-        await deps.git.run(
-          ["worktree", "add", "-b", branch, item.worktreePath, item.baseBranch],
-          item.sourcePath,
-        );
-      }
-    } catch (error) {
-      constituent.setupStatus = "failed";
-      constituent.setupError = `git worktree add failed: ${gitMessage(error)}`;
+  let persistQueue = Promise.resolve();
+  const persist = async (update: () => void): Promise<void> => {
+    const next = persistQueue.then(async () => {
+      update();
       active.updatedAt = deps.now();
       await writeManifest(deps.fs, active);
-      return {
-        ok: false,
-        virtualId,
-        workspaceId: null,
-        error: `git worktree add failed for ${item.repo.id}: ${gitMessage(error)}`,
-        preflight: [],
-      };
-    }
-    constituent.state = "created";
-    constituent.setupStatus = "checked-out";
-    active.updatedAt = deps.now();
-    await writeManifest(deps.fs, active);
-  }
+    });
+    persistQueue = next.catch(() => {});
+    await next;
+  };
+
+  const checkPreflight = async (
+    item: PlannedConstituent,
+    constituent: VirtualWorkspaceManifest["constituents"][number],
+  ): Promise<PreflightIssue | null> => {
+    const issue = (code: PreflightIssue["code"], message: string): PreflightIssue => ({
+      repoId: item.repo.id,
+      code,
+      message,
+    });
+    if (!(await deps.fs.isDirectory(item.sourcePath)))
+      return issue("source-missing", `source is not a directory: ${item.sourcePath}`);
+    if (!(await isGitRepo(deps.git, item.sourcePath)))
+      return issue("source-not-git", `source is not a git repo: ${item.sourcePath}`);
+    const base = importDefaults
+      ? (active.importDefaultBranches?.[item.repo.id] ??
+        (await resolveDefaultBranch(deps, item.sourcePath, item.repo.baseBranch)))
+      : await resolveBaseBranch(
+          deps.git,
+          item.sourcePath,
+          input.baseBranchOverrides?.[item.repo.id] ?? item.repo.baseBranch,
+        );
+    const validBase =
+      base &&
+      ((await localBranchExists(deps.git, item.sourcePath, base)) ||
+        (await remoteBranchExists(deps.git, item.sourcePath, base)));
+    if ((importDefaults && (!base || !validBase)) || (!base && !importBranch))
+      return issue(
+        "base-unresolvable",
+        `cannot resolve available default branch for ${item.repo.id}`,
+      );
+    item.baseBranch = base ?? importBranch ?? "";
+    await persist(() => {
+      constituent.baseBranch = item.baseBranch;
+      if (importDefaults) {
+        constituent.branch = item.baseBranch;
+        active.importDefaultBranches ??= {};
+        active.importDefaultBranches[item.repo.id] = item.baseBranch;
+      }
+    });
+    const checkedOut = await listWorktreeBranches(deps.git, item.sourcePath);
+    if (!importDefaults && checkedOut.includes(branch))
+      return issue(
+        "branch-checked-out",
+        `branch ${branch} is already checked out in ${item.repo.id}`,
+      );
+    const targetBranch = importDefaults ? item.baseBranch : branch;
+    const localExists = await localBranchExists(deps.git, item.sourcePath, targetBranch);
+    const remoteExists = importDefaults
+      ? await remoteBranchExists(deps.git, item.sourcePath, targetBranch)
+      : importBranch
+        ? await remoteBranchExists(deps.git, item.sourcePath, importBranch)
+        : false;
+    if ((importDefaults || importBranch) && !localExists && !remoteExists)
+      return issue(
+        "branch-unavailable",
+        `branch ${targetBranch} is not available locally or on origin in ${item.repo.id}`,
+      );
+    if (!importDefaults && !importBranch && localExists)
+      return issue("branch-exists", `branch ${branch} already exists in ${item.repo.id}`);
+    if (await deps.fs.exists(item.worktreePath))
+      return issue("target-exists", `target path already exists: ${item.worktreePath}`);
+    return null;
+  };
   const agentsPath = joinSegments(rootPath, "AGENTS.md");
   if ((await deps.fs.readFile(agentsPath)) === null) {
     const rendered = renderAgentsTemplate(templateRaw, {
@@ -875,77 +789,204 @@ export async function createVirtualWorkspace(
         path: rootPath,
         title: rootWorkspaceTitle(input.feature),
       });
-      active.workspaceId = created.workspaceId;
-      active.projectId = created.projectId;
-      active.projectOwned = Boolean(
-        created.projectId && previousProjectIds && !previousProjectIds.has(created.projectId),
-      );
-      active.updatedAt = deps.now();
-      await writeManifest(deps.fs, active);
+      await persist(() => {
+        active.workspaceId = created.workspaceId;
+        active.projectId = created.projectId;
+        active.projectOwned = Boolean(
+          created.projectId && previousProjectIds && !previousProjectIds.has(created.projectId),
+        );
+      });
       await updateIndex(deps, (index) => {
         const entry = index.virtual[virtualId];
         if (entry) entry.workspaceId = active.workspaceId;
       });
     } catch (error) {
-      active.updatedAt = deps.now();
-      await writeManifest(deps.fs, active);
       return {
         ok: false,
         virtualId,
         workspaceId: active.workspaceId,
         error: `workspace registration failed: ${error instanceof Error ? error.message : "unknown error"}`,
-        preflight: [],
+        preflight,
       };
     }
   }
-  const registrationError = await registerConstituentWorkspaces(deps, active, true);
-  if (registrationError) {
+  const projectId = active.projectId ?? (await lookupRootProjectId(deps, active));
+  if (!projectId) {
     return {
       ok: false,
       virtualId,
       workspaceId: active.workspaceId,
-      error: `workspace registration failed: ${registrationError}`,
-      preflight: [],
+      error: "workspace registration failed: root workspace has no project id",
+      preflight,
     };
   }
-  for (const constituent of active.constituents) {
-    if (constituent.state === "created" && constituent.initState !== "pending") {
-      constituent.setupStatus = "ready";
-      constituent.setupError = null;
-    }
+  if (active.projectId !== projectId) {
+    await persist(() => {
+      active.projectId = projectId;
+    });
   }
-  active.updatedAt = deps.now();
-  await writeManifest(deps.fs, active);
 
-  for (const item of planned) {
-    const constituent = active.constituents.find((c) => c.repoId === item.repo.id);
-    if (constituent?.initState !== "pending") continue;
-    constituent.setupStatus = "running-init";
-    constituent.setupError = null;
-    active.updatedAt = deps.now();
-    await writeManifest(deps.fs, active);
-    try {
-      if (item.repo.initScript?.trim())
-        await deps.init.run(item.repo.initScript, item.worktreePath);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "unknown error";
-      constituent.setupStatus = "failed";
-      constituent.setupError = message;
-      active.updatedAt = deps.now();
-      await writeManifest(deps.fs, active);
-      return {
-        ok: false,
-        virtualId,
-        workspaceId: active.workspaceId,
-        error: `init script failed for ${item.repo.id}: ${message}. Resume creation to retry.`,
-        preflight: [],
-      };
+  const errors: string[] = [];
+  const outcomes = await Promise.allSettled(
+    planned.map(async (item) => {
+      const constituent = active.constituents.find((c) => c.repoId === item.repo.id);
+      if (!constituent) return;
+      if (constituent.state !== "created") {
+        await persist(() => {
+          constituent.setupStatus = "checking-out";
+          constituent.setupError = null;
+        });
+        let stage = "preflight";
+        try {
+          const issue = await checkPreflight(item, constituent);
+          if (issue) {
+            preflight.push(issue);
+            await persist(() => {
+              constituent.setupStatus = "failed";
+              constituent.setupError = issue.message;
+            });
+            return;
+          }
+          stage = "git worktree add";
+          if (importDefaults) {
+            const checkedOut = (await listWorktreeBranches(deps.git, item.sourcePath)).includes(
+              item.baseBranch,
+            );
+            const local = await localBranchExists(deps.git, item.sourcePath, item.baseBranch);
+            const ref = local ? item.baseBranch : `origin/${item.baseBranch}`;
+            const args = checkedOut
+              ? ["worktree", "add", "--detach", item.worktreePath, ref]
+              : local
+                ? ["worktree", "add", item.worktreePath, item.baseBranch]
+                : ["worktree", "add", "--track", "-b", item.baseBranch, item.worktreePath, ref];
+            await deps.git.run(args, item.sourcePath);
+          } else if (importBranch) {
+            const localImportExists = await localBranchExists(
+              deps.git,
+              item.sourcePath,
+              importBranch,
+            );
+            if (localImportExists)
+              await deps.git.run(
+                ["worktree", "add", item.worktreePath, importBranch],
+                item.sourcePath,
+              );
+            else
+              await deps.git.run(
+                [
+                  "worktree",
+                  "add",
+                  "--track",
+                  "-b",
+                  importBranch,
+                  item.worktreePath,
+                  `origin/${importBranch}`,
+                ],
+                item.sourcePath,
+              );
+          } else {
+            await deps.git.run(
+              ["worktree", "add", "-b", branch, item.worktreePath, item.baseBranch],
+              item.sourcePath,
+            );
+          }
+          await persist(() => {
+            constituent.state = "created";
+            constituent.setupStatus = "checked-out";
+          });
+        } catch (error) {
+          const message = `${stage} failed: ${gitMessage(error)}`;
+          await persist(() => {
+            constituent.setupStatus = "failed";
+            constituent.setupError = message;
+          });
+          errors.push(`${item.repo.id}: ${message}`);
+          return;
+        }
+      }
+
+      try {
+        if (!constituent.workspaceId) {
+          let hostWorkspace: HostWorkspaceRef | undefined;
+          try {
+            hostWorkspace = (await deps.workspaces.listWorkspaces()).find(
+              (entry) => normalizeAbsolute(entry.cwd) === normalizeAbsolute(item.worktreePath),
+            );
+          } catch {
+            /* registration below will report failure */
+          }
+          if (hostWorkspace && hostWorkspace.projectId !== projectId) {
+            throw new Error("existing workspace belongs to a different project");
+          }
+          const workspaceId = hostWorkspace
+            ? hostWorkspace.id
+            : (
+                await deps.workspaces.createDirectoryWorkspace({
+                  path: item.worktreePath,
+                  title: repoWorkspaceTitle(active.feature, item.repo.id),
+                  projectId,
+                })
+              ).workspaceId;
+          await persist(() => {
+            constituent.workspaceId = workspaceId;
+          });
+        }
+      } catch (error) {
+        const message = `registration failed: ${error instanceof Error ? error.message : "unknown error"}`;
+        await persist(() => {
+          constituent.setupStatus = "failed";
+          constituent.setupError = message;
+        });
+        errors.push(`${item.repo.id}: ${message}`);
+        return;
+      }
+
+      if (constituent.initState === "pending") {
+        await persist(() => {
+          constituent.setupStatus = "running-init";
+          constituent.setupError = null;
+        });
+        try {
+          if (item.repo.initScript?.trim())
+            await deps.init.run(item.repo.initScript, item.worktreePath);
+          await persist(() => {
+            constituent.initState = "complete";
+            constituent.setupStatus = "ready";
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "unknown error";
+          await persist(() => {
+            constituent.setupStatus = "failed";
+            constituent.setupError = message;
+          });
+          errors.push(`${item.repo.id}: init script failed: ${message}`);
+        }
+      } else {
+        await persist(() => {
+          constituent.setupStatus = "ready";
+          constituent.setupError = null;
+        });
+      }
+    }),
+  );
+  outcomes.forEach((outcome, index) => {
+    if (outcome.status === "rejected") {
+      const error =
+        outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+      errors.push(`${planned[index]?.repo.id ?? "repository"}: ${error}`);
     }
-    constituent.initState = "complete";
-    constituent.setupStatus = "ready";
-    constituent.setupError = null;
-    active.updatedAt = deps.now();
-    await writeManifest(deps.fs, active);
+  });
+  await persistQueue;
+  if (errors.length || preflight.length) {
+    return {
+      ok: false,
+      virtualId,
+      workspaceId: active.workspaceId,
+      error: errors.length
+        ? `repository setup failed:\n${errors.map((error) => `- ${error}`).join("\n")}. Resume creation to retry.`
+        : null,
+      preflight,
+    };
   }
 
   try {

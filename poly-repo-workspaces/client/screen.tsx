@@ -1,7 +1,7 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import type { PluginScreenProps } from "@getpaseo/plugin/client";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
-import { useToast } from "@getpaseo/plugin/client/react-native";
+import { copyText, useToast } from "@getpaseo/plugin/client/react-native";
 import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -39,6 +39,13 @@ interface ScreenStyles {
   readonly label: TextStyle;
   readonly input: TextStyle;
   readonly row: ViewStyle;
+  readonly workspaceMain: ViewStyle;
+  readonly workspaceIdentity: ViewStyle;
+  readonly workspaceRepos: ViewStyle;
+  readonly workspaceActions: ViewStyle;
+  readonly workspacePathRow: ViewStyle;
+  readonly workspacePath: TextStyle;
+  readonly copyPathButton: ViewStyle;
   readonly name: TextStyle;
   readonly meta: TextStyle;
   readonly state: TextStyle;
@@ -64,7 +71,7 @@ function createStyles(theme: PluginTheme, compact: boolean): ScreenStyles {
     scroll: { flex: 1 },
     container: {
       width: "100%",
-      maxWidth: 800,
+      maxWidth: 1100,
       alignSelf: "center",
       paddingHorizontal: compact ? 16 : 24,
       paddingTop: compact ? 16 : 24,
@@ -84,6 +91,38 @@ function createStyles(theme: PluginTheme, compact: boolean): ScreenStyles {
       paddingHorizontal: 12,
     },
     row: { gap: 8, paddingVertical: 14, borderTopWidth: 1, borderTopColor: theme.colors.border },
+    workspaceMain: {
+      flexDirection: compact ? "column" : "row",
+      flexWrap: compact ? "nowrap" : "wrap",
+      alignItems: compact ? "stretch" : "center",
+      gap: 12,
+    },
+    workspaceIdentity: {
+      flexGrow: 0,
+      flexShrink: 1,
+      flexBasis: compact ? "auto" : 150,
+      minWidth: 0,
+      gap: 4,
+    },
+    workspaceRepos: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      flexGrow: 2,
+      flexShrink: 1,
+      flexBasis: compact ? "auto" : 260,
+      gap: 10,
+    },
+    workspaceActions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
+    workspacePathRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+    workspacePath: { color: theme.colors.foregroundMuted, fontSize: small, flex: 1, minWidth: 0 },
+    copyPathButton: {
+      minHeight: 36,
+      justifyContent: "center",
+      paddingHorizontal: 10,
+      borderRadius: 6,
+      backgroundColor: theme.colors.surface2,
+    },
     name: { color: theme.colors.foreground, fontSize, fontWeight: "600" },
     meta: { color: theme.colors.foregroundMuted, fontSize: small },
     state: { color: theme.colors.statusSuccess, fontSize: small },
@@ -338,6 +377,7 @@ export function PolyRepoScreen({
         }
         if (result.preflight.length > 0) {
           setIssues(result.preflight);
+          if (result.error) setCreateError(result.error);
           toast.error("Preflight found problems; fix them and retry");
           return;
         }
@@ -657,6 +697,23 @@ export function PolyRepoScreen({
     [items, navigation],
   );
 
+  const copyPathHandlers = useMemo(
+    () =>
+      new Map(
+        items.map((item) => [
+          item.virtualId,
+          () => {
+            void copyText(item.rootPath).then(
+              () => toast.show("Workspace path copied"),
+              (copyError: unknown) =>
+                toast.error(copyError instanceof Error ? copyError.message : "Copy failed"),
+            );
+          },
+        ]),
+      ),
+    [items, toast],
+  );
+
   const selectHandlers = useMemo(
     () =>
       new Map(
@@ -914,125 +971,151 @@ export function PolyRepoScreen({
           {error ? <Text style={styles.issue}>{error}</Text> : null}
           {items.map((item) => (
             <View key={item.virtualId} style={styles.row}>
-              <Text style={styles.name}>
-                {item.feature} · {item.branch}
-              </Text>
-              <Text style={item.state === "ready" ? styles.state : styles.stateBad}>
-                {stateLabel(item)}
-                {focused?.virtualId === item.virtualId ? " · selected" : ""}
-              </Text>
-              <Text style={styles.meta}>{item.rootPath}</Text>
-              {item.constituents.map((constituent) => (
-                <Text
-                  key={constituent.repoId}
-                  style={setupLabel(constituent) === "failed" ? styles.issue : styles.meta}
-                >
-                  {constituent.repoId}: {setupLabel(constituent)}
-                  {constituent.setupError ? ` · ${constituent.setupError}` : ""}
+              <View style={styles.workspaceMain}>
+                <View style={styles.workspaceIdentity}>
+                  <Text style={styles.name}>
+                    {item.feature}
+                    {item.branch !== item.feature ? ` · ${item.branch}` : ""}
+                  </Text>
+                  <Text style={item.state === "ready" ? styles.state : styles.stateBad}>
+                    {stateLabel(item)}
+                    {focused?.virtualId === item.virtualId ? " · selected" : ""}
+                  </Text>
+                </View>
+                <View style={styles.workspaceRepos}>
+                  {item.constituents.map((constituent) => {
+                    const status = setupLabel(constituent);
+                    return (
+                      <Text
+                        key={constituent.repoId}
+                        style={status === "failed" ? styles.issue : styles.meta}
+                        accessibilityLabel={`${constituent.repoId}: ${status}${constituent.setupError ? ` · ${constituent.setupError}` : ""}`}
+                      >
+                        {constituent.repoId}:{" "}
+                        <Text style={status === "ready" ? styles.state : undefined}>
+                          {status === "ready" ? "✓" : status}
+                        </Text>
+                        {constituent.setupError ? ` · ${constituent.setupError}` : ""}
+                      </Text>
+                    );
+                  })}
+                </View>
+                <View style={styles.workspaceActions}>
+                  {item.workspaceId ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open ${item.feature}`}
+                      onPress={openHandlers.get(item.virtualId)}
+                      style={styles.button}
+                    >
+                      <Text style={styles.buttonText}>Open</Text>
+                    </Pressable>
+                  ) : null}
+                  {item.state === "creating" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Resume ${item.feature}`}
+                      onPress={resumePressHandlers.get(item.virtualId)}
+                      style={styles.button}
+                      disabled={busy}
+                    >
+                      <Text style={styles.buttonText}>Resume</Text>
+                    </Pressable>
+                  ) : null}
+                  {item.state === "creating" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Discard partially created ${item.feature}`}
+                      onPress={archiveHandlers.get(item.virtualId)}
+                      style={styles.button}
+                      disabled={busy}
+                    >
+                      <Text style={styles.buttonText}>Discard</Text>
+                    </Pressable>
+                  ) : null}
+                  {!item.workspaceId && item.rootExists ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Reopen ${item.feature} root as a workspace`}
+                      onPress={reopenPressHandlers.get(item.virtualId)}
+                      style={styles.button}
+                      disabled={busy}
+                    >
+                      <Text style={styles.buttonText}>Reopen</Text>
+                    </Pressable>
+                  ) : null}
+                  {item.state === "orphaned" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Forget ${item.feature}`}
+                      onPress={forgetPressHandlers.get(item.virtualId)}
+                      style={styles.button}
+                      disabled={busy}
+                    >
+                      <Text style={styles.buttonText}>Forget</Text>
+                    </Pressable>
+                  ) : null}
+                  {item.state === "orphaned" && item.rootExists ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${item.feature} root and forget`}
+                      onPress={cleanupPressHandlers.get(item.virtualId)}
+                      style={styles.button}
+                      disabled={busy}
+                    >
+                      <Text style={styles.buttonText}>Clean up</Text>
+                    </Pressable>
+                  ) : null}
+                  {item.state === "creating" || item.state === "orphaned" ? null : (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Archive ${item.feature}`}
+                      onPress={archiveHandlers.get(item.virtualId)}
+                      style={styles.button}
+                      disabled={busy}
+                    >
+                      <Text style={styles.buttonText}>Archive</Text>
+                    </Pressable>
+                  )}
+                  {item.state !== "orphaned" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Force delete ${item.feature}`}
+                      onPress={forceHandlers.get(item.virtualId)}
+                      style={styles.button}
+                      disabled={busy}
+                    >
+                      <Text style={styles.buttonText}>Force delete</Text>
+                    </Pressable>
+                  ) : null}
+                  {archiving === item.virtualId ? (
+                    <View style={styles.progress}>
+                      <ActivityIndicator
+                        size="small"
+                        color={theme.colors.foregroundMuted}
+                        accessibilityLabel={`Archiving ${item.feature}`}
+                        accessibilityRole="progressbar"
+                      />
+                      <Text style={styles.meta} accessibilityLiveRegion="polite">
+                        Archiving {item.feature}; removing worktrees...
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+              <View style={styles.workspacePathRow}>
+                <Text selectable style={styles.workspacePath}>
+                  {item.rootPath}
                 </Text>
-              ))}
-
-              <View style={styles.actions}>
-                {item.workspaceId ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open ${item.feature}`}
-                    onPress={openHandlers.get(item.virtualId)}
-                    style={styles.button}
-                  >
-                    <Text style={styles.buttonText}>Open</Text>
-                  </Pressable>
-                ) : null}
-                {item.state === "creating" ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Resume ${item.feature}`}
-                    onPress={resumePressHandlers.get(item.virtualId)}
-                    style={styles.button}
-                    disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Resume</Text>
-                  </Pressable>
-                ) : null}
-                {item.state === "creating" ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Discard partially created ${item.feature}`}
-                    onPress={archiveHandlers.get(item.virtualId)}
-                    style={styles.button}
-                    disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Discard</Text>
-                  </Pressable>
-                ) : null}
-                {!item.workspaceId && item.rootExists ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Reopen ${item.feature} root as a workspace`}
-                    onPress={reopenPressHandlers.get(item.virtualId)}
-                    style={styles.button}
-                    disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Reopen</Text>
-                  </Pressable>
-                ) : null}
-                {item.state === "orphaned" ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Forget ${item.feature}`}
-                    onPress={forgetPressHandlers.get(item.virtualId)}
-                    style={styles.button}
-                    disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Forget</Text>
-                  </Pressable>
-                ) : null}
-                {item.state === "orphaned" && item.rootExists ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete ${item.feature} root and forget`}
-                    onPress={cleanupPressHandlers.get(item.virtualId)}
-                    style={styles.button}
-                    disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Clean up</Text>
-                  </Pressable>
-                ) : null}
-                {item.state === "creating" || item.state === "orphaned" ? null : (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Archive ${item.feature}`}
-                    onPress={archiveHandlers.get(item.virtualId)}
-                    style={styles.button}
-                    disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Archive</Text>
-                  </Pressable>
-                )}
-                {item.state !== "orphaned" ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Force delete ${item.feature}`}
-                    onPress={forceHandlers.get(item.virtualId)}
-                    style={styles.button}
-                    disabled={busy}
-                  >
-                    <Text style={styles.buttonText}>Force delete</Text>
-                  </Pressable>
-                ) : null}
-                {archiving === item.virtualId ? (
-                  <View style={styles.progress}>
-                    <ActivityIndicator
-                      size="small"
-                      color={theme.colors.foregroundMuted}
-                      accessibilityLabel={`Archiving ${item.feature}`}
-                      accessibilityRole="progressbar"
-                    />
-                    <Text style={styles.meta} accessibilityLiveRegion="polite">
-                      Archiving {item.feature}; removing worktrees...
-                    </Text>
-                  </View>
-                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Copy ${item.feature} workspace path`}
+                  onPress={copyPathHandlers.get(item.virtualId)}
+                  style={styles.copyPathButton}
+                  hitSlop={4}
+                >
+                  <Text style={styles.buttonText}>Copy</Text>
+                </Pressable>
               </View>
               {confirmForceId === item.virtualId ? (
                 <View style={styles.section}>

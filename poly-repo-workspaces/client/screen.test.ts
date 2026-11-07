@@ -390,6 +390,24 @@ describe("workspace creation feedback", () => {
     render();
   });
 
+  it("shows both preflight and setup failures from different repos", async () => {
+    let tree = await ready();
+    control(tree, "Feature name").onChangeText?.("Feature");
+    tree = render();
+    const pending = pendingCreate();
+    control(tree, "Create virtual workspace").onPress?.();
+    pending.resolve({
+      ...success,
+      ok: false,
+      error: "frontend: init failed",
+      preflight: [{ repoId: "app", code: "source-missing", message: "Source missing" }],
+    });
+    await flushAsync();
+    tree = render();
+    expect(text(tree)).toContain("frontend: init failed");
+    expect(text(tree)).toContain("Source missing");
+  });
+
   it.each(["preflight", "error", "exception"])(
     "clears the busy indicator after %s failures",
     async (failure) => {

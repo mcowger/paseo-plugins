@@ -8,6 +8,7 @@ export type ArchiveJob =
 interface Job {
   result?: ArchiveResult;
   expiresAt?: number;
+  completion?: Promise<void>;
 }
 
 const RETENTION_MS = 30 * 60 * 1000;
@@ -32,7 +33,7 @@ export function createArchiveJobManager() {
       const job: Job = {};
       jobs.set(jobId, job);
       activeByVirtualId.set(virtualId, jobId);
-      void Promise.resolve()
+      job.completion = Promise.resolve()
         .then(work)
         .catch(
           (error: unknown): ArchiveResult => ({
@@ -62,6 +63,10 @@ export function createArchiveJobManager() {
       return virtualId === undefined
         ? activeByVirtualId.size > 0
         : activeByVirtualId.has(virtualId);
+    },
+
+    async whenIdle(): Promise<void> {
+      await Promise.all([...activeByVirtualId.values()].map((id) => jobs.get(id)?.completion));
     },
 
     dispose(): void {
