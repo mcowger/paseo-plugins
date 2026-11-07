@@ -1,24 +1,10 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createUsageReader } from "./usage";
+import { ompToken } from "./omp-token";
 
-let dir: string;
-let originalHome: string | undefined;
-beforeEach(async () => {
-  originalHome = process.env.CLAUDE_CONFIG_DIR;
-  dir = await mkdtemp(join(tmpdir(), "claude-usage-test-"));
-  process.env.CLAUDE_CONFIG_DIR = dir;
-  await writeFile(join(dir, ".credentials.json"), JSON.stringify({ claudeAiOauth: { accessToken: "test-token" } }));
-});
-afterEach(async () => {
-  if (originalHome === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-  else process.env.CLAUDE_CONFIG_DIR = originalHome;
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
-  await rm(dir, { recursive: true, force: true });
-});
+vi.mock("./omp-token", () => ({ ompToken: vi.fn() }));
+beforeEach(() => { vi.mocked(ompToken).mockResolvedValue("test-token"); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.resetAllMocks(); });
 
 describe("Claude Enterprise usage", () => {
   it("reports a spend-only account in dollars without inventing quota windows", async () => {
@@ -49,6 +35,17 @@ describe("Claude Enterprise usage", () => {
       const next = (await reader.read(true)).accounts[0];
       expect(next).toMatchObject({ status: "error", stale: true, message: "Anthropic rate limited this request. Try again shortly." });
       expect(next.balances).toEqual(first.balances);
+    } finally { reader.dispose(); }
+  });
+
+  it("preserves the last reading when OMP credential retrieval fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ extra_usage: { monthly_limit: 10000, used_credits: 500 } }), { status: 200 })));
+    const reader = createUsageReader();
+    try {
+      const first = (await reader.read(false)).accounts[0];
+      vi.mocked(ompToken).mockRejectedValueOnce(new Error("unavailable"));
+      const next = (await reader.read(true)).accounts[0];
+      expect(next).toMatchObject({ status: "unavailable", stale: true, balances: first.balances });
     } finally { reader.dispose(); }
   });
 });

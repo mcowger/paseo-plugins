@@ -1,15 +1,8 @@
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { homedir, platform } from "node:os";
-import { join, resolve } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { Account, Balance, Window } from "../shared/usage";
+import { ompToken } from "./omp-token";
 
-const execFileAsync = promisify(execFile);
 const endpoint = "https://api.anthropic.com/api/oauth/usage";
-const credentialService = "Claude Code-credentials";
-interface Credentials { accessToken: string; expiresAt: number | null; label: string; plan: string | null }
+interface Credentials { accessToken: string; label: string; plan: string | null }
 interface Cached { account: Account; attemptedAt: number }
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -26,37 +19,8 @@ function date(value: unknown): string | null {
   const d = new Date(value);
   return Number.isFinite(d.getTime()) ? d.toISOString() : null;
 }
-function parseCredential(raw: unknown): Credentials | null {
-  const root = object(raw);
-  const oauth = object(root?.claudeAiOauth) ?? object(root?.oauth);
-  const accessToken = text(oauth?.accessToken) ?? text(oauth?.access_token);
-  if (!accessToken) return null;
-  const account = object(oauth?.account) ?? object(root?.account);
-  const email = text(account?.emailAddress) ?? text(account?.email) ?? text(oauth?.email);
-  const expiry = numeric(oauth?.expiresAt);
-  return { accessToken, expiresAt: expiry, label: email ?? "Claude account", plan: text(account?.billingType) ?? text(account?.subscriptionType) };
-}
-async function discoverCredentials(): Promise<Credentials | null> {
-  const configured = process.env.CLAUDE_CONFIG_DIR?.trim();
-  const dirs = [...new Set([...(configured ? [resolve(configured)] : []), join(homedir(), ".claude")])];
-  for (const dir of dirs) {
-    try {
-      const result = parseCredential(JSON.parse(await readFile(join(dir, ".credentials.json"), "utf8")));
-      if (result) return result;
-    } catch { /* Try the next configured credential source. */ }
-    if (platform() === "darwin") {
-      const custom = configured && dir === resolve(configured);
-      const service = custom
-        ? `${credentialService}-${createHash("sha256").update(dir.normalize("NFC")).digest("hex").slice(0, 8)}`
-        : credentialService;
-      try {
-        const { stdout } = await execFileAsync("security", ["find-generic-password", "-s", service, "-w"], { timeout: 5_000, maxBuffer: 1024 * 1024 });
-        const result = parseCredential(JSON.parse(stdout));
-        if (result) return result;
-      } catch { /* Missing Keychain item or unavailable Keychain. */ }
-    }
-  }
-  return null;
+async function discoverCredentials(): Promise<Credentials> {
+  return { accessToken: await ompToken("anthropic"), label: "Claude account", plan: null };
 }
 function makeWindows(raw: Record<string, unknown>): Window[] {
   const output: Window[] = [];
@@ -103,7 +67,7 @@ export function createUsageReader() {
     let result: Account;
     try {
       const response = await fetch(endpoint, { method: "GET", headers: { Authorization: `Bearer ${credentials.accessToken}`, Accept: "application/json", "anthropic-beta": "oauth-2025-04-20" }, signal: controller.signal, redirect: "error" });
-      if (response.status === 401 || response.status === 403) result = { ...base, status: "unavailable", message: "Claude login was rejected or expired. Sign in with Claude Code, then refresh." };
+      if (response.status === 401 || response.status === 403) result = { ...base, status: "unavailable", message: "OMP's Anthropic login was rejected. Sign in to Anthropic in OMP, then refresh." };
       else if (!response.ok) result = { ...base, status: "error", message: response.status === 429 ? "Anthropic rate limited this request. Try again shortly." : `Claude usage API returned HTTP ${response.status}.` };
       else {
         const payload: unknown = await response.json();
@@ -120,15 +84,13 @@ export function createUsageReader() {
   return {
     async read(refresh: boolean): Promise<{ accounts: Account[] }> {
       if (disposed) throw new Error("Usage plugin stopped.");
-      let credentials: Credentials | null;
-      try { credentials = await discoverCredentials(); } catch { credentials = null; }
-      if (!credentials) return { accounts: [{ id: "claude", label: "Claude account", plan: null, status: "unavailable", message: "Claude Code credentials were not found. Sign in with Claude Code on this host, then refresh.", balances: [], windows: [], updatedAt: null, stale: false }] };
-      const id = createHash("sha256").update(credentials.accessToken).digest("hex").slice(0, 24);
-      if (credentials.expiresAt !== null && credentials.expiresAt <= Date.now()) {
-        const old = cache.get(id)?.account;
-        const message = "Claude Code credentials have expired. Sign in with Claude Code, then refresh.";
-        return { accounts: [old?.updatedAt ? { ...old, status: "unavailable", message, stale: true } : { id, label: credentials.label, plan: credentials.plan, status: "unavailable", message, balances: [], windows: [], updatedAt: null, stale: false }] };
+      let credentials: Credentials;
+      try { credentials = await discoverCredentials(); } catch {
+        const old = [...cache.values()].find(({ account }) => account.updatedAt)?.account;
+        const message = "Could not obtain the Anthropic credential from OMP. Check OMP sign-in and availability, then refresh.";
+        return { accounts: [old ? { ...old, status: "unavailable", message, stale: true } : { id: "claude", label: "Claude account", plan: null, status: "unavailable", message, balances: [], windows: [], updatedAt: null, stale: false }] };
       }
+      const id = "claude";
       const running = pending.get(id);
       if (running) return { accounts: [await running] };
       const cached = cache.get(id);

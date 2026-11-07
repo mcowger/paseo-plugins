@@ -79,7 +79,7 @@ function UsageDetails({ theme, host, layout }: PluginPopoverProps) {
     <ScrollView style={{ maxHeight: layout.compact ? 440 : 500 }} contentContainerStyle={{ gap: 18 }}>
       {requestError ? <Text accessibilityRole="alert" style={{ color: theme.colors.statusWarning, fontSize: 13, lineHeight: 19 }}>Could not refresh usage from this host. Try again when it is connected.{accounts.length ? " Values below are from the last response." : ""}</Text> : null}
       {query.isPending ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13 }}>Loading Claude usage…</Text> : null}
-      {!query.isPending && !requestError && !accounts.length ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, lineHeight: 20 }}>Sign in to Claude on {host.label}, then refresh to load account usage.</Text> : null}
+      {!query.isPending && !requestError && !accounts.length ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, lineHeight: 20 }}>Sign in to Anthropic in OMP on {host.label}, then refresh to load account usage.</Text> : null}
       {accounts.map((account, index) => <AccountDetails key={account.id} account={account} theme={theme} index={index} requestError={requestError} />)}
     </ScrollView>
   </View>;
@@ -116,7 +116,7 @@ function CodexUsageDetails({ theme, host, layout }: PluginPopoverProps) {
     <ScrollView style={{ maxHeight: layout.compact ? 440 : 500 }} contentContainerStyle={{ gap: 18 }}>
       {requestError ? <Text accessibilityRole="alert" style={{ color: theme.colors.statusWarning, fontSize: 13, lineHeight: 19 }}>Could not refresh usage from this host. Try again when it is connected.{accounts.length ? " Values below are from the last response." : ""}</Text> : null}
       {query.isPending ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13 }}>Loading Codex usage…</Text> : null}
-      {!query.isPending && !requestError && !accounts.length ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, lineHeight: 20 }}>Sign in with Codex on {host.label}, then refresh to load account usage.</Text> : null}
+      {!query.isPending && !requestError && !accounts.length ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 13, lineHeight: 20 }}>Sign in to OpenAI Codex in OMP on {host.label}, then refresh to load account usage.</Text> : null}
       {accounts.map((account, index) => <View key={account.id} style={{ gap: 14, paddingTop: index ? 16 : 0, borderTopWidth: index ? 1 : 0, borderTopColor: theme.colors.border }}>
         <View style={{ gap: 4 }}><Text selectable style={{ color: theme.colors.foreground, fontSize: 13, fontWeight: "500" }}>{account.label}</Text>{account.plan ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>{account.plan.charAt(0).toUpperCase() + account.plan.slice(1)}</Text> : null}</View>
         {account.message ? <Text accessibilityRole="alert" style={{ color: theme.colors.statusWarning, fontSize: 13, lineHeight: 19 }}>{account.message}{account.stale ? " Showing last known usage." : ""}</Text> : null}

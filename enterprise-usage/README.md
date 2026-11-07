@@ -8,11 +8,11 @@ One Paseo plugin adds separate sidebar meters for Claude and Codex usage. Each m
 paseo plugin install /path/to/paseo-plugins/enterprise-usage
 ```
 
-The plugin runs on the Paseo daemon host. Sign in with Claude Code and Codex on that host for their respective meters. The Codex meter can display used or remaining usage. Paseo 0.12.0 or later is required.
+The plugin runs on the Paseo daemon host. Install OMP and sign in to Anthropic and OpenAI Codex in OMP on that host. The `omp` executable must be on the daemon's PATH. The Codex meter can display used or remaining usage. Paseo 0.12.0 or later is required.
 
 ## Data and privacy
 
-The server reads the Claude Code login from `CLAUDE_CONFIG_DIR` or the default Claude home, including macOS Keychain, and sends its access token to Anthropic's usage endpoint. It reads Codex logins from `CODEX_HOME` and the default Codex home, and sends the access token and account ID to ChatGPT's usage endpoint. Credentials stay on the daemon and are never returned to the client. The plugin does not refresh credentials; use the appropriate CLI to sign in again if needed.
+The server obtains access tokens with `omp token`, using the first OMP OAuth account for each provider and the daemon's OMP profile. OMP handles credential refresh and coordinates it with other OMP processes. The plugin sends the Anthropic token to Anthropic's usage endpoint, and the Codex token and account ID to ChatGPT's usage endpoint. Credentials stay on the daemon and are never returned to the client. Sign in again in OMP if credential retrieval fails.
 
 These usage endpoints can change independently of the plugin. Available budgets and windows depend on the account and organization; missing values are not treated as zero. Claude's spend meter supports USD. Claude automatic reads are cached for two minutes with a 30-second manual-refresh minimum; Codex uses a one-minute cache and a 10-second manual-refresh minimum. Provider rate limits apply; failures preserve the last successful reading with a stale indicator.
 

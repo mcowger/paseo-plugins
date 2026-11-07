@@ -1,31 +1,14 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import * as os from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCodexUsageReader } from "./codex-usage";
 import { parseCodexUsage } from "./codex-parser";
+import { ompToken } from "./omp-token";
 
-vi.mock("node:os", async (importOriginal) => ({
-  ...(await importOriginal<typeof os>()),
-  homedir: () => dir,
-}));
-
-let dir: string;
-let originalHome: string | undefined;
-beforeEach(async () => {
-  originalHome = process.env.CODEX_HOME;
-  dir = await mkdtemp(join(tmpdir(), "codex-usage-test-"));
-  process.env.CODEX_HOME = dir;
+vi.mock("./omp-token", () => ({ ompToken: vi.fn() }));
+beforeEach(() => {
   const payload = Buffer.from(JSON.stringify({ email: "enterprise@example.com", "https://api.openai.com/auth": { chatgpt_account_id: "account-1" } })).toString("base64url");
-  await writeFile(join(dir, "auth.json"), JSON.stringify({ tokens: { access_token: `header.${payload}.sig`, account_id: "account-1" } }));
+  vi.mocked(ompToken).mockResolvedValue(`header.${payload}.sig`);
 });
-afterEach(async () => {
-  if (originalHome === undefined) delete process.env.CODEX_HOME;
-  else process.env.CODEX_HOME = originalHome;
-  vi.useRealTimers(); vi.unstubAllGlobals();
-  await rm(dir, { recursive: true, force: true });
-});
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.resetAllMocks(); });
 
 describe("Codex Enterprise usage", () => {
   it("reports spend-only data as available without inventing usage windows", async () => {
@@ -69,6 +52,16 @@ describe("Codex Enterprise usage", () => {
       const next = (await reader.read(true)).accounts[0];
       expect(next).toMatchObject({ status: "error", stale: true, message: "Codex rate limited this request. Try again shortly." });
       expect(next.balances).toEqual(first.balances);
+    } finally { reader.dispose(); }
+  });
+  it("preserves the last reading when OMP credential retrieval fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ spend_control: { individual_limit: { limit: 50, used: 12 } } }), { status: 200 })));
+    const reader = createCodexUsageReader();
+    try {
+      const first = (await reader.read(false)).accounts[0];
+      vi.mocked(ompToken).mockRejectedValueOnce(new Error("unavailable"));
+      const next = (await reader.read(true)).accounts[0];
+      expect(next).toMatchObject({ status: "unavailable", stale: true, balances: first.balances });
     } finally { reader.dispose(); }
   });
 });
