@@ -110,6 +110,7 @@ import {
   type reasoningItemDataSchema,
   resolveExpansion,
   resolveTaskUpdateExpansion,
+  resolveToolCallExpansion,
   type TaskUpdateExpansionOverride,
   type TodoItemData,
   type ToolCallItemData,
@@ -2975,7 +2976,7 @@ function ToolCallCard({
         latestTaskUpdateTimestamp,
         taskUpdateOverride,
       )
-    : resolveExpansion(expansionMode, isLatest, userExpanded);
+    : resolveToolCallExpansion(item.data.name, expansionMode, isLatest, userExpanded);
   const hasDetails = detail ? hasMeaningfulToolCallDetail(detail) : true;
   const hasBody = toolCallHasBody(item.data.name, detail, item.data.presentation.summary);
   const expandable = hasBody || Boolean(item.data.errorText);
