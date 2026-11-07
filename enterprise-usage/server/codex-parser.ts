@@ -4,9 +4,13 @@ import { windowFromReportedDuration } from "@getpaseo/plugin/server/usage";
 import type { Balance, Window } from "../shared/usage";
 
 export function object(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
-export function text(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
+export function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
 function number(value: unknown): number | null {
   if (typeof value !== "number" && (typeof value !== "string" || !value.trim())) return null;
   const result = Number(value);
@@ -33,15 +37,45 @@ function windows(value: unknown, scope?: { id: string; label: string }): Window[
     const primary = slot === "primary_window";
     const normalized = windowFromReportedDuration({
       durationSeconds: nonnegative(window.limit_window_seconds),
-      unknown: { id: primary ? "unknown_primary" : "unknown_secondary", label: primary ? "Primary limit" : "Secondary limit", shortLabel: "" },
-      scope, summary: !scope, utilizationPct: usedPct, resetsAt: timestamp(window.reset_at),
+      unknown: {
+        id: primary ? "unknown_primary" : "unknown_secondary",
+        label: primary ? "Primary limit" : "Secondary limit",
+        shortLabel: "",
+      },
+      scope,
+      summary: !scope,
+      utilizationPct: usedPct,
+      resetsAt: timestamp(window.reset_at),
     });
-    return [{ id: normalized.id, label: normalized.label, shortLabel: normalized.shortLabel ?? "", summary: !scope, usedPct, resetsAt: normalized.resetsAt ?? null }];
+    return [
+      {
+        id: normalized.id,
+        label: normalized.label,
+        shortLabel: normalized.shortLabel ?? "",
+        summary: !scope,
+        usedPct,
+        resetsAt: normalized.resetsAt ?? null,
+      },
+    ];
   });
 }
-export function parseCodexUsage(raw: unknown): { plan: string | null; balances: Balance[]; windows: Window[] } {
+export function parseCodexUsage(raw: unknown): {
+  plan: string | null;
+  balances: Balance[];
+  windows: Window[];
+} {
   const usage = object(raw);
-  if (!usage || !["plan_type", "rate_limit", "additional_rate_limits", "spend_control", "credits", "code_review_rate_limit"].some((key) => key in usage)) {
+  if (
+    !usage ||
+    ![
+      "plan_type",
+      "rate_limit",
+      "additional_rate_limits",
+      "spend_control",
+      "credits",
+      "code_review_rate_limit",
+    ].some((key) => key in usage)
+  ) {
     throw new Error("Codex returned an unrecognized usage response.");
   }
   const balances: Balance[] = [];
@@ -51,16 +85,39 @@ export function parseCodexUsage(raw: unknown): { plan: string | null; balances: 
     const used = nonnegative(spend.used);
     const remaining = nonnegative(spend.remaining);
     const effectiveUsed = used ?? (remaining !== null ? Math.max(0, limit - remaining) : null);
-    const computedPct = limit > 0 && effectiveUsed !== null ? effectiveUsed / limit * 100 : null;
+    const computedPct = limit > 0 && effectiveUsed !== null ? (effectiveUsed / limit) * 100 : null;
     const reportedUnit = text(spend.unit)?.toLowerCase();
     const unit = reportedUnit === "usd" || reportedUnit === "credits" ? reportedUnit : undefined;
-    balances.push({ id: "spend", label: unit === "usd" ? "Monthly spend" : unit === "credits" ? "Monthly credits" : "Monthly allowance", limit, used: effectiveUsed,
+    balances.push({
+      id: "spend",
+      label:
+        unit === "usd"
+          ? "Monthly spend"
+          : unit === "credits"
+            ? "Monthly credits"
+            : "Monthly allowance",
+      limit,
+      used: effectiveUsed,
       remaining: remaining ?? (used !== null ? Math.max(0, limit - used) : null),
-      usedPct: nonnegative(spend.used_percent) ?? (computedPct !== null && Number.isFinite(computedPct) ? computedPct : null),
-      resetsAt: timestamp(spend.reset_at), unit });
+      usedPct:
+        nonnegative(spend.used_percent) ??
+        (computedPct !== null && Number.isFinite(computedPct) ? computedPct : null),
+      resetsAt: timestamp(spend.reset_at),
+      unit,
+    });
   } else {
     const remaining = nonnegative(object(usage.credits)?.balance);
-    if (remaining !== null) balances.push({ id: "credits", label: "Credits", remaining, limit: null, used: null, usedPct: null, resetsAt: null, unit: "credits" });
+    if (remaining !== null)
+      balances.push({
+        id: "credits",
+        label: "Credits",
+        remaining,
+        limit: null,
+        used: null,
+        usedPct: null,
+        resetsAt: null,
+        unit: "credits",
+      });
   }
   const result = windows(usage.rate_limit);
   const occurrences = new Map<string, number>();
@@ -72,9 +129,16 @@ export function parseCodexUsage(raw: unknown): { plan: string | null; balances: 
       if (!identity) continue;
       const occurrence = (occurrences.get(identity) ?? 0) + 1;
       occurrences.set(identity, occurrence);
-      result.push(...windows(feature.rate_limit, { id: `feature:${encodeURIComponent(identity)}${occurrence > 1 ? `:${occurrence}` : ""}`, label: text(feature.limit_name) ?? identity }));
+      result.push(
+        ...windows(feature.rate_limit, {
+          id: `feature:${encodeURIComponent(identity)}${occurrence > 1 ? `:${occurrence}` : ""}`,
+          label: text(feature.limit_name) ?? identity,
+        }),
+      );
     }
   }
-  result.push(...windows(usage.code_review_rate_limit, { id: "code_review", label: "Code review" }));
+  result.push(
+    ...windows(usage.code_review_rate_limit, { id: "code_review", label: "Code review" }),
+  );
   return { plan: text(usage.plan_type), balances, windows: result };
 }

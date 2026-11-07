@@ -5,7 +5,10 @@
   "license": "MIT",
   "type": "module",
   "description": "Claude and Codex enterprise usage and spend limits in the Paseo sidebar",
-  "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
   "devDependencies": {
     "@getpaseo/client": "0.12.0",
     "@getpaseo/plugin": "0.12.0",

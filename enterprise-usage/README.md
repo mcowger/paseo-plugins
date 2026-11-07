@@ -1,6 +1,6 @@
 # Claude and Codex Enterprise usage
 
-One Paseo plugin adds separate sidebar meters for Claude and Codex usage. Each meter opens details for that provider, including reported spend, limits, feature windows, reset times and refresh status. Spend-only Enterprise accounts do not need a session or weekly window to be displayed.
+One Paseo plugin adds side-by-side sidebar meters identified by Claude and Codex logos, each occupying half the available width. Each meter opens details for that provider, including reported spend, limits, feature windows, reset times and refresh status. Spend-only Enterprise accounts do not need a session or weekly window to be displayed.
 
 ## Install
 
