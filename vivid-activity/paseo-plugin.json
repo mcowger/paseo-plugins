@@ -1,0 +1,31 @@
+{
+  "id": "vivid-activity",
+  "name": "Vivid Activity",
+  "description": "Redraws agent thinking and tool-call rows as color-coded activity rows with live states, folds finished runs into one summary row with its file changes and turn tokens, and times every step. English and Simplified Chinese, plus user-defined languages.",
+  "icon": "assets/icon.png",
+  "media": [
+    "assets/screenshot-desktop-dark.png",
+    "assets/screenshot-details-light.png",
+    "assets/screenshot-phone-dark.png",
+    "assets/screenshot-settings-dark.png"
+  ],
+  "requirements": {
+    "paseo": ">=0.11.1"
+  },
+  "build": [
+    [
+      "npm",
+      "ci",
+      "--omit=dev",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund"
+    ]
+  ],
+  "translations": {
+    "zh-CN": {
+      "name": "彩色活动行",
+      "description": "把 Agent 的思考行和工具调用行重绘成按颜色区分、带实时状态的活动行，把跑完的一段折叠成一行摘要并附上文件改动和本轮 Token，还为每一步计时。支持英文、简体中文和用户自定义语言。"
+    }
+  }
+}

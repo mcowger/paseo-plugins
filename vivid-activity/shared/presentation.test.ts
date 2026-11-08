@@ -1,0 +1,1793 @@
+import { describe, expect, it } from "vitest";
+import { shouldAttemptImageLoad } from "./read-image";
+import { parseOmpTaskOutput } from "./omp-task";
+import {
+  diffLinesForDetail,
+  diffStatsForDetail,
+  diffStatsFromStrings,
+  diffStatsFromUnifiedDiff,
+  editDiffContentSize,
+  effectiveUnifiedDiff,
+  fileIconForPath,
+  tailLinesOf,
+  formatReasoningText,
+  hasEditDiffContent,
+  languageForFilePath,
+  parseSubAgentActionLog,
+  paseoToolCategory,
+  paseoToolIcon,
+  paseoToolLabel,
+  paseoToolLeafName,
+  paseoToolSummary,
+  paseoToolResult,
+  parsePiLsOutput,
+  parseBgWaitInput,
+  parseBgWaitOutput,
+  parseSubagentSupervisorInput,
+  bgWaitLabel,
+  bgWaitSummary,
+  ompWaitLabel,
+  ompWaitSummary,
+  isOmpTaskTool,
+  parseOmpWaitOutput,
+  extractPiToolText,
+  formatWaitTimeout,
+  isOmpWaitTool,
+  isSkillTool,
+  isTodoTool,
+  parseSkillName,
+  parseTodoToolInput,
+  parseTodoToolOutput,
+  notInHeader,
+  toolCallHasBody,
+  textAfterHeader,
+  todoTaskLabel,
+  todoToolDetailModel,
+  todoToolSummary,
+  isBgWaitTool,
+  isSubagentSupervisorTool,
+  isOpencodeSubagentTool,
+  parseOpencodeSubagentInput,
+  parseOpencodeSubagentOutput,
+  opencodeSubagentSummary,
+  skillNameForDetail,
+  shortRunId,
+  subagentSupervisorLabel,
+  subagentSupervisorSummary,
+  readErrorMessage,
+  stripLeadingCwdCd,
+  unwrapPaseoToolOutput,
+  parsePiShellResult,
+  normalizeToolCallDetail,
+  resolveActivityPalette,
+  resolveSubAgentActionPresentation,
+  resolveToolCallPresentation,
+  formatJson,
+  isDirectoryRead,
+  formatError,
+  prettyJson,
+  formatUnknownValue,
+  expansionTargetForToolCall,
+  hasMeaningfulToolCallDetail,
+  hasMeaningfulUnknownValue,
+  isAskTool,
+  extractCodeInput,
+  extractApplyPatchEdits,
+  isApplyPatchTool,
+  previewText,
+  parseOpencodeSearchContent,
+  relativeToRoot,
+  resolveSearchCounts,
+  splitFileDisplay,
+  truncateDirFront,
+  splitReasoningSteps,
+  estimateReasoningTokens,
+  formatReasoningMeta,
+  MAX_DIFF_CHARS,
+  MAX_FORMAT_CHARS,
+  PASEO_TOOL_ICONS,
+} from "./presentation";
+
+const colors = {
+  surface0: "#101010",
+  surface1: "#181818",
+  surface2: "#242424",
+  border: "#444444",
+  foreground: "#f4f4f5",
+  foregroundMuted: "#a1a1aa",
+  accent: "#60a5fa",
+  accentForeground: "#0f172a",
+  statusSuccess: "#4ade80",
+  statusWarning: "#fbbf24",
+  statusDanger: "#f87171",
+};
+
+describe("colorful activity presentation", () => {
+  it("maps file extensions to icons and highlight languages", () => {
+    expect(fileIconForPath("src/web/main.tsx")).toBe("FileCode2");
+    expect(fileIconForPath("package.json")).toBe("FileJson");
+    expect(fileIconForPath("README.md")).toBe("FileText");
+    expect(fileIconForPath(".env")).toBe("FileKey2");
+    expect(languageForFilePath("src/web/main.tsx")).toBe("typescript");
+    expect(languageForFilePath("styles.css")).toBe("css");
+  });
+
+  it("counts unified diff additions and deletions without file headers", () => {
+    expect(
+      diffStatsFromUnifiedDiff("--- a/main.ts\n+++ b/main.ts\n@@ -1 +1 @@\n-old\n+new\n"),
+    ).toEqual({ additions: 1, deletions: 1 });
+  });
+
+  it("counts changes when an edit only has old and new strings", () => {
+    expect(diffStatsFromStrings("one\ntwo\n", "one\nthree\n")).toEqual({
+      additions: 1,
+      deletions: 1,
+    });
+    expect(diffStatsFromStrings("one\ntwo", "one\ntwo\n")).toEqual({
+      additions: 1,
+      deletions: 1,
+    });
+  });
+
+  it("creates colored diff rows from old and new strings", () => {
+    expect(
+      diffLinesForDetail({
+        type: "edit",
+        filePath: "main.ts",
+        oldString: "const oldValue = 1;\n",
+        newString: "const newValue = 2;\n",
+      }),
+    ).toEqual([
+      { kind: "remove", text: "const oldValue = 1;" },
+      { kind: "add", text: "const newValue = 2;" },
+    ]);
+  });
+
+  it("centers diff rows on changes instead of rendering the whole file", () => {
+    const before = Array.from({ length: 10 }, (_, index) => `line ${index + 1}`).join("\n");
+    const after = before.replace("line 9", "changed line 9");
+
+    expect(diffLinesForDetail({ type: "edit", filePath: "file.txt", oldString: before, newString: after })).toEqual([
+      { kind: "meta", text: "…" },
+      { kind: "context", text: "line 6" },
+      { kind: "context", text: "line 7" },
+      { kind: "context", text: "line 8" },
+      { kind: "remove", text: "line 9" },
+      { kind: "add", text: "changed line 9" },
+      { kind: "context", text: "line 10" },
+    ]);
+  });
+
+  it("maps known tool details to screenshot-style presentation", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "edit",
+        detail: { type: "edit", filePath: "src/web/main.tsx", oldString: "", newString: "x" },
+      }),
+    ).toMatchObject({
+      category: "file",
+      icon: "FileCode2",
+      label: "Edit",
+      summary: "src/web/main.tsx",
+      language: "typescript",
+      diffStats: { additions: 1, deletions: 0 },
+    });
+    expect(
+      resolveToolCallPresentation({
+        name: "bash",
+        detail: { type: "shell", command: "bun run typecheck && bun test" },
+      }),
+    ).toEqual({
+      category: "shell",
+      icon: "SquareTerminal",
+      label: "Shell",
+      summary: "bun run typecheck && bun test",
+    });
+  });
+
+  it("labels top-level Ls tool calls as List", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "Ls",
+        detail: { type: "unknown", input: { path: "", limit: 200 }, output: { content: [] } },
+      }),
+    ).toMatchObject({
+      category: "file",
+      icon: "List",
+      label: "List",
+    });
+  });
+
+  it("labels directory reads as List instead of Read", () => {
+    expect(
+      isDirectoryRead(
+        "/home/user/workspace/paseo-worktrees/0e5bdwyx/filthy-robin/colorful-agent-activity",
+        "Read directory /home/user/workspace/paseo-worktrees/0e5bdwyx/filthy-robin/colorful-agent-activity:\nclient/\nimages/\n",
+      ),
+    ).toBe(true);
+    expect(isDirectoryRead("/tmp/some-dir/", "anything")).toBe(true);
+    expect(isDirectoryRead("src/index.ts", "const x = 1;")).toBe(false);
+    expect(
+      resolveToolCallPresentation({
+        name: "read",
+        detail: {
+          type: "read",
+          filePath:
+            "/home/user/workspace/paseo-worktrees/0e5bdwyx/filthy-robin/colorful-agent-activity",
+          content:
+            "Read directory /home/user/workspace/paseo-worktrees/0e5bdwyx/filthy-robin/colorful-agent-activity:\nclient/\nimages/\n",
+        },
+      }),
+    ).toMatchObject({
+      category: "file",
+      icon: "Folder",
+      label: "List",
+    });
+    expect(
+      resolveToolCallPresentation({
+        name: "read",
+        detail: { type: "read", filePath: "src/index.ts", content: "const x = 1;" },
+      }),
+    ).toMatchObject({ label: "Read" });
+  });
+
+  it("recovers Pi image reads with null pagination without retaining base64 output", () => {
+    const detail = normalizeToolCallDetail({
+      type: "unknown",
+      input: { path: "/tmp/screenshot.png", offset: null, limit: null },
+      output: {
+        content: [
+          { type: "text", text: "Read image file [image/png]" },
+          { type: "image", data: "base64-image-data", mimeType: "image/png" },
+        ],
+      },
+    }, "read");
+
+    expect(detail).toEqual({
+      type: "read",
+      filePath: "/tmp/screenshot.png",
+      content: "Read image file [image/png]",
+    });
+    expect(resolveToolCallPresentation({ name: "read", detail })).toMatchObject({
+      category: "file",
+      label: "Read",
+      filePath: "/tmp/screenshot.png",
+    });
+    expect(detail.type).toBe("read");
+    if (detail.type === "read") {
+      expect(shouldAttemptImageLoad(detail.filePath, detail.content)).toBe(true);
+    }
+  });
+
+  it("recovers namespaced text reads and preserves numeric pagination", () => {
+    expect(normalizeToolCallDetail({
+      type: "unknown",
+      input: JSON.stringify({ path: "src/index.ts", offset: 10, limit: 20 }),
+      output: { content: [{ type: "text", text: "line one" }, { type: "text", text: "line two" }] },
+    }, "functions.Read")).toEqual({
+      type: "read",
+      filePath: "src/index.ts",
+      offset: 10,
+      limit: 20,
+      content: "line one\nline two",
+    });
+  });
+
+  it("keeps other tools and malformed read inputs unknown", () => {
+    for (const [name, input] of [
+      ["find", { path: "src" }],
+      ["read", { path: 42 }],
+      ["read", { path: "" }],
+      ["read", { path: "src/index.ts", offset: "10" }],
+      ["read", { path: "src/index.ts", limit: false }],
+    ] as const) {
+      const detail = { type: "unknown" as const, input, output: "plain text" };
+      expect(normalizeToolCallDetail(detail, name)).toBe(detail);
+    }
+  });
+
+  it("strips a leading cd to the session cwd from shell titles", () => {
+    const cwd = "/home/user/workspace/pi-stuff/pi-control";
+    expect(stripLeadingCwdCd(`cd ${cwd} && grep -rn foo src`, cwd)).toBe("grep -rn foo src");
+    expect(stripLeadingCwdCd(`cd "${cwd}" && ls`, cwd)).toBe("ls");
+    expect(stripLeadingCwdCd(`cd '${cwd}'; ls`, cwd)).toBe("ls");
+    expect(stripLeadingCwdCd(`cd ${cwd}/ && ls`, cwd)).toBe("ls");
+  });
+
+  it("keeps shell titles when the leading cd targets another directory", () => {
+    const cwd = "/home/user/workspace/pi-stuff/pi-control";
+    const command = "cd /tmp/other && grep -rn foo src";
+    expect(stripLeadingCwdCd(command, cwd)).toBe(command);
+    expect(stripLeadingCwdCd(`cd ${cwd}`, cwd)).toBe(`cd ${cwd}`);
+    expect(stripLeadingCwdCd("grep -rn foo src", cwd)).toBe("grep -rn foo src");
+    expect(stripLeadingCwdCd(`cd ${cwd} && grep`, undefined)).toBe(`cd ${cwd} && grep`);
+  });
+
+  it("parses Pi ls text envelopes into file entries", () => {
+    expect(
+      parsePiLsOutput({
+        content: [
+          {
+            type: "text",
+            text: ".git/\nREADME.md\npackage.json\n",
+          },
+        ],
+      }),
+    ).toEqual([".git/", "README.md", "package.json"]);
+    expect(parsePiLsOutput({ content: [] })).toEqual([]);
+    expect(parsePiLsOutput({ content: [{ type: "image", text: "README.md" }] })).toBeNull();
+  });
+
+  it("recognizes Pi read errors without treating regular content as an error", () => {
+    expect(readErrorMessage("ENOENT: no such file or directory, access 'missing.ts'"))
+      .toBe("ENOENT: no such file or directory, access 'missing.ts'");
+    expect(readErrorMessage("Error: permission denied")).toBe("Error: permission denied");
+    expect(readErrorMessage("Error handling example")).toBeUndefined();
+    expect(readErrorMessage("const value = 1;")).toBeUndefined();
+  });
+
+  it("extracts Pi error text from the error envelope", () => {
+    expect(
+      formatError({
+        content: [{ type: "text", text: "ENOENT: no such file or directory" }],
+        details: {},
+      }),
+    ).toBe("ENOENT: no such file or directory");
+  });
+
+  it("keeps line breaks in Claude Code error text and drops the tool_result envelope (local patch)", () => {
+    const lint = "Exit code 1\n\n> demo@1.0.0 lint\n> eslint src\n\n\n\nsrc/log.ts\n  8:3  error  no-console   \n";
+    expect(formatError({ type: "tool_result", tool_use_id: "toolu_1", is_error: true, content: lint })).toBe(
+      "Exit code 1\n\n> demo@1.0.0 lint\n> eslint src\n\nsrc/log.ts\n  8:3  error  no-console",
+    );
+    expect(formatError({ message: "spawn ENOENT" })).toBe("spawn ENOENT");
+    expect(formatError("x".repeat(2000))).toHaveLength(1200);
+  });
+
+  it("maps sub-agent actions to readable inline progress rows", () => {
+    expect(resolveSubAgentActionPresentation("read", "README.md")).toEqual({
+      icon: "FileText",
+      label: "Read",
+      summaryIcon: "FileText",
+    });
+    expect(resolveSubAgentActionPresentation("read", "src/")).toEqual({
+      icon: "Folder",
+      label: "List",
+      summaryIcon: "Folder",
+    });
+    expect(resolveSubAgentActionPresentation("find_files")).toEqual({
+      icon: "Search",
+      label: "Find",
+    });
+    expect(resolveSubAgentActionPresentation("Ls")).toEqual({
+      icon: "List",
+      label: "List",
+    });
+    expect(resolveSubAgentActionPresentation("shell", "git status")).toEqual({
+      icon: "SquareTerminal",
+      label: "Shell",
+    });
+  });
+
+  it("recovers Claude-style sub-agent actions from the provider log", () => {
+    expect(parseSubAgentActionLog("[Read] README.md\n[Shell] git status\nnot an action")).toEqual([
+      { index: 0, toolName: "Read", summary: "README.md" },
+      { index: 1, toolName: "Shell", summary: "git status" },
+    ]);
+  });
+
+  it("gives namespaced Paseo tools a specialized title, icon, and summary", () => {
+    const input = {
+      title: "Random Number Agent 3",
+      provider: "pi/plexus/gpt-5.6-luna",
+    };
+    expect(paseoToolLabel("mcp__paseo__create_agent")).toBe("Create Agent");
+    expect(paseoToolLabel("mcp_paseo_create_agent")).toBe("Create Agent");
+    expect(paseoToolIcon("paseo.create_agent")).toBe("Bot");
+    expect(paseoToolLeafName("paseo_create_agent")).toBe("create_agent");
+    expect(paseoToolLeafName("mcp_paseo_create_agent")).toBe("create_agent");
+    expect(paseoToolLeafName("mcp__paseo__future_tool")).toBeNull();
+    expect(paseoToolCategory("paseo_remote.create_agent")).toBe("agent");
+    expect(paseoToolSummary("mcp__paseo__create_agent", input)).toBe(
+      "Random Number Agent 3 · pi/plexus/gpt-5.6-luna",
+    );
+    expect(paseoToolLabel("mcp__github__create_issue")).toBeNull();
+    expect(
+      resolveToolCallPresentation({
+        name: "mcp_paseo_create_agent",
+        detail: { type: "unknown", input, output: { agentId: "agt_123" } },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Bot",
+      label: "Paseo Create Agent",
+      summary: "Random Number Agent 3 · pi/plexus/gpt-5.6-luna",
+    });
+    expect(
+      resolveToolCallPresentation({
+        name: "mcp__github__search_repositories",
+        detail: { type: "unknown", input: { query: "paseo" }, output: {} },
+      }),
+    ).toMatchObject({
+      category: "search",
+      icon: "BookMarked",
+      label: "GitHub Repository Search",
+      summary: "paseo",
+    });
+    expect(
+      resolveToolCallPresentation({
+        name: "mcp__paseo__create_agent",
+        detail: { type: "unknown", input, output: { agentId: "agt_123" } },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Bot",
+      label: "Paseo Create Agent",
+      summary: "Random Number Agent 3 · pi/plexus/gpt-5.6-luna",
+    });
+  });
+
+  it("unwraps MCP text envelopes with diagnostic prefixes", () => {
+    const output = {
+      content: [
+        {
+          type: "text",
+          text: 'availableModes_count=0\\n\\n{"agentId":"agt_123","status":"running"}',
+        },
+      ],
+    };
+    expect(unwrapPaseoToolOutput(output)).toEqual({
+      agentId: "agt_123",
+      status: "running",
+    });
+    expect(paseoToolResult({ ok: true, result: { browserId: "tab-1" } })).toEqual({
+      browserId: "tab-1",
+    });
+    expect(
+      paseoToolResult({
+        ok: false,
+        error: { code: "browser_timeout", message: "Timed out" },
+      }),
+    ).toEqual({
+      ok: false,
+      error: { code: "browser_timeout", message: "Timed out" },
+    });
+  });
+
+  it("looks for embedded JSON from a few starts only, so crafted output cannot stall the app or the daemon (0.4.1)", () => {
+    // Retrying from every bracket was quadratic: 100 000 nested brackets kept the parser busy for minutes.
+    const crafted = "{" + "[".repeat(99_990) + "x";
+    const started = performance.now();
+    expect(parsePiShellResult(crafted)).toBeUndefined();
+    expect(unwrapPaseoToolOutput({ content: [{ type: "text", text: crafted }] })).toBe(crafted);
+    expect(performance.now() - started).toBeLessThan(2_000);
+    // A short prefix with brackets of its own still finds the result.
+    expect(unwrapPaseoToolOutput({ content: [{ type: "text", text: 'note [1] [2] (3):\n{"agentId":"a1"}' }] })).toEqual({ agentId: "a1" });
+    // Longer text is only taken when the whole text is JSON.
+    const long = "x".repeat(100_001) + '{"agentId":"a1"}';
+    expect(unwrapPaseoToolOutput({ content: [{ type: "text", text: long }] })).toBe(long);
+    expect(unwrapPaseoToolOutput({ content: [{ type: "text", text: JSON.stringify({ log: "y".repeat(200_000) }) }] })).toEqual({ log: "y".repeat(200_000) });
+  });
+
+  it("unwraps Pi 0.99 bash structured results", () => {
+    const envelope = {
+      content: [{ type: "text", text: "copied\nvalid json\n" }],
+      structuredContent: {
+        output: "copied\nvalid json\n",
+        truncated: false,
+        exit_code: 0,
+        wall_time_seconds: 0.1,
+      },
+    };
+    const expected = { output: "copied\nvalid json\n", exitCode: 0, truncated: false };
+    expect(parsePiShellResult(envelope)).toEqual(expected);
+    expect(parsePiShellResult(JSON.stringify(envelope))).toEqual(expected);
+    // Plain output and MCP envelopes without a shell result pass through untouched.
+    expect(parsePiShellResult("copied\n")).toBeUndefined();
+    expect(parsePiShellResult({ content: [{ type: "text", text: "hi" }] })).toBeUndefined();
+  });
+
+  it("normalizes shell and unknown Pi bash details", () => {
+    const envelope = {
+      content: [{ type: "text", text: "short" }],
+      structuredContent: {
+        output: "full output",
+        truncated: true,
+        exit_code: 1,
+        full_output_path: "/tmp/out.txt",
+      },
+    };
+
+    expect(
+      normalizeToolCallDetail({
+        type: "shell",
+        command: "run",
+        output: JSON.stringify(envelope),
+        exitCode: null,
+      }),
+    ).toMatchObject({
+      type: "shell",
+      command: "run",
+      output: "full output",
+      exitCode: 1,
+      truncated: true,
+      fullOutputPath: "/tmp/out.txt",
+    });
+
+    expect(
+      normalizeToolCallDetail(
+        { type: "unknown", input: { command: "run" }, output: envelope },
+        "bash",
+      ),
+    ).toMatchObject({
+      type: "shell",
+      command: "run",
+      output: "full output",
+      exitCode: 1,
+      truncated: true,
+    });
+
+    // Envelopes without a structured result still render as shell output.
+    expect(
+      normalizeToolCallDetail(
+        {
+          type: "unknown",
+          input: { command: "bun test" },
+          output: { content: [{ type: "text", text: "170 pass" }] },
+        },
+        "bash",
+      ),
+    ).toMatchObject({ type: "shell", command: "bun test", output: "170 pass" });
+
+    // Ordinary unknown payloads are left alone.
+    expect(
+      normalizeToolCallDetail({ type: "unknown", input: { q: "x" }, output: "plain" }, "grep"),
+    ).toEqual({ type: "unknown", input: { q: "x" }, output: "plain" });
+  });
+
+  it("presents a Pi bash envelope as a shell row", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "bash",
+        detail: {
+          type: "unknown",
+          input: { command: "bun test" },
+          output: {
+            content: [{ type: "text", text: "170 pass" }],
+            structuredContent: { output: "170 pass", truncated: false, exit_code: 0 },
+          },
+        },
+      }),
+    ).toMatchObject({
+      category: "shell",
+      icon: "SquareTerminal",
+      label: "Shell",
+      summary: "bun test",
+    });
+  });
+
+  it("keeps reasoning formatting outside code spans", () => {
+    expect(formatReasoningText("**Plan****Result**\n\n`**inline**`")).toBe(
+      "**Plan**\n\n**Result**\n\n`**inline**`",
+    );
+  });
+
+  it("derives palette colors from Paseo theme tokens", () => {
+    const palette = resolveActivityPalette("high_contrast", colors);
+    expect(palette.categoryColors.shell).toBe(colors.statusWarning);
+    expect(palette.categoryColors.reasoning).toBe(colors.foregroundMuted);
+    expect(palette.statusColors.failed).toBe(colors.statusDanger);
+    expect(palette.borderWidth).toBe(2);
+  });
+
+  it("uses valid Activity icon for get_agent_activity", () => {
+    expect(PASEO_TOOL_ICONS.get_agent_activity).toBe("Activity");
+    expect(paseoToolIcon("mcp_paseo_get_agent_activity")).toBe("Activity");
+    expect(
+      resolveToolCallPresentation({
+        name: "mcp_paseo_get_agent_activity",
+        detail: { type: "unknown", input: { agentId: "agt_1" }, output: {} },
+      }).icon,
+    ).toBe("Activity");
+  });
+
+  it("lexically formats JSON without losing precision or key order", () => {
+    const raw = '{"id":9007199254740993,"b":1,"a":2}';
+    const formatted = prettyJson(raw);
+    expect(formatted).toBe('{\n  "id": 9007199254740993,\n  "b": 1,\n  "a": 2\n}');
+    expect(formatted).toContain("9007199254740993");
+
+    // formatUnknownValue uses prettyJson
+    expect(formatUnknownValue(raw)).toBe(formatted);
+    expect(formatUnknownValue({ num: 123 })).toContain("123");
+
+    // Rejects invalid JSON cleanly
+    expect(prettyJson("not json")).toBeNull();
+
+    // Bails out on oversized input
+    const oversized = '{"key": "' + "x".repeat(MAX_FORMAT_CHARS) + '"}';
+    expect(formatJson(oversized).limited).toBe(true);
+  });
+
+  it("extracts literal JavaScript code from code tool inputs", () => {
+    expect(extractCodeInput("exec", { code: "console.log('hi');" })).toEqual({
+      code: "console.log('hi');",
+      language: "javascript",
+    });
+    expect(extractCodeInput("mcp__plugin__mcpscript", JSON.stringify({ code: "const x = 1;" }))).toEqual({
+      code: "const x = 1;",
+      language: "javascript",
+    });
+    expect(extractCodeInput("evaluate_browser", { expression: "window.location.href" })).toEqual({
+      code: "window.location.href",
+      language: "javascript",
+    });
+    expect(extractCodeInput("read_file", { path: "foo.ts" })).toBeUndefined();
+  });
+
+  it("extracts every file operation from a multi-file apply_patch input", () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: src/index.ts",
+      "@@",
+      "-old()",
+      "+new()",
+      "*** Add File: docs/notes.md",
+      "+Notes",
+      "*** Delete File: src/obsolete.ts",
+      "*** End Patch",
+    ].join("\n");
+
+    expect(extractApplyPatchEdits({ input: patch }, undefined)).toEqual([
+      { filePath: "src/index.ts", operation: "update", unifiedDiff: "@@\n-old()\n+new()" },
+      { filePath: "docs/notes.md", operation: "add", unifiedDiff: "+Notes" },
+      { filePath: "src/obsolete.ts", operation: "delete", unifiedDiff: "" },
+    ]);
+    expect(isApplyPatchTool("apply_patch")).toBe(true);
+    expect(isApplyPatchTool("mcp__codex__apply_patch")).toBe(true);
+    expect(isApplyPatchTool("patch")).toBe(true);
+    expect(isApplyPatchTool("edit")).toBe(false);
+  });
+
+  it("parses OpenCode patch grammar including environment and move directives", () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Environment ID: env-123",
+      "*** Update File: src/old-name.ts",
+      "*** Move to: src/new-name.ts",
+      "@@",
+      "-old()",
+      "+new()",
+      "*** Delete File: src/obsolete.ts",
+      "*** End Patch",
+    ].join("\n");
+
+    expect(extractApplyPatchEdits({ input: { patchText: patch } }, undefined)).toEqual([
+      { filePath: "src/new-name.ts", operation: "update", unifiedDiff: "@@\n-old()\n+new()" },
+      { filePath: "src/obsolete.ts", operation: "delete", unifiedDiff: "" },
+    ]);
+  });
+
+  it("extracts per-file edits from OpenCode patch metadata", () => {
+    const metadata = {
+      files: [
+        {
+          file: "src/index.ts",
+          patch: "@@ -1 +1 @@\n-old()\n+new()",
+          additions: 1,
+          deletions: 1,
+          status: "modified",
+        },
+        {
+          file: "docs/notes.md",
+          patch: "@@ -0,0 +1 @@\n+Notes",
+          additions: 1,
+          deletions: 0,
+          status: "added",
+        },
+        {
+          file: "src/obsolete.ts",
+          patch: "@@ -1,1 +0,0 @@\n-obsolete()",
+          additions: 0,
+          deletions: 1,
+          status: "deleted",
+        },
+      ],
+    };
+
+    expect(extractApplyPatchEdits({ type: "unknown", input: { patchText: "..." }, output: null }, null, metadata)).toEqual([
+      { filePath: "src/index.ts", operation: "update", unifiedDiff: "@@ -1 +1 @@\n-old()\n+new()" },
+      { filePath: "docs/notes.md", operation: "add", unifiedDiff: "@@ -0,0 +1 @@\n+Notes" },
+      { filePath: "src/obsolete.ts", operation: "delete", unifiedDiff: "@@ -1,1 +0,0 @@\n-obsolete()" },
+    ]);
+  });
+
+  it("prefers OpenCode patch metadata over patchText parsing", () => {
+    const patchText = [
+      "*** Begin Patch",
+      "*** Update File: stale.ts",
+      "@@",
+      "-old()",
+      "+new()",
+      "*** End Patch",
+    ].join("\n");
+
+    expect(
+      extractApplyPatchEdits({ type: "unknown", input: { patchText } }, null, {
+        files: [{ file: "fresh.ts", patch: "@@\n-a\n+b", status: "modified" }],
+      }),
+    ).toEqual([{ filePath: "fresh.ts", operation: "update", unifiedDiff: "@@\n-a\n+b" }]);
+  });
+
+  it("ignores malformed OpenCode patch metadata and falls back", () => {
+    const patch = [
+      "*** Begin Patch",
+      "*** Add File: docs/notes.md",
+      "+Notes",
+      "*** End Patch",
+    ].join("\n");
+
+    expect(
+      extractApplyPatchEdits({ type: "unknown", input: { patchText: patch } }, null, {
+        files: [{ file: "docs/notes.md", status: "added" }],
+      }),
+    ).toEqual([{ filePath: "docs/notes.md", operation: "add", unifiedDiff: "+Notes" }]);
+  });
+
+  it("extracts file operations from canonical multi-file unified diffs", () => {
+    const unifiedDiff = [
+      "diff --git a/src/index.ts b/src/index.ts",
+      "--- a/src/index.ts",
+      "+++ b/src/index.ts",
+      "@@ -1 +1 @@",
+      "-old()",
+      "+new()",
+      "diff --git a/src/obsolete.ts b/src/obsolete.ts",
+      "--- a/src/obsolete.ts",
+      "+++ /dev/null",
+      "@@ -1 +0,0 @@",
+      "-obsolete()",
+    ].join("\n");
+
+    expect(extractApplyPatchEdits({
+      type: "edit",
+      filePath: "src/index.ts",
+      unifiedDiff,
+    }, undefined)).toEqual([
+      { filePath: "src/index.ts", operation: "update", unifiedDiff: "@@ -1 +1 @@\n-old()\n+new()" },
+      { filePath: "src/obsolete.ts", operation: "delete", unifiedDiff: "@@ -1 +0,0 @@\n-obsolete()" },
+    ]);
+  });
+
+  it("uses apply_patch preview files when the result contains them", () => {
+    expect(extractApplyPatchEdits(undefined, {
+      details: {
+        preview: {
+          files: [
+            { filePath: "src/index.ts", operation: "update", diff: "- 1 old\n+ 1 new" },
+            { filePath: "README.md", operation: "add", diff: "+ 1 Notes" },
+          ],
+        },
+      },
+    })).toEqual([
+      { filePath: "src/index.ts", operation: "update", unifiedDiff: "-old\n+new" },
+      { filePath: "README.md", operation: "add", unifiedDiff: "+Notes" },
+    ]);
+  });
+
+  it("omits diff stats for file-only edits without a diff payload", () => {
+    // Completed opencode edit tool calls arrive with only a filePath
+    // (old/new strings stripped upstream). They must not report +0/-0.
+    const fileOnly = { type: "edit" as const, filePath: "src/web/main.tsx" };
+    expect(hasEditDiffContent(fileOnly)).toBe(false);
+    expect(editDiffContentSize(fileOnly)).toBe(0);
+    expect(effectiveUnifiedDiff(fileOnly)).toBeUndefined();
+    expect(diffLinesForDetail(fileOnly)).toEqual([]);
+    expect(resolveToolCallPresentation({ name: "edit", detail: fileOnly })).toEqual({
+      category: "file",
+      icon: "FileCode2",
+      label: "Edit",
+      summary: "src/web/main.tsx",
+      filePath: "src/web/main.tsx",
+      fileIcon: "FileCode2",
+      language: "typescript",
+    });
+  });
+
+  it("ignores blank unified diffs instead of shadowing old and new strings", () => {
+    const withBlankDiff = {
+      type: "edit" as const,
+      filePath: "main.ts",
+      oldString: "const oldValue = 1;\n",
+      newString: "const newValue = 2;\n",
+      unifiedDiff: "",
+    };
+    expect(hasEditDiffContent(withBlankDiff)).toBe(true);
+    expect(diffStatsForDetail(withBlankDiff)).toEqual({ additions: 1, deletions: 1 });
+    expect(diffLinesForDetail(withBlankDiff)).toEqual([
+      { kind: "remove", text: "const oldValue = 1;" },
+      { kind: "add", text: "const newValue = 2;" },
+    ]);
+    expect(
+      resolveToolCallPresentation({ name: "edit", detail: withBlankDiff }).diffStats,
+    ).toEqual({ additions: 1, deletions: 1 });
+
+    const whitespaceDiff = {
+      type: "edit" as const,
+      filePath: "main.ts",
+      unifiedDiff: "  \n",
+    };
+    expect(hasEditDiffContent(whitespaceDiff)).toBe(false);
+    expect(effectiveUnifiedDiff(whitespaceDiff)).toBeUndefined();
+    expect(diffLinesForDetail(whitespaceDiff)).toEqual([]);
+    expect(
+      resolveToolCallPresentation({ name: "edit", detail: whitespaceDiff }).diffStats,
+    ).toBeUndefined();
+  });
+
+  it("hides file headers before the first hunk but keeps header-like content lines", () => {
+    const header = "--- /tmp/a.txt\n+++ /tmp/a.txt\n";
+    // Change at the top of the file: previously showed the headers as meta rows.
+    expect(
+      diffLinesForDetail({
+        type: "edit",
+        filePath: "/tmp/a.txt",
+        unifiedDiff: `${header}@@ -1,2 +1,2 @@\n-old\n+new\n same`,
+      }),
+    ).toEqual([
+      { kind: "meta", text: "@@ -1,2 +1,2 @@" },
+      { kind: "remove", text: "old" },
+      { kind: "add", text: "new" },
+      { kind: "context", text: "same" },
+    ]);
+    // Header-like lines after the first hunk are content: a removed "-- rule"
+    // renders as "--- rule" and must count and render as a removal.
+    const markdown = {
+      type: "edit" as const,
+      filePath: "/tmp/a.md",
+      unifiedDiff: `--- /tmp/a.md\n+++ /tmp/a.md\n@@ -1,3 +1,3 @@\n # Title\n--- rule\n+++ plus rule\n text`,
+    };
+    expect(diffLinesForDetail(markdown)).toEqual([
+      { kind: "meta", text: "@@ -1,3 +1,3 @@" },
+      { kind: "context", text: "# Title" },
+      { kind: "remove", text: "-- rule" },
+      { kind: "add", text: "++ plus rule" },
+      { kind: "context", text: "text" },
+    ]);
+    expect(diffStatsForDetail(markdown)).toEqual({ additions: 1, deletions: 1 });
+    expect(resolveToolCallPresentation({ name: "edit", detail: markdown }).diffStats).toEqual({
+      additions: 1,
+      deletions: 1,
+    });
+    // Diffs without a hunk header are untouched.
+    expect(diffLinesForDetail({ type: "edit", filePath: "a", unifiedDiff: "-old\n+new" })).toEqual([
+      { kind: "remove", text: "old" },
+      { kind: "add", text: "new" },
+    ]);
+  });
+
+  it("protects against oversized diff calculations", () => {
+    const largeOld = "a\n".repeat(60_000);
+    const largeNew = "b\n".repeat(60_000);
+    expect(largeOld.length + largeNew.length).toBeGreaterThan(MAX_DIFF_CHARS);
+
+    // Fast fallback without hanging LCS
+    const stats = diffStatsFromStrings(largeOld, largeNew);
+    expect(stats.additions).toBe(60_000);
+    expect(stats.deletions).toBe(60_000);
+
+    const diffLines = diffLinesForDetail({
+      type: "edit",
+      filePath: "large.txt",
+      oldString: largeOld,
+      newString: largeNew,
+    });
+    expect(diffLines.length).toBe(2);
+    expect(diffLines[0]?.kind).toBe("remove");
+    expect(diffLines[1]?.kind).toBe("add");
+
+    // Timeline presentation skips diffStats when edit is oversized
+    const pres = resolveToolCallPresentation({
+      name: "edit",
+      detail: {
+        type: "edit",
+        filePath: "large.txt",
+        oldString: largeOld,
+        newString: largeNew,
+      },
+    });
+    expect(pres.diffStats).toBeUndefined();
+  });
+
+  it("enforces strict 20-line and 4,000-character preview budget with surrogate safety", () => {
+    // Under limit
+    expect(previewText("line 1\nline 2")).toEqual({
+      text: "line 1\nline 2",
+      truncated: false,
+      totalLines: 2,
+      totalChars: 13,
+    });
+
+    // Over line limit
+    const thirtyLines = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n");
+    const linePreview = previewText(thirtyLines);
+    expect(linePreview.truncated).toBe(true);
+    expect(linePreview.text.split("\n").length).toBe(20);
+    expect(linePreview.totalLines).toBe(30);
+
+    // Over character limit
+    const longSingleLine = "x".repeat(5000);
+    const charPreview = previewText(longSingleLine);
+    expect(charPreview.truncated).toBe(true);
+    expect(charPreview.text.length).toBeLessThanOrEqual(4000);
+
+    // Surrogate pair safety
+    const textWithEmoji = "a".repeat(3999) + "🐱" + "b";
+    const emojiPreview = previewText(textWithEmoji);
+    expect(emojiPreview.truncated).toBe(true);
+    const lastChar = emojiPreview.text.charCodeAt(emojiPreview.text.length - 1);
+    // Must not end on a high surrogate
+    expect(lastChar >= 0xd800 && lastChar <= 0xdbff).toBe(false);
+  });
+});
+
+describe("reasoning steps and header metadata", () => {
+  it("splits steps on blank-line runs and drops empties", () => {
+    expect(splitReasoningSteps("first\n\nsecond\n   \n\nthird"))
+      .toEqual(["first", "second", "third"]);
+    expect(splitReasoningSteps("  solo  ")).toEqual(["solo"]);
+    expect(splitReasoningSteps("")).toEqual([]);
+    expect(splitReasoningSteps("\n\n   \n")).toEqual([]);
+  });
+
+  it("groups bold summary lines with their following detail", () => {
+    expect(
+      splitReasoningSteps(
+        "**Understanding user feedback**\n\nThe user clarified what they need.\n\n**Clarifying the check process**\n\nNo additional checks are required.",
+      ),
+    ).toEqual([
+      "**Understanding user feedback**\n\nThe user clarified what they need.",
+      "**Clarifying the check process**\n\nNo additional checks are required.",
+    ]);
+  });
+
+  it("keeps adjacent bold summary lines as separate steps", () => {
+    expect(splitReasoningSteps("**Summary Line**\n\n**Summary Line 2**")).toEqual([
+      "**Summary Line**",
+      "**Summary Line 2**",
+    ]);
+    expect(splitReasoningSteps(formatReasoningText("**Summary Line****Summary Line 2**"))).toEqual([
+      "**Summary Line**",
+      "**Summary Line 2**",
+    ]);
+  });
+
+  it("does not treat prose containing bold spans as a summary line", () => {
+    expect(splitReasoningSteps("**Important** text with **emphasis**\n\nDetail")).toEqual([
+      "**Important** text with **emphasis**",
+      "Detail",
+    ]);
+  });
+
+  it("estimates tokens at four characters each", () => {
+    expect(estimateReasoningTokens("")).toBe(0);
+    expect(estimateReasoningTokens("x".repeat(8))).toBe(2);
+    expect(estimateReasoningTokens("x".repeat(464))).toBe(116);
+  });
+
+  it("formats step and token counts in Chinese (local patch)", () => {
+    expect(formatReasoningMeta(2, 116)).toBe("2 步 · 约 116 token");
+    expect(formatReasoningMeta(1, 1)).toBe("约 1 token");
+    expect(formatReasoningMeta(0, 0)).toBe("约 0 token");
+    expect(formatReasoningMeta(3, 12345)).toBe("3 步 · 约 12,345 token");
+  });
+
+  it("relativizes workspace paths against the root", () => {
+    expect(relativeToRoot("/ws/src/index.ts", "/ws")).toBe("src/index.ts");
+    expect(relativeToRoot("/ws/src/index.ts", "/ws/")).toBe("src/index.ts");
+    expect(relativeToRoot("/ws", "/ws")).toBe("ws");
+    expect(relativeToRoot("/other/index.ts", "/ws")).toBe("/other/index.ts");
+    expect(relativeToRoot("/ws2/index.ts", "/ws")).toBe("/ws2/index.ts");
+    expect(relativeToRoot("src/index.ts", "/ws")).toBe("src/index.ts");
+    expect(relativeToRoot("/ws/src/index.ts", undefined)).toBe("/ws/src/index.ts");
+    expect(relativeToRoot("/ws/src/index.ts", "")).toBe("/ws/src/index.ts");
+  });
+
+  it("splits display paths into muted dirs and bold filenames", () => {
+    expect(splitFileDisplay("src/index.ts")).toEqual({ dir: "src", base: "index.ts" });
+    expect(splitFileDisplay("index.ts")).toEqual({ base: "index.ts" });
+    expect(splitFileDisplay("/other/index.ts")).toEqual({ dir: "/other", base: "index.ts" });
+  });
+
+  it("front-truncates long directories to their tail", () => {
+    expect(truncateDirFront("src")).toBe("src");
+    expect(truncateDirFront("a/b")).toBe("a/b");
+    expect(truncateDirFront("a/b/c")).toBe("…/b/c");
+    expect(truncateDirFront("/other")).toBe("/other");
+    expect(truncateDirFront("/a/b/c")).toBe("…/b/c");
+  });
+
+  it("recognizes the ask tool in any namespace", () => {
+    expect(isAskTool("ask")).toBe(true);
+    expect(isAskTool("Ask")).toBe(true);
+    expect(isAskTool("functions.ask")).toBe(true);
+    expect(isAskTool("mcp__server__ask")).toBe(true);
+    expect(isAskTool("task")).toBe(false);
+    expect(isAskTool("")).toBe(false);
+  });
+
+  it("projects ask tools as a question row", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "ask",
+        detail: { type: "unknown", input: { question: "Continue?" }, output: null },
+      }),
+    ).toEqual({
+      category: "communication",
+      icon: "MessageCircleQuestionMark",
+      label: "Ask Question",
+    });
+  });
+
+  it("keys expansion settings off the body renderer", () => {
+    expect(expansionTargetForToolCall("read", "read")).toBe("read");
+    expect(expansionTargetForToolCall("edit", "edit")).toBe("edit");
+    expect(expansionTargetForToolCall("bash", "shell")).toBe("shell");
+    expect(expansionTargetForToolCall("task", "sub_agent")).toBe("sub_agent");
+    expect(expansionTargetForToolCall("ask", "unknown")).toBe("ask");
+    expect(expansionTargetForToolCall("functions.ask", "unknown")).toBe("ask");
+    expect(expansionTargetForToolCall("speak", "unknown")).toBe("speak");
+    expect(expansionTargetForToolCall("todo", "unknown")).toBe("todo");
+    expect(expansionTargetForToolCall("some-future-tool", "unknown")).toBe("unknown");
+    expect(expansionTargetForToolCall("read", "bogus")).toBe("unknown");
+  });
+
+  it("detects pending tool calls with no arguments or output", () => {
+    expect(hasMeaningfulUnknownValue(null)).toBe(false);
+    expect(hasMeaningfulUnknownValue(undefined)).toBe(false);
+    expect(hasMeaningfulUnknownValue("")).toBe(false);
+    expect(hasMeaningfulUnknownValue("   ")).toBe(false);
+    expect(hasMeaningfulUnknownValue({})).toBe(false);
+    expect(hasMeaningfulUnknownValue([])).toBe(false);
+    expect(hasMeaningfulUnknownValue({ path: "" })).toBe(false);
+    expect(hasMeaningfulUnknownValue(0)).toBe(true);
+    expect(hasMeaningfulUnknownValue(false)).toBe(true);
+    expect(hasMeaningfulUnknownValue({ path: "src/index.ts" })).toBe(true);
+    expect(hasMeaningfulUnknownValue('{"path":"x"}')).toBe(true);
+
+    expect(
+      hasMeaningfulToolCallDetail({ type: "unknown", input: null, output: null }),
+    ).toBe(false);
+    expect(
+      hasMeaningfulToolCallDetail({ type: "unknown", input: {}, output: null }),
+    ).toBe(false);
+    expect(
+      hasMeaningfulToolCallDetail({
+        type: "unknown",
+        input: { path: "src/index.ts" },
+        output: null,
+      }),
+    ).toBe(true);
+    expect(
+      hasMeaningfulToolCallDetail({
+        type: "unknown",
+        input: { path: "src/index.ts" },
+        output: { content: [] },
+      }),
+    ).toBe(true);
+    expect(hasMeaningfulToolCallDetail(undefined)).toBe(false);
+    expect(hasMeaningfulToolCallDetail(null)).toBe(false);
+    expect(
+      hasMeaningfulToolCallDetail({ type: "read", filePath: "", content: undefined }),
+    ).toBe(false);
+    expect(
+      hasMeaningfulToolCallDetail({ type: "read", filePath: "src/index.ts" }),
+    ).toBe(true);
+    expect(
+      hasMeaningfulToolCallDetail({ type: "shell", command: "", output: undefined }),
+    ).toBe(true);
+  });
+});
+
+describe("pi-subagents tool presentation", () => {
+  const supervisorInput = {
+    action: "reply",
+    message: "Decision: ship the worker change.",
+    replyTo: "415abc66-55cb-4c91-a5c8-4d82813bde16",
+  };
+  const supervisorOutput = {
+    content: [
+      { type: "text", text: "Replied to supervisor request 415abc66-55cb-4c91-a5c8-4d82813bde16." },
+    ],
+    details: {
+      replyTo: "415abc66-55cb-4c91-a5c8-4d82813bde16",
+      runId: "09ca5995-b579-46ea-aba6-48e455105a61",
+      agent: "planner",
+    },
+  };
+  const bgWaitInput = { id: "09ca5995-b579-46ea-aba6-48e455105a61", timeoutMs: 300000 };
+  const bgWaitOutput = {
+    content: [
+      {
+        type: "text",
+        text: "Waiting 30.2s for 1 async run(s) and 0 provider item(s). · planner: thinking...\nActive async runs: 1\n",
+      },
+    ],
+    details: { mode: "management", results: [] },
+  };
+
+  it("recognizes pi-subagents tool names with prefixes", () => {
+    expect(isSubagentSupervisorTool("subagent_supervisor")).toBe(true);
+    expect(isSubagentSupervisorTool("mcp__plugin__subagent_supervisor")).toBe(true);
+    expect(isSubagentSupervisorTool("bg_wait")).toBe(false);
+    expect(isBgWaitTool("bg_wait")).toBe(true);
+    expect(isBgWaitTool("Bg_Wait")).toBe(true);
+    expect(isBgWaitTool("subagent_supervisor")).toBe(false);
+  });
+
+  it("parses supervisor reply input and output", () => {
+    expect(parseSubagentSupervisorInput(supervisorInput)).toEqual({
+      action: "reply",
+      replyTo: "415abc66-55cb-4c91-a5c8-4d82813bde16",
+      message: "Decision: ship the worker change.",
+    });
+    expect(parseSubagentSupervisorInput(JSON.stringify(supervisorInput)).action).toBe("reply");
+    expect(subagentSupervisorLabel(supervisorInput)).toBe("Supervisor Reply");
+    expect(subagentSupervisorLabel({ action: "pending" })).toBe("Supervisor Queue");
+    expect(subagentSupervisorSummary(supervisorInput, supervisorOutput)).toBe(
+      "planner · Decision: ship the worker change.",
+    );
+    expect(extractPiToolText(supervisorOutput)?.text).toContain("Replied to supervisor request");
+  });
+
+  it("parses bg_wait input and output", () => {
+    expect(parseBgWaitInput(bgWaitInput)).toEqual(bgWaitInput);
+    expect(bgWaitLabel(bgWaitInput)).toBe("Wait for Run");
+    expect(bgWaitLabel({ all: true })).toBe("Wait for All");
+    expect(bgWaitLabel({ id: "abc", nonBlocking: true })).toBe("Wait Subscription");
+    expect(bgWaitLabel({})).toBe("Bg Wait");
+    expect(formatWaitTimeout(300000)).toBe("5 分");
+    expect(formatWaitTimeout(30000)).toBe("30 秒");
+    expect(formatWaitTimeout(77000)).toBe("1 分 17 秒");
+    expect(formatWaitTimeout(3_900_000)).toBe("1 小时 5 分");
+    expect(shortRunId("09ca5995-b579-46ea-aba6-48e455105a61")).toBe("09ca5995");
+    const parsed = parseBgWaitOutput(bgWaitOutput);
+    expect(parsed?.headline).toContain("Waiting 30.2s");
+    expect(parsed?.body).toContain("Active async runs");
+    expect(bgWaitSummary(bgWaitInput, bgWaitOutput)).toBe("09ca5995 · 最多等 5 分 · 已等待 30.2 秒");
+  });
+
+  it("maps pi-subagents tools to agent presentation", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "subagent_supervisor",
+        detail: { type: "unknown", input: supervisorInput, output: supervisorOutput },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Reply",
+      label: "Supervisor Reply",
+      summary: "planner · Decision: ship the worker change.",
+    });
+    expect(
+      resolveToolCallPresentation({
+        name: "bg_wait",
+        detail: { type: "unknown", input: bgWaitInput, output: bgWaitOutput },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Hourglass",
+      label: "Wait for Run",
+    });
+  });
+
+  it("labels bg_wait rows in sub-agent progress", () => {
+    expect(resolveSubAgentActionPresentation("bg_wait", "planner")).toEqual({
+      icon: "Hourglass",
+      label: "Wait for Background Work",
+    });
+    expect(resolveSubAgentActionPresentation("subagent_supervisor", "reply")).toEqual({
+      icon: "Reply",
+      label: "Supervisor Reply",
+    });
+  });
+
+  it("reports timed-out bg_wait windows from details", () => {
+    const timedOut = parseBgWaitOutput({
+      content: [{ type: "text", text: "Waiting 5m for 1 async run(s) and 0 provider item(s)." }],
+      details: {
+        mode: "management",
+        results: [],
+        wait: { reason: "window_elapsed", timedOut: true, activeRunIds: ["run-1"], activeProviderItems: [] },
+      },
+    });
+    expect(timedOut?.waitReason).toBe("window_elapsed");
+    expect(timedOut?.activeRunIds).toEqual(["run-1"]);
+    expect(bgWaitSummary({ timeoutMs: 300000 }, { content: [{ type: "text", text: "Waiting." }], details: { wait: { reason: "window_elapsed", timedOut: true, activeRunIds: [], activeProviderItems: [] } } })).toContain("已超时");
+  });
+});
+describe("omp wait tool presentation", () => {
+  const ompWaitOutput = {
+    content: [{ type: "text", text: "" }],
+    details: {
+      op: "wait",
+      jobs: [
+        {
+          id: "OAuthCoreReview",
+          type: "task",
+          status: "running",
+          label: "OAuthCoreReview",
+          durationMs: 76963,
+          resolvedModel: "meta/muse-spark-1.3:high",
+          resolvedModelIdentity: "meta/muse-spark-1.3",
+          resolvedThinkingLevel: "high",
+          agentUrlId: "OAuthCoreReview",
+        },
+        {
+          id: "PersistenceReview",
+          type: "task",
+          status: "running",
+          label: "PersistenceReview",
+          durationMs: 76962,
+          resolvedModel: "meta/muse-spark-1.3:high",
+          resolvedModelIdentity: "meta/muse-spark-1.3",
+          resolvedThinkingLevel: "high",
+          agentUrlId: "PersistenceReview",
+        },
+      ],
+    },
+  };
+
+  it("recognizes the omp wait tool without colliding with other wait tools", () => {
+    expect(isOmpWaitTool("wait")).toBe(true);
+    expect(isOmpWaitTool("Wait")).toBe(true);
+    expect(isOmpWaitTool("mcp__plugin__wait")).toBe(true);
+    expect(isOmpWaitTool("bg_wait")).toBe(false);
+    expect(isOmpWaitTool("browser_wait")).toBe(false);
+    expect(isOmpWaitTool("task")).toBe(false);
+  });
+
+  it("parses omp wait jobs with durations and models", () => {
+    const parsed = parseOmpWaitOutput(ompWaitOutput);
+    expect(parsed?.op).toBe("wait");
+    expect(parsed?.jobs).toHaveLength(2);
+    expect(parsed?.jobs[0]).toMatchObject({
+      id: "OAuthCoreReview",
+      status: "running",
+      label: "OAuthCoreReview",
+      durationMs: 76963,
+      model: "meta/muse-spark-1.3:high",
+    });
+    expect(ompWaitLabel(ompWaitOutput)).toBe("Wait for 2 Agents");
+    expect(ompWaitSummary({}, ompWaitOutput)).toBe("2 个运行中 · 1 分 17 秒 · OAuthCoreReview、PersistenceReview");
+  });
+
+  it("labels a single waited agent and falls back without job output", () => {
+    const single = {
+      content: [{ type: "text", text: "" }],
+      details: { op: "wait", jobs: [{ id: "solo", status: "running" }] },
+    };
+    expect(ompWaitLabel(single)).toBe("Wait for Agent");
+    expect(ompWaitSummary({}, single)).toBe("1 个运行中 · solo");
+    expect(ompWaitLabel(null)).toBe("Wait");
+    expect(ompWaitSummary({}, null)).toBeUndefined();
+  });
+
+  it("rejects non-wait envelopes", () => {
+    expect(
+      parseOmpWaitOutput({ content: [{ type: "text", text: "hi" }], details: { op: "read" } }),
+    ).toBeUndefined();
+    expect(parseOmpWaitOutput(null)).toBeUndefined();
+  });
+
+  it("maps omp wait to agent presentation", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "wait",
+        detail: { type: "unknown", input: {}, output: ompWaitOutput },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Hourglass",
+      label: "Wait for 2 Agents",
+      summary: "2 个运行中 · 1 分 17 秒 · OAuthCoreReview、PersistenceReview",
+    });
+  });
+
+  it("labels wait rows in sub-agent progress", () => {
+    expect(resolveSubAgentActionPresentation("wait", undefined)).toEqual({
+      icon: "Hourglass",
+      label: "Wait",
+    });
+  });
+});
+
+describe("OMP task batch presentation", () => {
+  it("recognizes batched input without stealing OpenCode task calls", () => {
+    const input = { tasks: [{ name: "Review", agent: "scout", task: "Review changes" }] };
+    expect(isOmpTaskTool("task", input)).toBe(true);
+    expect(isOmpTaskTool("functions.task", JSON.stringify(input))).toBe(true);
+    expect(isOmpTaskTool("task", { prompt: "Review changes" })).toBe(false);
+    expect(resolveToolCallPresentation({ name: "task", detail: { type: "unknown", input, output: undefined } }).label).toBe("Agent Task");
+    expect(isOpencodeSubagentTool("task")).toBe(true);
+  });
+
+  it("reads live task progress and retains the output", () => {
+    const output = { content: [{ type: "text", text: "Spawned 1 agent" }], details: { progress: [{ id: "Review", assignment: "Review changes", status: "running" }] } };
+    expect(parseOmpTaskOutput(output)).toEqual({ text: "Spawned 1 agent", tasks: [{ id: "Review", description: "Review changes", status: "running" }] });
+    expect(toolCallHasBody("task", { type: "unknown", input: { tasks: [] }, output }, undefined)).toBe(true);
+  });
+});
+
+describe("pi todo tool presentation", () => {
+  const tasks = [
+    {
+      id: 1,
+      subject: "Tail reader + follower modules",
+      status: "completed",
+      activeForm: "writing tail reader and follower",
+    },
+    {
+      id: 8,
+      subject: "Inspect branch and PR state",
+      status: "in_progress",
+      description: "Check worktree changes, tracking branch, upstream/main, and PR ownership.",
+      activeForm: "inspecting branch and PR state",
+    },
+    { id: 9, subject: "Rebase branch onto upstream main", status: "pending", blockedBy: [8] },
+  ];
+  const todoOutput = {
+    content: [{ type: "text", text: "Updated #8 (pending → in_progress)" }],
+    details: {
+      action: "update",
+      params: {
+        action: "update",
+        id: 8,
+        status: "in_progress",
+        activeForm: "inspecting branch and PR state",
+      },
+      tasks,
+      nextId: 11,
+    },
+  };
+
+  it("recognizes the todo tool exactly", () => {
+    expect(isTodoTool("todo")).toBe(true);
+    expect(isTodoTool("Todo")).toBe(true);
+    expect(isTodoTool("functions.todo")).toBe(true);
+    expect(isTodoTool("todowrite")).toBe(false);
+    expect(isTodoTool("task")).toBe(false);
+  });
+
+  it("parses tasks, params, and next id from the result envelope", () => {
+    const parsed = parseTodoToolOutput(todoOutput);
+    expect(parsed?.action).toBe("update");
+    expect(parsed?.nextId).toBe(11);
+    expect(parsed?.text).toBe("Updated #8 (pending → in_progress)");
+    expect(parsed?.params).toMatchObject({
+      action: "update",
+      id: 8,
+      status: "in_progress",
+      activeForm: "inspecting branch and PR state",
+    });
+    expect(parsed?.tasks).toHaveLength(3);
+    expect(parsed?.tasks[1]).toMatchObject({
+      id: 8,
+      subject: "Inspect branch and PR state",
+      status: "in_progress",
+      activeForm: "inspecting branch and PR state",
+    });
+    expect(parsed?.tasks[2]?.blockedBy).toEqual([8]);
+    expect(parseTodoToolOutput(null)).toBeUndefined();
+  });
+
+  it("parses update arguments including dependency edits", () => {
+    expect(parseTodoToolInput({ action: "update", id: 9, addBlockedBy: [8], removeBlockedBy: [3] })).toEqual({
+      action: "update",
+      id: 9,
+      addBlockedBy: [8],
+      removeBlockedBy: [3],
+    });
+  });
+
+  it("summarizes with the tool's text and falls back to done counts", () => {
+    expect(todoToolSummary(todoOutput)).toBe("Updated #8 (pending → in_progress)");
+    const listOutput = {
+      content: [{ type: "text", text: "Tasks:\n#1 pending foo" }],
+      details: { action: "list", tasks, nextId: 11 },
+    };
+    expect(todoToolSummary(listOutput)).toBe("已完成 1/3");
+    expect(todoToolSummary(null)).toBeUndefined();
+  });
+
+  it("labels numeric task ids and leaves generated ids alone", () => {
+    expect(todoTaskLabel(2, "Normalize status")).toBe("#2 Normalize status");
+    expect(todoTaskLabel("2", "Normalize status")).toBe("#2 Normalize status");
+    expect(todoTaskLabel("todo-1", "Run tests")).toBe("Run tests");
+  });
+
+  it("builds a body with only the touched task and no repeated result", () => {
+    const model = todoToolDetailModel({ action: "update", id: 8 }, todoOutput);
+    expect(model.resultText).toBeUndefined();
+    expect(model.tasks.map((task) => task.id)).toEqual([8]);
+    const listOutput = {
+      content: [{ type: "text", text: "Tasks:\n#1 pending foo" }],
+      details: { action: "list", tasks, nextId: 11 },
+    };
+    const list = todoToolDetailModel({ action: "list" }, listOutput);
+    expect(list.resultText).toBe("Tasks:\n#1 pending foo");
+    expect(list.tasks.every((task) => task.status !== "completed")).toBe(true);
+    expect(todoToolDetailModel({}, null)).toEqual({ tasks: [] });
+  });
+
+  it("maps the todo tool to a plan presentation", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "todo",
+        detail: { type: "unknown", input: todoOutput.details.params, output: todoOutput },
+      }),
+    ).toMatchObject({
+      category: "plan",
+      icon: "ListChecks",
+      label: "Tasks",
+      summary: "Updated #8 (pending → in_progress)",
+    });
+  });
+
+  it("labels todo rows in sub-agent progress", () => {
+    expect(resolveSubAgentActionPresentation("todo", undefined)).toEqual({
+      icon: "ListChecks",
+      label: "Tasks",
+    });
+  });
+});
+
+describe("skill tool presentation", () => {
+  it("recognizes the skill tool in any namespace", () => {
+    expect(isSkillTool("skill")).toBe(true);
+    expect(isSkillTool("Skill")).toBe(true);
+    expect(isSkillTool("functions.skill")).toBe(true);
+    expect(isSkillTool("mcp__plugin__skill")).toBe(true);
+    expect(isSkillTool("tasks")).toBe(false);
+  });
+
+  it("parses skill names from id and name input shapes", () => {
+    expect(parseSkillName({ id: "git-commit" })).toBe("git-commit");
+    expect(parseSkillName({ name: "diagnose" })).toBe("diagnose");
+    expect(parseSkillName(JSON.stringify({ id: "git-commit" }))).toBe("git-commit");
+    expect(parseSkillName({})).toBeUndefined();
+    expect(parseSkillName(null)).toBeUndefined();
+  });
+
+  it("resolves skill names from plain_text labels and unknown envelopes", () => {
+    expect(skillNameForDetail({ type: "plain_text", label: "diagnose", text: "body" })).toBe(
+      "diagnose",
+    );
+    expect(
+      skillNameForDetail({
+        type: "unknown",
+        input: { id: "git-commit" },
+        output: '<skill_content name="git-commit"># Skill</skill_content>',
+      }),
+    ).toBe("git-commit");
+    expect(
+      skillNameForDetail({
+        type: "unknown",
+        input: {},
+        output: '<skill_content name="diagnose"># Skill</skill_content>',
+      }),
+    ).toBe("diagnose");
+  });
+
+  it("maps skill calls to a name-only header without contents", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "skill",
+        detail: {
+          type: "unknown",
+          input: { id: "git-commit" },
+          output: '<skill_content name="git-commit"># Skill: git-commit</skill_content>',
+        },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Sparkles",
+      label: "Skill",
+      summary: "git-commit",
+    });
+    expect(
+      resolveToolCallPresentation({
+        name: "skill",
+        detail: { type: "plain_text", label: "diagnose", text: '<skill_content name="diagnose">' },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Sparkles",
+      label: "Skill",
+      summary: "diagnose",
+    });
+  });
+
+  it("labels skill rows in sub-agent progress", () => {
+    expect(resolveSubAgentActionPresentation("skill", undefined)).toEqual({
+      icon: "Sparkles",
+      label: "Skill",
+    });
+  });
+});
+
+describe("opencode search content parsing", () => {
+  it("parses absolute paths with line matches and relativizes against cwd", () => {
+    const content = [
+      "Found 3 matches",
+      "/home/user/workspace/paseo-plugins/colorful-agent-activity/shared/presentation.ts",
+      " Line 1591: export function resolveToolCallPresentation(",
+      "",
+      " Line 1949: export function formatUnknownValue(value: unkno",
+      "",
+      " Line 1982:  const text = typeof error === \"string\" ? error : for",
+    ].join("\n");
+    const parsed = parseOpencodeSearchContent(content);
+    expect(parsed?.numMatches).toBe(3);
+    expect(parsed?.files).toHaveLength(1);
+    expect(parsed?.files[0]?.filePath).toBe(
+      "/home/user/workspace/paseo-plugins/colorful-agent-activity/shared/presentation.ts",
+    );
+    expect(parsed?.files[0]?.matches).toEqual([
+      { lineNumber: 1591, text: "export function resolveToolCallPresentation(" },
+      { lineNumber: 1949, text: "export function formatUnknownValue(value: unkno" },
+      { lineNumber: 1982, text: ' const text = typeof error === "string" ? error : for' },
+    ]);
+    expect(
+      relativeToRoot(
+        parsed?.files[0]?.filePath ?? "",
+        "/home/user/workspace/paseo-plugins/colorful-agent-activity",
+      ),
+    ).toBe("shared/presentation.ts");
+  });
+
+  it("parses multiple relative files with trailing colons", () => {
+    const parsed = parseOpencodeSearchContent(
+      "Found 2 matches\nsrc/file.ts:\n  Line 1: todowrite\nsrc/other.ts:\n  Line 4: todowrite again",
+    );
+    expect(parsed?.numMatches).toBe(2);
+    expect(parsed?.files).toEqual([
+      { filePath: "src/file.ts", matches: [{ lineNumber: 1, text: "todowrite" }] },
+      { filePath: "src/other.ts", matches: [{ lineNumber: 4, text: "todowrite again" }] },
+    ]);
+  });
+
+  it("falls back to raw text for non-search output", () => {
+    expect(parseOpencodeSearchContent("just some output")).toBeUndefined();
+    expect(parseOpencodeSearchContent("")).toBeUndefined();
+    expect(parseOpencodeSearchContent(undefined)).toBeUndefined();
+  });
+
+  it("prefers parsed file counts over stale detail counts", () => {
+    const parsed = parseOpencodeSearchContent(
+      "Found 4 matches\ncolorful-agent-activity/shared/presentation.ts\n Line 6: isCodeModeTool,\n Line 541: export function isSkillTool(",
+    );
+    expect(parsed?.files).toHaveLength(1);
+    expect(resolveSearchCounts({ numMatches: 4, numFiles: 0 }, parsed)).toEqual({
+      matchCount: 4,
+      fileCount: 1,
+    });
+  });
+
+  it("counts parsed match rows when the content has no Found header", () => {
+    const parsed = parseOpencodeSearchContent("src/file.ts:\n  Line 1: todowrite\n  Line 2: todowrite again");
+    expect(resolveSearchCounts({}, parsed)).toEqual({ matchCount: 2, fileCount: 1 });
+  });
+
+  it("falls back to detail counts when content does not parse", () => {
+    expect(resolveSearchCounts({ numMatches: 4, numFiles: 0 }, undefined)).toEqual({
+      matchCount: 4,
+      fileCount: 0,
+    });
+    expect(resolveSearchCounts({}, undefined)).toEqual({});
+  });
+
+  it("reports zero files for explicit no-match content", () => {
+    expect(resolveSearchCounts({}, parseOpencodeSearchContent("No matches found"))).toEqual({
+      matchCount: 0,
+      fileCount: 0,
+    });
+  });
+});
+
+describe("opencode codemode execute presentation", () => {
+  it("labels catalog discovery searches", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "execute",
+        detail: {
+          type: "unknown",
+          input: { code: 'const s = search({query: "exa web search"});\nreturn s;' },
+          output: {
+            items: [{ path: "tools.exa.web_search_exa", description: "Search" }],
+            remaining: 51,
+          },
+        },
+      }),
+    ).toMatchObject({
+      category: "search",
+      icon: "Search",
+      label: "Search Tools",
+      summary: "exa web search",
+    });
+  });
+
+  it("labels single inner exa calls", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "execute",
+        detail: {
+          type: "unknown",
+          input: { code: 'const r = await exa.web_search_exa({query: "hi"});\nreturn r;' },
+          output: { results: [] },
+        },
+      }),
+    ).toMatchObject({
+      category: "search",
+      label: "Exa Web Search",
+      summary: "hi",
+    });
+  });
+});
+
+describe("opencode subagent tool presentation", () => {
+  const subagentInput = {
+    agent: "explore",
+    description: "explore opencode subagents",
+    prompt: "In repo /tmp/x, investigate how Paseo handles opencode subagents.",
+  };
+
+  it("recognizes subagent and legacy task tool names", () => {
+    expect(isOpencodeSubagentTool("subagent")).toBe(true);
+    expect(isOpencodeSubagentTool("Subagent")).toBe(true);
+    expect(isOpencodeSubagentTool("task")).toBe(true);
+    expect(isOpencodeSubagentTool("mcp__opencode__subagent")).toBe(true);
+    expect(isOpencodeSubagentTool("ask")).toBe(false);
+    expect(isOpencodeSubagentTool("todo")).toBe(false);
+  });
+
+  it("parses v2 subagent input and legacy task input", () => {
+    expect(parseOpencodeSubagentInput(subagentInput)).toMatchObject({
+      agent: "explore",
+      description: "explore opencode subagents",
+      prompt: "In repo /tmp/x, investigate how Paseo handles opencode subagents.",
+    });
+    expect(
+      parseOpencodeSubagentInput({ subagent_type: "explore", description: "look around" }),
+    ).toMatchObject({ agent: "explore", description: "look around" });
+    expect(parseOpencodeSubagentInput(JSON.stringify(subagentInput)).agent).toBe("explore");
+  });
+
+  it("parses subagent envelope and background outputs", () => {
+    const envelope =
+      '<subagent sessionID="ses_abc123" state="completed" description="explore opencode subagents">\nCHILD_OK\n</subagent>';
+    expect(parseOpencodeSubagentOutput(envelope)).toMatchObject({
+      sessionID: "ses_abc123",
+      status: "completed",
+      description: "explore opencode subagents",
+      text: "CHILD_OK",
+    });
+    expect(
+      parseOpencodeSubagentOutput({
+        sessionID: "ses_abc123",
+        status: "running",
+        output: "The subagent is working in the background (sessionID: ses_abc123).",
+      }),
+    ).toMatchObject({ sessionID: "ses_abc123", status: "running", isBackgroundNotice: true });
+  });
+
+  it("projects subagent tools as agent task rows", () => {
+    expect(
+      resolveToolCallPresentation({
+        name: "subagent",
+        detail: { type: "unknown", input: subagentInput, output: null },
+      }),
+    ).toMatchObject({
+      category: "agent",
+      icon: "Bot",
+      label: "Agent Task",
+      summary: "explore opencode subagents",
+    });
+    expect(opencodeSubagentSummary(subagentInput, null)).toBe("explore opencode subagents");
+    expect(expansionTargetForToolCall("subagent", "unknown")).toBe("sub_agent");
+    expect(expansionTargetForToolCall("task", "unknown")).toBe("sub_agent");
+  });
+});
+
+describe("header de-duplication", () => {
+  it("hides values the one-line header already shows whole", () => {
+    expect(notInHeader("abc123", "abc123")).toBeUndefined();
+    expect(notInHeader("run abc", "worker done · run abc · 5m timeout")).toBeUndefined();
+    expect(notInHeader("owner/repo", "owner/repo#12")).toBeUndefined();
+    expect(notInHeader(12, "owner/repo#12")).toBeUndefined();
+    expect(notInHeader("Timed Out", "next run · timed out")).toBeUndefined();
+  });
+
+  it("keeps values the header doesn't show or can't show in full", () => {
+    expect(notInHeader("gpt-5", "Audit parser · claude")).toBe("gpt-5");
+    expect(notInHeader("1", "run 12")).toBe("1");
+    expect(notInHeader("abc", undefined)).toBe("abc");
+    expect(notInHeader(undefined, "abc")).toBeUndefined();
+    const long = "a long description that easily exceeds what a single header line can display";
+    expect(notInHeader(long, long)).toBe(long);
+    expect(notInHeader("line one\nline two", "line one line two")).toBe("line one\nline two");
+  });
+
+  it("drops a leading line that the header repeats", () => {
+    expect(textAfterHeader("3 pending\n- a\n- b", "3 pending")).toBe("- a\n- b");
+    expect(textAfterHeader("3 pending", "3 pending")).toBeUndefined();
+    expect(textAfterHeader("other\nbody", "3 pending")).toBe("other\nbody");
+    expect(textAfterHeader("  ", "x")).toBeUndefined();
+  });
+});
+
+describe("toolCallHasBody", () => {
+  it("never expands skills", () => {
+    expect(toolCallHasBody("skill", { type: "unknown", input: { name: "x" }, output: "ok" }, "x")).toBe(false);
+  });
+
+  it("collapses search and fetch when the header already shows everything", () => {
+    expect(toolCallHasBody("grep", { type: "search", query: "foo" }, "foo")).toBe(false);
+    expect(toolCallHasBody("grep", { type: "search", query: "foo", content: "a.ts:1:foo" }, "foo")).toBe(true);
+    expect(toolCallHasBody("fetch", { type: "fetch", url: "https://x.dev" }, "https://x.dev")).toBe(false);
+    expect(toolCallHasBody("fetch", { type: "fetch", url: "https://x.dev", result: "body" }, "https://x.dev")).toBe(true);
+  });
+
+  it("collapses sub-agents whose progress rows already show the whole log", () => {
+    const detail = { type: "sub_agent" as const, description: "Audit", log: "[read] a.ts\n[grep] foo" };
+    expect(toolCallHasBody("task", detail, "Audit")).toBe(false);
+    expect(toolCallHasBody("task", { ...detail, log: `${detail.log}\nfree text` }, "Audit")).toBe(true);
+  });
+
+  it("collapses file cards without contents or a diff", () => {
+    expect(toolCallHasBody("read", { type: "read", filePath: "a.ts" }, undefined)).toBe(false);
+    expect(toolCallHasBody("read", { type: "read", filePath: "a.ts", content: "x" }, undefined)).toBe(true);
+    expect(toolCallHasBody("read", { type: "read", filePath: "logo.png" }, undefined)).toBe(true);
+    expect(toolCallHasBody("edit", { type: "edit", filePath: "a.ts" }, undefined)).toBe(false);
+    expect(toolCallHasBody("edit", { type: "edit", filePath: "a.ts", newString: "y" }, undefined)).toBe(true);
+  });
+
+  it("collapses Paseo action tools that only echo the header", () => {
+    const cancel = (output: unknown) =>
+      toolCallHasBody("mcp__paseo__cancel_agent", { type: "unknown", input: { agentId: "a1" }, output }, "a1");
+    expect(cancel({})).toBe(false);
+    expect(cancel({ success: true })).toBe(true);
+    expect(
+      toolCallHasBody("mcp__paseo__speak", { type: "unknown", input: { text: "hi" }, output: {} }, "hi"),
+    ).toBe(false);
+  });
+
+  it("collapses todo and wait tools with nothing beyond the header", () => {
+    expect(toolCallHasBody("todo", { type: "unknown", input: { action: "clear" }, output: null }, undefined)).toBe(false);
+    expect(toolCallHasBody("wait", { type: "unknown", input: {}, output: { content: [{ type: "text", text: "ok" }] } }, "ok")).toBe(false);
+    expect(toolCallHasBody("bash", { type: "shell", command: "ls" }, "ls")).toBe(true);
+  });
+});
+
+import { splitStepTitle } from "./presentation";
+describe("reasoning step titles (local patch)", () => {
+  it("takes a leading bold paragraph as the step title", () => {
+    expect(splitStepTitle("**先摸清现状**\n\n先读入口文件。")).toEqual({ title: "先摸清现状", body: "先读入口文件。" });
+    expect(splitStepTitle("**只有标题**")).toEqual({ title: "只有标题", body: "" });
+    expect(splitStepTitle("没有标题的一段。")).toEqual({ title: null, body: "没有标题的一段。" });
+    expect(splitStepTitle("**a** b")).toEqual({ title: null, body: "**a** b" });
+  });
+});
+
+describe("tailLinesOf", () => {
+  it("returns the text whole when it fits the window", () => {
+    expect(tailLinesOf("a\nb\nc", 5)).toBe("a\nb\nc");
+    expect(tailLinesOf("", 5)).toBe("");
+    expect(tailLinesOf("a\nb", 2)).toBe("a\nb");
+  });
+
+  it("returns exactly the last n lines when it does not fit", () => {
+    expect(tailLinesOf(["l1", "l2", "l3", "l4", "l5"].join("\n"), 2)).toBe("l4\nl5");
+    expect(tailLinesOf(["l1", "l2", "l3"].join("\n"), 3)).toBe("l1\nl2\nl3");
+  });
+});

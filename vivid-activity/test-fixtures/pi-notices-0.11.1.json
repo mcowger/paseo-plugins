@@ -1,0 +1,801 @@
+{
+ "$comment": "Paseo 0.11.1 Pi notice rows, built by the host's own mapCustomMessageToToolCall from Pi custom messages written after each extension's formatter (pi-background-tasks 2.6, pi-subagents 0.77, @tintinweb/pi-subagents 0.21, @gotgenes/pi-subagents 23.4, pi-web-access 0.39, @narumitw/pi-goal 0.54); synthetic ids, generic paths. display:false messages are skipped as the host does.",
+ "rows": [
+  {
+   "name": "bg-completed",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-1",
+    "name": "background-task-notification",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "<background-task-notification>\n  <task-id>b1f0c2d3e</task-id>\n  <task-name>构建</task-name>\n  <status>completed</status>\n\n  <exit-code>0</exit-code>\n  <output-file>.pi/tasks/session-a1-4242/b1f0c2d3e.output</output-file>\n  <summary>Background task \"构建\" completed</summary>\n  <guidance>Terminal state and output metadata are durable. Do not call bg_status to reconfirm; use bg_logs only if output is needed.</guidance>\n</background-task-notification>"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "background-task-notification",
+     "details": {
+      "id": "b1f0c2d3e",
+      "name": "构建",
+      "command": "npm run build",
+      "status": "completed",
+      "outputPath": ".pi/tasks/session-a1-4242/b1f0c2d3e.output",
+      "cwd": "/home/user/demo-app",
+      "startTime": 1767258000000,
+      "endTime": 1767258065000,
+      "exitCode": 0,
+      "signal": null,
+      "pid": 4243,
+      "bytesWritten": 18234,
+      "isAgent": false,
+      "surviveReload": false,
+      "notified": true,
+      "notifyOnCompletion": true,
+      "triggerOnCompletion": true
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "bg-failed",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-2",
+    "name": "background-task-notification",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "<background-task-notification>\n  <task-id>b2a3b4c5d</task-id>\n  <task-name>lint &amp; test &lt;ci&gt;</task-name>\n  <status>failed</status>\n\n  <exit-code>1</exit-code>\n\n  <error>Exited with code 1</error>\n  <output-file>.pi/tasks/session-a1-4242/b2a3b4c5d.output</output-file>\n  <summary>Background task \"lint &amp; test &lt;ci&gt;\" failed</summary>\n  <guidance>Terminal state and output metadata are durable. Do not call bg_status to reconfirm; use bg_logs only if output is needed.</guidance>\n</background-task-notification>"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "background-task-notification",
+     "details": {
+      "id": "b2a3b4c5d",
+      "name": "lint & test <ci>",
+      "command": "npm run lint && npm test",
+      "status": "failed",
+      "outputPath": ".pi/tasks/session-a1-4242/b2a3b4c5d.output",
+      "cwd": "/home/user/demo-app",
+      "startTime": 1767258100000,
+      "endTime": 1767258112400,
+      "exitCode": 1,
+      "signal": null,
+      "pid": 4243,
+      "bytesWritten": 18234,
+      "isAgent": false,
+      "surviveReload": false,
+      "error": "Exited with code 1",
+      "notified": true,
+      "notifyOnCompletion": true,
+      "triggerOnCompletion": true
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "bg-killed",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-3",
+    "name": "background-task-notification",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "<background-task-notification>\n  <task-id>b3c4d5e6f</task-id>\n  <task-name>dev server</task-name>\n  <status>killed</status>\n\n  <exit-code>null</exit-code>\n\n  <error>Timed out after 600s</error>\n  <output-file>.pi/tasks/session-a1-4242/b3c4d5e6f.output</output-file>\n  <summary>Background task \"dev server\" killed</summary>\n  <guidance>Terminal state and output metadata are durable. Do not call bg_status to reconfirm; use bg_logs only if output is needed.</guidance>\n</background-task-notification>"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "background-task-notification",
+     "details": {
+      "id": "b3c4d5e6f",
+      "name": "dev server",
+      "command": "npm run dev",
+      "status": "killed",
+      "outputPath": ".pi/tasks/session-a1-4242/b3c4d5e6f.output",
+      "cwd": "/home/user/demo-app",
+      "startTime": 1767258200000,
+      "endTime": 1767258800000,
+      "exitCode": null,
+      "signal": "SIGTERM",
+      "pid": 4243,
+      "bytesWritten": 18234,
+      "isAgent": false,
+      "surviveReload": false,
+      "error": "Timed out after 600s",
+      "notified": true,
+      "notifyOnCompletion": true,
+      "triggerOnCompletion": true
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "notify-failed",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-4",
+    "name": "subagent-notify",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Background task failed: **reviewer**\n\nError: Model request failed: 429 Too Many Requests\n\nreviewer:\n已检查 3 个文件，发现 1 处问题后中断：\n- src/auth/session.ts:42 过期判断写反了\n\nRetention-managed async directory: /tmp/pi-subagents-uid-1000/async-subagent-runs/7c1e2f60-0000-4000-8000-000000000001\n\nSession file: /home/user/.pi/agent/sessions/--home-user-demo-app--/7c1e2f60/run-0/session.jsonl\n\nParent action: Read the saved results above and resume the already-authorized parent task, or report completion. If approval is required, explicitly ask the user. Do not silently yield, rerun completed work, or infer new authorization."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-notify",
+     "details": {
+      "runs": [
+       {
+        "agent": "reviewer",
+        "status": "failed",
+        "asyncDir": "/tmp/pi-subagents-uid-1000/async-subagent-runs/7c1e2f60-0000-4000-8000-000000000001",
+        "durationMs": 48200,
+        "runId": "7c1e2f60",
+        "sessionLabel": "Session file",
+        "sessionValue": "/home/user/.pi/agent/sessions/--home-user-demo-app--/7c1e2f60/run-0/session.jsonl"
+       }
+      ]
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "notify-paused-foreground",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-5",
+    "name": "subagent-notify",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Detached foreground task paused: **planner** (2/3)\n\nPaused after interrupt. Resume to continue from the last checkpoint.\n\nSession file: /home/user/.pi/agent/sessions/--home-user-demo-app--/3d4e5f60/run-1/session.jsonl\n\nParent action: Read the saved results above and resume the already-authorized parent task, or report completion. If approval is required, explicitly ask the user. Do not silently yield, rerun completed work, or infer new authorization."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-notify",
+     "details": {
+      "runs": [
+       {
+        "agent": "planner",
+        "status": "paused",
+        "source": "foreground",
+        "taskInfo": " (2/3)",
+        "runId": "3d4e5f60",
+        "sessionLabel": "Session file",
+        "sessionValue": "/home/user/.pi/agent/sessions/--home-user-demo-app--/3d4e5f60/run-1/session.jsonl"
+       }
+      ]
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "notify-stopped-scheduled",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-6",
+    "name": "subagent-notify",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Background task stopped: **nightly-audit**\n\nScheduled run from **夜间巡检** (schedule sch_42).\n\n(no output)\n\nRetention-managed async directory: /tmp/pi-subagents-uid-1000/async-subagent-runs/5e6f7a80-0000-4000-8000-000000000004\n\nParent action: Read the saved results above and resume the already-authorized parent task, or report completion. If approval is required, explicitly ask the user. Do not silently yield, rerun completed work, or infer new authorization."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-notify",
+     "details": {
+      "runs": [
+       {
+        "agent": "nightly-audit",
+        "status": "stopped",
+        "scheduleOrigin": {
+         "id": "sch_42",
+         "name": "夜间巡检"
+        },
+        "asyncDir": "/tmp/pi-subagents-uid-1000/async-subagent-runs/5e6f7a80-0000-4000-8000-000000000004",
+        "runId": "5e6f7a80"
+       }
+      ]
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "notify-workflow-failed",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-7",
+    "name": "subagent-notify",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Background task failed: **workflow**\n\nError: tests: npm test exited with code 1\n\nWorkflow failed.\n\nChild outputs:\n- key=review run=r-0001 status=completed\n  Saved output: .pi/out/review.md\n  Preview:\n    | 审查完成：没有阻断问题。\n    | 建议补一条回归测试。\n- key=tests run=r-0002 status=failed\n  Saved output: unavailable\n  Error: npm test exited with code 1\n  Preview: unavailable (no safe inline output)\n\nRetention-managed async directory: /tmp/pi-subagents-uid-1000/async-subagent-runs/wf-0001\nWorkflow run: wf-0001\nChild runs: review=r-0001 (completed), tests=r-0002 (failed)\n\nParent action: Read the saved results above and resume the already-authorized parent task, or report completion. If approval is required, explicitly ask the user. Do not silently yield, rerun completed work, or infer new authorization."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-notify",
+     "details": {
+      "runs": [
+       {
+        "agent": "workflow",
+        "status": "failed",
+        "asyncDir": "/tmp/pi-subagents-uid-1000/async-subagent-runs/wf-0001",
+        "runId": "wf-0001",
+        "workflowRunId": "wf-0001",
+        "childRuns": [
+         {
+          "runId": "r-0001",
+          "workflowKey": "review",
+          "agent": "reviewer",
+          "status": "completed"
+         },
+         {
+          "runId": "r-0002",
+          "workflowKey": "tests",
+          "agent": "tester",
+          "status": "failed"
+         }
+        ],
+        "childOutputs": [
+         {
+          "workflowKey": "review",
+          "runId": "r-0001",
+          "agent": "reviewer",
+          "status": "completed",
+          "savedOutputPath": ".pi/out/review.md"
+         },
+         {
+          "workflowKey": "tests",
+          "runId": "r-0002",
+          "agent": "tester",
+          "status": "failed",
+          "error": "npm test exited with code 1"
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "notify-grouped",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-8",
+    "name": "subagent-notify",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Background tasks completed (2): **scout**, **reviewer** (2/2)\n\n1. scout\nscout:\n1. 读了 src/app.ts\n2. 读了 src/greet.ts\n结论：入口很简单。\nRetention-managed async directory: /tmp/pi-subagents-uid-1000/async-subagent-runs/aa01\nSession file: /home/user/.pi/agent/sessions/--home-user-demo-app--/aa01/run-0/session.jsonl\n\n2. reviewer (2/2) — scheduled run from 每日审查 (schedule sch_7)\nreviewer:\n没有发现问题。\nRetention-managed async directory: /tmp/pi-subagents-uid-1000/async-subagent-runs/aa02\nSession file: /home/user/.pi/agent/sessions/--home-user-demo-app--/aa02/run-0/session.jsonl\n\nParent action: Read the saved results above and resume the already-authorized parent task, or report completion. If approval is required, explicitly ask the user. Do not silently yield, rerun completed work, or infer new authorization."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-notify",
+     "details": {
+      "runs": [
+       {
+        "agent": "scout",
+        "status": "completed",
+        "asyncDir": "/tmp/pi-subagents-uid-1000/async-subagent-runs/aa01",
+        "runId": "aa01",
+        "sessionLabel": "Session file",
+        "sessionValue": "/home/user/.pi/agent/sessions/--home-user-demo-app--/aa01/run-0/session.jsonl"
+       },
+       {
+        "agent": "reviewer",
+        "status": "completed",
+        "taskInfo": " (2/2)",
+        "scheduleOrigin": {
+         "id": "sch_7",
+         "name": "每日审查"
+        },
+        "asyncDir": "/tmp/pi-subagents-uid-1000/async-subagent-runs/aa02",
+        "runId": "aa02",
+        "sessionLabel": "Session file",
+        "sessionValue": "/home/user/.pi/agent/sessions/--home-user-demo-app--/aa02/run-0/session.jsonl"
+       }
+      ]
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "tintinweb-single",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-9",
+    "name": "subagent-notification",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "<task-notification>\n<task-id>3f9a1c2e-5b7d-4e8</task-id>\n<tool-use-id>call_100001</tool-use-id>\n<output-file>/tmp/pi-subagents-1000/home-user-demo-app/0f1e2d3c/tasks/3f9a1c2e-5b7d-4e8.output</output-file>\n<status>Done</status>\n<summary>Agent \"梳理登录流程\" completed</summary>\n<result>登录流程分三步：\n1. 表单提交到 /api/login\n2. 服务端校验后写 session\n3. 前端跳转首页</result>\n<usage><total_tokens>18642</total_tokens><tool_uses>4</tool_uses><context_percent>3</context_percent><duration_ms>52920</duration_ms></usage>\n</task-notification>\nFull transcript available at: /tmp/pi-subagents-1000/home-user-demo-app/0f1e2d3c/tasks/3f9a1c2e-5b7d-4e8.output"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-notification",
+     "details": {
+      "id": "3f9a1c2e-5b7d-4e8",
+      "description": "梳理登录流程",
+      "status": "completed",
+      "toolUses": 4,
+      "turnCount": 5,
+      "maxTurns": 30,
+      "totalTokens": 18642,
+      "totalCost": 0.0156,
+      "durationMs": 52920,
+      "outputFile": "/tmp/pi-subagents-1000/home-user-demo-app/0f1e2d3c/tasks/3f9a1c2e-5b7d-4e8.output",
+      "resultPreview": "登录流程分三步：\n1. 表单提交到 /api/login\n2. 服务端校验后写 session\n3. 前端跳转首页"
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "tintinweb-group",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-10",
+    "name": "subagent-notification",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Background agent group completed: 3 agent(s) finished\n\n<task-notification>\n<task-id>4b4fd01d-aaa8-46d</task-id>\n<tool-use-id>call_277170</tool-use-id>\n<output-file>/tmp/pi-subagents-1000/home-user-demo-app/01a0f602/tasks/4b4fd01d-aaa8-46d.output</output-file>\n<status>Done</status>\n<summary>Agent \"检查依赖\" completed</summary>\n<result>依赖都是最新的。</result>\n<usage><total_tokens>10186</total_tokens><tool_uses>2</tool_uses><duration_ms>1054</duration_ms></usage>\n</task-notification>\n\n<task-notification>\n<task-id>a92b022c-cd9e-41e</task-id>\n<tool-use-id>call_277171</tool-use-id>\n<output-file>/tmp/pi-subagents-1000/home-user-demo-app/01a0f602/tasks/a92b022c-cd9e-41e.output</output-file>\n<status>Error: Request timed out</status>\n<summary>Agent \"跑单元测试\" error</summary>\n<result>No output.</result>\n<usage><total_tokens>2310</total_tokens><tool_uses>1</tool_uses><duration_ms>30000</duration_ms></usage>\n</task-notification>\n\n<task-notification>\n<task-id>13336b9f-79c3-49e</task-id>\n<tool-use-id>call_277172</tool-use-id>\n<output-file>/tmp/pi-subagents-1000/home-user-demo-app/01a0f602/tasks/13336b9f-79c3-49e.output</output-file>\n<status>Done</status>\n<summary>Agent \"检查文档\" completed</summary>\n<result>README 缺少安装说明。</result>\n<usage><total_tokens>9800</total_tokens><tool_uses>3</tool_uses><duration_ms>1472</duration_ms></usage>\n</task-notification>\n\nUse get_subagent_result for full output."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-notification",
+     "details": {
+      "id": "4b4fd01d-aaa8-46d",
+      "description": "检查依赖",
+      "status": "completed",
+      "toolUses": 2,
+      "turnCount": 2,
+      "totalTokens": 10186,
+      "totalCost": 0.0076,
+      "durationMs": 1054,
+      "outputFile": "/tmp/pi-subagents-1000/home-user-demo-app/01a0f602/tasks/4b4fd01d-aaa8-46d.output",
+      "resultPreview": "依赖都是最新的。",
+      "others": [
+       {
+        "id": "a92b022c-cd9e-41e",
+        "description": "跑单元测试",
+        "status": "error",
+        "toolUses": 1,
+        "turnCount": 2,
+        "totalTokens": 2310,
+        "totalCost": 0.0076,
+        "durationMs": 30000,
+        "outputFile": "/tmp/pi-subagents-1000/home-user-demo-app/01a0f602/tasks/a92b022c-cd9e-41e.output",
+        "error": "Request timed out",
+        "resultPreview": "No output."
+       },
+       {
+        "id": "13336b9f-79c3-49e",
+        "description": "检查文档",
+        "status": "completed",
+        "toolUses": 3,
+        "turnCount": 2,
+        "totalTokens": 9800,
+        "totalCost": 0.0076,
+        "durationMs": 1472,
+        "outputFile": "/tmp/pi-subagents-1000/home-user-demo-app/01a0f602/tasks/13336b9f-79c3-49e.output",
+        "resultPreview": "README 缺少安装说明。"
+       }
+      ]
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "gotgenes-single",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-11",
+    "name": "subagent-notification",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "<task-notification>\n<task-id>b913f6d2-2b1e-4be</task-id>\n<tool-use-id>call_403820</tool-use-id>\n<output-file>/home/user/.pi/agent/sessions/--home-user-demo-app--/0a1b2c3d/tasks/0c2d3e4f.jsonl</output-file>\n<status>Done</status>\n<summary>Subagent \"list files\" completed</summary>\n<result>The workspace has 12 files; the entry point is src/app.ts.</result>\n<usage><total_tokens>8843</total_tokens><tool_uses>1</tool_uses><context_percent>1</context_percent><duration_ms>3714</duration_ms></usage>\n</task-notification>\nFull transcript available at: /home/user/.pi/agent/sessions/--home-user-demo-app--/0a1b2c3d/tasks/0c2d3e4f.jsonl\nCall get_subagent_result(\"b913f6d2-2b1e-4be\") to collect the full result."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-notification",
+     "details": {
+      "id": "b913f6d2-2b1e-4be",
+      "description": "list files",
+      "status": "completed",
+      "toolUses": 1,
+      "totalTokens": 8843,
+      "durationMs": 3714,
+      "outputFile": "/home/user/.pi/agent/sessions/--home-user-demo-app--/0a1b2c3d/tasks/0c2d3e4f.jsonl",
+      "resultPreview": "The workspace has 12 files; the entry point is src/app.ts."
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "gotgenes-update",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-12",
+    "name": "subagent-update",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "<subagent-update>\n<task-id>b913f6d2-2b1e-4be</task-id>\n<summary>Subagent \"migrate db\" sent an update</summary>\n<message>Schema diff ready; 2 tables change.\nWaiting on the users table backfill.</message>\n</subagent-update>\nThe agent is still running. Steer it with steer_subagent(\"b913f6d2-2b1e-4be\", \"...\") to redirect it, or let it continue."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-update",
+     "details": {
+      "id": "b913f6d2-2b1e-4be",
+      "description": "migrate db",
+      "message": "Schema diff ready; 2 tables change.\nWaiting on the users table backfill."
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "supervisor-request",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-13",
+    "name": "subagent_supervisor_request",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Subagent needs a supervisor decision.\nRun: 5d2c9e10-0000-4000-8000-000000000002\nAgent: migrator\nChild index: 0\n\n要不要把旧的 users 表直接删掉？还是先保留一个版本做回滚？\n\nReply with: subagent_supervisor({ action: \"reply\", replyTo: \"req-0001\", message: \"...\" })\n\nLive guidance: subagent({ action: \"steer\", id: \"5d2c9e10-0000-4000-8000-000000000002\", message: \"...\", options: { index: 0 } }) (Reply to the pending request first.)"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent_supervisor_request",
+     "details": {
+      "id": "req-0001",
+      "requestId": "req-0001",
+      "reason": "need_decision",
+      "expectsReply": true,
+      "runId": "5d2c9e10-0000-4000-8000-000000000002",
+      "agent": "migrator",
+      "childIndex": 0,
+      "requestBody": "要不要把旧的 users 表直接删掉？还是先保留一个版本做回滚？",
+      "replyHint": "subagent_supervisor({ action: \"reply\", replyTo: \"req-0001\", message: \"...\" })"
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "supervisor-unanswered",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-14",
+    "name": "subagent-supervisor-unanswered",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Silent supervisor wake. Pending request IDs: req-0001, req-0002. Check subagent_supervisor({ action: \"pending\" }) and reply within existing authority, or explicitly ask the user for approval. Do not auto-approve."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-supervisor-unanswered",
+     "details": {
+      "requestIds": [
+       "req-0001",
+       "req-0002"
+      ]
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "control-idle",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-15",
+    "name": "subagent_control_notice",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Subagent needs attention: scout\nRun: 9a8b7c6d-0000-4000-8000-000000000003\nSignal: scout needs attention (no observed activity for 180s)\nFacts: elapsed 180s | 6 turns | 41200 tokens | 9 tools\nHint: Inspect status first unless the run is clearly blocked. Use steer for a top-level live async child, routed resume for a live nested child, or resume to revive a paused/completed/failed child.\nTop-level live async nudge: subagent({ action: \"steer\", id: \"9a8b7c6d-0000-4000-8000-000000000003\", message: \"What are you blocked on? Reply with the smallest next step or ask for a decision.\" })\nRouted live nested nudge: subagent({ action: \"resume\", id: \"9a8b7c6d-0000-4000-8000-000000000003\", message: \"What are you blocked on? Reply with the smallest next step or ask for a decision.\" })\nStatus: subagent({ action: \"status\", id: \"9a8b7c6d-0000-4000-8000-000000000003\" })\nInterrupt: subagent({ action: \"interrupt\", id: \"9a8b7c6d-0000-4000-8000-000000000003\" })"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent_control_notice",
+     "details": {
+      "event": {
+       "type": "needs_attention",
+       "to": "needs_attention",
+       "ts": 1767258300000,
+       "runId": "9a8b7c6d-0000-4000-8000-000000000003",
+       "agent": "scout",
+       "message": "scout needs attention (no observed activity for 180s)",
+       "reason": "idle",
+       "turns": 6,
+       "tokens": 41200,
+       "toolCount": 9,
+       "elapsedMs": 180000
+      },
+      "source": "async",
+      "noticeText": "Subagent needs attention: scout\nRun: 9a8b7c6d-0000-4000-8000-000000000003\nSignal: scout needs attention (no observed activity for 180s)\nFacts: elapsed 180s | 6 turns | 41200 tokens | 9 tools\nHint: Inspect status first unless the run is clearly blocked. Use steer for a top-level live async child, routed resume for a live nested child, or resume to revive a paused/completed/failed child.\nTop-level live async nudge: subagent({ action: \"steer\", id: \"9a8b7c6d-0000-4000-8000-000000000003\", message: \"What are you blocked on? Reply with the smallest next step or ask for a decision.\" })\nRouted live nested nudge: subagent({ action: \"resume\", id: \"9a8b7c6d-0000-4000-8000-000000000003\", message: \"What are you blocked on? Reply with the smallest next step or ask for a decision.\" })\nStatus: subagent({ action: \"status\", id: \"9a8b7c6d-0000-4000-8000-000000000003\" })\nInterrupt: subagent({ action: \"interrupt\", id: \"9a8b7c6d-0000-4000-8000-000000000003\" })"
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "control-tool-open",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-16",
+    "name": "subagent_control_notice",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Subagent needs attention: builder\nRun: 1b2c3d4e-0000-4000-8000-000000000005 step 2\nSignal: builder has had tool 'bash' open for 420s\nFacts: elapsed 430s | 3 turns | 12000 tokens | 5 tools | tool bash 420s\nHint: Inspect the running command and recent output before nudging. A queued steer does not cancel an in-flight bash call. A dev server or watch command may intentionally never return. Elapsed time alone does not prove the command is stuck.\nRecovery: For a local Pi child explicitly granted subagent_command, yield a needed persistent command or cancel the exact incorrect command, then steer the child. Query command.status to confirm the result. If command controls are unavailable, inspect partial changes and interruption scope before interrupt/resume; interrupt is run-scoped and may affect siblings.\nCommand: subagent({\"action\":\"command.status\",\"id\":\"1b2c3d4e-0000-4000-8000-000000000005\",\"options\":{\"index\":1,\"toolCallId\":\"call_9\"}})\nYield: subagent({\"action\":\"command.yield\",\"id\":\"1b2c3d4e-0000-4000-8000-000000000005\",\"options\":{\"index\":1,\"toolCallId\":\"call_9\"}})\nCancel: subagent({\"action\":\"command.cancel\",\"id\":\"1b2c3d4e-0000-4000-8000-000000000005\",\"options\":{\"index\":1,\"toolCallId\":\"call_9\"}})\nStatus: subagent({ action: \"status\", id: \"1b2c3d4e-0000-4000-8000-000000000005\" })\nTranscript: subagent({ action: \"status\", id: \"1b2c3d4e-0000-4000-8000-000000000005\", options: { view: \"transcript\", index: 1 } })"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent_control_notice",
+     "details": {
+      "event": {
+       "type": "needs_attention",
+       "to": "needs_attention",
+       "ts": 1767258400000,
+       "runId": "1b2c3d4e-0000-4000-8000-000000000005",
+       "agent": "builder",
+       "index": 1,
+       "message": "builder has had tool 'bash' open for 420s",
+       "reason": "tool_open_threshold",
+       "turns": 3,
+       "tokens": 12000,
+       "toolCount": 5,
+       "currentTool": "bash",
+       "toolCallId": "call_9",
+       "currentToolDurationMs": 420000,
+       "elapsedMs": 430000
+      },
+      "source": "async",
+      "noticeText": "Subagent needs attention: builder\nRun: 1b2c3d4e-0000-4000-8000-000000000005 step 2\nSignal: builder has had tool 'bash' open for 420s\nFacts: elapsed 430s | 3 turns | 12000 tokens | 5 tools | tool bash 420s\nHint: Inspect the running command and recent output before nudging. A queued steer does not cancel an in-flight bash call. A dev server or watch command may intentionally never return. Elapsed time alone does not prove the command is stuck.\nRecovery: For a local Pi child explicitly granted subagent_command, yield a needed persistent command or cancel the exact incorrect command, then steer the child. Query command.status to confirm the result. If command controls are unavailable, inspect partial changes and interruption scope before interrupt/resume; interrupt is run-scoped and may affect siblings.\nCommand: subagent({\"action\":\"command.status\",\"id\":\"1b2c3d4e-0000-4000-8000-000000000005\",\"options\":{\"index\":1,\"toolCallId\":\"call_9\"}})\nYield: subagent({\"action\":\"command.yield\",\"id\":\"1b2c3d4e-0000-4000-8000-000000000005\",\"options\":{\"index\":1,\"toolCallId\":\"call_9\"}})\nCancel: subagent({\"action\":\"command.cancel\",\"id\":\"1b2c3d4e-0000-4000-8000-000000000005\",\"options\":{\"index\":1,\"toolCallId\":\"call_9\"}})\nStatus: subagent({ action: \"status\", id: \"1b2c3d4e-0000-4000-8000-000000000005\" })\nTranscript: subagent({ action: \"status\", id: \"1b2c3d4e-0000-4000-8000-000000000005\", options: { view: \"transcript\", index: 1 } })"
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "steering-failed",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-17",
+    "name": "subagent_steering_notice",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Subagent steering failed: 9a8b7c6d-0000-4000-8000-000000000003\nRequest: steer-0001\nThe child finished before the correction arrived.\nInspect the run status before sending another correction."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent_steering_notice",
+     "details": {
+      "state": "failed",
+      "runId": "9a8b7c6d-0000-4000-8000-000000000003",
+      "requestId": "steer-0001",
+      "message": "The child finished before the correction arrived.",
+      "currentSessionId": "sess-0001",
+      "noticeText": "Subagent steering failed: 9a8b7c6d-0000-4000-8000-000000000003\nRequest: steer-0001\nThe child finished before the correction arrived.\nInspect the run status before sending another correction."
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "watchdog-blocker",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-18",
+    "name": "subagent_watchdog_warning",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "<subagent_watchdog severity=\"blocker\" importance=\"high\" category=\"test-gap\" source=\"main\" guidance=\"weigh, don't blindly obey\">\n<summary>Tests for &lt;LoginForm&gt; &amp; logout were skipped</summary>\n<evidence>The turn edited src/auth/*.ts but ran no test command.</evidence>\n<recommended_action>Run npm test -- auth before reporting completion.</recommended_action>\n<agent>implementer</agent>\n<run_id>4e5f6a7b-0000-4000-8000-000000000006</run_id>\n<state>displayed</state>\n<blocker_guidance>If this warning changes the outcome, produce a new self-contained final answer after addressing it.</blocker_guidance>\n</subagent_watchdog>"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent_watchdog_warning",
+     "details": {
+      "severity": "blocker",
+      "importance": "high",
+      "category": "test-gap",
+      "source": "main",
+      "summary": "Tests for <LoginForm> & logout were skipped",
+      "evidence": "The turn edited src/auth/*.ts but ran no test command.",
+      "recommendedAction": "Run npm test -- auth before reporting completion.",
+      "agent": "implementer",
+      "runId": "4e5f6a7b-0000-4000-8000-000000000006",
+      "state": "displayed"
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "wait-timed-out",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-19",
+    "name": "subagent-wait-subscription",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Wait subscription ws-0001 fired for run 9a8b7c6d-0000-4000-8000-000000000003: timed out. The targeted run may still be active; inspect its status before taking follow-up action."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-wait-subscription",
+     "details": {
+      "token": "ws-0001",
+      "runId": "9a8b7c6d-0000-4000-8000-000000000003",
+      "outcome": "timed out"
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "workflow-child-paused",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-20",
+    "name": "subagent-incremental-child-notify",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Workflow child paused (needs attention): **lint**\nWorkflow run: wf-0002\nChild run: r-0010\nOutput: .pi/out/lint.md\nError: Interrupted by user\nStatus: workflow still running"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "subagent-incremental-child-notify",
+     "details": {
+      "childKey": "lint",
+      "outcome": "paused"
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "web-content-partial",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-21",
+    "name": "web-search-content-ready",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Content fetched for 2/3 URLs [f-0001]. Partial page content now available."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "web-search-content-ready"
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "web-error",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-22",
+    "name": "web-search-error",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Content fetch failed [f-0002]: getaddrinfo ENOTFOUND docs.example.invalid"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "web-search-error"
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "web-results",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-23",
+    "name": "web-search-results",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "**Provider:** exa\n\n1. **Paseo plugin API** — https://example.com/paseo/plugins\n   插件可以注册时间线渲染器。\n\n---\nFull search results are stored as responseId \"s-0001\". Use get_search_content({ responseId: \"s-0001\", queryIndex: 0, offset: 0, limit: 30000 }) to retrieve the first bounded page."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "web-search-results",
+     "details": {
+      "queries": [
+       "paseo plugin timeline renderer"
+      ],
+      "queryCount": 1,
+      "successfulQueries": 1,
+      "totalResults": 8,
+      "includeContent": false
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "goal-budget",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-24",
+    "name": "goal-budget-wrap-up",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "The active /goal token budget is exhausted. Stop substantive work and do not call substantive tools. Summarize progress, verified results, remaining work, and blockers concisely. Treat completion as unproven. Do not call goal_complete unless authoritative, requirement-by-requirement evidence already proves every requirement is complete. Weak, indirect, or missing evidence is not enough. Budget exhaustion is not completion."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "goal-budget-wrap-up",
+     "details": {
+      "goalId": "goal-0001"
+     }
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "unknown-xml",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-25",
+    "name": "deploy-status",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "<deploy-status>\n  <service>web</service>\n  <result>rolled out 3/3 pods &amp; healthy</result>\n</deploy-status>"
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "deploy-status"
+    },
+    "error": null
+   }
+  },
+  {
+   "name": "no-custom-type",
+   "row": {
+    "type": "tool_call",
+    "callId": "pi-custom-26",
+    "name": "custom-message",
+    "status": "completed",
+    "detail": {
+     "type": "plain_text",
+     "text": "Remember: keep answers short."
+    },
+    "metadata": {
+     "synthetic": true,
+     "customType": "custom-message"
+    },
+    "error": null
+   }
+  }
+ ]
+}

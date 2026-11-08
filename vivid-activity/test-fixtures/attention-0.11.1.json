@@ -1,0 +1,170 @@
+{
+  "$comment": "Paseo 0.11.1 rows (the host's own Claude and Codex mappers) and the permission requests raised for them; synthetic ids.",
+  "claudeAskRunning": {
+    "type": "tool_call",
+    "callId": "toolu_ask_1",
+    "name": "AskUserQuestion",
+    "detail": {
+      "type": "unknown",
+      "input": {
+        "questions": [
+          {
+            "question": "用哪种数据库？",
+            "header": "数据库",
+            "options": [
+              {
+                "label": "PostgreSQL",
+                "description": "多人协作"
+              },
+              {
+                "label": "SQLite",
+                "description": "单机"
+              }
+            ],
+            "multiSelect": false
+          }
+        ]
+      },
+      "output": null
+    },
+    "status": "running",
+    "error": null
+  },
+  "claudeAskCompleted": {
+    "type": "tool_call",
+    "callId": "toolu_ask_1",
+    "name": "AskUserQuestion",
+    "detail": {
+      "type": "unknown",
+      "input": {
+        "questions": [
+          {
+            "question": "用哪种数据库？",
+            "header": "数据库",
+            "options": [
+              {
+                "label": "PostgreSQL",
+                "description": "多人协作"
+              },
+              {
+                "label": "SQLite",
+                "description": "单机"
+              }
+            ],
+            "multiSelect": false
+          }
+        ]
+      },
+      "output": "User has answered your questions: \"用哪种数据库？\"=\"PostgreSQL\". You can now continue with the user's answers in mind."
+    },
+    "status": "completed",
+    "error": null
+  },
+  "claudeAskRequest": {
+    "id": "permission-ask-1",
+    "provider": "claude",
+    "name": "AskUserQuestion",
+    "kind": "question",
+    "title": "用哪种数据库？",
+    "input": {
+      "questions": [
+        {
+          "question": "用哪种数据库？",
+          "header": "数据库",
+          "options": [
+            {
+              "label": "PostgreSQL",
+              "description": "多人协作"
+            },
+            {
+              "label": "SQLite",
+              "description": "单机"
+            }
+          ],
+          "multiSelect": false
+        }
+      ]
+    },
+    "metadata": {
+      "toolUseId": "toolu_ask_1"
+    }
+  },
+  "claudeEditRequest": {
+    "id": "permission-edit-1",
+    "provider": "claude",
+    "name": "Edit",
+    "kind": "tool",
+    "metadata": {
+      "toolUseId": "toolu_edit_1"
+    }
+  },
+  "codexCommandRunning": {
+    "type": "tool_call",
+    "callId": "item_cmd_1",
+    "name": "shell",
+    "status": "running",
+    "error": null,
+    "detail": {
+      "type": "shell",
+      "command": "rm -rf build",
+      "cwd": "/workspace/app"
+    }
+  },
+  "codexCommandRequest": {
+    "id": "permission-item_cmd_1",
+    "provider": "codex",
+    "name": "CodexBash",
+    "kind": "tool",
+    "title": "Run command: rm -rf build",
+    "input": {
+      "command": "rm -rf build",
+      "cwd": "/workspace/app"
+    },
+    "metadata": {
+      "itemId": "item_cmd_1",
+      "threadId": "thread_1",
+      "turnId": "turn_1"
+    }
+  },
+  "codexQuestionRunning": {
+    "type": "tool_call",
+    "callId": "item_q_1",
+    "name": "request_user_input",
+    "detail": {
+      "type": "plain_text",
+      "text": "数据库: 用哪种数据库？\nOptions: PostgreSQL, SQLite",
+      "icon": "brain"
+    },
+    "metadata": {
+      "questions": [
+        {
+          "id": "db",
+          "header": "数据库",
+          "question": "用哪种数据库？",
+          "options": [
+            {
+              "label": "PostgreSQL"
+            },
+            {
+              "label": "SQLite"
+            }
+          ]
+        }
+      ]
+    },
+    "status": "running",
+    "error": null
+  },
+  "codexQuestionRequest": {
+    "id": "permission-item_q_1",
+    "provider": "codex",
+    "name": "request_user_input",
+    "kind": "question",
+    "title": "Question",
+    "metadata": {
+      "itemId": "item_q_1",
+      "threadId": "thread_1",
+      "turnId": "turn_1"
+    }
+  }
+}
