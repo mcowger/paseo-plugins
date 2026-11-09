@@ -1,0 +1,5 @@
+[
+  { "name": "ui", "entry": "ui-chunk.client.tsx", "manifest": "UI_CHUNK", "api": 1 },
+  { "name": "pi", "entry": "pi-chunk.client.tsx", "manifest": "PI_CHUNK", "api": 1 },
+  { "name": "fx", "entry": "fx-chunk.client.tsx", "manifest": "FX_CHUNK", "api": 1 }
+]

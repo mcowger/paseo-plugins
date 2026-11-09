@@ -11,6 +11,7 @@ when contributing changes.
 ## Plugins in this repository
 
 - [Colorful agent activity](./colorful-agent-activity/README.md)
+- [Vivid Activity](./vivid-activity/README.md): a separate fork with folding, timing, and OMP tool views. Use it instead of Colorful Agent Activity, not alongside it.
 - [Paseo Worktrunk](./paseo-worktrunk/README.md): experimental Worktrunk placement and setup hooks.
 - [Plexus activity](./plexus-activity/README.md): live Plexus request activity in the Explorer dock,
   fed by Plexus's SSE event stream and scoped optionally to one API key.

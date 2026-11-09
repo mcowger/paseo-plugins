@@ -178,6 +178,42 @@ describe("Worktrunk hooks", () => {
     },
   );
 
+  it("logs safe timings for placement, core creation, and each hook", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const run = vi.fn(async (args: string[]) => {
+      if (args[2] === "step") return JSON.stringify({ result: candidate });
+      if (args[3] === "pre-start") await new Promise((resolve) => setTimeout(resolve, 40));
+      return "";
+    });
+    const h = harness(run);
+    const placed = await h.before({ request }, { signal });
+    if (!placed) throw new Error("Worktrunk did not return a path");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await h.after(
+      {
+        worktree: {
+          path: placed.path,
+          branch: request.branch,
+          sourceCheckout: request.sourceCheckout,
+        },
+      },
+      { signal },
+    );
+    const messages = info.mock.calls.map(([message]) => String(message)).join("\n");
+    expect(messages).toMatch(/stage=path-calculation durationMs=\d+ outcome=placed/);
+    expect(messages).toMatch(/stage=worktree-core durationMs=\d+ outcome=completed/);
+    expect(messages).toMatch(/stage=pre-start durationMs=\d+ outcome=completed/);
+    expect(
+      Number(messages.match(/stage=worktree-core durationMs=(\d+)/)?.[1]),
+    ).toBeGreaterThanOrEqual(30);
+    expect(Number(messages.match(/stage=pre-start durationMs=(\d+)/)?.[1])).toBeGreaterThanOrEqual(
+      30,
+    );
+    expect(messages).toMatch(/stage=post-start durationMs=\d+ outcome=completed/);
+    expect(messages).not.toContain(request.branch);
+    expect(messages).not.toContain(placed.path);
+  });
+
   it("runs pre-start before post-start and continues on failures without logging output", async () => {
     const run = vi.fn().mockResolvedValue("");
     const h = harness(run);

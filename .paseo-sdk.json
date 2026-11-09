@@ -13,10 +13,12 @@
     "@getpaseo/protocol"
   ],
   "pluginVersions": {
-    "paseo-worktrunk": "0.15.0-beta.1"
+    "paseo-worktrunk": "0.15.0-beta.1",
+    "vivid-activity": "0.11.1"
   },
   "plugins": [
     "colorful-agent-activity",
+    "vivid-activity",
     "skill-picker",
     "super-tasks",
     "plexuspi",

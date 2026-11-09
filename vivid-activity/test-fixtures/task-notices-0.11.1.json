@@ -1,0 +1,1083 @@
+{
+  "$comment": "Paseo 0.11.1 task_notification rows, built by the host's own mapper from Claude Code 2.1.294-shaped records (synthetic ids).",
+  "rows": [
+    {
+      "name": "agent-finished",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-finished",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"审查登录模块\" finished",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a1b2c3</task-id>\n<tool-use-id>toolu_agent_1</tool-use-id>\n<status>completed</status>\n<summary>Agent \"审查登录模块\" finished</summary>\n<result>登录模块的审查结论：\n\n1. 会话过期后没有清掉本地缓存。\n2. 密码重置链接没有限流。\n\n建议先修第 2 条。</result>\n<usage><subagent_tokens>48213</subagent_tokens><tool_uses>17</tool_uses><duration_ms>131500</duration_ms></usage>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a1b2c3",
+          "toolUseId": "toolu_agent_1",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-failed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-failed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"生成报告\" failed: Unknown error",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a2</task-id>\n<tool-use-id>toolu_agent_2</tool-use-id>\n<status>failed</status>\n<summary>Agent \"生成报告\" failed: Unknown error</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a2",
+          "toolUseId": "toolu_agent_2",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Agent \"生成报告\" failed: Unknown error"
+        }
+      }
+    },
+    {
+      "name": "agent-killed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-killed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"清理缓存\" was stopped by user",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a3</task-id>\n<tool-use-id>toolu_agent_3</tool-use-id>\n<status>killed</status>\n<summary>Agent \"清理缓存\" was stopped by user</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a3",
+          "toolUseId": "toolu_agent_3",
+          "status": "killed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-turn-limit",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-turn-limit",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"长任务\" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a4</task-id>\n<tool-use-id>toolu_agent_4</tool-use-id>\n<status>completed</status>\n<summary>Agent \"长任务\" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)</summary>\n<result>做到一半：已检查 12 个文件中的 7 个。</result>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a4",
+          "toolUseId": "toolu_agent_4",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-resumed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-resumed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"长任务\" was resumed by the user",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a5</task-id>\n<summary>Agent \"长任务\" was resumed by the user</summary>\n<note>The user resumed this agent from its transcript view; it is running again.</note>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a5"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "monitor-event",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-monitor-event",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Monitor event: \"dev server\"",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>w1</task-id>\n<summary>Monitor event: \"dev server\"</summary>\n<event>ready on :5173</event>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "w1"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "monitor-failed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-monitor-failed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Monitor \"tail logs\" script failed (exit 2)",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>b9</task-id>\n<tool-use-id>toolu_monitor_1</tool-use-id>\n<status>failed</status>\n<summary>Monitor \"tail logs\" script failed (exit 2)</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "b9",
+          "toolUseId": "toolu_monitor_1",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Monitor \"tail logs\" script failed (exit 2)"
+        }
+      }
+    },
+    {
+      "name": "command-completed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-command-completed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Background command \"构建\" completed (exit code 0)",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>b1</task-id>\n<tool-use-id>toolu_bash_1</tool-use-id>\n<output-file>/tmp/tasks/b1.output</output-file>\n<status>completed</status>\n<summary>Background command \"构建\" completed (exit code 0)</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "b1",
+          "toolUseId": "toolu_bash_1",
+          "status": "completed",
+          "outputFile": "/tmp/tasks/b1.output"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "command-failed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-command-failed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Background command \"lint\" failed with exit code 1",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>b2</task-id>\n<tool-use-id>toolu_bash_2</tool-use-id>\n<output-file>/tmp/tasks/b2.output</output-file>\n<status>failed</status>\n<summary>Background command \"lint\" failed with exit code 1</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "b2",
+          "toolUseId": "toolu_bash_2",
+          "status": "failed",
+          "outputFile": "/tmp/tasks/b2.output"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Background command \"lint\" failed with exit code 1"
+        }
+      }
+    },
+    {
+      "name": "command-killed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-command-killed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Background command \"dev server\" was stopped",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>b3</task-id>\n<tool-use-id>toolu_bash_3</tool-use-id>\n<status>killed</status>\n<summary>Background command \"dev server\" was stopped</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "b3",
+          "toolUseId": "toolu_bash_3",
+          "status": "killed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "command-check-in",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-command-check-in",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Background command \"watch\" is still running after 10m 0s, with no new output for 4m 30s",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>b4</task-id>\n<tool-use-id>toolu_bash_4</tool-use-id>\n<output-file>/tmp/tasks/b4.output</output-file>\n<summary>Background command \"watch\" is still running after 10m 0s, with no new output for 4m 30s</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "b4",
+          "toolUseId": "toolu_bash_4",
+          "outputFile": "/tmp/tasks/b4.output"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "command-waiting-input",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-command-waiting-input",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Background command \"init\" appears to be waiting for interactive input",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>b5</task-id>\n<tool-use-id>toolu_bash_5</tool-use-id>\n<summary>Background command \"init\" appears to be waiting for interactive input</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "b5",
+          "toolUseId": "toolu_bash_5"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "remote-blocked",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-remote-blocked",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Remote task \"修复 CI\" is blocked",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>r1</task-id>\n<tool-use-id>toolu_remote_1</tool-use-id>\n<status>blocked</status>\n<summary>Remote task \"修复 CI\" is blocked</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "r1",
+          "toolUseId": "toolu_remote_1",
+          "status": "blocked"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "task-stopped",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-task-stopped",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Task \"构建镜像\" was stopped by the user",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>t1</task-id>\n<tool-use-id>toolu_task_1</tool-use-id>\n<status>killed</status>\n<summary>Task \"构建镜像\" was stopped by the user</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "t1",
+          "toolUseId": "toolu_task_1",
+          "status": "killed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "foreground-repeat",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-foreground-repeat",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "The Bash call finished; its result follows. On the user's screen it just landed in that call's own row, like any tool result. Carry on from it as if the tool had just returned: do not announce a notification or a background task.",
+          "icon": "wrench",
+          "text": "<task-notification>\n<tool-use-id>toolu_bash_6</tool-use-id>\n<task-type>tool_call</task-type>\n<status>completed</status>\n<summary>The Bash call finished; its result follows. On the user's screen it just landed in that call's own row, like any tool result. Carry on from it as if the tool had just returned: do not announce a notification or a background task.</summary>\n<result>\nbuilt in 4.2s\n</result>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "toolUseId": "toolu_bash_6",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "legacy-foreground",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-legacy-foreground",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "列出项目依赖",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>b7</task-id>\n<tool-use-id>toolu_bash_7</tool-use-id>\n<status>completed</status>\n<summary>列出项目依赖</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "b7",
+          "toolUseId": "toolu_bash_7",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-failed-quoted",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-failed-quoted",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"审查\" failed: Hook \"validate\" finished with exit code 1",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a6</task-id>\n<tool-use-id>toolu_agent_6</tool-use-id>\n<status>failed</status>\n<summary>Agent \"审查\" failed: Hook \"validate\" finished with exit code 1</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a6",
+          "toolUseId": "toolu_agent_6",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Agent \"审查\" failed: Hook \"validate\" finished with exit code 1"
+        }
+      }
+    },
+    {
+      "name": "agent-failed-quoted-stop",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-failed-quoted-stop",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"审查\" failed: Command \"build\" was stopped after exceeding its timeout",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a7</task-id>\n<tool-use-id>toolu_agent_7</tool-use-id>\n<status>failed</status>\n<summary>Agent \"审查\" failed: Command \"build\" was stopped after exceeding its timeout</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a7",
+          "toolUseId": "toolu_agent_7",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Agent \"审查\" failed: Command \"build\" was stopped after exceeding its timeout"
+        }
+      }
+    },
+    {
+      "name": "agent-killed-quoted",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-killed-quoted",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"审查\" was stopped: Hook \"validate\" finished with exit code 1",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a8</task-id>\n<tool-use-id>toolu_agent_8</tool-use-id>\n<status>killed</status>\n<summary>Agent \"审查\" was stopped: Hook \"validate\" finished with exit code 1</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a8",
+          "toolUseId": "toolu_agent_8",
+          "status": "killed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-stopped-quoted",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-stopped-quoted",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"审查\" was stopped: Hook \"validate\" finished with exit code 1",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a10</task-id>\n<tool-use-id>toolu_agent_10</tool-use-id>\n<status>stopped</status>\n<summary>Agent \"审查\" was stopped: Hook \"validate\" finished with exit code 1</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a10",
+          "toolUseId": "toolu_agent_10",
+          "status": "stopped"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-name-quotes-finished",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-name-quotes-finished",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"Investigate why \"build\" failed\" finished",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a11</task-id>\n<tool-use-id>toolu_agent_11</tool-use-id>\n<status>completed</status>\n<summary>Agent \"Investigate why \"build\" failed\" finished</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a11",
+          "toolUseId": "toolu_agent_11",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "command-name-quotes-completed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-command-name-quotes-completed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Background command \"Explain why \"worker\" was stopped\" completed (exit code 0)",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>b11</task-id>\n<tool-use-id>toolu_bash_13</tool-use-id>\n<status>completed</status>\n<summary>Background command \"Explain why \"worker\" was stopped\" completed (exit code 0)</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "b11",
+          "toolUseId": "toolu_bash_13",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-name-quotes-turn-limit",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-name-quotes-turn-limit",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"Investigate why \"job\" finished early\" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a12</task-id>\n<tool-use-id>toolu_agent_12</tool-use-id>\n<status>completed</status>\n<summary>Agent \"Investigate why \"job\" finished early\" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a12",
+          "toolUseId": "toolu_agent_12",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-name-quotes-failed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-name-quotes-failed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"Why \"build\" finished\" failed: Hook \"validate\" finished with exit code 1",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a13</task-id>\n<tool-use-id>toolu_agent_13</tool-use-id>\n<status>failed</status>\n<summary>Agent \"Why \"build\" finished\" failed: Hook \"validate\" finished with exit code 1</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a13",
+          "toolUseId": "toolu_agent_13",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Agent \"Why \"build\" finished\" failed: Hook \"validate\" finished with exit code 1"
+        }
+      }
+    },
+    {
+      "name": "command-name-quotes-killed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-command-name-quotes-killed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Background command \"Restart \"api\" completed\" was stopped",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>b12</task-id>\n<tool-use-id>toolu_bash_14</tool-use-id>\n<status>killed</status>\n<summary>Background command \"Restart \"api\" completed\" was stopped</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "b12",
+          "toolUseId": "toolu_bash_14",
+          "status": "killed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "monitor-name-quotes-failed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-monitor-name-quotes-failed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Monitor \"tail \"app\" stream ended\" script failed (exit 2)",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>m2</task-id>\n<tool-use-id>toolu_monitor_2</tool-use-id>\n<status>failed</status>\n<summary>Monitor \"tail \"app\" stream ended\" script failed (exit 2)</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "m2",
+          "toolUseId": "toolu_monitor_2",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Monitor \"tail \"app\" stream ended\" script failed (exit 2)"
+        }
+      }
+    },
+    {
+      "name": "agent-failed-ending-quoted",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-failed-ending-quoted",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"部署\" failed: worker \"sync\" was stopped",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a14</task-id>\n<tool-use-id>toolu_agent_14</tool-use-id>\n<status>failed</status>\n<summary>Agent \"部署\" failed: worker \"sync\" was stopped</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a14",
+          "toolUseId": "toolu_agent_14",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Agent \"部署\" failed: worker \"sync\" was stopped"
+        }
+      }
+    },
+    {
+      "name": "agent-killed-ending-quoted",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-killed-ending-quoted",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"部署\" was stopped: Task \"sync\" finished",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a15</task-id>\n<tool-use-id>toolu_agent_15</tool-use-id>\n<status>killed</status>\n<summary>Agent \"部署\" was stopped: Task \"sync\" finished</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a15",
+          "toolUseId": "toolu_agent_15",
+          "status": "killed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-long-name-turn-limit",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-long-name-turn-limit",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a16</task-id>\n<tool-use-id>toolu_agent_16</tool-use-id>\n<status>completed</status>\n<summary>Agent \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a16",
+          "toolUseId": "toolu_agent_16",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-long-name-finished",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-long-name-finished",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"Investigate why \"job\" failed xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" finished",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a17</task-id>\n<tool-use-id>toolu_agent_17</tool-use-id>\n<status>completed</status>\n<summary>Agent \"Investigate why \"job\" failed xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" finished</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a17",
+          "toolUseId": "toolu_agent_17",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-long-name-quoted-turn-limit",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-long-name-quoted-turn-limit",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"Investigate why \"job\" finished early xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a18</task-id>\n<tool-use-id>toolu_agent_18</tool-use-id>\n<status>completed</status>\n<summary>Agent \"Investigate why \"job\" finished early xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a18",
+          "toolUseId": "toolu_agent_18",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-long-name-failed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-long-name-failed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" failed: Hook \"validator\" finished",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a19</task-id>\n<tool-use-id>toolu_agent_19</tool-use-id>\n<status>failed</status>\n<summary>Agent \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" failed: Hook \"validator\" finished</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a19",
+          "toolUseId": "toolu_agent_19",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Agent \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" failed: Hook \"validator\" finished"
+        }
+      }
+    },
+    {
+      "name": "agent-long-reason-failed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-long-reason-failed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"Inspect \"job\" finished\" failed: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Task \"inner\" finished",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a20</task-id>\n<tool-use-id>toolu_agent_20</tool-use-id>\n<status>failed</status>\n<summary>Agent \"Inspect \"job\" finished\" failed: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Task \"inner\" finished</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a20",
+          "toolUseId": "toolu_agent_20",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Agent \"Inspect \"job\" finished\" failed: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx Task \"inner\" finished"
+        }
+      }
+    },
+    {
+      "name": "agent-empty-name-finished",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-empty-name-finished",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"\" finished",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>e00</task-id>\n<tool-use-id>toolu_agent_e00</tool-use-id>\n<status>completed</status>\n<summary>Agent \"\" finished</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "e00",
+          "toolUseId": "toolu_agent_e00",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-empty-name-turn-limit",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-empty-name-turn-limit",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"\" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>e01</task-id>\n<tool-use-id>toolu_agent_e01</tool-use-id>\n<status>completed</status>\n<summary>Agent \"\" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "e01",
+          "toolUseId": "toolu_agent_e01",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-empty-name-failed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-empty-name-failed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"\" failed: Unknown error",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>e02</task-id>\n<tool-use-id>toolu_agent_e02</tool-use-id>\n<status>failed</status>\n<summary>Agent \"\" failed: Unknown error</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "e02",
+          "toolUseId": "toolu_agent_e02",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Agent \"\" failed: Unknown error"
+        }
+      }
+    },
+    {
+      "name": "agent-empty-name-killed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-empty-name-killed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"\" was stopped",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>e03</task-id>\n<tool-use-id>toolu_agent_e03</tool-use-id>\n<status>killed</status>\n<summary>Agent \"\" was stopped</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "e03",
+          "toolUseId": "toolu_agent_e03",
+          "status": "killed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-empty-name-stopped",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-empty-name-stopped",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"\" was stopped by user",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>e04</task-id>\n<tool-use-id>toolu_agent_e04</tool-use-id>\n<status>stopped</status>\n<summary>Agent \"\" was stopped by user</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "e04",
+          "toolUseId": "toolu_agent_e04",
+          "status": "stopped"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-blank-name-finished",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-blank-name-finished",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \" \t \" finished",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>e10</task-id>\n<tool-use-id>toolu_agent_e10</tool-use-id>\n<status>completed</status>\n<summary>Agent \" \t \" finished</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "e10",
+          "toolUseId": "toolu_agent_e10",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-blank-name-turn-limit",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-blank-name-turn-limit",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \" \t \" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>e11</task-id>\n<tool-use-id>toolu_agent_e11</tool-use-id>\n<status>completed</status>\n<summary>Agent \" \t \" stopped at its 30-turn limit (partial result; SendMessage to task-id to continue)</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "e11",
+          "toolUseId": "toolu_agent_e11",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-blank-name-failed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-blank-name-failed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \" \t \" failed: Unknown error",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>e12</task-id>\n<tool-use-id>toolu_agent_e12</tool-use-id>\n<status>failed</status>\n<summary>Agent \" \t \" failed: Unknown error</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "e12",
+          "toolUseId": "toolu_agent_e12",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "Agent \" \t \" failed: Unknown error"
+        }
+      }
+    },
+    {
+      "name": "agent-blank-name-killed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-blank-name-killed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \" \t \" was stopped",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>e13</task-id>\n<tool-use-id>toolu_agent_e13</tool-use-id>\n<status>killed</status>\n<summary>Agent \" \t \" was stopped</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "e13",
+          "toolUseId": "toolu_agent_e13",
+          "status": "killed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "agent-blank-name-stopped",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-agent-blank-name-stopped",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \" \t \" was stopped by user",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>e14</task-id>\n<tool-use-id>toolu_agent_e14</tool-use-id>\n<status>stopped</status>\n<summary>Agent \" \t \" was stopped by user</summary>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "e14",
+          "toolUseId": "toolu_agent_e14",
+          "status": "stopped"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "detached-finished",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-detached-finished",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "The Bash call finished; its result follows. Carry on from it as if the tool had just returned: do not announce a notification or a background task. If the user has since said they no longer need this result, do not answer the old request again: correct anything you got wrong in one or two lines, or say nothing new.",
+          "icon": "wrench",
+          "text": "<task-notification>\n<tool-use-id>toolu_bash_11</tool-use-id>\n<task-type>tool_call</task-type>\n<status>completed</status>\n<summary>The Bash call finished; its result follows. Carry on from it as if the tool had just returned: do not announce a notification or a background task. If the user has since said they no longer need this result, do not answer the old request again: correct anything you got wrong in one or two lines, or say nothing new.</summary>\n<result>\n✓ 312 tests passed\n</result>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "toolUseId": "toolu_bash_11",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    },
+    {
+      "name": "detached-failed",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_uuid-detached-failed",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "The Bash call ended without a result; what happened follows. Carry on as if the tool had just returned it: do not announce a notification or a background task.",
+          "icon": "wrench",
+          "text": "<task-notification>\n<tool-use-id>toolu_bash_12</tool-use-id>\n<task-type>tool_call</task-type>\n<status>failed</status>\n<summary>The Bash call ended without a result; what happened follows. Carry on as if the tool had just returned it: do not announce a notification or a background task.</summary>\n<result>\nThe user stopped this call before it finished.\n</result>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "toolUseId": "toolu_bash_12",
+          "status": "failed"
+        },
+        "status": "failed",
+        "error": {
+          "message": "The Bash call ended without a result; what happened follows. Carry on as if the tool had just returned it: do not announce a notification or a background task."
+        }
+      }
+    },
+    {
+      "name": "queued-agent-finished",
+      "row": {
+        "type": "tool_call",
+        "callId": "task_notification_msg-queued-1",
+        "name": "task_notification",
+        "detail": {
+          "type": "plain_text",
+          "label": "Agent \"写周报\" finished",
+          "icon": "wrench",
+          "text": "<task-notification>\n<task-id>a9</task-id>\n<tool-use-id>toolu_agent_9</tool-use-id>\n<status>completed</status>\n<summary>Agent \"写周报\" finished</summary>\n<result>周报写好了。</result>\n</task-notification>"
+        },
+        "metadata": {
+          "synthetic": true,
+          "source": "claude_task_notification",
+          "taskId": "a9",
+          "toolUseId": "toolu_agent_9",
+          "status": "completed"
+        },
+        "status": "completed",
+        "error": null
+      }
+    }
+  ]
+}
