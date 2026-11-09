@@ -250,6 +250,19 @@ describe("output tail window while following (0.11.0 跟随最新输出)", () =>
     });
   }
 
+  it("renders MCP text from plain and content-block results", () => {
+    for (const detail of [
+      { type: "plain_text", text: "MCP returned text" },
+      { type: "plain_text", output: { content: [{ type: "text", text: "MCP returned text" }] } },
+      { type: "unknown", input: { query: "example" }, output: { content: [{ type: "text", text: "MCP returned text" }] } },
+    ]) {
+      const data = ui.createToolCallData({ type: "tool_call", callId: "m1", name: "mcp__sigma_docs_query", status: "completed", error: null, detail });
+      const rendered = withWrap(false, () => texts({ type: ui.DetailBody, props: { data, agentId: "a", theme, palette: palette(), styles: styles(), follow: false } }).join(" "));
+      expect(rendered).toContain("MCP returned text");
+      expect(rendered).not.toContain("No text returned");
+    }
+  });
+
   it("a following worktree setup log shows its newest lines too; not following, its first", () => {
     const data = ui.createToolCallData({ type: "tool_call", callId: "w1", name: "paseo_worktree_setup", status: "running", error: null, detail: { type: "worktree_setup", worktreePath: "/w", branchName: "b", log: lines.join("\n") } });
     const draw = (follow: boolean) => withWrap(false, () => shownLines({ type: ui.DetailBody, props: { data, agentId: "a", theme, palette: palette(), styles: styles(), follow } }));

@@ -10,6 +10,7 @@ import { extractCodeModeCode, isCodeModeTool } from "../shared/codemode";
 import { exaToolKind } from "../shared/exa";
 import { githubToolKind } from "../shared/github";
 import { parseInlineMarkdown, parseReasoningMarkdown, type ReasoningMarkdownBlock } from "../shared/markdown";
+import { isMcpTool, mcpResultText } from "../shared/mcp-result";
 import { isOmpFindTool } from "../shared/omp-find";
 import { isOmpGlobTool, isOmpGrepTool } from "../shared/omp-search";
 import { isOmpEvalTool, isOmpWebSearchTool } from "../shared/omp-tools";
@@ -983,9 +984,11 @@ export function DetailBody({
           {detail.log && !subAgentLogFullyShown(detail) ? <HighlightedCodeBlock code={detail.log} language="ansi" label={t("ui.activityLog")} styles={styles} theme={theme} follow={follow} /> : null}
         </>
       );
-    case "plain_text":
-      // 0.5.0: plain-text results can be terminal output: no escape sequences on screen. 0.6.0: a preview first.
-      return detail.text ? <PlainTextBlock text={detail.text} label={t("ui.result")} theme={theme} styles={styles} /> : <Text style={styles.empty}>{t("ui.noTextReturned")}</Text>;
+    case "plain_text": {
+      const value = detail as unknown as Record<string, unknown>;
+      const text = detail.text || (isMcpTool(data.name) ? mcpResultText(value.output) ?? mcpResultText(value.result) ?? mcpResultText(value) : undefined);
+      return text ? <PlainTextBlock text={text} label={t("ui.result")} theme={theme} styles={styles} /> : <Text style={styles.empty}>{t("ui.noTextReturned")}</Text>;
+    }
     case "plan":
       return <Text selectable style={styles.detailText}>{detail.text}</Text>;
     case "unknown": {
@@ -1159,6 +1162,7 @@ export function DetailBody({
           </>
         );
       }
+      const mcpText = isMcpTool(data.name) ? mcpResultText(detail.output) : undefined;
       return (
         <>
           {hasMeaningfulUnknownValue(detail.input) ? (
@@ -1170,7 +1174,9 @@ export function DetailBody({
               theme={theme}
             />
           ) : null}
-          {hasMeaningfulUnknownValue(detail.output) ? (
+          {mcpText ? (
+            <PlainTextBlock text={mcpText} label={t("ui.result")} theme={theme} styles={styles} />
+          ) : hasMeaningfulUnknownValue(detail.output) ? (
             <HighlightedCodeBlock
               code={formatUnknownValue(detail.output)}
               language="json"

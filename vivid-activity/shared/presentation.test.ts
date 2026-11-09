@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { shouldAttemptImageLoad } from "./read-image";
 import { parseOmpTaskOutput } from "./omp-task";
+import { mcpResultText } from "./mcp-result";
 import {
   diffLinesForDetail,
   diffStatsForDetail,
@@ -229,6 +230,13 @@ describe("colorful activity presentation", () => {
         detail: { type: "read", filePath: "src/index.ts", content: "const x = 1;" },
       }),
     ).toMatchObject({ label: "Read" });
+  });
+
+  it("keeps MCP text from direct and content-block result shapes", () => {
+    expect(mcpResultText("direct result")).toBe("direct result");
+    expect(mcpResultText({ content: [{ type: "text", text: "first" }, { type: "image", data: "ignored" }, { type: "text", text: "second" }] })).toBe("first\nsecond");
+    expect(mcpResultText({ output: { content: [{ type: "text", text: "nested" }] } })).toBe("nested");
+    expect(mcpResultText({ content: [{ type: "image", data: "ignored" }] })).toBeUndefined();
   });
 
   it("recovers Pi image reads with null pagination without retaining base64 output", () => {
