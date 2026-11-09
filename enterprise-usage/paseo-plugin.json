@@ -1,6 +1,0 @@
-{
-  "id": "enterprise-usage",
-  "name": "Enterprise Usage",
-  "description": "Claude and Codex enterprise usage and spend limits in the Paseo sidebar",
-  "requirements": { "paseo": ">=0.12.0" }
-}

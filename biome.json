@@ -47,8 +47,7 @@
   "overrides": [
     {
       "includes": [
-        "super-tasks/**",
-        "poly-repo-workspaces/**"
+        "super-tasks/**"
       ],
       "linter": {
         "rules": {

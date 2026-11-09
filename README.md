@@ -10,7 +10,6 @@ when contributing changes.
 
 ## Plugins in this repository
 
-- [Enterprise usage](./enterprise-usage/README.md): Claude and Codex spend limits in the sidebar.
 - [Colorful agent activity](./colorful-agent-activity/README.md)
 - [Paseo Worktrunk](./paseo-worktrunk/README.md): experimental Worktrunk placement and setup hooks.
 - [Plexus activity](./plexus-activity/README.md): live Plexus request activity in the Explorer dock,
@@ -21,6 +20,11 @@ when contributing changes.
   durable history, and Plexus-discovered context/service-tier controls. It requires
   the `plexus-pi` Pi extension, which is installed in Pi rather than shipped as a
   separate Paseo plugin.
+
+## Sigma plugins
+
+Enterprise usage and poly-repo workspaces now live in the separate
+`~/sigma/sigma-paseo-plugins` repository.
 
 ## Continuing development through PlexusPi
 

@@ -16,13 +16,11 @@
     "paseo-worktrunk": "0.15.0-beta.1"
   },
   "plugins": [
-    "enterprise-usage",
     "colorful-agent-activity",
     "skill-picker",
     "super-tasks",
     "plexuspi",
     "plexus-activity",
-    "poly-repo-workspaces",
     "paseo-worktrunk"
   ]
 }

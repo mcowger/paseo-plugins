@@ -1,6 +1,0 @@
-node_modules/
-.pi/
-*.log
-.env*
-coverage/
-.DS_Store
