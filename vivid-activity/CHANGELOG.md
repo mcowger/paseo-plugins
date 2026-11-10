@@ -4,6 +4,7 @@
 
 - Add OMP grep, glob, eval and web search details. Show OMP batched agent tasks separately from OpenCode task calls.
 - Show MCP text results from direct output and content-block envelopes.
+- Recover missing OMP MCP result text from the agent's local session when Paseo omits it from the timeline.
 
 ## 0.11.0 (2026-11-02)
 

@@ -706,7 +706,6 @@ describe("0.11.0: 设置预览面板", () => {
     const opacity = flatten(node.props.style).opacity;
     return typeof opacity === "number" ? [opacity] : [];
   });
-  const scrollsHorizontally = (nodes: Host[]) => nodes.flatMap(nodesOf).some((node) => node.type === "ScrollView" && node.props.horizontal === true);
   const text = (nodes: Host[]) => nodes.map(textOf).join("\n");
 
   it("dims the idle samples by the chosen strength and keeps expanded and running ones full", () => {

@@ -10,7 +10,6 @@ import { Breathe, Flash, Ping, Pop, Spin, Sweep, useChangeCount } from "./motion
 import type { ActivityPalette } from "../shared/presentation";
 import { badgeInk, type Badge } from "../shared/brand";
 import { useFx, useLoader } from "./fx";
-import type { HighlightToken } from "./highlight";
 import { typeset, useTypography } from "./typography";
 
 /**

@@ -260,7 +260,7 @@ export interface CatalogCheck {
 const MESSAGE_LIMIT = 4000;
 const ISSUE_LIMIT = 20;
 // Control characters other than tab and newline would garble a row; a file may still use any other text.
-const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/;
+const CONTROL = new RegExp(`[${String.fromCharCode(0)}-${String.fromCharCode(8)}${String.fromCharCode(11)}-${String.fromCharCode(31)}${String.fromCharCode(127)}]`);
 const shown = (value: string) => value.replace(/[^\x20-\x7e]/g, "?").slice(0, 60);
 
 /**

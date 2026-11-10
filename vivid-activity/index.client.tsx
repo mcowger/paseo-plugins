@@ -5,7 +5,6 @@ import { t } from "./shared/text";
 import { settingsRpc } from "@getpaseo/plugin";
 import type { PluginClientContext, PluginScreenProps, PluginSidebarItemProps } from "@getpaseo/plugin/client";
 import { SidebarRow } from "@getpaseo/plugin/client/ui";
-import { ScrollView } from "@getpaseo/plugin/client/react-native";
 import { z } from "zod";
 import { createChunkLoader, lazySurfaces } from "./client/lazy-chunk";
 import { ActivityDetailsContext, PlainDetail } from "./client/activity-lazy";

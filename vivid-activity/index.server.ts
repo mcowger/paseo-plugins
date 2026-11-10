@@ -4,6 +4,8 @@ import { getUiChunk } from "./server/ui-chunk";
 import { getClientChunk } from "./shared/ui-chunk";
 import { handleChildSummary } from "./server/child-summary";
 import { childSummaryRpc } from "./shared/child-summary";
+import { handleOmpMcpResult } from "./server/omp-mcp-result.js";
+import { ompMcpResultRpc } from "./shared/omp-mcp-result.js";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { forgetAgentTurns, handleFoldIndex, noteAgentClosed, noteTurnStarted, turnName } from "./server/fold-index.js";
 import { createProviderBases } from "./server/provider-base.js";
@@ -46,6 +48,7 @@ export default function contribute(server: PluginServerContext) {
   turnTimes.start();
   server.handle(childSummaryRpc, handleChildSummary);
   server.handle(readImageRpc, (input, context) => handleReadImage(input, context));
+  server.handle(ompMcpResultRpc, (input, context) => handleOmpMcpResult(input, context));
   // 本地补丁：折叠用的时间线索引（只回传位置、种类、状态和类别）。0.8.0：另带改动行数、退出码和本轮 Token。
   server.handle(foldIndexRpc, (input, context) => {
     see(context.paseo);

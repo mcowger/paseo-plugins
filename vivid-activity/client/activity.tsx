@@ -5,7 +5,7 @@ import { t } from "../shared/text";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useAgent, useSettings } from "@getpaseo/plugin/client";
 import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
-import { type NativeScrollEvent, type ScrollView as NativeScrollView, type NativeSyntheticEvent } from "react-native";
+import { type ScrollView as NativeScrollView } from "react-native";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";

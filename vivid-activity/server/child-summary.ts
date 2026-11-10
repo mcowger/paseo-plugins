@@ -120,7 +120,7 @@ async function summarize(input: ChildSummaryInput, paseo: PluginHandlerContext["
   const after = page.agent ? cardStatus(page.agent) : status;
   const output: ChildSummaryOutput = {
     status: "ok",
-    agent: after ? cardAgent({ ...(agent ?? {}), ...(page.agent ?? {}) }, after) : null,
+    agent: after ? cardAgent({ ...agent, ...page.agent }, after) : null,
     // This plugin's turn-end time row (server/turn-time.ts) is not something the child did: it never takes one of the three places.
     rows: recentChildTimelineEntries(page.entries.filter((entry) => !(entry.item.type === "plugin" && entry.item.kind === TURN_TIME_RENDERER_KIND)))
       .slice(-3)

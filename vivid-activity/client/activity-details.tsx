@@ -4,13 +4,14 @@ import { useAgent, useRpc, useSettings } from "@getpaseo/plugin/client";
 import { Icon, ScrollView, useRevealedText } from "@getpaseo/plugin/client/react-native";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Image, Pressable, Text, View, type NativeScrollEvent, type ScrollView as NativeScrollView, type NativeSyntheticEvent, type TextStyle } from "react-native";
+import { ActivityIndicator, Image, Pressable, Text, View, type ScrollView as NativeScrollView, type TextStyle } from "react-native";
 import { commandBadge, fileBadge, type Badge } from "../shared/brand";
 import { extractCodeModeCode, isCodeModeTool } from "../shared/codemode";
 import { exaToolKind } from "../shared/exa";
 import { githubToolKind } from "../shared/github";
 import { parseInlineMarkdown, parseReasoningMarkdown, type ReasoningMarkdownBlock } from "../shared/markdown";
 import { isMcpTool, mcpResultText } from "../shared/mcp-result";
+import { ompMcpResultRpc } from "../shared/omp-mcp-result";
 import { isOmpFindTool } from "../shared/omp-find";
 import { isOmpGlobTool, isOmpGrepTool } from "../shared/omp-search";
 import { isOmpEvalTool, isOmpWebSearchTool } from "../shared/omp-tools";
@@ -803,6 +804,26 @@ export function DetailBody({
   follow?: boolean;
 }) {
   const detail = asToolCallDetail(data.detail);
+  const loadOmpMcpResult = useRpc(ompMcpResultRpc);
+  const directMcpText = detail?.type === "plain_text" && isMcpTool(data.name)
+    ? detail.text || (mcpResultText((detail as unknown as Record<string, unknown>).output) ?? mcpResultText((detail as unknown as Record<string, unknown>).result) ?? mcpResultText(detail))
+    : undefined;
+  const shouldRecoverMcpResult = Boolean(
+    detail?.type === "plain_text" && isMcpTool(data.name) && !directMcpText && data.status !== "running" && data.callId,
+  );
+  const [recoveredMcpResult, setRecoveredMcpResult] = useState<{ key: string; text: string | null } | null>(null);
+  const recoveryKey = shouldRecoverMcpResult ? `${agentId}\u0000${data.callId}` : "";
+  useEffect(() => {
+    if (!recoveryKey) return;
+    let live = true;
+    setRecoveredMcpResult(null);
+    void loadOmpMcpResult({ agentId, callId: data.callId! }).then(
+      (result) => { if (live) setRecoveredMcpResult({ key: recoveryKey, text: result.text }); },
+      () => { if (live) setRecoveredMcpResult({ key: recoveryKey, text: null }); },
+    );
+    return () => { live = false; };
+  }, [agentId, data.callId, loadOmpMcpResult, recoveryKey]);
+  const recoveredText = recoveredMcpResult?.key === recoveryKey ? recoveredMcpResult.text : undefined;
   const cwd = useAgent(agentId, (agent) => agent.cwd);
   const shownPath = (path: string) => (cwd ? relativeToRoot(path, cwd) : path);
   if (data.notice) {
@@ -985,9 +1006,11 @@ export function DetailBody({
         </>
       );
     case "plain_text": {
-      const value = detail as unknown as Record<string, unknown>;
-      const text = detail.text || (isMcpTool(data.name) ? mcpResultText(value.output) ?? mcpResultText(value.result) ?? mcpResultText(value) : undefined);
-      return text ? <PlainTextBlock text={text} label={t("ui.result")} theme={theme} styles={styles} /> : <Text style={styles.empty}>{t("ui.noTextReturned")}</Text>;
+      const text = detail.text || directMcpText || recoveredText;
+      if (text) return <PlainTextBlock text={text} label={t("ui.result")} theme={theme} styles={styles} />;
+      if (shouldRecoverMcpResult && recoveredText === undefined) return <ActivityIndicator size="small" color={styles.mutedText.color} />;
+      if (shouldRecoverMcpResult) return <Text style={styles.empty}>{t("modelStatus.unavailable")}</Text>;
+      return <Text style={styles.empty}>{t("ui.noTextReturned")}</Text>;
     }
     case "plan":
       return <Text selectable style={styles.detailText}>{detail.text}</Text>;

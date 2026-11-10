@@ -2,8 +2,8 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import { useSettings } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import type { ReactNode } from "react";
-import { ScrollView, Text, View, type TextStyle, type ViewStyle } from "react-native";
-import { STRENGTH_OPACITY, activitySettings, type LoaderKind, type PaletteMode } from "../shared/settings";
+import { ScrollView, Text, View, type TextStyle } from "react-native";
+import { STRENGTH_OPACITY, activitySettings, type PaletteMode } from "../shared/settings";
 import { PIN_COLLAPSED_LINES } from "../shared/prompt-pin";
 import { densityMetrics, type DensityMetrics } from "../shared/density";
 import { looks, type LookKey } from "../shared/vivid-model";
@@ -104,17 +104,6 @@ function RowText({ style, children }: { style: TextStyle; children: string }) {
   return <Text numberOfLines={1} style={style}>{children}</Text>;
 }
 
-/** 迷你行头：类别色点 + 动作词（可带语法色段）+ 命令/摘要 + 右侧注记。 */
-function MiniHeader({ theme, styles, dotColor, title, summary, summaryNode, right }: { theme: PluginTheme; styles: ActivityStyles; dotColor: string; title: string; summary?: string; summaryNode?: ReactNode; right?: ReactNode }) {
-  return (
-    <View style={styles.headerButton}>
-      <Dot color={dotColor} />
-      <RowText style={styles.title}>{title}</RowText>
-      {summaryNode ? <Text numberOfLines={1} style={styles.summary}>{summaryNode}</Text> : summary ? <RowText style={styles.summary}>{summary}</RowText> : null}
-      {right ?? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, flexShrink: 0 }}>›</Text>}
-    </View>
-  );
-}
 
 /** 淡出豁免谓词的预览版：与 client/activity.tsx、fold-row.tsx 的真实规则同构。运行中不淡；展开不淡；
  * 失败行同样淡出（failures 档只让它初始展开——经 expanded 豁免，与真实点击收起后的行为一致）。 */
@@ -129,7 +118,7 @@ function card(children: ReactNode, opacity: number | null, styles: ActivityStyle
 }
 
 /** 思考行副本：always/latest 展开正文（跟随模式取尾窗 N 行，否则头 20 行）；failures/never 收起并淡出（与真实行为一致）。 */
-function ReasoningReplica({ theme, styles, values, palette, metrics }: { theme: PluginTheme; styles: ActivityStyles; values: PreviewValues; palette: ActivityPalette; metrics: DensityMetrics }) {
+function ReasoningReplica({ theme, styles, values, metrics }: { theme: PluginTheme; styles: ActivityStyles; values: PreviewValues; palette: ActivityPalette; metrics: DensityMetrics }) {
   const mode = values.thoughtExpansion ?? "latest";
   const expanded = mode === "always" || mode === "latest";
   const opacity = values.strength === "full" || expanded ? null : STRENGTH_OPACITY[values.strength];
@@ -157,7 +146,7 @@ function ReasoningReplica({ theme, styles, values, palette, metrics }: { theme: 
 }
 
 /** 工具行副本：state/expanded 驱动（failures 档 = 失败行展开全强度红态，完成行收起淡出）。 */
-function ToolReplica({ theme, styles, palette, values, metrics, look, label, command, commandNode, state, expanded, diff, errorLine, expandedBody, chip }: {
+function ToolReplica({ theme, styles, values, metrics, look, label, command, commandNode, state, expanded, diff, errorLine, expandedBody, chip }: {
   theme: PluginTheme;
   styles: ActivityStyles;
   palette: ActivityPalette;
@@ -203,7 +192,7 @@ function ToolReplica({ theme, styles, palette, values, metrics, look, label, com
 
 /** 折叠摘要副本：done 段（绿 tile/勾/时长），跟随淡出档位；含失败 → 自动展开明细（全强度）。
  * 明细字号走 typeset（与真实 FoldChangeList 的 mono 同基，随字号/行距缩放）。 */
-function FoldReplica({ theme, styles, values, palette, metrics, failed, type, wrapOutput }: { theme: PluginTheme; styles: ActivityStyles; values: PreviewValues; palette: ActivityPalette; metrics: DensityMetrics; failed: boolean; type: Typography; wrapOutput?: boolean }) {
+function FoldReplica({ theme, styles, values, metrics, failed, type, wrapOutput }: { theme: PluginTheme; styles: ActivityStyles; values: PreviewValues; palette: ActivityPalette; metrics: DensityMetrics; failed: boolean; type: Typography; wrapOutput?: boolean }) {
   if (!values.fold) return null;
   const expanded = failed;
   const opacity = values.strength === "full" || expanded ? null : STRENGTH_OPACITY[values.strength];
@@ -235,22 +224,6 @@ function FoldReplica({ theme, styles, values, palette, metrics, failed, type, wr
   );
 }
 
-function LoaderMarkNode(mark: SettingsActions["LoaderMark"], loader: LoaderKind, color: string, theme: PluginTheme): ReactNode {
-  if (!mark) {
-    return (
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 28, paddingLeft: 5 }}>
-        <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>…</Text>
-      </View>
-    );
-  }
-  const Mark = mark;
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 28, paddingLeft: 5 }}>
-      <Mark kind={loader} size={16} color={color} />
-      <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>npm ci --omit=dev</Text>
-    </View>
-  );
-}
 
 function TokensReplica({ theme, indent }: { theme: PluginTheme; indent: number }) {
   return (
