@@ -74,7 +74,9 @@ from Beautiful Chat and [TokenLedger](https://github.com/stv1024/token-ledger).
   foreground and the card is on screen, and never wakes an agent that is closed or archived unless you ask.
   A sub-agent that waits for your approval or asks you something says "Waiting for you" or "Asking you" in amber;
   one that stopped with an error shows the error's first line in red (common token shapes masked).
-- **OMP subagents**: task rows show child status and recent activity inline as provider updates arrive.
+- **OMP subagents**: running wait rows show child status and recent activity inline as provider updates arrive.
+  Wait headers use labels such as `Task Running` and `Task Completed`. Completed waits show agent metadata and
+  formatted result text; running updates show per-agent progress.
   Activity is session-local; earlier updates are unavailable after a reload or reconnect.
 - **Leaves native cards alone**: plan cards, task lists and permission prompts stay with Paseo; cards of other
   plugins, such as Bots proposals, stay with them and split the steps around them into separate folds.

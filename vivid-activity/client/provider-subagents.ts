@@ -145,9 +145,9 @@ export function startProviderSubagents(paseo: PaseoObserverHost): () => void {
   return stop;
 }
 
-/** Read child descriptors and newest-first event activity for one parent and tool call. */
-export function useProviderSubagents(parentAgentId: string, toolCallId: string, enabled = true): ProviderSubagentsSnapshot {
-  const key = enabled && parentAgentId && toolCallId ? parentAgentId : "";
+/** Read the running children addressed by a wait call. An unnamed wait observes all running children. */
+export function useProviderSubagents(parentAgentId: string, name: string | undefined, enabled = true): ProviderSubagentsSnapshot {
+  const key = enabled && parentAgentId ? parentAgentId : "";
   const subscribe = (listener: () => void) => {
     if (!key) return () => undefined;
     let set = listeners.get(key);
@@ -163,11 +163,12 @@ export function useProviderSubagents(parentAgentId: string, toolCallId: string, 
     const stored = stores.get(key) ?? EMPTY;
     let byCall = filteredStores.get(stored);
     if (!byCall) filteredStores.set(stored, byCall = new Map());
-    let filtered = byCall.get(toolCallId);
+    const filterKey = name ?? "";
+    let filtered = byCall.get(filterKey);
     if (!filtered) {
-      const children = stored.filter((child) => child.toolCallId === toolCallId);
+      const children = stored.filter((child) => child.status === "running" && (!name || child.id === name));
       filtered = children.length === stored.length ? stored : Object.freeze(children);
-      byCall.set(toolCallId, filtered);
+      byCall.set(filterKey, filtered);
     }
     return filtered;
   };

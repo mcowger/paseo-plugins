@@ -1281,6 +1281,12 @@ describe("omp wait tool presentation", () => {
     expect(ompWaitSummary({}, null)).toBeUndefined();
   });
 
+  it("keeps structured wait output out of the header", () => {
+    expect(resolveToolCallPresentation({ name: "wait", detail: { type: "plain_text", label: "task completed: Scout", text: '<task-result id="Scout"><output>Answer</output></task-result>' } })).toEqual({ category: "agent", icon: "Bot", label: "Task Completed: Scout" });
+    expect(resolveToolCallPresentation({ name: "wait", detail: { type: "plain_text", label: "task running: Scout", text: "## Still Running (1)" } })).toEqual({ category: "agent", icon: "Bot", label: "Task Running: Scout" });
+    expect(resolveToolCallPresentation({ name: "wait", detail: { type: "plain_text", label: "task failed: myAgent", text: "error" } }).label).toBe("Task Failed: myAgent");
+  });
+
   it("rejects non-wait envelopes", () => {
     expect(
       parseOmpWaitOutput({ content: [{ type: "text", text: "hi" }], details: { op: "read" } }),

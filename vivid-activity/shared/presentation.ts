@@ -2738,6 +2738,10 @@ export function resolveToolCallPresentation(
           : compactText(detail.subAgentType ?? ""),
       };
     case "plain_text":
+      if (isOmpWaitTool(item.name)) {
+        const match = detail.label?.match(/^task (running|completed|failed|aborted|canceled):([\s\S]*)$/i);
+        if (match) return { category: "agent", icon: "Bot", label: `Task ${match[1][0].toUpperCase()}${match[1].slice(1).toLowerCase()}:${match[2]}` };
+      }
       return {
         category: "communication",
         icon: iconNameFromProtocol(detail.icon) ?? "Wrench",

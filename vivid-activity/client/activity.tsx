@@ -498,7 +498,9 @@ export function ColorfulToolCall({
   // 0.6.0 (grok-B2): the question of this turn, when this row opens the newest stretch of activity.
   const pin = usePromptPin(agentId, { key: item.data.fold, part: item.data.part });
   const detail = asToolCallDetail(item.data.detail);
-  const providerChildren = useProviderSubagents(agentId, item.data.callId ?? "");
+  const waitLabel = item.data.name === "wait" && detail?.type === "plain_text" ? detail.label : undefined;
+  const waitName = waitLabel?.match(/^task running:\s*(.+)$/i)?.[1]?.trim();
+  const providerChildren = useProviderSubagents(agentId, waitName, item.data.name === "wait" && isRunning);
   // 0.11.0:「跟随最新输出」矩阵：展开明细区流式更新时回底（域按明细类型映射；思考行走 thoughtTail*，折叠明细无内滚容器不在矩阵内）。
   const browserTool = /browser/i.test(item.data.name);
   const followArea = browserTool ? "browser" : detail?.type === "shell" ? "shell" : isTodoTool(item.data.name) ? "todo" : "logs";
@@ -527,7 +529,7 @@ export function ColorfulToolCall({
     : resolveExpansion(expansionMode, isLatest, userExpanded, item.data.status === "failed");
   const hasDetails = detail ? hasMeaningfulToolCallDetail(detail) : true;
   // A notice always has its explanation and state to show.
-  const hasBody = Boolean(item.data.notice || item.data.pi) || toolCallHasBody(item.data.name, detail, item.data.presentation.summary);
+  const hasBody = !(isRunning && item.data.name === "wait" && detail?.type === "plain_text" && !detail.text?.trim()) && (Boolean(item.data.notice || item.data.pi) || toolCallHasBody(item.data.name, detail, item.data.presentation.summary));
   const expandable = hasBody || Boolean(item.data.errorText);
   const expanded = expandable ? baseExpanded : false;
   const [hovered, setHovered] = useState(false);

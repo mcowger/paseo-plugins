@@ -24,15 +24,17 @@ function harness() {
 
 
 describe("provider subagent event observer", () => {
-  it("associates live child activity with its originating task and removes it", () => {
+  it("shows only matching running children for a wait and excludes finished work", () => {
     const fake = harness();
     const stop = startProviderSubagents(fake.paseo);
-    fake.emit({ type: "agent.provider_subagents.update", payload: { kind: "upsert", subagent: { id: "child", parentAgentId: "parent", toolCallId: "call", title: "Scout", status: "running" } } });
-    fake.emit({ type: "agent.provider_subagents.update", payload: { kind: "timeline", parentAgentId: "parent", subagentId: "child", seq: 1, item: { type: "tool_call", name: "read", detail: { command: "file.ts" } } } });
-    expect(useProviderSubagents("parent", "call")).toMatchObject([{ title: "Scout", status: "running", activity: [{ title: "read", summary: "file.ts" }] }]);
-    expect(useProviderSubagents("parent", "other")).toEqual([]);
-    fake.emit({ type: "agent.provider_subagents.update", payload: { kind: "remove", parentAgentId: "parent", subagentId: "child" } });
-    expect(useProviderSubagents("parent", "call")).toEqual([]);
+    fake.emit({ type: "agent.provider_subagents.update", payload: { kind: "upsert", subagent: { id: "Scout", parentAgentId: "parent", toolCallId: "call", title: "scout", status: "running" } } });
+    fake.emit({ type: "agent.provider_subagents.update", payload: { kind: "upsert", subagent: { id: "Other", parentAgentId: "parent", toolCallId: "other", title: "scout", status: "running" } } });
+    fake.emit({ type: "agent.provider_subagents.update", payload: { kind: "timeline", parentAgentId: "parent", subagentId: "Scout", seq: 1, item: { type: "tool_call", name: "read", detail: { command: "file.ts" } } } });
+    expect(useProviderSubagents("parent", "Scout")).toMatchObject([{ id: "Scout", activity: [{ title: "read", summary: "file.ts" }] }]);
+    expect(useProviderSubagents("parent", undefined)).toHaveLength(2);
+    expect(useProviderSubagents("parent", "missing")).toEqual([]);
+    fake.emit({ type: "agent.provider_subagents.update", payload: { kind: "upsert", subagent: { id: "Scout", parentAgentId: "parent", toolCallId: "call", title: "scout", status: "completed" } } });
+    expect(useProviderSubagents("parent", "Scout")).toEqual([]);
     stop();
   });
 

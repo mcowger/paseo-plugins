@@ -32,6 +32,8 @@ import { OmpFindToolDetail } from "./omp-find";
 import { OmpGlobToolDetail, OmpGrepToolDetail } from "./omp-search";
 import { OmpEvalToolDetail, OmpWebSearchToolDetail } from "./omp-tools";
 import { OmpWaitToolDetail } from "./omp-wait";
+import { parseOmpWaitText } from "../shared/omp-wait-text";
+import { OmpWaitTextDetail } from "./omp-wait-text";
 import { OmpTaskToolDetail } from "./omp-task";
 import { OpencodeSubagentToolDetail } from "./opencode-subagent";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
@@ -1021,6 +1023,8 @@ export function DetailBody({
       );
     case "plain_text": {
       const text = detail.text || directMcpText || recoveredText;
+      const wait = isOmpWaitTool(data.name) && text ? parseOmpWaitText(text) : null;
+      if (wait) return <OmpWaitTextDetail model={wait} theme={theme} palette={palette} styles={styles} />;
       if (text) return <PlainTextBlock text={text} label={t("ui.result")} theme={theme} styles={styles} />;
       if (shouldRecoverMcpResult && recoveredText === undefined) return <ActivityIndicator size="small" color={styles.mutedText.color} />;
       return <Text style={styles.empty}>{t("ui.noTextReturned")}</Text>;

@@ -108,6 +108,7 @@ beforeAll(async () => {
     `export { ReasoningText } from ${JSON.stringify(path.join(here, "activity-details.tsx"))};`,
     `export { VividHeader, resolveVividPalette, useVividText } from ${JSON.stringify(path.join(here, "vivid.tsx"))};`,
     `export { PiSubagentLifecycleSummary } from ${JSON.stringify(path.join(here, "pi-subagent-summary.tsx"))};`,
+    `export { OmpWaitTextDetail } from ${JSON.stringify(path.join(here, "omp-wait-text.tsx"))};`,
     `export { densityMetrics } from ${JSON.stringify(path.join(here, "density.ts"))};`,
     `export { PinnedPromptView } from ${JSON.stringify(path.join(here, "prompt-pin.tsx"))};`,
     // 0.6.0-local.5 (codex-vivid-merge-F2): a whole tool row, and the Pi notice data it draws.
@@ -158,6 +159,16 @@ afterAll(() => {
 
 describe("rows on the phone apps: long text shrinks instead of running off the row (opus-F49)", () => {
   const styles = () => ui.useActivityStyles(theme, ui.resolveVividPalette(theme), ui.densityMetrics("compact", true, true));
+
+  it("renders wait result markdown and running metadata without raw wrappers", () => {
+    const palette = ui.resolveVividPalette(theme);
+    const props = { theme, palette, styles: styles() };
+    const result = render({ type: ui.OmpWaitTextDetail, props: { ...props, model: { kind: "result", entries: [{ id: "Scout", agent: "scout", status: "completed", duration: "26s", output: "**Summary**\n- Found the answer" }] } } });
+    const running = render({ type: ui.OmpWaitTextDetail, props: { ...props, model: { kind: "running", entries: [{ id: "Scout", agent: "task", duration: "15s", metadata: ["5 req", "ctx 9K"] }] } } });
+    expect(result.map(textOf).join(" ")).toContain("Found the answer");
+    expect(result.map(textOf).join(" ")).not.toContain("<task-result");
+    expect(running.map(textOf).join(" ")).toContain("5 req");
+  });
 
   it("lets a reasoning list item shrink next to its marker, and the marker grow for 「10.」", () => {
     const text = `- ${"很长的一条说明".repeat(20)}\n10. 第十条`;
