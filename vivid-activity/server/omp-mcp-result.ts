@@ -51,19 +51,31 @@ async function readBounded(handle: Awaited<ReturnType<typeof open>>, limit: numb
   return Buffer.concat(chunks, position);
 }
 
-function messageRecord(value: unknown): value is {
-  type: "message";
-  message: { role: "toolResult"; toolCallId: string; toolName: "write"; details: { xdev: { tool: string } }; content: unknown[] };
-} {
+type ToolResultMessage = {
+  role: "toolResult";
+  toolCallId: string;
+  toolName: string;
+  details?: { xdev?: { tool?: string; mode?: string } };
+  content: unknown[];
+};
+
+function messageRecord(value: unknown): value is { type: "message"; message: ToolResultMessage } {
   if (!value || typeof value !== "object" || !("type" in value) || value.type !== "message" ||
     !("message" in value) || !value.message || typeof value.message !== "object") return false;
   const message = value.message;
   return "role" in message && message.role === "toolResult" && "toolCallId" in message &&
-    typeof message.toolCallId === "string" && "toolName" in message && message.toolName === "write" &&
-    "details" in message && !!message.details && typeof message.details === "object" &&
-    "xdev" in message.details && !!message.details.xdev && typeof message.details.xdev === "object" &&
-    "tool" in message.details.xdev && typeof message.details.xdev.tool === "string" &&
+    typeof message.toolCallId === "string" && "toolName" in message && typeof message.toolName === "string" &&
     "content" in message && Array.isArray(message.content);
+}
+
+function supportedResult(message: ToolResultMessage): boolean {
+  if (message.toolName === "grep") return true;
+  if (message.toolName !== "write" || !message.details || typeof message.details !== "object" ||
+    !("xdev" in message.details) || !message.details.xdev || typeof message.details.xdev !== "object" ||
+    !("tool" in message.details.xdev) || typeof message.details.xdev.tool !== "string") return false;
+  const xdev = message.details.xdev;
+  return message.details.xdev.tool.startsWith("mcp__") ||
+    ("mode" in xdev && xdev.mode === "execute");
 }
 
 export async function handleOmpMcpResult(input: Input, context: PluginHandlerContext): Promise<z.output<typeof ompMcpResultRpc.output>> {
@@ -93,7 +105,7 @@ export async function handleOmpMcpResult(input: Input, context: PluginHandlerCon
         let record: unknown;
         try { record = JSON.parse(line); } catch { continue; }
         if (!messageRecord(record) || record.message.toolCallId !== input.callId ||
-          !record.message.details.xdev.tool.startsWith("mcp__")) continue;
+          !supportedResult(record.message)) continue;
         const text = record.message.content.filter((item): item is { type: "text"; text: string } =>
           !!item && typeof item === "object" && "type" in item && item.type === "text" &&
           "text" in item && typeof item.text === "string").map((item) => item.text).join("\n");

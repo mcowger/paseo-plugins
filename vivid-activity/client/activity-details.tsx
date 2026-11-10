@@ -708,12 +708,16 @@ function SearchDetail({
   agentId,
   theme,
   styles,
+  recoveredText,
+  recovering,
 }: {
   detail: Extract<ToolCallDetail, { type: "search" }>;
   headerSummary: string | undefined;
   agentId: string;
   theme: Theme;
   styles: ReturnType<typeof useActivityStyles>;
+  recoveredText?: string | null;
+  recovering?: boolean;
 }) {
   const cwd = useAgent(agentId, (agent) => agent.cwd);
   const parsed = useMemo(() => parseOpencodeSearchContent(detail.content), [detail.content]);
@@ -783,6 +787,9 @@ function SearchDetail({
       {detail.annotations?.map((annotation, index) => (
         <Text key={`${annotation}-${index}`} selectable style={styles.mutedText}>{annotation}</Text>
       ))}
+      {recovering ? <ActivityIndicator size="small" color={styles.mutedText.color} /> : null}
+      {recoveredText ? <Text selectable style={styles.mutedText}>{recoveredText}</Text> : null}
+      {recoveredText === null ? <Text style={styles.empty}>{t("modelStatus.unavailable")}</Text> : null}
     </>
   );
 }
@@ -805,11 +812,16 @@ export function DetailBody({
 }) {
   const detail = asToolCallDetail(data.detail);
   const loadOmpMcpResult = useRpc(ompMcpResultRpc);
+  const provider = useAgent(agentId, (agent) => agent.provider);
   const directMcpText = detail?.type === "plain_text" && isMcpTool(data.name)
     ? detail.text || (mcpResultText((detail as unknown as Record<string, unknown>).output) ?? mcpResultText((detail as unknown as Record<string, unknown>).result) ?? mcpResultText(detail))
     : undefined;
+  const missingSearchResult = detail?.type === "search" && isOmpGrepTool(data.name) &&
+    !detail.content && !detail.filePaths?.length && !detail.webResults?.length && !detail.annotations?.length &&
+    detail.numMatches === undefined && detail.numFiles === undefined;
   const shouldRecoverMcpResult = Boolean(
-    detail?.type === "plain_text" && isMcpTool(data.name) && !directMcpText && data.status !== "running" && data.callId,
+    provider === "omp" && data.status !== "running" && data.callId &&
+    ((detail?.type === "plain_text" && !detail.text && !directMcpText) || missingSearchResult),
   );
   const [recoveredMcpResult, setRecoveredMcpResult] = useState<{ key: string; text: string | null } | null>(null);
   const recoveryKey = shouldRecoverMcpResult ? `${agentId}\u0000${data.callId}` : "";
@@ -971,6 +983,8 @@ export function DetailBody({
           agentId={agentId}
           theme={theme}
           styles={styles}
+          recoveredText={missingSearchResult ? recoveredText : undefined}
+          recovering={missingSearchResult && recoveredText === undefined}
         />
       );
     case "fetch":
@@ -1009,7 +1023,6 @@ export function DetailBody({
       const text = detail.text || directMcpText || recoveredText;
       if (text) return <PlainTextBlock text={text} label={t("ui.result")} theme={theme} styles={styles} />;
       if (shouldRecoverMcpResult && recoveredText === undefined) return <ActivityIndicator size="small" color={styles.mutedText.color} />;
-      if (shouldRecoverMcpResult) return <Text style={styles.empty}>{t("modelStatus.unavailable")}</Text>;
       return <Text style={styles.empty}>{t("ui.noTextReturned")}</Text>;
     }
     case "plan":

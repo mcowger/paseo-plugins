@@ -14,14 +14,16 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const STANDINS: Record<string, string> = {
   react: `export const Fragment = Symbol.for("standin.fragment");
 export const createElement = (type, props, ...children) => ({ type, props: { ...(props ?? {}), ...(children.length ? { children: children.length === 1 ? children[0] : children } : {}) } });
-export const useState = (value) => [typeof value === "function" ? value() : value, () => {}];
+let __stateSlots = [];
+let __stateIdx = 0;
+export const useState = (value) => { const index = __stateIdx++; if (index === __stateSlots.length) __stateSlots.push(typeof value === "function" ? value() : value); return [__stateSlots[index], (next) => { __stateSlots[index] = typeof next === "function" ? next(__stateSlots[index]) : next; }]; };
 export const useMemo = (factory) => factory();
 export const useCallback = (callback) => callback;
 let __refSlots = [];
 let __refIdx = 0;
 export const useRef = (value) => { if (__refIdx >= __refSlots.length) __refSlots.push({ current: value }); return __refSlots[__refIdx++]; };
-export const __refsReset = () => { __refIdx = 0; };
-export const __refsClear = () => { __refSlots = []; __refIdx = 0; };
+export const __refsReset = () => { __refIdx = 0; __stateIdx = 0; };
+export const __refsClear = () => { __refSlots = []; __refIdx = 0; __stateSlots = []; __stateIdx = 0; };
 export const useEffect = (fn) => { fn(); };
 export const setTimeout = (fn, ms) => globalThis.setTimeout(fn, ms);
 export const clearTimeout = (id) => globalThis.clearTimeout(id);
@@ -56,9 +58,10 @@ export const useHighlightTokens = () => null;
 export const copyText = async () => {};
 export const useToast = () => ({ error() {} });
 export const useSettings = () => globalThis.__vividSettings ?? ({ status: "loading" });
-export const useAgent = () => undefined;
+export const useAgent = (_, selector) => selector?.({ cwd: undefined, provider: globalThis.__vividAgentProvider });
 export const usePaseo = () => ({ agents: { ref: () => ({}) } });
-export const useRpc = () => async () => ({});
+const invoke = async () => globalThis.__vividRpcResult ?? {};
+export const useRpc = () => invoke;
 export const defineRpc = (contract) => contract;
 export const defineSettings = (definition) => definition;
 export const settingsRpc = () => ({ read: {} });`,
@@ -123,6 +126,9 @@ beforeAll(async () => {
 beforeEach(() => {
   // 每个用例都是一次全新挂载：ref 槽位连值一起清空（用例内的两次 draw 之间只做索引回绕，槽位保留）。
   ui?.__refsClear?.();
+  const runtime = globalThis as unknown as Record<string, unknown>;
+  runtime.__vividAgentProvider = undefined;
+  runtime.__vividRpcResult = undefined;
 });
 
 afterAll(() => {
@@ -261,6 +267,57 @@ describe("output tail window while following (0.11.0 跟随最新输出)", () =>
       expect(rendered).toContain("MCP returned text");
       expect(rendered).not.toContain("No text returned");
     }
+  });
+  it("renders session-recovered OMP grep output for an empty search detail", async () => {
+    const runtime = globalThis as unknown as Record<string, unknown>;
+    runtime.__vividAgentProvider = "omp";
+    runtime.__vividRpcResult = { text: "src/example.ts:4: needle" };
+    const data = ui.createToolCallData({
+      type: "tool_call", callId: "grep-1", name: "grep", status: "completed", error: null,
+      detail: { type: "search", query: "needle" },
+    });
+    const draw = () => {
+      ui.__refsReset();
+      return texts({ type: ui.DetailBody, props: { data, agentId: "a", theme, palette: palette(), styles: styles(), follow: false } }).join(" ");
+    };
+    expect(draw()).not.toContain("src/example.ts:4: needle");
+    await Promise.resolve();
+    expect(draw()).toContain("src/example.ts:4: needle");
+  });
+  it("renders recovered text for executed OMP device calls", async () => {
+    const runtime = globalThis as unknown as Record<string, unknown>;
+    runtime.__vividAgentProvider = "omp";
+    for (const [name, text] of [
+      ["slack_slack_read_thread", "thread output"],
+      ["lsp", "definition output"],
+    ]) {
+      ui.__refsClear();
+      runtime.__vividRpcResult = { text };
+      const data = ui.createToolCallData({
+        type: "tool_call", callId: name, name, status: "completed", error: null,
+        detail: { type: "plain_text", text: "" },
+      });
+      const draw = () => {
+        ui.__refsReset();
+        return texts({ type: ui.DetailBody, props: { data, agentId: "a", theme, palette: palette(), styles: styles(), follow: false } }).join(" ");
+      };
+      draw();
+      await Promise.resolve();
+      expect(draw()).toContain(text);
+    }
+  });
+  it("keeps populated OMP grep content and skips recovery", () => {
+    const runtime = globalThis as unknown as Record<string, unknown>;
+    runtime.__vividAgentProvider = "omp";
+    runtime.__vividRpcResult = { text: "recovered replacement" };
+    const data = ui.createToolCallData({
+      type: "tool_call", callId: "grep-existing", name: "grep", status: "completed", error: null,
+      detail: { type: "search", query: "needle", content: "existing result" },
+    });
+    ui.__refsReset();
+    const rendered = texts({ type: ui.DetailBody, props: { data, agentId: "a", theme, palette: palette(), styles: styles(), follow: false } }).join(" ");
+    expect(rendered).toContain("existing result");
+    expect(rendered).not.toContain("recovered replacement");
   });
 
   it("a following worktree setup log shows its newest lines too; not following, its first", () => {

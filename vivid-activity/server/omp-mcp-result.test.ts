@@ -42,6 +42,109 @@ describe("handleOmpMcpResult", () => {
     await expect(handleOmpMcpResult({ agentId: "agent-1", callId: "other" }, nonOmp)).resolves.toEqual({ text: null });
   });
 
+
+  it("returns text from matching grep and executed xdev device results", async () => {
+    const grep = {
+      type: "message",
+      message: {
+        role: "toolResult",
+        toolCallId: "grep-call",
+        toolName: "grep",
+        content: [{ type: "text", text: "src/file.ts:12: match" }],
+        details: { duration: 4 },
+      },
+    };
+    const slack = {
+      type: "message",
+      message: {
+        role: "toolResult",
+        toolCallId: "slack-call",
+        toolName: "write",
+        details: { xdev: { tool: "slack_slack_read_thread", mode: "execute", tier: "read" } },
+        content: [{ type: "text", text: "thread output" }],
+      },
+    };
+    const lsp = {
+      type: "message",
+      message: {
+        role: "toolResult",
+        toolCallId: "lsp-call",
+        toolName: "write",
+        details: { xdev: { tool: "lsp", mode: "execute", tier: "read" } },
+        content: [{ type: "text", text: "definition output" }],
+      },
+    };
+    const executedWrite = {
+      type: "message",
+      message: {
+        role: "toolResult",
+        toolCallId: "write-tier-call",
+        toolName: "write",
+        details: { xdev: { tool: "slack_slack_send_message", mode: "execute", tier: "write" } },
+        content: [{ type: "text", text: "recorded device output" }],
+      },
+    };
+    const { context } = await setup([grep, slack, lsp, executedWrite]);
+    await expect(handleOmpMcpResult({ agentId: "agent-1", callId: "grep-call" }, context))
+      .resolves.toEqual({ text: "src/file.ts:12: match" });
+    await expect(handleOmpMcpResult({ agentId: "agent-1", callId: "slack-call" }, context))
+      .resolves.toEqual({ text: "thread output" });
+    await expect(handleOmpMcpResult({ agentId: "agent-1", callId: "lsp-call" }, context))
+      .resolves.toEqual({ text: "definition output" });
+    await expect(handleOmpMcpResult({ agentId: "agent-1", callId: "write-tier-call" }, context))
+      .resolves.toEqual({ text: "recorded device output" });
+  });
+
+  it("rejects nonmatching IDs, documentation reads, and ordinary writes", async () => {
+    const { context } = await setup([
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "another-call",
+          toolName: "grep",
+          content: [{ type: "text", text: "not this call" }],
+        },
+      },
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "docs-call",
+          toolName: "read",
+          details: { xdev: { tool: "slack_slack_read_thread", mode: "execute", tier: "read" } },
+          content: [{ type: "text", text: "documentation device" }],
+        },
+      },
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "write-call",
+          toolName: "write",
+          content: [{ type: "text", text: "ordinary write" }],
+        },
+      },
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "legacy-write-call",
+          toolName: "write",
+          details: { xdev: { tool: "lsp" } },
+          content: [{ type: "text", text: "ordinary write without mode" }],
+        },
+      },
+    ]);
+    await expect(handleOmpMcpResult({ agentId: "agent-1", callId: "missing-call" }, context))
+      .resolves.toEqual({ text: null });
+    await expect(handleOmpMcpResult({ agentId: "agent-1", callId: "docs-call" }, context))
+      .resolves.toEqual({ text: null });
+    await expect(handleOmpMcpResult({ agentId: "agent-1", callId: "write-call" }, context))
+      .resolves.toEqual({ text: null });
+    await expect(handleOmpMcpResult({ agentId: "agent-1", callId: "legacy-write-call" }, context))
+      .resolves.toEqual({ text: null });
+  });
   it("ignores matching records without textual content or MCP tool metadata", async () => {
     const { context } = await setup([
       { type: "message", message: { role: "toolResult", toolCallId: "no-text", toolName: "write", details: { xdev: { tool: "mcp__x" } }, content: [{ type: "image" }] } },

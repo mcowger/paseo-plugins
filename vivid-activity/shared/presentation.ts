@@ -3328,7 +3328,8 @@ export function toolCallHasBody(
   switch (detail.type) {
     case "search":
       return Boolean(
-        notInHeader(detail.query.trim() || undefined, headerSummary) ||
+        /^grep$/.test(name) ||
+        notInHeader(detail.query, headerSummary) ||
           detail.content ||
           detail.filePaths?.length ||
           detail.webResults?.length ||

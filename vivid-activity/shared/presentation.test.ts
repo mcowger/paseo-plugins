@@ -1739,8 +1739,8 @@ describe("toolCallHasBody", () => {
     expect(toolCallHasBody("skill", { type: "unknown", input: { name: "x" }, output: "ok" }, "x")).toBe(false);
   });
 
-  it("collapses search and fetch when the header already shows everything", () => {
-    expect(toolCallHasBody("grep", { type: "search", query: "foo" }, "foo")).toBe(false);
+  it("keeps header-only grep searches expandable and collapses other searches", () => {
+    expect(toolCallHasBody("grep", { type: "search", query: "foo" }, "foo")).toBe(true);
     expect(toolCallHasBody("grep", { type: "search", query: "foo", content: "a.ts:1:foo" }, "foo")).toBe(true);
     expect(toolCallHasBody("fetch", { type: "fetch", url: "https://x.dev" }, "https://x.dev")).toBe(false);
     expect(toolCallHasBody("fetch", { type: "fetch", url: "https://x.dev", result: "body" }, "https://x.dev")).toBe(true);
