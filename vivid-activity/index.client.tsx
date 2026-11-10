@@ -38,6 +38,7 @@ import {
   toolCallItemDataSchema,
   type PiNoticeReader,
 } from "./shared/timeline";
+import { startProviderSubagents } from "./client/provider-subagents";
 
 type EventObserver = (
   events: ["status.plugin_settings_changed"],
@@ -82,6 +83,7 @@ function SettingsSidebarItem({ currentScreen, openScreen }: PluginSidebarItemPro
 }
 
 export default function contribute(client: PluginClientContext) {
+  const stopProviderSubagents = startProviderSubagents(client.paseo);
   const i18n = createClientI18n(client, { pluginId: "vivid-activity", boot: { "zh-CN": { boot: bootZh }, en: { boot: bootEn } } });
   const surface = lazySurfaces(client, { rpc: getClientChunk, manifest: UI_CHUNK, label: () => t("boot.name"), text: i18n, fallback: (id, props) => id === "settings" ? <ActivityIndicator color={props.theme?.colors.foregroundMuted} /> : <PlainDetail {...props} /> });
   const details = { DetailBody: surface("detail"), ReasoningText: surface("reasoning") };
@@ -229,6 +231,7 @@ export default function contribute(client: PluginClientContext) {
   }, i18n.isReady() ? DEFAULT_TAKEOVER : "off");
   setLiveTakeover(takeover);
   return () => {
+    stopProviderSubagents();
     stopScreen();
     stopSidebar();
     stopSidebarWatch();

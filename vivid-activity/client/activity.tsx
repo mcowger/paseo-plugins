@@ -33,6 +33,8 @@ import { useFx } from "./fx";
 import { retryPiNotices } from "./transform";
 import { failureText, lookFor, mcpParts, resolveVividPalette, VividHeader, zh, type LookKey, type RowStatus } from "./vivid";
 import { cmonoViewEscape, cuiTextEscape, pmonoViewEscape } from "./web";
+import { useProviderSubagents } from "./provider-subagents";
+import { ProviderSubagentProgress } from "./provider-subagent-progress";
 
 // Paseo spaces consecutive activity rows by applying its inter-row gap to the row
 // that still has a newer neighbor. On the native inverted timeline the newest live
@@ -496,6 +498,7 @@ export function ColorfulToolCall({
   // 0.6.0 (grok-B2): the question of this turn, when this row opens the newest stretch of activity.
   const pin = usePromptPin(agentId, { key: item.data.fold, part: item.data.part });
   const detail = asToolCallDetail(item.data.detail);
+  const providerChildren = useProviderSubagents(agentId, item.data.callId ?? "");
   // 0.11.0:「跟随最新输出」矩阵：展开明细区流式更新时回底（域按明细类型映射；思考行走 thoughtTail*，折叠明细无内滚容器不在矩阵内）。
   const browserTool = /browser/i.test(item.data.name);
   const followArea = browserTool ? "browser" : detail?.type === "shell" ? "shell" : isTodoTool(item.data.name) ? "todo" : "logs";
@@ -615,6 +618,7 @@ export function ColorfulToolCall({
         output={detail.type === "sub_agent" ? detail.log : detail.type === "unknown" ? detail.output : undefined}
         theme={theme} palette={palette} styles={styles} /> : null}
       {hasDetails && subAgentDetail ? <SubAgentProgress detail={subAgentDetail} toolName={item.data.name} styles={styles} /> : null}
+      <ProviderSubagentProgress children={providerChildren} palette={palette} styles={styles} />
       {expandable && expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
           <ScrollView ref={detailScrollRef} style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} nestedScrollEnabled showsVerticalScrollIndicator onScroll={onDetailScroll} onContentSizeChange={onDetailContentSizeChange} scrollEventThrottle={16}>
