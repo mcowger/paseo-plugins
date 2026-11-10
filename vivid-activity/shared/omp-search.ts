@@ -24,6 +24,24 @@ function outputTexts(value: unknown): string[] {
     return typeof item?.text === "string" ? item.text.split(/\r?\n/).filter(Boolean) : [];
   });
 }
+
+export type SearchDisplayLine =
+  | { kind: "file"; text: string; path: string; tag?: string }
+  | { kind: "match"; text: string; line: number; body: string }
+  | { kind: "separator"; text: string }
+  | { kind: "plain"; text: string };
+
+/** Parse the compact [path#TAG] search display while retaining every source line. */
+export function parseSearchDisplay(content: string): SearchDisplayLine[] {
+  return content.split(/\r?\n/).map((text) => {
+    const file = /^\[(.+)#([^\]]+)\]$/.exec(text);
+    if (file) return { kind: "file", text, path: file[1], tag: file[2] };
+    const match = /^\*\s*(\d+)(?::\s*|\s+)(.*)$/.exec(text);
+    if (match) return { kind: "match", text, line: Number(match[1]), body: match[2] };
+    if (/^\.{3,}$/.test(text.trim())) return { kind: "separator", text };
+    return { kind: "plain", text };
+  });
+}
 function parseMatchLine(line: string): { path: string; line?: number; text?: string } | null {
   const match = /^(.*?):(\d+):(.*)$/.exec(line);
   if (!match) return null;

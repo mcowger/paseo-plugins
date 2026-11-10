@@ -1287,6 +1287,12 @@ describe("omp wait tool presentation", () => {
     expect(resolveToolCallPresentation({ name: "wait", detail: { type: "plain_text", label: "task failed: myAgent", text: "error" } }).label).toBe("Task Failed: myAgent");
   });
 
+  it("presents a completed background bash job as a command", () => {
+    const detail = { type: "plain_text" as const, label: "bash completed: node cli.mjs --home /tmp", text: '{"ok":true,"error":null}' };
+    expect(resolveToolCallPresentation({ name: "wait", detail })).toEqual({ category: "shell", icon: "SquareTerminal", label: "Command", summary: "node cli.mjs --home /tmp" });
+    expect(resolveToolCallPresentation({ name: "other", detail }).category).toBe("communication");
+  });
+
   it("rejects non-wait envelopes", () => {
     expect(
       parseOmpWaitOutput({ content: [{ type: "text", text: "hi" }], details: { op: "read" } }),

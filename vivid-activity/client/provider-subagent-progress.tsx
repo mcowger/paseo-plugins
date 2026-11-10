@@ -1,5 +1,6 @@
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { Text, View } from "react-native";
+import { parseInlineMarkdown } from "../shared/markdown";
 import { t } from "../shared/text";
 import type { ActivityPalette } from "../shared/presentation";
 import type { ActivityStyles } from "./activity";
@@ -55,7 +56,20 @@ export function ProviderSubagentProgress({
                 <View key={entry.id} style={styles.childTimelineItem}>
                   {entry.icon ? <Icon name={entry.icon} color={styles.childTimelineItemMeta.color} size={11} /> : null}
                   <Text numberOfLines={1} style={styles.childTimelineItemTitle}>{entry.title}</Text>
-                  {entry.summary ? <Text numberOfLines={1} style={styles.childTimelineItemSummary}>{entry.summary}</Text> : null}
+                  {entry.summary ? (
+                    <Text numberOfLines={1} style={styles.childTimelineItemSummary}>
+                      {parseInlineMarkdown(entry.summary).map((part, index) => {
+                        if (part.type === "text") return part.text;
+                        const style =
+                          part.type === "bold"
+                            ? { fontWeight: "700" as const }
+                            : part.type === "italic"
+                              ? { fontStyle: "italic" as const }
+                              : styles.reasoningInlineCode;
+                        return <Text key={`summary-${index}`} style={style}>{part.text}</Text>;
+                      })}
+                    </Text>
+                  ) : null}
                   {entry.meta ? <Text numberOfLines={1} style={styles.childTimelineItemMeta}>{entry.meta}</Text> : null}
                 </View>
               ))}

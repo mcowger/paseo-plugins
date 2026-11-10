@@ -5,6 +5,7 @@ import React from "react";
 import { Text, View } from "react-native";
 import type { ActivityStyles } from "./activity";
 import type { ActivityPalette } from "../shared/presentation";
+import { splitWaitTextNotices } from "./omp-wait-notice";
 import { ReasoningMarkdown } from "./activity-details";
 import { PaseoFields, Section } from "./paseo";
 
@@ -51,7 +52,12 @@ export function OmpWaitTextDetail({ model, theme, palette, styles }: Props) {
           />
         </Section>
       )}
-      {model.remainder ? <Text selectable style={styles.detailText}>{model.remainder}</Text> : null}
+      {model.remainder ? splitWaitTextNotices(model.remainder).map((part, index) => part.kind === "notice" ? (
+        <View key={`notice-${index}`} style={{ borderLeftColor: palette.statusColors.failed, borderLeftWidth: 2, paddingLeft: 8 }}>
+          <Text style={[styles.detailLabel, { color: palette.statusColors.failed }]}>{t("ui.notice")}</Text>
+          <ReasoningMarkdown text={part.text} theme={theme} styles={styles} />
+        </View>
+      ) : <ReasoningMarkdown key={`text-${index}`} text={part.text} theme={theme} styles={styles} />) : null}
     </View>
   );
 }

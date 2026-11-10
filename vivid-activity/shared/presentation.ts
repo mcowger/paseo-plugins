@@ -5,6 +5,7 @@ import { getPaseoToolLeafName } from "@getpaseo/protocol/tool-name-normalization
 import type { ExpansionTarget, PaletteMode } from "./settings";
 import { shouldAttemptImageLoad } from "./read-image";
 import { piSubagentOperation, piSubagentPresentation } from "./pi-subagents";
+import { ompBashWait } from "./omp-bash-wait";
 import {
   extractCodeModeCode,
   isCodeModeTool,
@@ -2738,6 +2739,10 @@ export function resolveToolCallPresentation(
           : compactText(detail.subAgentType ?? ""),
       };
     case "plain_text":
+      {
+        const bash = ompBashWait(item.name, detail);
+        if (bash) return { category: "shell", icon: "SquareTerminal", label: "Command", summary: compactText(bash.command) };
+      }
       if (isOmpWaitTool(item.name)) {
         const match = detail.label?.match(/^task (running|completed|failed|aborted|canceled):([\s\S]*)$/i);
         if (match) return { category: "agent", icon: "Bot", label: `Task ${match[1][0].toUpperCase()}${match[1].slice(1).toLowerCase()}:${match[2]}` };

@@ -59,7 +59,9 @@ from Beautiful Chat and [TokenLedger](https://github.com/stv1024/token-ledger).
 - **Wrap diff lines**: keep long diff lines on one scrolling row (default) or wrap them to the available width.
 - **Detail cards**: highlighted commands with output, exit code and copy buttons; file reads with a language
   badge and line numbers; colored diffs; inline previews for images the agent read; dedicated views for OMP
-  search, eval and batched agent tasks, Paseo's own tools, and GitHub and Exa results.
+  search, eval and batched agent tasks, Paseo's own tools, and GitHub and Exa results. Background OMP bash results
+  use command cards; JSON output is formatted and the copy button retains the original output.
+  Annotated search output distinguishes file headers and matching lines, with the original output available to copy.
 - **Readable notices**: background command, agent and monitor notices from Claude Code, and notices from Pi
   extensions (background tasks, sub-agents, web search, goals), become short localized rows colored by outcome, with
   localized fields and original results when expanded.
@@ -76,7 +78,7 @@ from Beautiful Chat and [TokenLedger](https://github.com/stv1024/token-ledger).
   one that stopped with an error shows the error's first line in red (common token shapes masked).
 - **OMP subagents**: running wait rows show child status and recent activity inline as provider updates arrive.
   Wait headers use labels such as `Task Running` and `Task Completed`. Completed waits show agent metadata and
-  formatted result text; running updates show per-agent progress.
+  formatted result text; running updates show per-agent progress with inline emphasis and formatted system notices.
   Activity is session-local; earlier updates are unavailable after a reload or reconnect.
 - **Leaves native cards alone**: plan cards, task lists and permission prompts stay with Paseo; cards of other
   plugins, such as Bots proposals, stay with them and split the steps around them into separate folds.

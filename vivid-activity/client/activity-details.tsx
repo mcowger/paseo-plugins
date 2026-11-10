@@ -13,6 +13,7 @@ import { parseInlineMarkdown, parseReasoningMarkdown, type ReasoningMarkdownBloc
 import { isMcpTool, mcpResultText } from "../shared/mcp-result";
 import { ompMcpResultRpc } from "../shared/omp-mcp-result";
 import { isOmpFindTool } from "../shared/omp-find";
+import { parseSearchDisplay } from "../shared/omp-search";
 import { isOmpGlobTool, isOmpGrepTool } from "../shared/omp-search";
 import { isOmpEvalTool, isOmpWebSearchTool } from "../shared/omp-tools";
 import { parsePiSubagentCall, piSubagentOperation } from "../shared/pi-subagents";
@@ -29,11 +30,12 @@ import { aria, vividSyntaxColors } from "./kit";
 import { useFollowBottom, useWrapLines } from "./settings-hooks";
 import { Breathe } from "./motion";
 import { OmpFindToolDetail } from "./omp-find";
-import { OmpGlobToolDetail, OmpGrepToolDetail } from "./omp-search";
+import { OmpGlobToolDetail, OmpGrepToolDetail, SearchDisplay } from "./omp-search";
 import { OmpEvalToolDetail, OmpWebSearchToolDetail } from "./omp-tools";
 import { OmpWaitToolDetail } from "./omp-wait";
 import { parseOmpWaitText } from "../shared/omp-wait-text";
 import { OmpWaitTextDetail } from "./omp-wait-text";
+import { ompBashWait } from "../shared/omp-bash-wait";
 import { OmpTaskToolDetail } from "./omp-task";
 import { OpencodeSubagentToolDetail } from "./opencode-subagent";
 import { ExaToolDetail, PaseoToolDetail } from "./paseo";
@@ -160,6 +162,7 @@ function HighlightedCodeBlock({
   lineStart,
   extra,
   copyLabel = t("ui.copyCode"),
+  copyRaw,
   follow,
 }: {
   code: string;
@@ -174,6 +177,7 @@ function HighlightedCodeBlock({
   lineStart?: number;
   extra?: ReactNode;
   copyLabel?: string;
+  copyRaw?: string;
   /** 0.11.0:「跟随最新输出」——跟随域开启时输出块显示尾窗（最后 N 行），最新行始终可见。 */
   follow?: boolean;
 }) {
@@ -206,7 +210,7 @@ function HighlightedCodeBlock({
           ) : null}
         </View>
         {extra}
-        <OutputCopyButtons clean={clean} raw={code} label={copyLabel} theme={theme} styles={styles} />
+        <OutputCopyButtons clean={copyRaw ?? clean} raw={copyRaw ?? code} label={copyLabel} theme={theme} styles={styles} />
       </View>
       {wrap ? (
         <View style={styles.frameBodyWrap}>
@@ -722,7 +726,8 @@ function SearchDetail({
   recovering?: boolean;
 }) {
   const cwd = useAgent(agentId, (agent) => agent.cwd);
-  const parsed = useMemo(() => parseOpencodeSearchContent(detail.content), [detail.content]);
+  const annotated = detail.content ? parseSearchDisplay(detail.content).some((line) => line.kind === "file") : false;
+  const parsed = useMemo(() => annotated ? undefined : parseOpencodeSearchContent(detail.content), [annotated, detail.content]);
   const displayPath = useCallback(
     (filePath: string) => (cwd ? relativeToRoot(filePath, cwd) : filePath),
     [cwd],
@@ -775,8 +780,9 @@ function SearchDetail({
               styles={styles}
             />
           ))}
-          {detail.content && matchCount !== 0 ? (
-            <HighlightedCodeBlock code={detail.content} language="text" styles={styles} theme={theme} />
+          {detail.content && (annotated || matchCount !== 0) ? (
+            annotated ? <SearchDisplay content={detail.content} styles={styles} theme={theme} />
+              : <HighlightedCodeBlock code={detail.content} language="text" styles={styles} theme={theme} />
           ) : null}
         </>
       )}
@@ -1023,6 +1029,17 @@ export function DetailBody({
       );
     case "plain_text": {
       const text = detail.text || directMcpText || recoveredText;
+      const bash = ompBashWait(data.name, detail);
+      if (bash) {
+        let json: string | undefined;
+        if (text && text.length <= 200_000) {
+          try { json = JSON.stringify(JSON.parse(text), null, 2); } catch { /* Keep non-JSON output as terminal text. */ }
+        }
+        return <>
+          <TerminalBlock command={bash.command} output={json === undefined ? text ?? undefined : undefined} errorOutput={data.errorText} exitCode={null} theme={theme} palette={palette} styles={styles} follow={follow} />
+          {json !== undefined && text ? <HighlightedCodeBlock code={json} copyRaw={text} language="json" label={t("ui.result")} theme={theme} styles={styles} follow={follow} /> : null}
+        </>;
+      }
       const wait = isOmpWaitTool(data.name) && text ? parseOmpWaitText(text) : null;
       if (wait) return <OmpWaitTextDetail model={wait} theme={theme} palette={palette} styles={styles} />;
       if (text) return <PlainTextBlock text={text} label={t("ui.result")} theme={theme} styles={styles} />;

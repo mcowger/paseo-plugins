@@ -106,9 +106,11 @@ beforeAll(async () => {
     `export { useActivityStyles } from ${JSON.stringify(path.join(here, "activity.tsx"))};`,
     `export { ReasoningMarkdown } from ${JSON.stringify(path.join(here, "activity-details.tsx"))};`,
     `export { ReasoningText } from ${JSON.stringify(path.join(here, "activity-details.tsx"))};`,
+    `export { DetailBody } from ${JSON.stringify(path.join(here, "activity-details.tsx"))};`,
     `export { VividHeader, resolveVividPalette, useVividText } from ${JSON.stringify(path.join(here, "vivid.tsx"))};`,
     `export { PiSubagentLifecycleSummary } from ${JSON.stringify(path.join(here, "pi-subagent-summary.tsx"))};`,
     `export { OmpWaitTextDetail } from ${JSON.stringify(path.join(here, "omp-wait-text.tsx"))};`,
+    `export { ProviderSubagentProgress } from ${JSON.stringify(path.join(here, "provider-subagent-progress.tsx"))};`,
     `export { densityMetrics } from ${JSON.stringify(path.join(here, "density.ts"))};`,
     `export { PinnedPromptView } from ${JSON.stringify(path.join(here, "prompt-pin.tsx"))};`,
     // 0.6.0-local.5 (codex-vivid-merge-F2): a whole tool row, and the Pi notice data it draws.
@@ -168,6 +170,41 @@ describe("rows on the phone apps: long text shrinks instead of running off the r
     expect(result.map(textOf).join(" ")).toContain("Found the answer");
     expect(result.map(textOf).join(" ")).not.toContain("<task-result");
     expect(running.map(textOf).join(" ")).toContain("5 req");
+  });
+
+  it("renders a background command and formatted JSON result", () => {
+    const palette = ui.resolveVividPalette(theme);
+    const data = ui.createToolCallData({ type: "tool_call", callId: "wait-1", name: "wait", status: "completed", error: null, detail: { type: "plain_text", label: "bash completed: node cli.mjs --home /tmp", text: '{"ok":true,"error":null}' } });
+    const text = render({ type: ui.DetailBody, props: { data, agentId: "agent", theme, palette, styles: styles() } }).map(textOf).join(" ");
+    expect(text).toContain("node cli.mjs --home /tmp");
+    expect(text).toContain('"ok": true');
+    expect(text).toContain('"error": null');
+  });
+
+  it("renders subagent activity with inline markdown", () => {
+    const palette = ui.resolveVividPalette(theme);
+    const nodes = render({ type: ui.ProviderSubagentProgress, props: { palette, styles: styles(), children: [{ id: "a", title: "Scout", status: "running", activity: [{ id: "1", title: "Thinking", summary: "**Adding keyboard handlers**" }] }] } });
+    const text = nodes.map(textOf).join(" ");
+    expect(text).toContain("Adding keyboard handlers");
+    expect(text).not.toContain("**");
+  });
+
+  it("renders a system notice without markup and retains surrounding text", () => {
+    const palette = ui.resolveVividPalette(theme);
+    const model = { kind: "running", entries: [{ id: "Scout", agent: "task" }], remainder: "Still waiting.\n<system-notice>Use **another action**.</system-notice>" };
+    const text = render({ type: ui.OmpWaitTextDetail, props: { model, theme, palette, styles: styles() } }).map(textOf).join(" ");
+    expect(text).toContain("Still waiting.");
+    expect(text).toContain("another action");
+    expect(text).not.toContain("<system-notice>");
+  });
+
+  it("renders annotated search matches and surrounding lines", () => {
+    const palette = ui.resolveVividPalette(theme);
+    const data = ui.createToolCallData({ type: "tool_call", callId: "grep-1", name: "grep", status: "completed", error: null, detail: { type: "search", query: "optional", content: "[src/a.ts#3005]\n 409: context\n*410: matched\n..." } });
+    const text = render({ type: ui.DetailBody, props: { data, agentId: "agent", theme, palette, styles: styles() } }).map(textOf).join(" ");
+    expect(text).toContain("[src/a.ts#3005]");
+    expect(text).toContain("*410: matched");
+    expect(text).toContain("409: context");
   });
 
   it("lets a reasoning list item shrink next to its marker, and the marker grow for 「10.」", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOmpGlobTool, isOmpGrepTool, parseOmpSearchResult } from "./omp-search";
+import { isOmpGlobTool, isOmpGrepTool, parseOmpSearchResult, parseSearchDisplay } from "./omp-search";
 
 describe("OMP grep and glob presentation", () => {
   it("recognizes only bare or explicitly namespaced tool names", () => {
@@ -29,5 +29,13 @@ describe("OMP grep and glob presentation", () => {
 
   it("handles a string output even when input is absent", () => {
     expect(parseOmpSearchResult(undefined, "src/a.ts\nsrc/b.ts", "glob")).toMatchObject({ files: ["src/a.ts", "src/b.ts"] });
+  });
+  it("groups annotated search output while retaining separators and unknown lines", () => {
+    expect(parseSearchDisplay("[src/a.ts#A1B2]\n* 12: matched\n...\nunrecognized")).toEqual([
+      { kind: "file", text: "[src/a.ts#A1B2]", path: "src/a.ts", tag: "A1B2" },
+      { kind: "match", text: "* 12: matched", line: 12, body: "matched" },
+      { kind: "separator", text: "..." },
+      { kind: "plain", text: "unrecognized" },
+    ]);
   });
 });
