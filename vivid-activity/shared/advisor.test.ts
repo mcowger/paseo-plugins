@@ -39,6 +39,10 @@ describe("Advisor notes", () => {
       { severity: "concern", text: "```ts\ncode\n```" },
       { severity: "blocker", text: "Stop" },
     ]);
+    expect(parseAdvisorNotes("[reviewer] ```ts\ncode\n```\n\n[blocker] Stop")).toEqual([
+      { severity: "nit", advisor: "reviewer", text: "```ts\ncode\n```" },
+      { severity: "blocker", text: "Stop" },
+    ]);
   });
 
   it("handles CRLF, empty text, and incomplete prefixes without losing text", () => {

@@ -17,8 +17,8 @@ export function parseAdvisorNotes(text: string): AdvisorNote[] {
     const line = lines[i];
     const startsNote = !fence && (i === 0 || !lines[i - 1].trim()) && /^\[(?:nit|concern|blocker)\](?:\s|$)/i.test(line);
     if (startsNote && i > 0) chunks.push([]);
-    const fenceLine = startsNote
-      ? line.replace(/^\[(?:nit|concern|blocker)\][ \t]+(?:\[[^\]\r\n]+\][ \t]+)?/i, "")
+    const fenceLine = chunks[chunks.length - 1].length === 0
+      ? line.replace(/^(?:\[(?:nit|concern|blocker)\][ \t]+)?(?:\[[^\]\r\n]+\][ \t]+)?/i, "")
       : line;
     const marker = fenceLine.match(/^ {0,3}(`{3,}|~{3,})/);
     if (marker) {
