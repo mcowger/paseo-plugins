@@ -14,7 +14,8 @@
   ],
   "pluginVersions": {
     "paseo-worktrunk": "0.15.0-beta.1",
-    "vivid-activity": "0.11.1"
+    "vivid-activity": "0.11.1",
+    "paseo-turn-speed": "0.17.3"
   },
   "plugins": [
     "vivid-activity",
@@ -22,6 +23,7 @@
     "super-tasks",
     "plexuspi",
     "plexus-activity",
-    "paseo-worktrunk"
+    "paseo-worktrunk",
+    "paseo-turn-speed"
   ]
 }

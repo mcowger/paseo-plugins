@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "outDir": ".tmp-test",
+    "noEmit": false
+  },
+  "include": [
+    "client/meter.ts",
+    "client/format.ts",
+    "client/store.ts",
+    "client/team.ts",
+    "client/links.ts",
+    "client/lifecycle.ts",
+    "client/pill.tsx",
+    "client/composer-match.ts",
+    "client/composer-match.test.ts",
+    "client/meter.test.ts",
+    "client/format.test.ts",
+    "client/team.test.ts",
+    "client/links.test.ts",
+    "client/lifecycle.test.ts",
+    "client/pill.test.ts"
+  ]
+}

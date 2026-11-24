@@ -11,6 +11,7 @@ when contributing changes.
 ## Plugins in this repository
 
 - [Vivid Activity](./vivid-activity/README.md): folding, timing, and OMP tool views.
+- [Turn speed](./paseo-turn-speed/README.md): upstream fork with a minimal numeric composer pill.
 - [Paseo Worktrunk](./paseo-worktrunk/README.md): experimental Worktrunk placement and setup hooks.
 - [Plexus activity](./plexus-activity/README.md): live Plexus request activity in the Explorer dock,
   fed by Plexus's SSE event stream and scoped optionally to one API key.

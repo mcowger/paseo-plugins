@@ -1,0 +1,52 @@
+{
+  "name": "paseo-turn-speed",
+  "version": "1.4.2",
+  "description": "Live decode tok/s, prefill and token breakdown for every agent turn",
+  "license": "MIT",
+  "author": "Bogdan Yanysh <acidlol@live.ru>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Drenalol/paseo-turn-speed.git"
+  },
+  "homepage": "https://github.com/Drenalol/paseo-turn-speed#readme",
+  "bugs": {
+    "url": "https://github.com/Drenalol/paseo-turn-speed/issues"
+  },
+  "keywords": [
+    "paseo",
+    "paseo-plugin",
+    "tokens-per-second",
+    "observability"
+  ],
+  "files": [
+    "paseo-plugin.json",
+    "OVERVIEW.md",
+    "index.client.ts",
+    "index.client.tsx",
+    "index.server.ts",
+    "index.server.tsx",
+    "client/",
+    "shared/",
+    "assets/",
+    "!client/*.test.ts"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test \".tmp-test/*.test.js\"",
+    "check:client": "node scripts/check-client-bundle.mjs",
+    "verify": "npm run typecheck && npm test && npm run check:client"
+  },
+  "devDependencies": {
+    "@getpaseo/client": "0.17.3",
+    "@getpaseo/plugin": "0.17.3",
+    "@getpaseo/protocol": "0.17.3",
+    "@tanstack/react-query": "^5.90.11",
+    "@types/node": "^20.9.0",
+    "@types/react": "~19.2.0",
+    "esbuild": "^0.25.12",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "typescript": "^5.9.3",
+    "zod": "^4.4.3"
+  }
+}
