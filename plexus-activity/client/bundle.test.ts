@@ -12,8 +12,6 @@ import { describe, expect, it } from "vitest";
  * Paseo compiles the client entry with esbuild (`es2020`, CJS, no Babel lowering) and `eval()`s the
  * result on iOS/Android. Unlowered class syntax and oversized bundles fail there and the plugin is
  * dropped for the session, so the same compile is reproduced here and checked in CI.
- *
- * Mirrors `colorful-agent-activity/client/bundle.test.ts`.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));

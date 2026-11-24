@@ -467,10 +467,11 @@ function stringField(value: unknown, key: string): string | undefined {
 
 /**
  * Which expansion setting governs a tool call row. Most tools key off their
- * body renderer (detail type); ask and speak share the unknown renderer, so
- * they key off the tool name instead — same table, no special handling.
+ * body renderer (detail type); tools with dedicated settings such as Advisor,
+ * ask and speak key off the tool name instead.
  */
 export function expansionTargetForToolCall(toolName: string, detailType: string): ExpansionTarget {
+  if (toolName.trim().toLowerCase() === "advisor") return "advisor";
   if (isAskTool(toolName)) return "ask";
   if (toolName.trim().toLowerCase() === "speak") return "speak";
   if (isTodoTool(toolName)) return "todo";

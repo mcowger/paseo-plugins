@@ -89,6 +89,13 @@ describe("activity settings", () => {
     expect(parsed.expansion.search).toBe("latest");
   });
 
+  it("defaults advisor expansion for older settings and preserves an explicit choice", () => {
+    expect(activitySettings.schema.parse({ expansion: { plain_text: "never" } }).expansion.advisor).toBe("latest");
+    expect(activitySettings.schema.parse({ expansion: { advisor: "always" } }).expansion.advisor).toBe("always");
+    expect(visibleExpansionTargets("all").map((target) => target.key)).toContain("advisor");
+    expect(visibleExpansionTargets("reasoning").map((target) => target.key)).not.toContain("advisor");
+  });
+
   it("collapses edit, write and shell rows by default (local default)", () => {
     expect(DEFAULT_EXPANSION.edit).toBe("never");
     expect(DEFAULT_EXPANSION.write).toBe("never");

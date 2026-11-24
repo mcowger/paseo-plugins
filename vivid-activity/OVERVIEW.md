@@ -27,7 +27,7 @@ in the Command Center — all three show the same page:
 - Wrap diff lines: off by default (long diff lines scroll sideways); on wraps them to the width.
 - Thinking rows: follow the output live (default off) with a 5–500 line window (default 20); the per-row Expand all still shows everything.
 - Follow new output: one switch per area (command output, worktree and sub-agent logs, task lists, browser), on by default. While a row is still running, its open details stay at the newest output and long output shows its latest 20 lines; finished rows open at the top.
-- Expansion for each kind of row: always, newest only, failed only, or collapsed. A fold summary with failures starts expanded.
+- Expansion for each kind of row, including OMP Advisor messages: always, newest only (the Advisor default), failed only, or collapsed. A fold summary with failures starts expanded.
 
 A preview card at the top of the settings page shows sample rows that follow the strength, palette and wrap settings live.
 

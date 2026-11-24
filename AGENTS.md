@@ -159,8 +159,7 @@ Patterns observed across Paseo plugins:
     item identity, preserving mounted component identity across streaming deltas.
   - Paseo through 0.12 exports `useRevealedText(text, phase)` for paced timeline text; 0.13 replaces it
     with `<StreamedText text phase>` from `/client/ui`, which cannot serve a renderer that splits the
-    revealed string. Read the hook off the host module and pace locally when it is missing (see
-    `colorful-agent-activity/client/reveal.ts`).
+    revealed string. Read the hook off the host module and pace locally when it is missing.
   - Timeline notifications: Pi extension `ctx.ui.notify()` and OpenCode notices are unified as first-class
     `type: "notification"` timeline items with log levels (info, warning, error) mapped to activity log styling.
     Transformers can target `query: { itemType: "notification" }`.
@@ -213,7 +212,7 @@ Add an automated client bundle test (e.g. `client/bundle.test.ts`) that runs wit
 3. **Assert bundle size budget:** Keep client bundle under ~300 KB to guard against accidental heavy imports.
 4. **Bytecode compilation via `hermesc`:** Resolve React Native's bundled Hermes compiler (`node_modules/react-native/sdks/hermesc/<platform>-bin/hermesc`) and run `-emit-binary` to guarantee Hermes bytecode parser acceptance.
 
-See `colorful-agent-activity/client/bundle.test.ts` for the reference test implementation.
+See `plexus-activity/client/bundle.test.ts` for a reference test implementation.
 
 #### Runtime verification on device
 
@@ -295,7 +294,6 @@ For the normal local workflow, install dependencies, run `npm run lint`, `npm ru
 confirm it loaded with `paseo plugin ls <plugin-id>` and `paseo plugin logs <plugin-id>`.
 
 A plugin that generates client code at build time must have that output committed and regenerated
-before reloading. colorful-agent-activity is the current example: `npm run build:client` emits its
-client payload and version. Paseo installs npm and Git sources with `--ignore-scripts --omit=dev`, so
+before reloading. Paseo installs npm and Git sources with `--ignore-scripts --omit=dev`, so
 nothing runs a build for those installs, and a `paseo-plugin.json` `build` command cannot rely on
 development tooling being present. Make the plugin's own tests fail when generated output drifts.

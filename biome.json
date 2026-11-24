@@ -71,7 +71,6 @@
     },
     {
       "includes": [
-        "colorful-agent-activity/**",
         "skill-picker/**",
         "plexuspi/**"
       ],

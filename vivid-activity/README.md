@@ -4,7 +4,7 @@ A [Paseo](https://paseo.sh) plugin that redraws an agent's thinking and tool-cal
 color-coded activity rows with live states, folds finished runs of steps into one summary row and shows how
 long every step took. The interface supports English, Simplified Chinese and user-defined languages.
 
-This is a personal fork of [Vivid Activity](https://github.com/zhjiang22/paseo-plugins/tree/92a17ee411860da77ba7a4aab8c6bf389a186c89/vivid-activity), with additional OMP tool views. It is separate from this repository's Colorful Agent Activity plugin. Only one plugin should take over activity rows at a time.
+This is a personal fork of [Vivid Activity](https://github.com/zhjiang22/paseo-plugins/tree/92a17ee411860da77ba7a4aab8c6bf389a186c89/vivid-activity), with additional OMP tool views. Only one plugin should take over activity rows at a time.
 
 Based on [Colorful Agent Activity](https://github.com/mcowger/paseo-plugins/tree/e65409bbccf6d07c1bbe24dc8eddd902ee10a769/colorful-agent-activity)
 0.3.0 by Matt Cowger (MIT). The layered detail cards take design ideas from
@@ -103,7 +103,7 @@ The Vivid Activity settings page offers:
 | Wrap diff lines | off (default, long lines scroll sideways), on |
 | Thinking rows | follow the output live (default off) with a 5–500 line window (default 20) |
 | Follow new output | per area — command output, worktree and sub-agent logs (and the other tool details), task lists, browser — on (default), off; only running rows follow |
-| Expansion | per row kind: always, newest only, failed only, collapsed |
+| Expansion | per row kind, including OMP Advisor messages: always, newest only (Advisor default), failed only, collapsed |
 
 The same page opens from Paseo's **Settings → Plugins**, from the **Vivid Activity** row in the app's sidebar,
 and from "Open Vivid Activity settings" in the Command Center.

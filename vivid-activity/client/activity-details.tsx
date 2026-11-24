@@ -6,6 +6,7 @@ import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Image, Pressable, Text, View, type ScrollView as NativeScrollView, type TextStyle } from "react-native";
 import { commandBadge, fileBadge, type Badge } from "../shared/brand";
+import { isAdvisorTool, parseAdvisorNotes } from "../shared/advisor";
 import { extractCodeModeCode, isCodeModeTool } from "../shared/codemode";
 import { exaToolKind } from "../shared/exa";
 import { githubToolKind } from "../shared/github";
@@ -1029,6 +1030,18 @@ export function DetailBody({
       );
     case "plain_text": {
       const text = detail.text || directMcpText || recoveredText;
+      if (isAdvisorTool(data.name) && text?.trim()) {
+        return <View style={{ gap: 8 }}>{parseAdvisorNotes(text).map((note, index) => {
+          const color = note.severity === "blocker" ? theme.colors.statusDanger
+            : note.severity === "concern" ? theme.colors.statusWarning : theme.colors.accent;
+          return <View key={index} style={{ backgroundColor: theme.colors.surface1, borderLeftWidth: 3, borderLeftColor: color, borderRadius: 8, padding: 10, gap: 4 }}>
+            <Text style={{ color, fontWeight: "700", fontSize: 12 }}>
+              {note.advisor ? `${note.advisor} · ${note.severity}` : `Advisor · ${note.severity}`}
+            </Text>
+            <ReasoningMarkdown text={note.text} theme={theme} styles={styles} />
+          </View>;
+        })}</View>;
+      }
       const bash = ompBashWait(data.name, detail);
       if (bash) {
         let json: string | undefined;

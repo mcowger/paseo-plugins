@@ -31,6 +31,7 @@ export const EXPANSION_TARGETS = [
   { key: "fetch", get label() { return t("settings.fetchPage"); }, default: "latest" },
   { key: "worktree_setup", get label() { return t("settings.worktreeSetup"); }, default: "latest" },
   { key: "sub_agent", get label() { return t("settings.subagent"); }, default: "latest" },
+  { key: "advisor", get label() { return t("settings.advisorTools"); }, default: "latest" },
   { key: "plain_text", get label() { return t("settings.plainTextResults"); }, default: "latest" },
   { key: "plan", get label() { return t("settings.plan"); }, default: "latest", hidden: true },
   { key: "ask", get label() { return t("settings.ask"); }, default: "never" },

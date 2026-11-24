@@ -1046,6 +1046,9 @@ describe("reasoning steps and header metadata", () => {
     expect(expansionTargetForToolCall("functions.ask", "unknown")).toBe("ask");
     expect(expansionTargetForToolCall("speak", "unknown")).toBe("speak");
     expect(expansionTargetForToolCall("todo", "unknown")).toBe("todo");
+    expect(expansionTargetForToolCall("advisor", "plain_text")).toBe("advisor");
+    expect(expansionTargetForToolCall(" Advisor ", "unknown")).toBe("advisor");
+    expect(expansionTargetForToolCall("other", "plain_text")).toBe("plain_text");
     expect(expansionTargetForToolCall("some-future-tool", "unknown")).toBe("unknown");
     expect(expansionTargetForToolCall("read", "bogus")).toBe("unknown");
   });

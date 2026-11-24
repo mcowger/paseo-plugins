@@ -22,8 +22,8 @@ pointing to a GitHub repository, with metadata, categories, platforms, and cavea
 - **Expanded Markdown catalog**: [`https://paseo.cafe/llms-full.txt`](https://paseo.cafe/llms-full.txt)
 - **Full JSON catalog**: [`https://paseo.cafe/api/plugins`](https://paseo.cafe/api/plugins)
 - **OpenAPI document**: [`https://paseo.cafe/openapi.json`](https://paseo.cafe/openapi.json)
-- **Per-plugin Markdown**: `https://paseo.cafe/plugins/<id>.md` (e.g. [`colorful-agent-activity.md`](https://paseo.cafe/plugins/colorful-agent-activity.md))
-- **Per-plugin JSON**: `https://paseo.cafe/api/plugin/<id>.json` (e.g. [`colorful-agent-activity.json`](https://paseo.cafe/api/plugin/colorful-agent-activity.json))
+- **Per-plugin Markdown**: `https://paseo.cafe/plugins/<id>.md`
+- **Per-plugin JSON**: `https://paseo.cafe/api/plugin/<id>.json`
 
 ---
 
@@ -74,7 +74,6 @@ Paseo v0.8 supports live streaming transformation without remounting using `{ it
 
 | Plugin & links | Study for | Useful locations / implementation | Caveats & platforms |
 | --- | --- | --- | --- |
-| [colorful-agent-activity](https://github.com/mcowger/paseo-plugins/tree/main/colorful-agent-activity) &bull; [cafe](https://paseo.cafe/plugins/colorful-agent-activity) | Dense IDE-style tool & reasoning cards, streaming expansion, Prism syntax highlighting, automated Hermes mobile bundle test. | `client/activity.tsx`, `client/highlight.ts`, `client/bundle.test.ts` | Detailed tool mode; mobile-safe (Hermes verified). |
 | [readable-agent-activity](https://github.com/geoqiao/paseo-stuff/tree/main/plugins/agent-activity) &bull; [cafe](https://paseo.cafe/plugins/readable-agent-activity) | Clean tool call and reasoning presentation, JSON syntax formatting, bounded payload folding. | `plugins/agent-activity/client/` | Full detail only; do not stack with other transformers. |
 | [math-renderer](https://github.com/geoqiao/paseo-stuff/tree/main/plugins/math-renderer) &bull; [cafe](https://paseo.cafe/plugins/math-renderer) | Renders block LaTeX in assistant messages using local MathJax and embedded resvg WASM. | `plugins/math-renderer/client/` | Block math only; fallback on unsupported macros. |
 | [video-embeds](https://github.com/kschniedergers/paseo-plugins/tree/main/video-embeds) &bull; [cafe](https://paseo.cafe/plugins/video-embeds) | Parses `![clip](/path.mp4)` in assistant markdown, embeds native video player on desktop/web with mobile fallback. | `client/`, `server/` | Desktop/web playback only; mobile shows card. |
@@ -172,8 +171,3 @@ Official example plugins from the [getpaseo/paseo v0.8.0 repository](https://git
 
 ---
 
-## 10. Local plugins in this repository
-
-Reference implementations maintained within this repository:
-
-- [colorful-agent-activity](../colorful-agent-activity/README.md): Timeline transformer replacing reasoning and tool-call rows with dense IDE cards, Prism syntax highlighting, and automated Hermes mobile bundle tests.
