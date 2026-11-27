@@ -3,13 +3,13 @@
 This repository contains Paseo plugins. Use the following Paseo resources as the source of truth
 when creating or changing a plugin:
 
-The current target host and SDK baseline is **Paseo v0.18.1**. Pin `@getpaseo/client`,
-`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.18.1. Declare compatibility in
-`paseo-plugin.json` via `requirements: { "paseo": ">=0.18.1" }` to enforce version checks at startup.
+The current target host and SDK baseline is **Paseo v0.17.5**. Pin `@getpaseo/client`,
+`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.17.5. Declare compatibility in
+`paseo-plugin.json` via `requirements: { "paseo": ">=0.17.5" }` to enforce version checks at startup.
 
 Per-plugin exceptions live in `.paseo-sdk.json` under `pluginVersions`, and both `npm run sdk:check`
 and `npm run sdk:install` honor them (installing, packing, and verifying each plugin at the version
-it pins). There are currently no exceptions; every plugin requires 0.18.1.
+it pins). There are currently no exceptions; every plugin requires 0.17.5.
 Add an exception only when a plugin needs a newer host than the baseline, and keep its
 `requirements.paseo`, its three dependency pins, and the override in step.
 
@@ -23,7 +23,7 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
   components, SDK usage, RPC, themes, hosts, and troubleshooting.
 - [Runtime entry migration guide](https://paseo.sh/docs/plugins/migration.md): migrating from
   mixed root entries to explicit client and server runtime entries.
-- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.18.1/plugin-examples):
+- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.17.5/plugin-examples):
   working examples for panels and commands (`local-plugin`), RPC, attachment sources (`linear`),
   themes (`catppuccin`), and timeline items (`timeline-items`, `inline-thinking`).
   Provider examples (`provider-direct`, `provider-acp-transformer`) are included as well.
@@ -252,8 +252,8 @@ research and original acceptance goals.
   `plexuspi:state:v1:`, and `plexuspi:child:v1:` prefixes.
 - Keep the root integration on subprocess JSONL RPC. Do not embed Pi's SDK or
   modify Pi/Paseo core. Owned `pi-subagents` child execution is a separate boundary.
-- SDK pins follow the repository baseline, currently `0.18.1`, and the isolated launcher installs
-  host `0.18.1`. Earlier runtime checks used host `0.11.0-beta.3` and Pi `1.0.0+local`.
+- SDK pins follow the repository baseline, currently `0.17.5`, and the isolated launcher installs
+  host `0.17.5`. Earlier runtime checks used host `0.11.0-beta.3` and Pi `1.0.0+local`.
 - Plexus publishes exact per-model tier choices and short/max context budgets.
   Do not restore a fixed tier enum, hardcoded expanded budget, or backend matrix.
 - Run lint, typecheck, and tests in `plexuspi/`, plus root `npm run sdk:check`.

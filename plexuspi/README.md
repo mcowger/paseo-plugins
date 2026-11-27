@@ -7,9 +7,9 @@ owns tier/context controls, tree navigation, and reload through the
 activity bridge. The plugin itself doesn't copy, install, or sync `plexus-pi`; the
 isolated test launcher copies it for test runs only.
 
-Requires Paseo **0.18.1** or later; SDK dependencies are pinned to 0.18.1. Runtime
+Requires Paseo **0.17.5** or later; SDK dependencies are pinned to 0.17.5. Runtime
 checks were last run with Paseo **0.11.0-beta.3**, Pi **1.0.0+local**, and DeepSeek
-`deepseek-v4.1-flash`, before the 0.18.1 baseline.
+`deepseek-v4.1-flash`, before the 0.17.5 baseline.
 
 ## Implemented
 

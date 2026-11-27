@@ -1,7 +1,7 @@
 # Paseo shortcomings
 
 Candidate upstream issues, checked on 2026-10-03 against the local Paseo
-checkout and the installed 0.11.0-beta.3 host. PlexusPi now requires the public 0.18.1
+checkout and the installed 0.11.0-beta.3 host. PlexusPi now requires the public 0.17.5
 plugin contracts. No Paseo source was modified.
 
 The documentation audit reconfirmed the resume-template and child-outline source

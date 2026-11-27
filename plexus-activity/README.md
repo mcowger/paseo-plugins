@@ -6,7 +6,7 @@ The panel mirrors the columns an operator actually reads on Plexus's admin Logs 
 tokens, cost, and performance — and updates as requests stream, so a busy Plexus can be watched without
 leaving Paseo. Scope it to a single API key from the panel header when you only care about one client.
 
-Paseo 0.18.1+. [Scope and design rationale](./docs/SCOPE.md).
+Paseo 0.17.5+. [Scope and design rationale](./docs/SCOPE.md).
 
 ## Setup
 
@@ -59,7 +59,7 @@ Plexus  ──SSE──►  plugin server (owns the socket, folds rows, keeps a 
                         └── push deltas ── plugin client (Explorer panel)
 ```
 
-Paseo 0.18.1 has server-to-client subscriptions. The panel receives a reset snapshot, then debounced deltas on
+Paseo 0.17.5 has server-to-client subscriptions. The panel receives a reset snapshot, then debounced deltas on
 `plexus.activity.stream` as the server folds changes. A snapshot RPC re-syncs it on mount, on resume, and every
 60 s as a backstop. The server keeps the SSE connection open regardless of whether the panel is mounted,
 backfills from `GET /v0/management/usage` on every (re)connect, and falls back to REST polling when a proxy

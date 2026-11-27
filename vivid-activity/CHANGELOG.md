@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Require Paseo 0.18.1 or later; the SDK is pinned to 0.18.1.
+- Require Paseo 0.17.5 or later (so 0.17.5 apps load it); the SDK is pinned to 0.17.5.
 - Show an OMP tool call's intent (Paseo 0.18.1 `metadata.intent`) in place of the row header's command, file or summary, controlled by a setting that is on by default.
 - Show OMP Advisor notes as severity-colored messages, with a dedicated expansion setting (newest only by default).
 - Add OMP grep, glob, eval and web search details. Show OMP batched agent tasks separately from OpenCode task calls.

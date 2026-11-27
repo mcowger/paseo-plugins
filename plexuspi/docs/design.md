@@ -74,7 +74,7 @@ execution SDK integration.
 ## 1. Provider registration and discovery
 
 - Register a distinct `plexuspi` provider. Do not patch the built-in Pi provider.
-- Follow the repo dependency baseline, now 0.18.1. Runtime checks used host 0.11.0-beta.3
+- Follow the repo dependency baseline, now 0.17.5. Runtime checks used host 0.11.0-beta.3
   and Pi 1.0.0+local, before that baseline. Verify native feature
   discovery and required history behavior against the chosen installed host;
   explicitly rebaseline only if required available APIs demand it.
@@ -508,7 +508,7 @@ No iOS/Android device test is required for this personal V1 release.
 
 The Pi-side control is the `plexus-pi` extension, loaded by Pi as a normal package
 through its agent settings; PlexusPi doesn't pass it a path or flag. SDK pins follow the repo baseline,
-now 0.18.1; the isolated launcher installs host 0.18.1 and copies Pi 1.0.0+local.
+now 0.17.5; the isolated launcher installs host 0.17.5 and copies Pi 1.0.0+local.
 Transport limits/deadlines and cleanup grace periods are named constants in
 `server/pi-rpc.ts`, with regression coverage. Plexus supplies context/tier policy;
 PlexusPi does not choose a fixed expansion or provider-specific translation.

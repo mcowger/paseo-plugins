@@ -70,7 +70,7 @@ baseline:
   isn't equivalent to in-place rewind.
 - Native todo/subagent parsers are internal, not supported plugin imports.
 - Durable parent history doesn't imply durable child control.
-- The survey targets Paseo `0.11.0-beta.3`; this repository now pins `0.18.1`.
+- The survey targets Paseo `0.11.0-beta.3`; this repository now pins `0.17.5`.
 
 Preserve desired behavior without assuming the native implementation is
 reusable. See the [provider API version boundary](01-paseo-provider-api.md#scope-and-version-boundary)

@@ -95,7 +95,7 @@ async function setup() {
     { recursive: true, dereference: true },
   );
   const packages = [];
-  const dependencies = { "@getpaseo/cli": "0.18.1" };
+  const dependencies = { "@getpaseo/cli": "0.17.5" };
   for (const source of extensionSources) {
     const destination = `${root}/extensions/${path.basename(source)}`;
     await copyResource(source, destination);

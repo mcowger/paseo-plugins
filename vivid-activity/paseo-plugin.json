@@ -10,7 +10,7 @@
     "assets/screenshot-settings-dark.png"
   ],
   "requirements": {
-    "paseo": ">=0.18.1"
+    "paseo": ">=0.17.5"
   },
   "build": [
     [

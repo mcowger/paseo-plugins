@@ -1,7 +1,7 @@
 # Paseo plugins
 
-Plugins and local experiments for [Paseo](https://paseo.sh/), targeting the Paseo 0.18 plugin API and
-`@getpaseo/*` SDK `0.18.1`; every plugin requires Paseo 0.18.1 or later. A plugin that needs a newer
+Plugins and local experiments for [Paseo](https://paseo.sh/), targeting the Paseo 0.17 plugin API and
+`@getpaseo/*` SDK `0.17.5`; every plugin requires Paseo 0.17.5 or later. A plugin that needs a newer
 host pins its own SDK version in `.paseo-sdk.json`.
 
 Plugins use separate `index.client.tsx` and `index.server.ts` entries with strict `client/`,
