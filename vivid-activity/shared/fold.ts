@@ -469,8 +469,8 @@ export function planFolds(rows: readonly IndexRow[], options: FoldOptions): Fold
 }
 
 /** A segment's duration in the same words as the rows; null below one second (replayed sessions stamp every row alike). */
-export function formatFoldDuration(ms: number | null): string | null {
-  return ms === null || !Number.isFinite(ms) || ms < 1000 ? null : formatDuration(ms);
+export function formatFoldDuration(ms: number | null, whole = false): string | null {
+  return ms === null || !Number.isFinite(ms) || ms < 1000 ? null : formatDuration(ms, { whole });
 }
 
 /** Counts as shown: 「思考 2」「命令 5」…, unknown looks as 其他. */

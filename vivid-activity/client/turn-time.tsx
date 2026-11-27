@@ -29,6 +29,7 @@ export function TurnTimeRow({ item, theme, layout }: PluginTimelineItemProps<Tur
         justifyContent: "flex-end",
         gap: 5,
         minHeight: metrics.rowMinHeight,
+        marginHorizontal: metrics.marginHorizontal,
         marginTop: metrics.marginTop,
         marginBottom: metrics.marginBottom,
         paddingVertical: metrics.rowPaddingVertical,

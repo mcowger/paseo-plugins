@@ -260,6 +260,7 @@ function ActivityHeader({
   summary,
   summaryNode,
   fileDisplay,
+  hideTitle = false,
   status,
   statusColor,
   stats,
@@ -279,6 +280,8 @@ function ActivityHeader({
   summary?: string;
   summaryNode?: ReactNode;
   fileDisplay?: { dir?: string; base: string };
+  /** 「工具名」 off: the row leads with its tile and context text only (the caller keeps it when there is no context). */
+  hideTitle?: boolean;
   status?: ToolCallData["status"];
   statusColor?: string;
   stats?: ToolCallData["presentation"]["diffStats"];
@@ -295,6 +298,7 @@ function ActivityHeader({
         compact={vivid.compact}
         look={vivid.look}
         title={title}
+        hideTitle={hideTitle}
         summary={summary}
         summaryNode={summaryNode}
         fileDisplay={fileDisplay}
@@ -336,7 +340,7 @@ function ActivityHeader({
       <View style={styles.iconBadge}>
         <Icon name={icon} color={iconColor} size={12} />
       </View>
-      <Text {...cuiTextEscape} numberOfLines={1} style={styles.title}>{title}</Text>
+      {hideTitle ? null : <Text {...cuiTextEscape} numberOfLines={1} style={styles.title}>{title}</Text>}
       {summaryNode ? (
         <Text {...cuiTextEscape} numberOfLines={1} style={styles.summary}>{summaryNode}</Text>
       ) : fileDisplay ? (
@@ -414,8 +418,8 @@ export function ColorfulReasoning({
   const onScreen = useOnScreen(rootRef, isStreaming);
   const timing = useRowTiming(agentId, item.data.fold, isStreaming);
   const liveNow = useLiveNow(isStreaming && onScreen && timing?.start != null);
-  const thinkTime = timingText(timing, isStreaming, liveNow);
   const timeSettings = useSettings(activitySettings);
+  const thinkTime = timingText(timing, isStreaming, liveNow, timeSettings.status === "ready" && timeSettings.values.wholeSeconds);
   const stamp = endedStamp(timestamp, timeSettings.status === "ready" && timeSettings.values.foldTime, isStreaming);
   const isLatest = useIsLatestReasoning(agentId, timestamp, isStreaming);
   const isLiveTail = useIsLiveTail(agentId, timestamp, isStreaming, layout.platform);
@@ -495,9 +499,11 @@ export function ColorfulToolCall({
   const onScreen = useOnScreen(rootRef, isRunning);
   const timing = useRowTiming(agentId, item.data.fold, isRunning);
   const liveNow = useLiveNow(isRunning && onScreen && timing?.start != null);
-  const durationText = item.data.notice || item.data.pi ? null : timingText(timing, isRunning, liveNow);
   const timeSettings = useSettings(activitySettings);
-  const stamp = endedStamp(timestamp, timeSettings.status === "ready" && timeSettings.values.foldTime, isRunning);
+  const displayValues = timeSettings.status === "ready" ? timeSettings.values : null;
+  const wholeSeconds = displayValues?.wholeSeconds ?? false;
+  const durationText = item.data.notice || item.data.pi ? null : timingText(timing, isRunning, liveNow, wholeSeconds);
+  const stamp = endedStamp(timestamp, displayValues?.foldTime ?? false, isRunning);
   const isLatest = useIsLatestToolCall(agentId, timestamp, isRunning);
   const isLiveTail = useIsLiveTail(agentId, timestamp, isRunning, layout.platform);
   // 0.6.0 (grok-B2): the question of this turn, when this row opens the newest stretch of activity.
@@ -581,8 +587,11 @@ export function ColorfulToolCall({
   const noticeRaw = notice && detail?.type === "plain_text" ? detail.text : undefined;
   const noticeTime = useMemo(() => {
     const ms = noticeRaw ? noticeSections(noticeRaw).usage?.durationMs : null;
-    return ms != null ? formatDuration(ms) : null;
-  }, [noticeRaw, translator()]);
+    return ms != null ? formatDuration(ms, { whole: wholeSeconds }) : null;
+  }, [noticeRaw, wholeSeconds, translator()]);
+  // 「工具名」 off: the tile's category icon names the tool; a row with nothing else to say keeps its name, and notices
+  // keep theirs (their title is what happened, not a tool).
+  const hideTitle = !(displayValues?.toolLabels ?? true) && !notice && !pi && Boolean(intent || vividSummary || headerFile);
   // 0.6.0 (opus-B30): a Pi notice too; one that reports work still going on (仍在运行) gets no spinner, the work is elsewhere.
   const headerStatus: RowStatus | undefined = notice?.state === "info" || pi?.state === "info" || pi?.state === "running" ? undefined : rowStatus;
   const statusText = notice
@@ -612,6 +621,7 @@ export function ColorfulToolCall({
         summary={intent ?? vividSummary}
         summaryNode={intent ? null : commandNode}
         fileDisplay={intent ? undefined : headerFile ?? undefined}
+        hideTitle={hideTitle}
         // 0.6.0-local.5 (codex-vivid-merge-F2): the other palettes leave out the same state marks as the vivid one.
         status={headerStatus === undefined ? undefined : item.data.status}
         statusColor={statusColor}
@@ -622,7 +632,7 @@ export function ColorfulToolCall({
         expandable={expandable}
         styles={styles}
         stamp={stamp}
-        vivid={vivid ? { theme, compact: layout.compact, look, status: headerStatus, statusText, icon: notice || pi ? item.data.presentation.icon : item.data.presentation.fileIcon, metrics, timing: notice ? noticeTime : durationText } : undefined}
+        vivid={vivid ? { theme, compact: layout.compact, look, status: headerStatus, statusText, icon: notice || pi ? item.data.presentation.icon : hideTitle ? undefined : item.data.presentation.fileIcon, metrics, timing: notice ? noticeTime : durationText } : undefined}
       />
       {operation && detail ? <PiSubagentLifecycleSummary toolName={item.data.name} input={undefined}
         output={detail.type === "sub_agent" ? detail.log : detail.type === "unknown" ? detail.output : undefined}

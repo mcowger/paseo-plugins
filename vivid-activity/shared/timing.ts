@@ -110,23 +110,25 @@ export interface RowTimes {
  * The words for a row's time: final duration, or the live elapsed time of a running row (`liveNow`, daemon clock). A
  * finished row longer than 30 minutes that the index never saw running gets no words: its start cannot be vouched for.
  */
-export function rowTimeText(times: RowTimes | null, running: boolean, liveNow: number | null): string | null {
+export function rowTimeText(times: RowTimes | null, running: boolean, liveNow: number | null, whole = false): string | null {
   if (!times || times.start === null) return null;
   // The row finished but the index has not heard yet: wait for the real end instead of showing a short one.
   if (!running && times.running) return null;
   if (running) return liveNow === null ? null : formatDuration(Math.max(0, liveNow - times.start), { live: true });
   const ms = times.end - times.start;
   if (ms > MAX_UNWITNESSED_MS && !times.witnessed) return null;
-  return formatDuration(ms);
+  return formatDuration(ms, { whole });
 }
 
 /**
  * 「4.2 秒」「12 秒」「1 分 5 秒」「1 小时 3 分」; null under 0.1 s (nothing worth a number) and for unknown values.
  * `live`: whole seconds only, so a ticking timer does not flicker its decimals.
+ * `whole`: the 「整秒」 setting; finished durations round to whole seconds, and under half a second reads 「<1 秒」.
  */
-export function formatDuration(ms: number | null | undefined, options: { live?: boolean } = {}): string | null {
+export function formatDuration(ms: number | null | undefined, options: { live?: boolean; whole?: boolean } = {}): string | null {
   if (ms === null || ms === undefined || !Number.isFinite(ms) || ms < (options.live ? 0 : 100)) return null;
-  if (!options.live && ms < 9_950) return t("timing.seconds", { count: (ms / 1000).toFixed(1) });
+  if (!options.live && options.whole && ms < 500) return t("timing.underSecond");
+  if (!options.live && !options.whole && ms < 9_950) return t("timing.seconds", { count: (ms / 1000).toFixed(1) });
   const seconds = options.live ? Math.floor(ms / 1000) : Math.round(ms / 1000);
   if (seconds < 60) return t("timing.seconds", { count: seconds });
   const minutes = Math.floor(seconds / 60);

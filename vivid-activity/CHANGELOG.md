@@ -9,6 +9,10 @@
 - Show MCP text results from direct output and content-block envelopes.
 - Recover missing OMP MCP result text from the agent's local session when Paseo omits it from the timeline.
 - Recover missing OMP grep search output and executed `xd://` device results from the agent's local session.
+- Phone rows reach into the host's side padding (8px each side), so narrow screens give the row more width.
+- Durations read `2.1s`, `1m 5s`, `1h 3m` in English. A new "Round durations to whole seconds" setting shows `2s` (`<1s` under half a second).
+- A new "Show tool names" setting (on by default): off drops the tool name (Command, Edit…) and leads with the category icon; rows with no command, file or summary keep their name.
+- Diff counts on a row header share one compact pill (`+28 −29`).
 
 ## 0.11.0 (2026-11-02)
 

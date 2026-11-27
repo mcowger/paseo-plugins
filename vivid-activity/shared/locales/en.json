@@ -264,11 +264,12 @@
     "rowTarget": " {target}"
   },
   "timing": {
-    "seconds": "{count} sec",
-    "minutesSeconds": "{minutes} min {seconds} sec",
-    "minutes": "{count} min",
-    "hoursMinutes": "{hours} hr {minutes} min",
-    "hours": "{count} hr"
+    "seconds": "{count}s",
+    "underSecond": "<1s",
+    "minutesSeconds": "{minutes}m {seconds}s",
+    "minutes": "{count}m",
+    "hoursMinutes": "{hours}h {minutes}m",
+    "hours": "{count}h"
   },
   "clock": {
     "today": "Today",
@@ -789,6 +790,8 @@
     "turnTimeHint": "Record the end time of new turns; earlier turns are not backfilled, and times already recorded stay when this is off.",
     "foldTimeLabel": "Show activity timestamps",
     "foldTimeHint": "Show the latest update time of each activity or folded summary in the viewer's local time zone.",
+    "wholeSecondsLabel": "Round durations to whole seconds",
+    "wholeSecondsHint": "Show 2s instead of 2.1s on activity rows and folded summaries.",
     "savedSettings": "Saved settings",
     "restoreDefaults": "Restore defaults",
     "vividActivity": "Vivid activity",
@@ -844,6 +847,8 @@
     "commandColorsHint": "Syntax colors for the shell command in a row's title (colors from the theme).",
     "showIntent": "Show OMP tool intent",
     "showIntentHint": "Show OMP's reason for a tool call in place of the row header's command, file or summary. OMP only records it when its tools.intentTracing setting or PI_INTENT_TRACING is on.",
+    "toolLabels": "Show tool names",
+    "toolLabelsHint": "Show the tool name (Command, Edit, Read…) after a tool row's icon. Off leaves the category icon and the row's command, file or summary.",
     "whenOpen": "When open",
     "alwaysColored": "Always",
     "foldConsecutiveThinkingAndTool": "Fold consecutive thinking and tool rows when finished",

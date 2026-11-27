@@ -20,7 +20,7 @@ export function buildActivityStyles(
 ) {
   return typeset({
       card: {
-        marginHorizontal: 0,
+        marginHorizontal: metrics.marginHorizontal,
         marginTop: metrics.marginTop,
         marginBottom: metrics.marginBottom,
       } satisfies ViewStyle,

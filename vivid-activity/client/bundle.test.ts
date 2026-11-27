@@ -122,8 +122,9 @@ describe("client mobile bundle compatibility", () => {
     // 0.8.0: 72 KiB for the animations and the change list. 0.11.0: 128 KiB — Command colors (client/command-tokens.tsx)
     // pulls in the shared highlight module (Prism core and the language grammars; the shell grammar itself is the small
     // local one in client/highlight.ts). The chunk still downloads only when one of its features is actually used
-    // (client/fx.ts useFx(enabled)).
-    expect(Buffer.byteLength(bundle)).toBeLessThanOrEqual(128 * 1024);
+    // (client/fx.ts useFx(enabled)). Unreleased: 132 KiB — the shared settings schema and duration words it reaches
+    // through client/settings-hooks.ts gained the whole-seconds and tool-name switches.
+    expect(Buffer.byteLength(bundle)).toBeLessThanOrEqual(132 * 1024);
   });
 
   it("keeps the chunk independent of the eager fold and takeover state", async () => {

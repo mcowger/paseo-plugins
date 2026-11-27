@@ -254,6 +254,7 @@ function TimeControls({ settings }: { settings: ReadySettings }) {
       <SettingsCard>
         <SettingsSwitch label={t("settings.turnTimeLabel")} hint={t("settings.turnTimeHint")} value={settings.values.turnTime} disabled={settings.saving} onValueChange={(value) => { void settings.save({ ...settings.values, turnTime: value }, settings.revision); }} />
         <SettingsSwitch label={t("settings.foldTimeLabel")} hint={t("settings.foldTimeHint")} value={settings.values.foldTime} disabled={settings.saving} onValueChange={(value) => { void settings.save({ ...settings.values, foldTime: value }, settings.revision); }} />
+        <SettingsSwitch label={t("settings.wholeSecondsLabel")} hint={t("settings.wholeSecondsHint")} value={settings.values.wholeSeconds} disabled={settings.saving} onValueChange={(value) => { void settings.save({ ...settings.values, wholeSeconds: value }, settings.revision); }} />
       </SettingsCard>
     </SettingsSection>
   );
@@ -443,6 +444,13 @@ function DiffControls({ settings }: { settings: ReadySettings }) {
           value={settings.values.showIntent}
           disabled={settings.saving}
           onValueChange={(value) => { void settings.save({ ...settings.values, showIntent: value }, settings.revision); }}
+        />
+        <SettingsSwitch
+          label={t("settings.toolLabels")}
+          hint={t("settings.toolLabelsHint")}
+          value={settings.values.toolLabels}
+          disabled={settings.saving}
+          onValueChange={(value) => { void settings.save({ ...settings.values, toolLabels: value }, settings.revision); }}
         />
       </SettingsCard>
     </SettingsSection>

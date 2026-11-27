@@ -276,7 +276,7 @@ export function PreviewPanel({ theme, paletteFor, actions, compact, native }: Pr
   const styles = buildActivityStyles(theme, palette, metrics, type);
   // buildActivityStyles 的 card 外边距是负值（真实聊天里抵消 Paseo 列表的 16px 行距）；预览容器没有
   // 这份行距可抵消，负值会让样本行互相叠压——钳为固定正间距。
-  styles.card = { ...styles.card, marginTop: 6, marginBottom: 6 };
+  styles.card = { ...styles.card, marginHorizontal: 0, marginTop: 6, marginBottom: 6 };
   const failuresMode = values.expansion.shell === "failures";
   const shellAlways = values.expansion.shell === "always";
   const colored = values.commandColors === "always" || (failuresMode && values.commandColors === "expanded");

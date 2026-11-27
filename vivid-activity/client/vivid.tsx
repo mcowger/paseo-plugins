@@ -106,14 +106,12 @@ export function BrandChip({ badge }: { badge: Badge }) {
   </View>;
 }
 
-/** "+3 −2" as two tiny tinted pills. */
+/** "+3 −2" in one compact soft pill, each count in its own colour. */
 export function DiffPills({ theme, additions, deletions }: { theme: PluginTheme; additions: number; deletions: number }) {
-  const pill = (text: string, name: Hue) => <View style={{ paddingHorizontal: 5, height: 18, borderRadius: 9, justifyContent: "center", backgroundColor: hue(theme, name, "soft") }}>
-    <Text style={{ color: hue(theme, name, "text"), fontSize: 11, fontWeight: "700", fontVariant: ["tabular-nums"] }}>{text}</Text>
-  </View>;
-  return <View style={{ flexDirection: "row", gap: 3, flexShrink: 0 }}>
-    {additions > 0 ? pill(`+${additions}`, "green") : null}
-    {deletions > 0 ? pill(`−${deletions}`, "red") : null}
+  const count = (text: string, name: Hue) => <Text style={{ color: hue(theme, name, "text"), fontSize: 10.5, lineHeight: 14, fontWeight: "700", fontVariant: ["tabular-nums"] }}>{text}</Text>;
+  return <View style={{ flexDirection: "row", alignItems: "center", gap: 3, height: 16, paddingHorizontal: 4, borderRadius: 4, flexShrink: 0, backgroundColor: withAlpha(theme.colors.foregroundMuted.startsWith("#") ? theme.colors.foregroundMuted : "#888888", isDarkTheme(theme) ? 0.14 : 0.1) }}>
+    {additions > 0 ? count(`+${additions}`, "green") : null}
+    {deletions > 0 ? count(`−${deletions}`, "red") : null}
   </View>;
 }
 
@@ -177,6 +175,8 @@ export interface VividHeaderProps {
   compact: boolean;
   look: LookKey;
   title: string;
+  /** 「工具名」 off: the tile alone names the tool. */
+  hideTitle?: boolean;
   summary?: string;
   /** 0.11.0:「命令着色」：摘要的语法色段（shell 行）。给出时优先于纯文本 summary 渲染。 */
   summaryNode?: ReactNode;
@@ -206,7 +206,7 @@ export interface VividHeaderProps {
 /** One compact, coloured activity row: tile · 中文动作 · 摘要 · 改动 · 状态 · 展开. */
 export function VividHeader(props: VividHeaderProps) {
   useI18n();
-  const { theme, compact, look, title, summary, summaryNode, fileDisplay, status, statusText, stats, meta, live, icon, expanded, expandable, chevronColor, onPress, metrics, timing, stamp } = props;
+  const { theme, compact, look, title, hideTitle, summary, summaryNode, fileDisplay, status, statusText, stats, meta, live, icon, expanded, expandable, chevronColor, onPress, metrics, timing, stamp } = props;
   const text = useVividText(theme, metrics?.lineHeight ?? 18);
   // Attention states get words on phones too (「等你批准」「退出码 1」); quieter states only on wide layouts.
   const showPill = status === "waiting" || status === "question" || status === "failed" || (!compact && (status === "canceled" || (status === "running" && !!statusText)));
@@ -217,7 +217,7 @@ export function VividHeader(props: VividHeaderProps) {
       {/* 0.6.0-local.2 (codex-vivid-F3): the words share one area that takes the room left and gives way; the pills, timing,
           state mark and chevron after it keep their width, so a narrow phone row never pushes them out of the card. */}
       <View style={{ flexDirection: "row", alignItems: "center", gap, flexGrow: 1, flexShrink: 1, minWidth: 0 }}>
-        <Text numberOfLines={1} style={text.label}>{title}</Text>
+        {hideTitle ? null : <Text numberOfLines={1} style={text.label}>{title}</Text>}
         {summaryNode ? <Text numberOfLines={1} style={text.summary}>{summaryNode}</Text> : fileDisplay ? (
           <View style={{ flexDirection: "row", alignItems: "center", flexShrink: GIVE_WAY, minWidth: 0 }}>
             {fileDisplay.dir ? <Text numberOfLines={1} style={text.fileDir}>{props.dirText(fileDisplay.dir)}/</Text> : null}

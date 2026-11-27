@@ -152,8 +152,8 @@ export function FoldRow({ agentId, item, theme, layout, timestamp }: PluginTimel
   const changes = useChangeCount(data.mode);
   const parts = foldCountParts(data.counts);
   const bar = useMemo(() => parts.map((part) => [part.look, data.counts.find(([look]) => look === part.look)?.[1] ?? 0] as const), [data.counts, parts]);
-  const duration = done ? formatFoldDuration(data.durationMs) : null;
   const settings = useSettings(activitySettings);
+  const duration = done ? formatFoldDuration(data.durationMs, settings.status === "ready" && settings.values.wholeSeconds) : null;
   const endedAt = settings.status === "ready" && settings.values.foldTime && done ? formatTurnTime(data.endedAt ?? 0) : "";
   const toggle = useCallback(() => foldRuntime.toggle(agentId, data.segment, !data.expanded), [agentId, data.expanded, data.segment]);
   // 0.6.0 (grok-B2): the question of this turn, when this summary stands for the newest stretch of activity.
@@ -175,7 +175,7 @@ export function FoldRow({ agentId, item, theme, layout, timestamp }: PluginTimel
     }),
     [metrics.lineHeight, theme],
   );
-  const card: ViewStyle = { marginHorizontal: 0, marginTop: metrics.marginTop, marginBottom: metrics.marginBottom };
+  const card: ViewStyle = { marginHorizontal: metrics.marginHorizontal, marginTop: metrics.marginTop, marginBottom: metrics.marginBottom };
   const row: ViewStyle = {
     flexDirection: "row",
     alignItems: "center",

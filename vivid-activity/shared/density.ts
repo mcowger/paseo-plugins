@@ -18,6 +18,11 @@ export interface DensityMetrics {
   marginBottom: number;
   /** Native inverted timeline: the live tail row gets no host gap, so it brings its own (same visual gap as between rows). */
   tailMarginTop: number;
+  /**
+   * Phones: reaches into the host's per-row side padding (`streamItemWrapper`, spacing[2] = 8px inside the list's own
+   * 12px), so rows use the width the narrow screen has. Stays inside the cell, so nothing is clipped. 0 on wide layouts.
+   */
+  marginHorizontal: number;
   rowMinHeight: number;
   rowPaddingVertical: number;
   tile: number;
@@ -54,6 +59,7 @@ function computeMetrics(density: Density, compactLayout: boolean, native: boolea
     marginTop,
     marginBottom,
     tailMarginTop: STREAM_ROW_GAP + marginTop,
+    marginHorizontal: compactLayout ? -8 : 0,
     rowMinHeight: dense ? (compactLayout || native ? 30 : 24) : compactLayout ? 32 : 30,
     rowPaddingVertical: dense ? 1 : 3,
     tile: dense ? 18 : 20,

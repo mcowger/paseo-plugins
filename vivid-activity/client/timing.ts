@@ -50,8 +50,8 @@ export function useLiveNow(active: boolean): number | null {
 }
 
 /** The words for a row's time (shared/timing.ts `rowTimeText`). */
-export function timingText(timing: RowTiming | null, running: boolean, liveNow: number | null): string | null {
-  return rowTimeText(timing, running, liveNow);
+export function timingText(timing: RowTiming | null, running: boolean, liveNow: number | null, whole = false): string | null {
+  return rowTimeText(timing, running, liveNow, whole);
 }
 
 // Visibility checks need no fold runtime; detail chunks import this module directly through visibility.ts.

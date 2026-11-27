@@ -138,6 +138,9 @@ export const activitySettings = defineSettings({
     commandColors: commandColorsSchema.default("expanded"),
     // OMP 工具调用意图：默认在工具详情顶部显示；旧设置没有这一项，读出来取默认值。
     showIntent: z.boolean().default(true),
+    // 耗时取整秒（「2 秒」而不是「2.1 秒」）与工具行的工具名（关 = 只留类别图标）。旧设置读出来取默认值，版本号不变。
+    wholeSeconds: z.boolean().default(false),
+    toolLabels: z.boolean().default(true),
     // 0.11.0：「思考行实时跟随」：开 = 展开后的思考框展示最新 N 行并跟随输出；关 = 头部 20 行冻结（现状）。
     thoughtTailFollow: z.boolean().default(false),
     // 0.11.0：尾窗大小（块模式=行数，步骤模式=步数）。UI 层钳制 5–500 后才保存。

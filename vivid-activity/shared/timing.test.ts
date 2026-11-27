@@ -120,6 +120,14 @@ describe("duration words", () => {
     expect(formatDuration(3_780_000)).toBe("1 小时 3 分");
   });
 
+  it("rounds finished durations to whole seconds when asked", () => {
+    expect(formatDuration(40, { whole: true })).toBeNull();
+    expect(formatDuration(420, { whole: true })).toBe("<1 秒");
+    expect(formatDuration(2_140, { whole: true })).toBe("2 秒");
+    expect(formatDuration(2_600, { whole: true })).toBe("3 秒");
+    expect(formatDuration(65_000, { whole: true })).toBe("1 分 5 秒");
+  });
+
   it("ticks live timers in whole seconds", () => {
     expect(formatDuration(400, { live: true })).toBe("0 秒");
     expect(formatDuration(4_900, { live: true })).toBe("4 秒");
