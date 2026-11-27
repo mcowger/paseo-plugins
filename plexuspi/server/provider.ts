@@ -235,11 +235,16 @@ class PlexuspiConnection implements ProviderConnection {
         return;
       case "session.archive":
       case "session.unarchive":
+      case "session.can_stop_runtime":
         this.emit({
           type: "request.failed",
           requestId: input.requestId,
           error: { message: `${input.type} is not supported by PlexusPi stage 1` },
         });
+        return;
+      case "request.cancel":
+        // Paseo sends this only when the connection negotiated `request.cancel`, which PlexusPi
+        // does not offer; there is no in-flight request work to release.
         return;
       default: {
         const exhaustive: never = input;

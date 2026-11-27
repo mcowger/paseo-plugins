@@ -1,5 +1,5 @@
 {
-  "version": "0.12.0",
+  "version": "0.18.1",
   "localRepository": "~/workspace/paseo",
   "packages": {
     "@getpaseo/protocol": "packages/protocol",
@@ -12,11 +12,7 @@
     "@getpaseo/plugin",
     "@getpaseo/protocol"
   ],
-  "pluginVersions": {
-    "paseo-worktrunk": "0.15.0-beta.1",
-    "vivid-activity": "0.11.1",
-    "paseo-turn-speed": "0.17.3"
-  },
+  "pluginVersions": {},
   "plugins": [
     "vivid-activity",
     "skill-picker",

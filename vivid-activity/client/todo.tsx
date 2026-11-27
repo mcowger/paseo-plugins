@@ -1,7 +1,7 @@
 import { joinList } from "../shared/i18n";
 import { t } from "../shared/text";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import React from "react";
 import { Text, View } from "react-native";
 import type { ActivityStyles } from "./activity";

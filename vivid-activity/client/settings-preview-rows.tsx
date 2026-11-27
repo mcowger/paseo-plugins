@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { useSettings } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactNode } from "react";
 import { ScrollView, Text, View, type TextStyle } from "react-native";
 import { STRENGTH_OPACITY, activitySettings, type PaletteMode } from "../shared/settings";

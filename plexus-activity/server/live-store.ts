@@ -17,7 +17,7 @@ import type { ProgressSample } from "./records";
  *
  * Plexus never replays events, so the store is the only record of what arrived while a client was
  * disconnected. It keeps a newest-first ring of records plus a bounded journal of `(seq, requestId)`
- * mutations; a polling client sends its last `seq` and receives just the rows that changed since.
+ * mutations; a subscriber sends its last `seq` and receives just the rows that changed since.
  */
 
 export interface LiveStoreOptions {

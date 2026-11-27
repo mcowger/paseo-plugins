@@ -4,8 +4,7 @@ import type {
   PluginPopoverProps,
   PluginSidebarItemProps,
 } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
-import { SidebarRow } from "@getpaseo/plugin/client/ui";
+import { Icon, SidebarRow } from "@getpaseo/plugin/client/ui";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { Pressable, Text, type TextStyle, View, type ViewStyle } from "react-native";
 import { openAgentInPaseoWorkspace } from "../agents/navigation";

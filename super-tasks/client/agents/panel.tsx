@@ -6,7 +6,7 @@ import {
   usePaseo,
   useRpc,
 } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import type {
   AgentTaskItem,
   AgentTimelineItem,

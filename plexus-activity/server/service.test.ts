@@ -289,20 +289,6 @@ describe("createActivityService", () => {
     await service.stop();
   });
 
-  it("switches to degraded polling when the stream goes quiet", async () => {
-    const { service, state } = serviceWith(READY);
-    await settle();
-    const backfillsAfterConnect = state.backfillCalls;
-
-    await vi.advanceTimersByTimeAsync(2_000);
-    await settle();
-
-    expect(service.snapshot({ scope: null, since: null }).status.connection).toBe("degraded");
-    expect(state.backfillCalls).toBeGreaterThan(backfillsAfterConnect);
-
-    await service.stop();
-  });
-
   it("aborts and reconnects when the stream is silent for too long", async () => {
     const { service, state } = serviceWith(READY);
     await settle();

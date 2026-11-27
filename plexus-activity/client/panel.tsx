@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { type PluginSurfaceProps, useSettings } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, type ListRenderItemInfo, Pressable, Text, View } from "react-native";
 import { isPendingStatus } from "../shared/format";

@@ -1,4 +1,4 @@
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import { Text, View } from "react-native";
 import { parseInlineMarkdown } from "../shared/markdown";
 import { t } from "../shared/text";

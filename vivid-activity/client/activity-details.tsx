@@ -1,7 +1,9 @@
 import { t } from "../shared/text";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useAgent, useRpc, useSettings } from "@getpaseo/plugin/client";
-import { Icon, ScrollView, useRevealedText } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView } from "@getpaseo/plugin/client/ui";
+// Deprecated entry kept for this hook alone: `StreamedText` cannot serve a renderer that splits the revealed string.
+import { useRevealedText } from "@getpaseo/plugin/client/react-native";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Image, Pressable, Text, View, type ScrollView as NativeScrollView, type TextStyle } from "react-native";

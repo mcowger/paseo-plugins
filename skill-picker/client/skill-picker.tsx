@@ -1,5 +1,5 @@
 import { type PluginButtonContentProps, usePaseo, useSettings } from "@getpaseo/plugin/client";
-import { useToast } from "@getpaseo/plugin/client/react-native";
+import { useToast } from "@getpaseo/plugin/client/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { NativeSyntheticEvent, TextInputKeyPressEventData } from "react-native";
 import { Pressable, Text, TextInput, View } from "react-native";

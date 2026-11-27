@@ -2,7 +2,7 @@ import { useI18n } from "./i18n-client";
 import { t } from "../shared/text";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useAgent, useSettings } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { Pressable, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import { DiffBlocks, Glyph } from "./diffstat";

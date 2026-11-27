@@ -19,7 +19,7 @@ behavior and validation from the original research.
 - [Rewind verification](rewind-011-verification.md): executable evidence for the
   append-only host-history limitation.
 
-SDK dependencies follow the repo baseline, `0.12.0`. Runtime checks used Paseo
+SDK dependencies follow the repo baseline, `0.18.1`. Runtime checks used Paseo
 `0.11.0-beta.3` and Pi `1.0.0+local`. The pre-rename implementation baseline was
 `1c13cae` (Plexus model policies), following `cd2e74c`
 (session controls/commands). Mobile smoke passed on iOS (2026-10-04); Android
@@ -92,7 +92,7 @@ No remote repository was modified or fetched as part of this documentation work.
 The Paseo checkout changed between the initial research and verification. Reports
 use the verification snapshot unless they explicitly describe the older revision
 or the v0.10.0 tag. Current source behavior is not automatically a promise about
-the project's current `@getpaseo/*` 0.12.0 baseline.
+the project's current `@getpaseo/*` 0.18.1 baseline.
 
 ## Reading the evidence
 

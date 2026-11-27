@@ -3,7 +3,7 @@ import { useI18n } from "./i18n-client";
 import { t } from "../shared/text";
 import { useAgent, useRpc } from "@getpaseo/plugin/client";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Text, View } from "react-native";

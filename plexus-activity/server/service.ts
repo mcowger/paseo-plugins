@@ -1,14 +1,14 @@
 import type { PluginSettings, PluginSettingsState } from "@getpaseo/plugin/server";
 import { normalizeBaseUrl, type plexusConfig, resolveConfig } from "../shared/settings";
 import {
+  type ActivityUpdate,
+  activityUpdateSchema,
   type ConnectionState,
   type KeyEntry,
   type KeysInput,
   type KeysOutput,
   keysOutputSchema,
   type SnapshotInput,
-  type SnapshotOutput,
-  snapshotOutputSchema,
   type VerifyInput,
   type VerifyOutput,
   verifyOutputSchema,
@@ -19,11 +19,14 @@ import { toProgressSample, toRecordPatch } from "./records";
 import { createSseParser, type SseFrame } from "./sse";
 
 /**
- * Owns the single Plexus SSE connection and the store the panel polls.
+ * Owns the single Plexus SSE connection and the store the panel reads. Subscribers (one per open panel
+ * stream) are notified after every change so they can push deltas; the service itself never polls
+ * anything on the panel's behalf.
  *
- * Paseo 0.12.0 has no server-to-client push channel, so the server keeps the connection warm and the
- * panel asks for deltas. Startup is the body of `contribute(server)`; shutdown is the returned
- * cleanup, so `stop()` must release every timer and socket.
+ * The store is replaced on settings change, so `subscribe` listeners receive `reset: true` then and
+ * must resend a full snapshot instead of a delta.
+ * Startup is the body of `contribute(server)`; shutdown is the returned cleanup, so `stop()` must
+ * release every timer and socket.
  */
 
 export interface ActivityTimings {
@@ -61,10 +64,14 @@ export interface ActivityServiceOptions {
   readonly log?: (message: string) => void;
 }
 
+/** Called after each store or connection change. `reset` means the store was replaced. */
+export type ActivityListener = (reset: boolean) => void;
+
 export interface ActivityService {
   start(): void;
   stop(): Promise<void>;
-  snapshot(input: SnapshotInput): SnapshotOutput;
+  snapshot(input: SnapshotInput): ActivityUpdate;
+  subscribe(listener: ActivityListener): () => void;
   keys(input: KeysInput): Promise<KeysOutput>;
   verify(input: VerifyInput): Promise<VerifyOutput>;
 }
@@ -150,9 +157,16 @@ export function createActivityService(options: ActivityServiceOptions): Activity
     }
   }
 
+  const listeners = new Set<ActivityListener>();
+
+  function notify(reset: boolean): void {
+    for (const listener of [...listeners]) listener(reset);
+  }
+
   function setConnection(next: ConnectionState): void {
     connection = next;
     if (next !== "retrying") retryAt = null;
+    notify(false);
   }
 
   function handleFrame(frame: SseFrame): void {
@@ -164,13 +178,19 @@ export function createActivityService(options: ActivityServiceOptions): Activity
 
     if (frame.event === "progress") {
       const update = toProgressSample(payload);
-      if (update !== null) store.applyProgress(update.requestId, update.sample);
+      if (update !== null) {
+        store.applyProgress(update.requestId, update.sample);
+        notify(false);
+      }
       return;
     }
 
     if (frame.event === "started" || frame.event === "updated" || frame.event === "completed") {
       const patch = toRecordPatch(payload);
-      if (patch !== null) store.applyPatch(patch);
+      if (patch !== null) {
+        store.applyPatch(patch);
+        notify(false);
+      }
     }
     // Unknown event types are ignored, per the Plexus event-stream contract.
   }
@@ -393,6 +413,7 @@ export function createActivityService(options: ActivityServiceOptions): Activity
     lastBackfillAt = 0;
     lastKeysAt = 0;
     store = createLiveStore({ maxRows, clock });
+    notify(true);
     const target = generation;
     void runConnection(target).catch((error) => {
       if (!alive(target)) return;
@@ -432,11 +453,12 @@ export function createActivityService(options: ActivityServiceOptions): Activity
       attemptController = null;
       stopHeartbeat();
       clearSleeps();
+      listeners.clear();
     },
 
     snapshot(input) {
       const result = store.snapshot({ scope: input.scope ?? null, since: input.since ?? null });
-      return snapshotOutputSchema.parse({
+      return activityUpdateSchema.parse({
         status: {
           configured: config !== null,
           connection,
@@ -449,6 +471,12 @@ export function createActivityService(options: ActivityServiceOptions): Activity
         reset: result.reset,
         rows: result.rows,
       });
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
 
     async keys(input) {

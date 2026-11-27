@@ -177,7 +177,9 @@ describe("session open", () => {
     });
     await session.open("open-1");
     expect(
-      ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier"),
+      ofType(events, "session.config")[0]?.config.settings?.find(
+        (setting) => setting.id === "tier",
+      ),
     ).toMatchObject({
       value: null,
       options: [
@@ -245,7 +247,9 @@ describe("session open", () => {
     const { session, events, getLaunch } = harness({ fake });
     await session.open("open-1");
     expect(
-      ofType(events, "session.config")[0]?.config.settings.find((setting) => setting.id === "tier"),
+      ofType(events, "session.config")[0]?.config.settings?.find(
+        (setting) => setting.id === "tier",
+      ),
     ).toMatchObject({
       value: "priority",
       options: ["default", "flex", "priority"].map((value) => ({ label: value, value })),
@@ -295,7 +299,7 @@ describe("session open", () => {
       expect(
         ofType(events, "session.config")
           .at(-1)
-          ?.config.settings.find((setting) => setting.id === "tier"),
+          ?.config.settings?.find((setting) => setting.id === "tier"),
       ).toMatchObject({
         value: "default",
         options: [
@@ -327,7 +331,7 @@ describe("session open", () => {
     expect(
       ofType(events, "session.config")
         .at(-1)
-        ?.config.settings.find((setting) => setting.id === "tier"),
+        ?.config.settings?.find((setting) => setting.id === "tier"),
     ).toMatchObject({ value: "default" });
     await session.close();
   });
@@ -345,7 +349,7 @@ describe("session open", () => {
     expect(
       ofType(events, "session.config")
         .at(-1)
-        ?.config.settings.find((setting) => setting.id === "tier")?.value,
+        ?.config.settings?.find((setting) => setting.id === "tier")?.value,
     ).toBe("default");
     fake.emit({
       type: "extension_ui_request",
@@ -366,7 +370,7 @@ describe("session open", () => {
     expect(
       ofType(events, "session.config")
         .at(-1)
-        ?.config.settings.find((setting) => setting.id === "tier"),
+        ?.config.settings?.find((setting) => setting.id === "tier"),
     ).toMatchObject({
       value: "default",
       options: ["default", "flex", "priority"].map((value) => ({ label: value, value })),
@@ -418,7 +422,7 @@ describe("session open", () => {
     const { session, events } = harness({ fake });
     await session.open("open-1");
     expect(
-      ofType(events, "session.config")[0]?.config.settings.find(
+      ofType(events, "session.config")[0]?.config.settings?.find(
         (setting) => setting.id === "longContext",
       ),
     ).toMatchObject({
@@ -451,7 +455,7 @@ describe("session open", () => {
       });
       const { session, events } = harness({ fake });
       await session.open("open-1");
-      const setting = ofType(events, "session.config")[0]?.config.settings.find(
+      const setting = ofType(events, "session.config")[0]?.config.settings?.find(
         (setting) => setting.id === "longContext",
       );
       expect(setting).toMatchObject({
@@ -476,7 +480,7 @@ describe("session open", () => {
     const { session, events } = harness({ fake });
     await session.open("open-1");
     expect(
-      ofType(events, "session.config")[0]?.config.settings.map((setting) => setting.id),
+      ofType(events, "session.config")[0]?.config.settings?.map((setting) => setting.id),
     ).toEqual([]);
     await session.close();
   });
@@ -497,7 +501,7 @@ describe("session open", () => {
     expect(ofType(events, "session.ready")).toHaveLength(1);
     expect(fake.controlSettings.longContext).toBe(false);
     expect(
-      ofType(events, "session.config")[0]?.config.settings.map((setting) => setting.id),
+      ofType(events, "session.config")[0]?.config.settings?.map((setting) => setting.id),
     ).toEqual([]);
     await session.close();
   });
@@ -535,7 +539,7 @@ describe("session open", () => {
     expect(
       ofType(events, "session.config")
         .at(-1)
-        ?.config.settings.find((setting) => setting.id === "longContext")?.value,
+        ?.config.settings?.find((setting) => setting.id === "longContext")?.value,
     ).toBe("true");
     await session.close();
   });
@@ -568,14 +572,14 @@ describe("session open", () => {
     expect(
       ofType(events, "session.config")
         .at(-1)
-        ?.config.settings.find((setting) => setting.id === "longContext")?.description,
+        ?.config.settings?.find((setting) => setting.id === "longContext")?.description,
     ).toContain("Short budget: 200,000 tokens");
     emit(String(getLaunch()?.env?.PLEXUSPI_SESSION_KEY), { ...state, longContextAvailable: false });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(
       ofType(events, "session.config")
         .at(-1)
-        ?.config.settings.map((setting) => setting.id),
+        ?.config.settings?.map((setting) => setting.id),
     ).toEqual(["tier"]);
     expect(ofType(events, "timeline.item")).toHaveLength(0);
     await session.close();
@@ -647,8 +651,8 @@ describe("session open", () => {
       "high",
     ]);
     expect(config?.thinkingOptions.map((option) => option.id)).toEqual(["off", "high"]);
-    expect(config?.settings.map((setting) => setting.id)).toEqual(["tier", "longContext"]);
-    expect(config?.settings.find((setting) => setting.id === "longContext")?.label).toBe("2K");
+    expect(config?.settings?.map((setting) => setting.id)).toEqual(["tier", "longContext"]);
+    expect(config?.settings?.find((setting) => setting.id === "longContext")?.label).toBe("2K");
 
     expect(ofType(events, "session.commands")[0]?.commands).toEqual(
       expect.arrayContaining([
@@ -1279,13 +1283,13 @@ describe("stage 2 configuration", () => {
     await session.configure("cfg-1", { settings: { tier: "fast", longContext: true } });
     expect(fake.controlSettings).toEqual({ tier: "fast", longContext: true });
     const first = ofType(events, "session.config")[0]?.config;
-    expect(first?.settings.find((setting) => setting.id === "tier")?.value).toBe("fast");
-    expect(first?.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
+    expect(first?.settings?.find((setting) => setting.id === "tier")?.value).toBe("fast");
+    expect(first?.settings?.find((setting) => setting.id === "longContext")?.value).toBe("true");
 
     await session.configure("cfg-2", { model: "test/other" });
     const second = ofType(events, "session.config")[1]?.config;
-    expect(second?.settings.find((setting) => setting.id === "tier")?.value).toBe("fast");
-    expect(second?.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
+    expect(second?.settings?.find((setting) => setting.id === "tier")?.value).toBe("fast");
+    expect(second?.settings?.find((setting) => setting.id === "longContext")?.value).toBe("true");
     expect(fake.controlSettings).toEqual({ tier: "fast", longContext: true });
     await session.close();
   });
@@ -1299,8 +1303,8 @@ describe("stage 2 configuration", () => {
     await session.open("open-1");
     expect(fake.controlSettings).toEqual({ tier: "fast", longContext: true });
     const config = ofType(events, "session.config")[0]?.config;
-    expect(config?.settings.find((setting) => setting.id === "tier")?.value).toBe("fast");
-    expect(config?.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
+    expect(config?.settings?.find((setting) => setting.id === "tier")?.value).toBe("fast");
+    expect(config?.settings?.find((setting) => setting.id === "longContext")?.value).toBe("true");
     const readyIndex = events.findIndex((event) => event.type === "session.ready");
     const configIndex = events.findIndex((event) => event.type === "session.config");
     expect(configIndex).toBeGreaterThan(-1);
@@ -1322,8 +1326,8 @@ describe("stage 2 configuration", () => {
     const reload = harness({ fake: reloadFake });
     await reload.session.open("open-1");
     const restored = ofType(reload.events, "session.config")[0]?.config;
-    expect(restored?.settings.find((setting) => setting.id === "tier")?.value).toBe("fast");
-    expect(restored?.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
+    expect(restored?.settings?.find((setting) => setting.id === "tier")?.value).toBe("fast");
+    expect(restored?.settings?.find((setting) => setting.id === "longContext")?.value).toBe("true");
     await reload.session.close();
 
     const overrideFake = new FakePiRpc({
@@ -1342,8 +1346,8 @@ describe("stage 2 configuration", () => {
     await override.session.open("open-1");
     expect(overrideFake.controlSettings).toEqual({ tier: "flex", longContext: true });
     const merged = ofType(override.events, "session.config")[0]?.config;
-    expect(merged?.settings.find((setting) => setting.id === "tier")?.value).toBe("flex");
-    expect(merged?.settings.find((setting) => setting.id === "longContext")?.value).toBe("true");
+    expect(merged?.settings?.find((setting) => setting.id === "tier")?.value).toBe("flex");
+    expect(merged?.settings?.find((setting) => setting.id === "longContext")?.value).toBe("true");
     await override.session.close();
   });
 
@@ -1805,7 +1809,7 @@ describe("root integration", () => {
     expect(
       ofType(events, "session.config")
         .at(-1)
-        ?.config.settings.find((setting) => setting.id === "longContext")?.description,
+        ?.config.settings?.find((setting) => setting.id === "longContext")?.description,
     ).toContain("Maximum: 1,050,000 tokens");
     expect(
       ofType(events, "session.notice").some(

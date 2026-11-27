@@ -10,7 +10,7 @@ Expanding a row shows highlighted commands with output and exit code, file reads
 
 ## Settings
 
-No setup is needed. Requires Paseo 0.11.1 or later. Open the Vivid Activity settings page from Paseo's
+No setup is needed. Requires Paseo 0.18.1 or later. Open the Vivid Activity settings page from Paseo's
 Settings → Plugins, from the Vivid Activity row in the app's sidebar, or from "Open Vivid Activity settings"
 in the Command Center — all three show the same page:
 

@@ -204,7 +204,7 @@ plugins that redraw the same rows.
 
 ## Install
 
-Requires Paseo 0.11.1 or later. Git installs run the manifest's preparation step,
+Requires Paseo 0.18.1 or later. Git installs run the manifest's preparation step,
 `npm ci --omit=dev --ignore-scripts --no-audit --no-fund`, which installs the two runtime packages from the lockfile:
 `@getpaseo/protocol` (types and a tool name helper the bundle imports) and `prismjs`.
 

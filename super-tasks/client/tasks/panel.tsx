@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginHostProps, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import {
   RefreshControl,

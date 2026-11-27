@@ -1,6 +1,6 @@
 import { useI18n } from "./i18n-client";
 import type { PluginTheme } from "@getpaseo/plugin";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import { useMemo, type ReactNode } from "react";
 import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from "react-native";
 import { hue, isDarkTheme, withAlpha, type Hue } from "./kit";

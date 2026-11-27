@@ -1,5 +1,5 @@
 import { isPendingStatus } from "./format";
-import type { UsageRow } from "./view";
+import type { ActivityUpdate, UsageRow } from "./view";
 
 /**
  * Server-side record folding for Plexus usage events.
@@ -171,4 +171,27 @@ export function toUsageRow(
     liveTokensPerSec,
     updatedSeq,
   };
+}
+
+/** Client-side row cap; the panel keeps only the newest rows. */
+export const MAX_CLIENT_ROWS = 250;
+
+function sortAndCap(rows: readonly UsageRow[]): UsageRow[] {
+  const sorted = [...rows].sort(compareNewestFirst);
+  return sorted.length > MAX_CLIENT_ROWS ? sorted.slice(0, MAX_CLIENT_ROWS) : sorted;
+}
+
+/**
+ * Folds one snapshot or pushed update into the panel's rows. A reset replaces the list; otherwise rows
+ * upsert by `requestId`, and a copy with a lower `updatedSeq` never overwrites a newer one.
+ */
+export function foldActivityUpdate(previous: UsageRow[], update: ActivityUpdate): UsageRow[] {
+  if (update.reset) return sortAndCap(update.rows);
+  if (update.rows.length === 0) return previous;
+  const byId = new Map(previous.map((row) => [row.requestId, row]));
+  for (const row of update.rows) {
+    const current = byId.get(row.requestId);
+    if (current === undefined || current.updatedSeq <= row.updatedSeq) byId.set(row.requestId, row);
+  }
+  return sortAndCap([...byId.values()]);
 }

@@ -6,7 +6,7 @@ Paseo remains responsible for creating, owning, restoring, and removing worktree
 ## Requirements
 
 - `wt` on the Paseo daemon's `PATH`. Tested with Worktrunk 0.81.0.
-- Paseo 0.15.0-beta.1 or later.
+- Paseo 0.18.1 or later.
 
 Install the local directory using `paseo plugin install /absolute/path/to/paseo-worktrunk`.
 The plugin does not require a client bundle, shell integration, or plugin-specific settings. The

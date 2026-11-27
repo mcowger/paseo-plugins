@@ -1,4 +1,4 @@
 {
   "id": "plexuspi",
-  "requirements": { "paseo": ">=0.12.0" }
+  "requirements": { "paseo": ">=0.18.1" }
 }

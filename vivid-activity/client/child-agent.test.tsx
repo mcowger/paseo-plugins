@@ -37,7 +37,7 @@ const harness = vi.hoisted(() => {
 });
 vi.mock("react", () => ({ useState: harness.useState, useRef: harness.useRef, useEffect: harness.useEffect, useCallback: (callback: unknown) => callback }));
 vi.mock("@getpaseo/plugin/client", () => ({ useRpc: () => harness.rpc, useAgent: (id: string, selector: (value: any) => unknown) => harness.state.agents.has(id) ? selector(harness.state.agents.get(id)) : null }));
-vi.mock("@getpaseo/plugin/client/react-native", () => ({ Icon: "Icon" }));
+vi.mock("@getpaseo/plugin/client/ui", () => ({ Icon: "Icon" }));
 vi.mock("react-native", () => ({ Text: "Text", View: "View" }));
 vi.mock("./kit", () => ({ Button: "Button", StatusDot: "StatusDot" }));
 vi.mock("./motion", () => ({ Breathe: "Breathe" }));

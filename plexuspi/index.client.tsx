@@ -1,5 +1,5 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
-import { copyText } from "@getpaseo/plugin/client/react-native";
+import { copyText } from "@getpaseo/plugin/client/ui";
 import { DialogEditorScreen } from "./client/dialog-editor";
 import { ModelNameSettings } from "./client/model-names";
 import { resumeCommandRpc } from "./shared/resume";

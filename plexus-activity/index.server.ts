@@ -1,13 +1,20 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
+import { streamActivity } from "./server/activity-stream";
 import { createPlexusPort } from "./server/plexus-port";
 import { createActivityService } from "./server/service";
-import { keysRpc, snapshotRpc, verifyRpc } from "./shared/rpc";
+import { activityStreamSubscription, keysRpc, snapshotRpc, verifyRpc } from "./shared/rpc";
 import { plexusConfig } from "./shared/settings";
-import { keysInputSchema, snapshotInputSchema, verifyInputSchema } from "./shared/view";
+import {
+  activitySubscribeInputSchema,
+  keysInputSchema,
+  snapshotInputSchema,
+  verifyInputSchema,
+} from "./shared/view";
 
 /**
- * There is no startup lifecycle event and no server-to-client push in the 0.12.0 plugin API: the
- * service starts here and the returned cleanup stops it on reload, disable, removal, or daemon exit.
+ * The service starts here and the returned cleanup stops it on reload, disable, removal, or daemon
+ * exit. Each open panel holds one `activityStreamSubscription`; the server pushes changes to it and
+ * releases the subscription when the panel closes or the plugin stops.
  */
 export default function contribute(server: PluginServerContext) {
   const settings = server.registerSettings(plexusConfig);
@@ -18,6 +25,9 @@ export default function contribute(server: PluginServerContext) {
   });
 
   server.handle(snapshotRpc, (input) => service.snapshot(snapshotInputSchema.parse(input)));
+  server.handle(activityStreamSubscription, (input, context) =>
+    streamActivity(service, activitySubscribeInputSchema.parse(input), context),
+  );
   server.handle(keysRpc, (input) => service.keys(keysInputSchema.parse(input)));
   server.handle(verifyRpc, (input) => service.verify(verifyInputSchema.parse(input)));
 

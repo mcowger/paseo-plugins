@@ -34,7 +34,7 @@ The Super Tasks panel provides real-time tracking of workspace todos and progres
 
 ## Install
 
-> **Requires Paseo v0.12.0 or newer.**
+> **Requires Paseo v0.18.1 or newer.**
 
 Plugin code is trusted and unsandboxed. Read a plugin before you install it.
 

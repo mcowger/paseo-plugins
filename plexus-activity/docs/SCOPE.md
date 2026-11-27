@@ -34,11 +34,10 @@ to one API key, fed by Plexus's SSE event stream.
 
 ---
 
-## 2. Verified host constraints (Paseo SDK **0.10.0**)
+## 2. Verified host constraints (Paseo SDK **0.18.1**)
 
 All claims below were checked against the packages actually pinned in this repo
-(`skill-picker/node_modules/@getpaseo/plugin@0.10.0/dist/**`), not against `~/workspace/paseo`
-(which is at `v0.12.0` and has newer names).
+(`plexus-activity/node_modules/@getpaseo/plugin@0.18.1/dist/**`), not against `~/workspace/paseo`.
 
 | Fact | Evidence |
 |---|---|
@@ -48,16 +47,15 @@ All claims below were checked against the packages actually pinned in this repo
 | Settings are the **only** persistence API (`registerSettings` / `useSettings` / `settingsRpc`) | `dist/server/contracts.d.ts:16-36`; `dist/settings.d.ts` |
 | Settings files: `$PASEO_HOME/plugin-settings/<pluginId>/<id>.json`, mode `0o600`, temp+rename, sha256 revision | `v0.10.0:packages/server/src/server/plugins/settings/index.ts` (write path) |
 | Settings are "ordinary host-side JSON, **not a credential vault**" | `public-docs/plugins/reference.md` (settings section) |
-| **RPC is strictly request/response — there is no server→client push** | only `plugin.rpc.invoke.request` / `.response` exist: `@getpaseo/protocol@0.10.0/dist/messages.d.ts:1634,20990`; `server.handle` returns a single value: `dist/server/contracts.d.ts:33-36` |
+| **Server→client push exists (subscriptions)** | `defineSubscription`, `server.handle(contract, (input, ctx) => ctx.push(...))`, `useSubscription` in `@getpaseo/plugin@0.18.1`: `dist/rpc.d.ts:33`, `dist/server/contracts.d.ts:14-22,44`, `dist/client/rpc-context.d.ts:32` |
 | No `onStart`/`onStop`: the `contribute(server)` body is startup, the returned cleanup is shutdown | `dist/server/contracts.d.ts:38` |
 | Theme is exactly 11 tokens (`surface0/1/2`, `border`, `foreground`, `foregroundMuted`, `accent`, `accentForeground`, `statusSuccess`, `statusWarning`, `statusDanger`) | `dist/contracts.d.ts:4-17` |
-| Host UI: `Icon`, `Modal`, `useToast`, `copyText`, `FlatList`, `ScrollView`, `TextInput` | `dist/client/react-native.d.ts` |
+| Host UI: `Icon`, `Modal`, `useToast`, `ScrollView`, `TextInput` | `dist/client/ui.d.ts` |
 | Settings UI: `SettingsSection`, `SettingsRow`, `SettingsInput` (with `secureTextEntry`), `SettingsSelect`, `SettingsAction` | `dist/client/ui.d.ts:2-58` |
 | `openSettings(screenId)` exists on the client context | `dist/client/contracts.d.ts` (`PluginCommandCapabilities`) |
 | Client bundle: esbuild `es2020`/CJS, `async-await` downleveled, `@getpaseo/*`, `react`, `react-native`, `zod`, `@tanstack/react-query` external; **no ES6 classes**; evaluated via `eval()` on Hermes | `v0.10.0:packages/server/src/server/plugins/compiler.ts`; repo `AGENTS.md` |
 
-**Consequence (drives the whole design):** the server module owns the Plexus SSE connection and a
-bounded in-memory store; the panel polls a snapshot RPC. There is no supported push channel at 0.10.0.
+**Consequence (drives the whole design):** the server module owns the Plexus SSE connection and a bounded in-memory store. The panel receives pushed deltas on the `plexus.activity.stream` subscription and reads the snapshot RPC on mount, on resume, and as a 60 s backstop.
 
 ---
 
@@ -179,19 +177,18 @@ non-`success` rows — **not implemented unless requested.**
  Plexus daemon                Paseo daemon (plugin server module)        Paseo app (plugin client)
 ┌──────────────┐  SSE   ┌─────────────────────────────────────┐        ┌──────────────────────┐
 │ /v0/management│──────►│ sse.ts  (parse frames)              │        │ panel.tsx            │
-│   /events    │        │ live-store.ts (merge, cap, journal) │◄──RPC──│  useActivity() poll  │
+│   /events    │        │ live-store.ts (merge, cap, journal) │◄──sub──│  useActivity() push  │
 │ /v0/management│──────►│ service.ts (connect, backoff,       │  delta │  card.tsx            │
 │   /usage     │  REST  │   backfill, degraded mode)          │        │  scope-select.tsx    │
 │ /v0/management│──────►│                                     │        │  settings-screen.tsx │
 │   /keys      │        └─────────────────────────────────────┘        └──────────────────────┘
-└──────────────┘           settings document (admin key, baseUrl)          polls every 1.5–5 s
+└──────────────┘           settings document (admin key, baseUrl)          pushes deltas
 ```
 
 - One SSE connection per plugin subprocess, independent of panel mount/unmount.
 - The server keeps ≤ 250 records; the panel renders what the snapshot returns.
-- Updates reach the panel by polling (only supported path at 0.10.0). Worst-case visual latency ≈ poll
-  interval (1.5 s with in-flight rows, 5 s idle). In-flight durations tick locally at 4 Hz, so the feed
-  still looks continuous.
+- Updates reach the panel by server push (`plexus.activity.stream`, debounced 100 ms per subscriber). The panel
+  re-reads the snapshot every 60 s as a backstop. In-flight durations tick locally at 2.5 Hz, so the feed still looks continuous.
 
 ### 5.1 Why not consume SSE in the client
 
@@ -335,7 +332,7 @@ Three contracts, all zod-validated on both sides. No contract ever returns the a
 config, or `costMetadata`.
 
 ```ts
-// 1. delta snapshot, the polling workhorse
+// 1. delta snapshot: mount, resume, and 60 s backstop
 plexusActivity.snapshot
   in : { scope: string | null; since: number | null }
   out: {
@@ -423,7 +420,7 @@ is `{ id, title, icon, keywords? }` and the workspace form calls `onSelect(conte
 
 - Root `flex: 1`, `surface0` background; header row + `FlatList`.
 - Header: scope selector (`All keys` + names from `plexusActivity.keys`), connection pill, and a
-  "pause" toggle that stops polling and delta application without dropping the server stream.
+  "pause" toggle that stops applying pushed deltas without dropping the server stream.
   Key names are truncated with a middle ellipsis; the selector is a small `Modal` list rather than a
   native picker so it looks the same on iOS, Android and web.
 - If `plexusActivity.keys` is `unauthorized`/`unavailable`, the selector falls back to a free-text key
@@ -482,8 +479,8 @@ placeholder `••••••••` when one is already stored; "Clear key" r
 
 ```
 plexus-activity/
-  paseo-plugin.json        { "id": "plexus-activity", "requirements": { "paseo": ">=0.12.0" } }
-  package.json             @getpaseo/* pinned 0.12.0 (sdk:check enforced)
+  paseo-plugin.json        { "id": "plexus-activity", "requirements": { "paseo": ">=0.18.1" } }
+  package.json             @getpaseo/* pinned 0.18.1 (sdk:check enforced)
   tsconfig.json            lib: ["ES2023"] — no DOM, noUncheckedIndexedAccess
   vitest.config.ts         aliases the host-provided @getpaseo/* modules to a stub
   index.client.tsx         panel + surface + sidebar item + settings screen + commands
@@ -504,7 +501,7 @@ plexus-activity/
     *.test.ts              fake timers + a scripted port
   client/
     panel.tsx  card.tsx  scope-select.tsx  settings-screen.tsx
-    use-activity.ts        snapshot polling + key list + session scope memory
+    use-activity.ts        push subscription + 60 s backstop snapshot + key list + scope memory
     styles.ts              one memoized theme/compact style factory
     index.client.test.ts   registration contract (panel, surface, sidebar item, commands)
     bundle.test.ts         esbuild + no-classes + size budget + hermesc
@@ -522,7 +519,7 @@ the pins) and listed in the root `README.md` plugin list.
 
 | # | Risk | Impact | Mitigation |
 |---|---|---|---|
-| R1 | No server→client push at 0.10.0 | 1.5–5 s display latency | small delta payloads; local 4 Hz ticker for durations |
+| R1 | Subscription stream drops silently | stale panel until the 60 s backstop | snapshot backstop; local 2.5 Hz ticker for durations |
 | R2 | Settings are not a credential vault; `useSettings` exposes the key to the plugin client | key readable by any client authorized to manage the host | write-only field, never in RPC output, never logged; documented |
 | R3 | `GET /v0/management/keys` returns plaintext secrets | accidental leak | project `Object.keys()` only; zod output schema forbids extra fields; test asserts `secret` never serialized |
 | R4 | Proxy buffering of SSE (no `X-Accel-Buffering`) | frozen panel while claiming live | 45 s watchdog → degraded 10 s polling; 60 s backfill backstop |
@@ -564,10 +561,9 @@ ignores, and a 500-row `limit` cap that is not enforced. We neither use nor rely
 
 Verified locally:
 
-- 98 unit tests across format parity, API labels and the bytes-per-token heuristic, record folding and
-  ordering, SSE framing, store deltas/caps/eviction, and the service state machine (connect, backfill,
-  sparse merge, ping handling, degraded polling, idle abort, 401 halt, reconnect backoff, settings-change
-  reset, key caching/refresh, verify, idempotent cleanup).
+- 105 unit tests across format parity, API labels and the bytes-per-token heuristic, record folding and
+  sparse merge, ping handling, idle abort, 401 halt, reconnect backoff, settings-change reset, key
+  caching/refresh, verify, idempotent cleanup, push fold and subscriber abort cleanup.
 - `biome check`, `tsc --noEmit`, and root `npm run sdk:check` are clean.
 - `client/bundle.test.ts` reproduces Paseo's client compile: no ES6 classes, 48 KB bundle (budget
   320 KB), and `hermesc` bytecode generation on hosts with the prebuilt.

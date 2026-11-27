@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   compareNewestFirst,
   createEmptyRecord,
+  foldActivityUpdate,
   isInFlight,
+  MAX_CLIENT_ROWS,
   matchesScope,
   mergeRecord,
   toUsageRow,
 } from "./row-model";
-import { usageRowSchema } from "./view";
+import { type ActivityUpdate, usageRowSchema } from "./view";
 
 describe("mergeRecord", () => {
   it("applies only defined fields", () => {
@@ -150,5 +152,60 @@ describe("toUsageRow", () => {
     const row = toUsageRow(record, 2, 42.5);
     expect(row.liveTokensPerSec).toBe(42.5);
     expect(Object.keys(row)).not.toContain("apiKey");
+  });
+});
+
+describe("foldActivityUpdate", () => {
+  const rowFor = (requestId: string, updatedSeq: number, startTime = 1000) =>
+    toUsageRow(createEmptyRecord(requestId, startTime), updatedSeq, null);
+  const update = (overrides: Partial<ActivityUpdate>): ActivityUpdate => ({
+    status: {
+      configured: true,
+      connection: "live",
+      lastEventAt: null,
+      lastError: null,
+      retryInMs: null,
+    },
+    cursor: 0,
+    serverNow: 0,
+    reset: false,
+    rows: [],
+    ...overrides,
+  });
+
+  it("replaces every row on reset", () => {
+    const result = foldActivityUpdate(
+      [rowFor("a", 1)],
+      update({ reset: true, rows: [rowFor("b", 2)] }),
+    );
+    expect(result.map((row) => row.requestId)).toEqual(["b"]);
+  });
+
+  it("upserts rows by requestId", () => {
+    const result = foldActivityUpdate(
+      [rowFor("a", 1)],
+      update({ rows: [rowFor("a", 3), rowFor("b", 2)] }),
+    );
+    expect(result.map((row) => [row.requestId, row.updatedSeq])).toEqual([
+      ["b", 2],
+      ["a", 3],
+    ]);
+  });
+
+  it("keeps the newer copy when a stale update arrives", () => {
+    const result = foldActivityUpdate([rowFor("a", 5)], update({ rows: [rowFor("a", 2)] }));
+    expect(result[0]?.updatedSeq).toBe(5);
+  });
+
+  it("caps the list at the newest rows", () => {
+    const rows = Array.from({ length: 300 }, (_, index) => rowFor(`r${index}`, index, index));
+    const result = foldActivityUpdate([], update({ reset: true, rows }));
+    expect(result).toHaveLength(MAX_CLIENT_ROWS);
+    expect(result[0]?.requestId).toBe("r299");
+  });
+
+  it("returns the previous array when an update carries no rows", () => {
+    const previous = [rowFor("a", 1)];
+    expect(foldActivityUpdate(previous, update({}))).toBe(previous);
   });
 });

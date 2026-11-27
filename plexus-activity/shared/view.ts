@@ -53,7 +53,7 @@ export const usageRowSchema = z.object({
   tokensPerSec: z.number().nullable(),
   /** Estimated live throughput from a `progress` event; null once the request completes. */
   liveTokensPerSec: z.number().nullable(),
-  /** Server sequence number of the last mutation, used for delta polling. */
+  /** Server sequence number of the last mutation; merges duplicate or out-of-order updates per row. */
   updatedSeq: z.number(),
 });
 
@@ -72,23 +72,40 @@ export type ConnectionStatus = z.infer<typeof connectionStatusSchema>;
 export const snapshotInputSchema = z.object({
   /** API key name to scope to, or null for every key. */
   scope: z.string().min(1).nullable(),
-  /** Cursor from the previous snapshot, or null for a full snapshot. */
+  /** Cursor from the previous update, or null for a full snapshot. */
   since: z.number().int().nonnegative().nullable(),
 });
 
 export type SnapshotInput = z.infer<typeof snapshotInputSchema>;
 
-export const snapshotOutputSchema = z.object({
+/**
+ * One state update for the panel, used both as the snapshot RPC output and as every pushed event.
+ * `reset` replaces the client's list; otherwise `rows` are upserts keyed by `requestId`. `status` is
+ * always current so connection changes travel in the same stream as row changes.
+ */
+export const activityUpdateSchema = z.object({
   status: connectionStatusSchema,
   cursor: z.number().int().nonnegative(),
-  /** Server clock at snapshot time, for client-side live-duration skew correction. */
+  /** Server clock at emit time, for client-side live-duration skew correction. */
   serverNow: z.number(),
-  /** True when the client must replace its list instead of merging the delta. */
+  /** True when the client must replace its list instead of merging the rows. */
   reset: z.boolean(),
   rows: z.array(usageRowSchema),
 });
 
-export type SnapshotOutput = z.infer<typeof snapshotOutputSchema>;
+export type ActivityUpdate = z.infer<typeof activityUpdateSchema>;
+
+export const activitySubscribeInputSchema = z.object({
+  /** API key name to scope to, or null for every key. */
+  scope: z.string().min(1).nullable(),
+  /**
+   * Client-chosen restart counter. Bumping it re-subscribes after a closed or failed stream; the
+   * server ignores its value beyond the subscription identity.
+   */
+  epoch: z.number().int().nonnegative(),
+});
+
+export type ActivitySubscribeInput = z.infer<typeof activitySubscribeInputSchema>;
 
 export const keyEntrySchema = z.object({
   name: z.string().min(1),

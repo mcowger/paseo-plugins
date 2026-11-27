@@ -3,13 +3,13 @@
 This repository contains Paseo plugins. Use the following Paseo resources as the source of truth
 when creating or changing a plugin:
 
-The current target host and SDK baseline is **Paseo v0.12.0**. Pin `@getpaseo/client`,
-`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.12.0. Declare compatibility in
-`paseo-plugin.json` via `requirements: { "paseo": ">=0.12.0" }` to enforce version checks at startup.
+The current target host and SDK baseline is **Paseo v0.18.1**. Pin `@getpaseo/client`,
+`@getpaseo/plugin`, and `@getpaseo/protocol` to 0.18.1. Declare compatibility in
+`paseo-plugin.json` via `requirements: { "paseo": ">=0.18.1" }` to enforce version checks at startup.
 
 Per-plugin exceptions live in `.paseo-sdk.json` under `pluginVersions`, and both `npm run sdk:check`
 and `npm run sdk:install` honor them (installing, packing, and verifying each plugin at the version
-it pins). `paseo-worktrunk` is the current exception, requiring 0.15.0-beta.1 for worktree hooks.
+it pins). There are currently no exceptions; every plugin requires 0.18.1.
 Add an exception only when a plugin needs a newer host than the baseline, and keep its
 `requirements.paseo`, its three dependency pins, and the override in step.
 
@@ -23,7 +23,7 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
   components, SDK usage, RPC, themes, hosts, and troubleshooting.
 - [Runtime entry migration guide](https://paseo.sh/docs/plugins/migration.md): migrating from
   mixed root entries to explicit client and server runtime entries.
-- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.12.0/plugin-examples):
+- [Official plugin examples](https://github.com/getpaseo/paseo/tree/v0.18.1/plugin-examples):
   working examples for panels and commands (`local-plugin`), RPC, attachment sources (`linear`),
   themes (`catppuccin`), and timeline items (`timeline-items`, `inline-thinking`).
   Provider examples (`provider-direct`, `provider-acp-transformer`) are included as well.
@@ -70,9 +70,9 @@ Paseo checkout at `~/workspace/paseo` (`packages/plugin`, `packages/protocol`,
 - Import from host-provided module paths:
   - `@getpaseo/plugin`: shared contracts (`defineRpc`, `defineAttachmentSource`, `RpcInput`, `RpcOutput`).
   - `@getpaseo/plugin/client`: client contexts, contribution types, hooks, and navigation (`PluginClientContext`, `useRpc`, `usePaseo`, `useWorkspace`, `useAgent`).
-  - `@getpaseo/plugin/client/react-native`: Paseo React Native UI components (`Icon`, `Modal`, `useToast`).
-    The entry is deprecated in 0.13 in favor of `/client/ui`, but only `react-native` serves 0.12 hosts,
-    and it is the path that carries the `useRevealedText` compatibility export.
+  - `@getpaseo/plugin/client/ui`: Paseo UI components (`Icon`, `Modal`, `useToast`, `StreamedText`,
+    settings rows). The older `@getpaseo/plugin/client/react-native` entry re-exports it and is
+    deprecated (removed after 2027-04-20); new code imports from `/client/ui`.
   - `@getpaseo/plugin/server`: server contexts and handler-only types such as `PluginHandlerContext`.
   - Provider-only imports (`@getpaseo/plugin/server/provider`, `@getpaseo/plugin/server/acp`)
     are documented in the local Paseo checkout at `~/workspace/paseo/packages/plugin`.
@@ -138,7 +138,7 @@ Patterns observed across Paseo plugins:
   `layout` in one memoized style object; respect `layout.compact` and `layout.platform` (`ios`, `android`, `web`).
 - Color every primary `Text` from `theme.colors.foreground` and secondary text from `theme.colors.foregroundMuted`.
   Never hardcode hex colors or rely on React Native's default text colors.
-- Use Paseo host UI components from `@getpaseo/plugin/client/react-native`:
+- Use Paseo host UI components from `@getpaseo/plugin/client/ui`:
   - `<Icon name="..." />` for Lucide icons (unknown names safely render nothing; do not import `lucide-react-native`).
   - Controlled `<Modal title="..." icon={...} open={open} onOpenChange={setOpen}><Modal.Content>...</Modal.Content></Modal>` supporting custom body layout, `scrollable={false}` with `ScrollView`, and clipboard actions (`client.clipboard.copyText`).
   - `useToast()` (`show(message, options)`, `error(message)`).
@@ -157,9 +157,9 @@ Patterns observed across Paseo plugins:
     tool calls or reasoning, and `"complete"` otherwise.
   - Paseo memoizes transformer output by source-item reference and derives replacement keys from the source
     item identity, preserving mounted component identity across streaming deltas.
-  - Paseo through 0.12 exports `useRevealedText(text, phase)` for paced timeline text; 0.13 replaces it
-    with `<StreamedText text phase>` from `/client/ui`, which cannot serve a renderer that splits the
-    revealed string. Read the hook off the host module and pace locally when it is missing.
+  - Render paced timeline text with `<StreamedText text phase>` from `/client/ui`. The deprecated
+    `useRevealedText(text, phase)` hook on `/client/react-native` is the only way to split the revealed
+    string; read it off the host module and pace locally when it is missing.
   - Timeline notifications: Pi extension `ctx.ui.notify()` and OpenCode notices are unified as first-class
     `type: "notification"` timeline items with log levels (info, warning, error) mapped to activity log styling.
     Transformers can target `query: { itemType: "notification" }`.
@@ -252,8 +252,8 @@ research and original acceptance goals.
   `plexuspi:state:v1:`, and `plexuspi:child:v1:` prefixes.
 - Keep the root integration on subprocess JSONL RPC. Do not embed Pi's SDK or
   modify Pi/Paseo core. Owned `pi-subagents` child execution is a separate boundary.
-- SDK pins follow the repository baseline, currently `0.12.0`; the isolated tested host is
-  `0.11.0-beta.3` and the tested Pi build is `1.0.0+local`. The test host does not move the baseline.
+- SDK pins follow the repository baseline, currently `0.18.1`, and the isolated launcher installs
+  host `0.18.1`. Earlier runtime checks used host `0.11.0-beta.3` and Pi `1.0.0+local`.
 - Plexus publishes exact per-model tier choices and short/max context budgets.
   Do not restore a fixed tier enum, hardcoded expanded budget, or backend matrix.
 - Run lint, typecheck, and tests in `plexuspi/`, plus root `npm run sdk:check`.

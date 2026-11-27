@@ -3,6 +3,6 @@
   "description": "Live decode tok/s, prefill/TTFT, and a token breakdown for every agent turn, right in the composer.",
   "icon": "assets/icon.png",
   "requirements": {
-    "paseo": ">=0.17.3"
+    "paseo": ">=0.18.1"
   }
 }

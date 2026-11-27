@@ -11,9 +11,6 @@ export default defineConfig({
       "@getpaseo/plugin/server": fileURLToPath(
         new URL("./test/stubs/plugin-sdk.ts", import.meta.url),
       ),
-      "@getpaseo/plugin/client/react-native": fileURLToPath(
-        new URL("./test/stubs/plugin-sdk.ts", import.meta.url),
-      ),
       "@getpaseo/plugin/client/ui": fileURLToPath(
         new URL("./test/stubs/plugin-sdk.ts", import.meta.url),
       ),

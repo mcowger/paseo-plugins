@@ -4,7 +4,7 @@ import { useI18n } from "./i18n-client";
 import { t } from "../shared/text";
 import type { PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useAgent, useSettings } from "@getpaseo/plugin/client";
-import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView } from "@getpaseo/plugin/client/ui";
 import { type ScrollView as NativeScrollView } from "react-native";
 import type { ToolCallDetail } from "@getpaseo/protocol/agent-types";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -204,7 +204,7 @@ function SubAgentProgress({
 }) {
   const actions = useMemo(() => {
     const explicitActions = [...(detail.actions ?? [])].sort((left, right) => left.index - right.index);
-    return explicitActions.length > 0 ? explicitActions : parseSubAgentActionLog(detail.log);
+    return explicitActions.length > 0 ? explicitActions : parseSubAgentActionLog(detail.log ?? "");
   }, [detail.actions, detail.log]);
   const hiddenActionCount = Math.max(0, actions.length - MAX_VISIBLE_SUBAGENT_ACTIONS);
   const visibleActions = actions.slice(hiddenActionCount);

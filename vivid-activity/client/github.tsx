@@ -1,5 +1,5 @@
 import { t } from "../shared/text";
-import { Icon } from "@getpaseo/plugin/client/react-native";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import React, { type ReactNode } from "react";
 import { Text, View } from "react-native";
 import type { ActivityStyles } from "./activity";

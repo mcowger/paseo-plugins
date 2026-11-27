@@ -1,21 +1,20 @@
-import { useRpc } from "@getpaseo/plugin/client";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { compareNewestFirst } from "../shared/row-model";
-import { keysRpc, snapshotRpc } from "../shared/rpc";
-import type { ConnectionStatus, KeysOutput, SnapshotOutput, UsageRow } from "../shared/view";
+import { useRpc, useSubscription } from "@getpaseo/plugin/client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { foldActivityUpdate } from "../shared/row-model";
+import { activityStreamSubscription, keysRpc, snapshotRpc } from "../shared/rpc";
+import type { ActivityUpdate, ConnectionStatus, KeysOutput, UsageRow } from "../shared/view";
 
 /**
- * Polls the plugin server for activity deltas.
+ * Activity feed for the panel. The server pushes every change on `activityStreamSubscription`; each
+ * push is folded into the row list by `requestId`, keeping whichever copy has the newer `updatedSeq`.
  *
- * 0.12.0 exposes no server-to-client push, so this is the transport. The interval is short only while
- * something is in flight; in-flight durations are ticked locally at 4 Hz between polls, which is what
- * makes the feed look continuous.
+ * A snapshot RPC runs on mount, scope change, resume from pause, and every `BACKSTOP_MS`; it recovers
+ * a subscription that dropped without an error reaching the client. In-flight durations tick locally
+ * at `TICK_MS` between pushes.
  */
 
-const POLL_ACTIVE_MS = 1_500;
-const POLL_IDLE_MS = 5_000;
+const BACKSTOP_MS = 60_000;
 const TICK_MS = 400;
-const MAX_CLIENT_ROWS = 250;
 
 const INITIAL_STATUS: ConnectionStatus = {
   configured: false,
@@ -25,23 +24,6 @@ const INITIAL_STATUS: ConnectionStatus = {
   retryInMs: null,
 };
 
-function sortAndCap(rows: readonly UsageRow[]): UsageRow[] {
-  const sorted = [...rows].sort(compareNewestFirst);
-  return sorted.length > MAX_CLIENT_ROWS ? sorted.slice(0, MAX_CLIENT_ROWS) : sorted;
-}
-
-function applySnapshot(previous: UsageRow[], result: SnapshotOutput): UsageRow[] {
-  if (result.reset) return sortAndCap(result.rows);
-  if (result.rows.length === 0) return previous;
-  const byId = new Map(previous.map((row) => [row.requestId, row]));
-  for (const row of result.rows) byId.set(row.requestId, row);
-  return sortAndCap([...byId.values()]);
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : "Could not reach the Plexus activity service";
-}
-
 export interface ActivityFeed {
   readonly rows: UsageRow[];
   readonly status: ConnectionStatus;
@@ -50,7 +32,7 @@ export interface ActivityFeed {
   readonly now: number;
   readonly paused: boolean;
   readonly hasPending: boolean;
-  /** False until the first snapshot lands; the panel shows a neutral loading state before that. */
+  /** False until the first update lands; the panel shows a neutral loading state before that. */
   readonly loaded: boolean;
   togglePause(): void;
   refresh(): void;
@@ -64,60 +46,75 @@ export function useActivityFeed(scope: string | null): ActivityFeed {
   const [paused, setPaused] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [loaded, setLoaded] = useState(false);
-  const [revision, setRevision] = useState(0);
+  const [epoch, setEpoch] = useState(0);
 
-  const sinceRef = useRef<number | null>(null);
+  const cursorRef = useRef<number | null>(null);
   const offsetRef = useRef(0);
-  const scopeRef = useRef<string | null>(null);
-  const pendingRef = useRef(false);
+  const pausedRef = useRef(paused);
+  const scopeRef = useRef(scope);
 
   const hasPending = rows.some((row) => row.status === "pending");
 
   const togglePause = useCallback(() => setPaused((value) => !value), []);
-  const refresh = useCallback(() => setRevision((value) => value + 1), []);
+  const refresh = useCallback(() => {
+    cursorRef.current = null;
+    setEpoch((value) => value + 1);
+  }, []);
 
+  const apply = useCallback((update: ActivityUpdate, receivedAt: number) => {
+    // A snapshot answer can land after a newer push; a stale non-reset update must not rewind the cursor.
+    if (!update.reset && cursorRef.current !== null && update.cursor < cursorRef.current) return;
+    cursorRef.current = update.cursor;
+    offsetRef.current = update.serverNow - receivedAt;
+    setStatus(update.status);
+    setError(null);
+    setLoaded(true);
+    setRows((previous) => foldActivityUpdate(previous, update));
+    setNow(receivedAt + offsetRef.current);
+  }, []);
   useEffect(() => {
-    pendingRef.current = hasPending;
-  }, [hasPending]);
+    pausedRef.current = paused;
+  }, [paused]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: revision and paused only restart the poll loop
   useEffect(() => {
     if (scopeRef.current !== scope) {
       scopeRef.current = scope;
-      sinceRef.current = null;
+      cursorRef.current = null;
     }
+  }, [scope]);
+
+  const subscriptionInput = useMemo(() => ({ scope, epoch }), [scope, epoch]);
+  useSubscription(activityStreamSubscription, subscriptionInput, (update) => {
+    if (pausedRef.current) return;
+    apply(update, Date.now());
+  });
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: epoch restarts the snapshot on refresh
+  useEffect(() => {
     if (paused) return;
 
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
 
-    const poll = async (): Promise<void> => {
-      if (cancelled) return;
+    const sync = (): void => {
       const receivedAt = Date.now();
-      try {
-        const result = await callSnapshot({ scope, since: sinceRef.current });
-        if (cancelled) return;
-        sinceRef.current = result.cursor;
-        offsetRef.current = result.serverNow - receivedAt;
-        setStatus(result.status);
-        setError(null);
-        setLoaded(true);
-        setRows((previous) => applySnapshot(previous, result));
-        setNow(receivedAt + offsetRef.current);
-      } catch (caught) {
-        if (!cancelled) setError(errorText(caught));
-      }
-      if (cancelled) return;
-      timer = setTimeout(() => void poll(), pendingRef.current ? POLL_ACTIVE_MS : POLL_IDLE_MS);
+      callSnapshot({ scope, since: cursorRef.current })
+        .then((update) => {
+          if (!cancelled) apply(update, receivedAt);
+        })
+        .catch((caught: unknown) => {
+          if (cancelled) return;
+          setError(caught instanceof Error ? caught.message : "Activity service unreachable");
+        });
     };
 
-    void poll();
+    sync();
+    const timer = setInterval(sync, BACKSTOP_MS);
 
     return () => {
       cancelled = true;
-      if (timer !== null) clearTimeout(timer);
+      clearInterval(timer);
     };
-  }, [callSnapshot, scope, paused, revision]);
+  }, [callSnapshot, scope, paused, epoch, apply]);
 
   useEffect(() => {
     if (!hasPending) return;

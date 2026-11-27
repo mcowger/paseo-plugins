@@ -2,7 +2,7 @@
 
 `super-tasks` is a Paseo plugin with two UI panels and three server-side RPCs. This document explains how the files split between the client and the plugin server process, how the RPCs reach the daemon, and how the panels navigate the host application.
 
-> **Requires Paseo v0.12.0 or newer.** The plugin uses the Paseo 0.8+ runtime-entry layout (`index.client.tsx` / `index.server.ts`, `client/`, `server/`, `shared/`) introduced by the [plugin SDK migration](https://paseo.sh/docs/plugins/migration).
+> **Requires Paseo v0.18.1 or newer.** The plugin uses the Paseo 0.8+ runtime-entry layout (`index.client.tsx` / `index.server.ts`, `client/`, `server/`, `shared/`) introduced by the [plugin SDK migration](https://paseo.sh/docs/plugins/migration).
 
 ## File map
 
@@ -28,7 +28,7 @@
 
 Paseo loads a plugin in two places:
 
-- **Client**: the Paseo app (web or native) renders panels with React Native primitives. Files under `client/` and `index.client.tsx` run here. They may import `react`, `react-native`, and `@getpaseo/plugin/client` / `@getpaseo/plugin/client/react-native` (`usePaseo`, `useRpc`, `Icon`, theme and layout types).
+- **Client**: the Paseo app (web or native) renders panels with React Native primitives. Files under `client/` and `index.client.tsx` run here. They may import `react`, `react-native`, and `@getpaseo/plugin/client` / `@getpaseo/plugin/client/ui` (`usePaseo`, `useRpc`, `Icon`, theme and layout types).
 - **Server**: the daemon spawns a Node child process for the plugin. Files under `server/` and `index.server.ts` run here. They may use Node APIs (`node:crypto`, `process.send`, `process.on("message")`) and must not import React.
 - **Shared**: files under `shared/` carry only data and contracts (zod schemas, `defineRpc` calls, TypeScript types). Both sides import them so the client's `useRpc(contract)` and the server's `server.handle(contract, handler)` agree on the wire shape.
 

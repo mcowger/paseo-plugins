@@ -1,6 +1,5 @@
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { useRpc, useSettings } from "@getpaseo/plugin/client";
-import { useToast } from "@getpaseo/plugin/client/react-native";
 import {
   SettingsAction,
   SettingsCard,
@@ -8,6 +7,7 @@ import {
   SettingsRow,
   SettingsSection,
   SettingsSelect,
+  useToast,
 } from "@getpaseo/plugin/client/ui";
 import { type ReactElement, useCallback, useMemo, useState } from "react";
 import { Text, type TextStyle, View, type ViewStyle } from "react-native";

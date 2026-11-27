@@ -24,7 +24,6 @@ const PLUGIN_SDK_SPECIFIERS = [
   "@getpaseo/plugin/server/acp",
   "@getpaseo/plugin/client",
   "@getpaseo/plugin/client/ui",
-  "@getpaseo/plugin/client/react-native",
 ];
 
 const SIZE_BUDGET_KB = 320;

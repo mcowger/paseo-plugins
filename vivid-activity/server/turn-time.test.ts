@@ -41,10 +41,9 @@ function ended(turnId: string | null = "t1", kind: "completed" | "failed" | "can
         ? ({ kind: "canceled", reason: "stopped" } as const)
         : ({ kind: "completed" } as const);
   return {
-    agent: { id: "a1", workspaceId: null, parentAgentId: null, provider: "codex", cwd: "/tmp", title: null },
+    agent: { id: "a1", workspaceId: null, parentAgentId: null, provider: "codex", cwd: "/tmp", title: null, background: false, metadata: {} },
     turnId,
     outcome,
-    timeline: [],
   };
 }
 
