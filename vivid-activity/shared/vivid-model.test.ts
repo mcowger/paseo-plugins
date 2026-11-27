@@ -45,6 +45,7 @@ describe("category looks match the Agent observatory", () => {
     expect(lookFor("mcp__exa__web_search_exa", { type: "unknown" }, { category: "search", label: "Exa Web Search", icon: "Search" })).toBe("web");
     expect(lookFor("mcp__paseo__create_agent", { type: "unknown" }, { category: "agent", label: "Paseo Create Agent", icon: "Bot" })).toBe("paseo");
     expect(lookFor("mcp__bots__list_bots", { type: "unknown" }, { category: "unknown", label: "Bots List Bots", icon: "Wrench" })).toBe("mcp");
+    expect(lookFor("eval", { type: "unknown" }, { category: "unknown", label: "Eval", icon: "Wrench" })).toBe("code");
     expect(lookFor("mystery", null, { category: "unknown", label: "Mystery", icon: "Wrench" })).toBe("other");
   });
 });

@@ -17,7 +17,7 @@ import { lookFor, type LookKey } from "./vivid-model";
 const cursorSchema = z.object({ epoch: z.string().min(1).max(200), seq: z.number().int().nonnegative() });
 
 export const LOOK_KEYS = [
-  "think", "read", "list", "edit", "write", "shell", "search", "web", "browser", "agent", "plan", "mcp", "paseo", "ask", "skill", "other",
+  "think", "read", "list", "edit", "write", "shell", "code", "search", "web", "browser", "agent", "plan", "mcp", "paseo", "ask", "skill", "other",
 ] as const satisfies readonly LookKey[];
 
 const TEXT_LINES_CAP = 999;

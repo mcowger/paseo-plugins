@@ -23,7 +23,8 @@
     "paseo": "Paseo",
     "skill": "技能",
     "other": "其他",
-    "browser": "浏览器"
+    "browser": "浏览器",
+    "code": "代码"
   },
   "modelRowStatus": {
     "running": "运行中",
@@ -49,7 +50,8 @@
     "paseo": "Paseo",
     "skill": "技能",
     "other": "其他",
-    "browser": "浏览器"
+    "browser": "浏览器",
+    "code": "代码"
   },
   "modelPaseo": {
     "speak": "朗读",
@@ -427,9 +429,7 @@
     "readPiNoticesAgain": "重新读取 Pi 通知",
     "readAgain": "重新读取",
     "thinking": "思考",
-    "thoughtFor": "思考了 {time}",
     "thinking2": "思考中…",
-    "thinking3": "思考中… {time}",
     "noSubagentActivityYet": "子 Agent 还没有动态。",
     "readingSubagentActivity": "正在读取子 Agent 动态…",
     "viewSubagentActivity": "查看子 Agent 动态",

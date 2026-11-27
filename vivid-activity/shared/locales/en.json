@@ -23,7 +23,8 @@
     "paseo": "Paseo",
     "skill": "Skill",
     "other": "Other",
-    "browser": "Browser"
+    "browser": "Browser",
+    "code": "Code"
   },
   "modelRowStatus": {
     "running": "Running",
@@ -49,7 +50,8 @@
     "paseo": "Paseo",
     "skill": "Skill",
     "other": "Other",
-    "browser": "Browser"
+    "browser": "Browser",
+    "code": "Code"
   },
   "modelPaseo": {
     "speak": "Speak",
@@ -493,9 +495,7 @@
     "readPiNoticesAgain": "Read Pi notices again",
     "readAgain": "Read again",
     "thinking": "Thinking",
-    "thoughtFor": "Thought for {time}",
     "thinking2": "Thinking…",
-    "thinking3": "Thinking… {time}",
     "noSubagentActivityYet": "No subagent activity yet.",
     "readingSubagentActivity": "Reading subagent activity…",
     "viewSubagentActivity": "View subagent activity",

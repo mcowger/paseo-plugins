@@ -413,11 +413,11 @@ export function ColorfulReasoning({
   const isStreaming = item.data.phase === "streaming";
   // 0.5.0: a streaming row's key changes with every chunk; the finished text's key is the one the index will know.
   useFoldRow(agentId, isStreaming ? undefined : item.data.fold, undefined, timestamp);
-  // 本地补丁：「思考了 8.4 秒」；思考中实时走表（只在前台、行在屏幕上时）。
+  // 本地补丁：耗时在行尾计时列（只有鲜明配色有这一列，其余配色不显示）；思考中实时走表（只在前台、行在屏幕上时）。
   const rootRef = useRef<View>(null);
   const onScreen = useOnScreen(rootRef, isStreaming);
   const timing = useRowTiming(agentId, item.data.fold, isStreaming);
-  const liveNow = useLiveNow(isStreaming && onScreen && timing?.start != null);
+  const liveNow = useLiveNow(isStreaming && onScreen && timing?.start != null && palette.mode === "vivid");
   const timeSettings = useSettings(activitySettings);
   const thinkTime = timingText(timing, isStreaming, liveNow, timeSettings.status === "ready" && timeSettings.values.wholeSeconds);
   const stamp = endedStamp(timestamp, timeSettings.status === "ready" && timeSettings.values.foldTime, isStreaming);
@@ -442,20 +442,25 @@ export function ColorfulReasoning({
   const toggle = useCallback(() => {
     setUserExpanded(!expanded);
   }, [expanded]);
+  const vividPalette = palette.mode === "vivid";
+  // Vivid rows read like tool rows: 「Thinking」, the steps/tokens after it, the time in the timing column; with tool names
+  // off the brain tile stands for the word (a row without steps/tokens keeps it).
+  const hideTitle = vividPalette && !isStreaming && !(timeSettings.status === "ready" ? timeSettings.values.toolLabels : true) && Boolean(meta);
   return (
     <View ref={rootRef} {...pmonoViewEscape} style={[styles.card, isLiveTail ? styles.cardTail : null, quiet ? { opacity: STRENGTH_OPACITY[strength] } : null]}>
       {pin ? <PinnedPrompt agentId={agentId} pin={pin} theme={theme} mode={palette.mode} metrics={metrics} /> : null}
       <ActivityHeader
         icon="Sparkles"
         iconColor={palette.categoryColors.reasoning}
-        title={isStreaming ? (thinkTime ? t("ui.thinking3", { time: thinkTime }) : t("ui.thinking2")) : thinkTime ? t("ui.thoughtFor", { time: thinkTime }) : t("ui.thinking")}
-        summary={palette.mode === "vivid" ? undefined : meta}
+        title={isStreaming ? t("ui.thinking2") : t("ui.thinking")}
+        hideTitle={hideTitle}
+        summary={vividPalette ? undefined : meta}
         expanded={expanded}
         onPress={toggle}
         onHover={setHovered}
         styles={styles}
         stamp={stamp}
-        vivid={palette.mode === "vivid" ? { theme, compact: layout.compact, look: "think", meta, live: isStreaming, metrics } : undefined}
+        vivid={vividPalette ? { theme, compact: layout.compact, look: "think", meta, live: isStreaming, metrics, timing: thinkTime } : undefined}
       />
       {expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>

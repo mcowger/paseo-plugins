@@ -1,3 +1,4 @@
+import { isOmpEvalTool } from "./omp-tools";
 import { t, type MessageId } from "./text";
 
 /** Getters preserve the public tables while looking up text in the current language.
@@ -20,7 +21,7 @@ export type Hue = "blue" | "sky" | "cyan" | "teal" | "green" | "lime" | "amber" 
 
 /** waiting: a permission request on the row (等你批准); question: the row asks you something (等你回答, 0.6.0). */
 export type RowStatus = "running" | "waiting" | "question" | "completed" | "failed" | "canceled";
-export type LookKey = "think" | "read" | "list" | "edit" | "write" | "shell" | "search" | "web" | "browser" | "agent" | "plan" | "mcp" | "paseo" | "ask" | "skill" | "other";
+export type LookKey = "think" | "read" | "list" | "edit" | "write" | "shell" | "code" | "search" | "web" | "browser" | "agent" | "plan" | "mcp" | "paseo" | "ask" | "skill" | "other";
 
 /**
  * 类别色与 Agent 观测台（agent-observatory 的 laneLooks / kindLooks）一致：思考紫、读文件蓝、搜索靛、改文件绿、
@@ -34,6 +35,8 @@ export const looks: Record<LookKey, { label: string; icon: string; hue: Hue }> =
   edit: { get label() { return t("modelLook.edit"); }, icon: "FilePen", hue: "green" },
   write: { get label() { return t("modelLook.write"); }, icon: "FilePlus", hue: "green" },
   shell: { get label() { return t("modelLook.shell"); }, icon: "SquareTerminal", hue: "orange" },
+  // OMP eval (code cells): runs code like a command, so the same orange, with its own icon and count.
+  code: { get label() { return t("modelLook.code"); }, icon: "CodeXml", hue: "orange" },
   search: { get label() { return t("modelLook.search"); }, icon: "Search", hue: "indigo" },
   web: { get label() { return t("modelLook.web"); }, icon: "Globe", hue: "cyan" },
   // 0.11.0:Paseo 内置浏览器工具（导航/点击/输入/快照……）独立类目；与网页同青色系，计数与色带分开。
@@ -64,7 +67,7 @@ export const VIVID_CATEGORY_HUES = {
 
 /** 本地补丁：折叠摘要里的类别计数名，与行标题一致（读取、编辑、命令……）。 */
 export const COUNT_LABELS: Record<LookKey, string> = translatedTable({
-  think: "modelCount.think", read: "modelCount.read", list: "modelCount.list", edit: "modelCount.edit", write: "modelCount.write", shell: "modelCount.shell", search: "modelCount.search", web: "modelCount.web",
+  think: "modelCount.think", read: "modelCount.read", list: "modelCount.list", edit: "modelCount.edit", write: "modelCount.write", shell: "modelCount.shell", code: "modelCount.code", search: "modelCount.search", web: "modelCount.web",
   agent: "modelCount.agent", plan: "modelCount.plan", ask: "modelCount.ask", mcp: "modelCount.mcp", paseo: "modelCount.paseo", skill: "modelCount.skill", browser: "modelCount.browser", other: "modelCount.other",
 });
 
@@ -230,6 +233,7 @@ type DetailLike = { type?: unknown; toolName?: unknown } | null | undefined;
 export function lookFor(name: string, detail: DetailLike, presentation: { category: string; label: string; icon: string }): LookKey {
   const leaf = name.trim().toLowerCase();
   const detailType = typeof detail?.type === "string" ? detail.type : "unknown";
+  if (isOmpEvalTool(name)) return "code";
   if (detailType === "shell" || detailType === "worktree_setup") return "shell";
   if (detailType === "read") return presentation.label === "List" ? "list" : "read";
   if (detailType === "edit") return presentation.label === "Add" ? "write" : "edit";

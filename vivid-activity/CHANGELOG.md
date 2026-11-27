@@ -13,6 +13,8 @@
 - Durations read `2.1s`, `1m 5s`, `1h 3m` in English. A new "Round durations to whole seconds" setting shows `2s` (`<1s` under half a second).
 - A new "Show tool names" setting (on by default): off drops the tool name (Command, Edit…) and leads with the category icon; rows with no command, file or summary keep their name.
 - Diff counts on a row header share one compact pill (`+28 −29`).
+- Thinking rows read like tool rows: "Thinking", then steps and tokens. The vivid palette shows the time in the timing column; the other palettes show no time. With tool names off, the brain tile replaces the word.
+- OMP eval rows get their own "Code" look (code icon, orange) and count in folded summaries, instead of the gray puzzle of "Other".
 
 ## 0.11.0 (2026-11-02)
 
