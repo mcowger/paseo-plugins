@@ -843,7 +843,7 @@
     "commandColors": "Command colors",
     "commandColorsHint": "Syntax colors for the shell command in a row's title (colors from the theme).",
     "showIntent": "Show OMP tool intent",
-    "showIntentHint": "Show OMP's reason for a tool call at the top of its expanded details. OMP only records it when its tools.intentTracing setting or PI_INTENT_TRACING is on.",
+    "showIntentHint": "Show OMP's reason for a tool call in place of the row header's command, file or summary. OMP only records it when its tools.intentTracing setting or PI_INTENT_TRACING is on.",
     "whenOpen": "When open",
     "alwaysColored": "Always",
     "foldConsecutiveThinkingAndTool": "Fold consecutive thinking and tool rows when finished",

@@ -537,7 +537,7 @@ export function ColorfulToolCall({
   const hasBody = !(isRunning && item.data.name === "wait" && detail?.type === "plain_text" && !detail.text?.trim()) && (Boolean(item.data.notice || item.data.pi) || toolCallHasBody(item.data.name, detail, item.data.presentation.summary));
   const showIntent = useShowIntent();
   const intent = showIntent && !item.data.notice && !item.data.pi ? item.data.intent : undefined;
-  const expandable = hasBody || Boolean(item.data.errorText) || Boolean(intent);
+  const expandable = hasBody || Boolean(item.data.errorText);
   const expanded = expandable ? baseExpanded : false;
   const [hovered, setHovered] = useState(false);
   const strength = useStrength();
@@ -595,7 +595,7 @@ export function ColorfulToolCall({
   // 下载到之前（或失败时）行头保持纯文本摘要——与运行中动画同一降级模式。只有真的需要着色才触发下载：
   // 默认配置（折叠 + 展开时着色）下，fx 不因工具行的存在而被下载。
   const commandColors = useCommandColors();
-  const wantsColor = look === "shell" && !mcp && !notice && !pi && (commandColors === "always" || expanded);
+  const wantsColor = look === "shell" && !mcp && !notice && !pi && !intent && (commandColors === "always" || expanded);
   const CommandTokens = useFx(wantsColor)?.CommandTokens;
   const commandNode =
     wantsColor && headerSummary && CommandTokens ? (
@@ -608,9 +608,10 @@ export function ColorfulToolCall({
         icon={item.data.presentation.icon}
         iconColor={categoryColor}
         title={vividTitle}
-        summary={vividSummary}
-        summaryNode={commandNode}
-        fileDisplay={headerFile ?? undefined}
+        // OMP's intent, when shown, replaces the header's context text (command, file, summary).
+        summary={intent ?? vividSummary}
+        summaryNode={intent ? null : commandNode}
+        fileDisplay={intent ? undefined : headerFile ?? undefined}
         // 0.6.0-local.5 (codex-vivid-merge-F2): the other palettes leave out the same state marks as the vivid one.
         status={headerStatus === undefined ? undefined : item.data.status}
         statusColor={statusColor}
@@ -631,7 +632,6 @@ export function ColorfulToolCall({
       {expandable && expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
           <ScrollView ref={detailScrollRef} style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} nestedScrollEnabled showsVerticalScrollIndicator onScroll={onDetailScroll} onContentSizeChange={onDetailContentSizeChange} scrollEventThrottle={16}>
-            {intent ? <Text selectable style={styles.intentText}>{intent}</Text> : null}
             {hasBody ? (
               <DetailBody data={item.data} agentId={agentId} theme={theme} palette={palette} styles={styles} follow={follow} />
             ) : null}

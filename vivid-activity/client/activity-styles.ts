@@ -217,12 +217,6 @@ export function buildActivityStyles(
         fontSize: 11,
         lineHeight: 16,
       } satisfies TextStyle,
-      intentText: {
-        color: theme.colors.foreground,
-        fontSize: 12,
-        fontWeight: "600",
-        lineHeight: 17,
-      } satisfies TextStyle,
       mutedText: {
         color: theme.colors.foregroundMuted,
         fontFamily: "monospace",

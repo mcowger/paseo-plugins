@@ -100,7 +100,7 @@ The Vivid Activity settings page offers:
 | Running animation | spinner (default), sparkle, orb, dot grid: snake, dot grid: twinkle, with live previews |
 | Code font | font family (web and desktop; fonts installed on the viewing device, falling back to the default stack), text size small / standard (default) / large / larger (11 to 16 px), line spacing compact / standard (default) / relaxed |
 | Command colors | when open (default), always — syntax colors for the shell command in a row's title |
-| OMP tool intent | on (default), off — show the tool call's reason at the top of expanded details; OMP records it only when `tools.intentTracing` or `PI_INTENT_TRACING` is on, and it also appears when a row has no other details |
+| OMP tool intent | on (default), off — show the tool call's reason in place of the row header's command, file or summary; OMP records it only when `tools.intentTracing` or `PI_INTENT_TRACING` is on |
 | Wrap diff lines | off (default, long lines scroll sideways), on |
 | Thinking rows | follow the output live (default off) with a 5–500 line window (default 20) |
 | Follow new output | per area — command output, worktree and sub-agent logs (and the other tool details), task lists, browser — on (default), off; only running rows follow |
