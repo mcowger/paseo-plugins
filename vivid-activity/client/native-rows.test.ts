@@ -181,6 +181,29 @@ describe("rows on the phone apps: long text shrinks instead of running off the r
     expect(text).toContain('"error": null');
   });
 
+  it("shows OMP intent in expanded rows, including body-less calls, and honors the setting", () => {
+    const fullTheme = { colors: { ...theme.colors, accentForeground: "#ffffff", statusSuccess: "#3fb950", statusWarning: "#d29922", statusDanger: "#f85149" } };
+    const settings = (showIntent: boolean) => ({ status: "ready", values: { expansion: { shell: "always", unknown: "always" }, showIntent, density: "compact" }, revision: 1 });
+    const withSettings = (value: unknown, draw: () => Host[]) => {
+      (globalThis as { __vividSettings?: unknown }).__vividSettings = value;
+      try { return draw(); } finally { (globalThis as { __vividSettings?: unknown }).__vividSettings = undefined; }
+    };
+    const call = (name: string, detail: unknown, metadata?: Record<string, unknown>) => ui.createToolCallData({ type: "tool_call", callId: `${name}-1`, name, status: "completed", error: null, detail, ...(metadata ? { metadata } : {}) });
+    const draw = (data: unknown, showIntent = true) => withSettings(settings(showIntent), () => render({ type: ui.ColorfulToolCall, props: { agentId: "agent", item: { kind: "colorful-tool-call", data }, theme: fullTheme, timestamp: new Date(0), layout: { compact: false, platform: "web" } } }));
+    const detailText = (nodes: Host[]) => {
+      const scroll = nodes.flatMap(nodesOf).find((node) => node.type === "ScrollView" && node.props.nestedScrollEnabled === true);
+      return scroll ? textOf(scroll) : "";
+    };
+    const shell = draw(call("bash", { type: "shell", command: "npm test", output: "ok", exitCode: 0 }, { intent: "  Run the unit tests  " }));
+    expect(detailText(shell)).toContain("Run the unit tests");
+    expect(detailText(shell).startsWith("Run the unit tests")).toBe(true);
+    const empty = draw(call("unknown", { type: "unknown", output: "" }, { intent: "Explain this call" }));
+    expect(detailText(empty)).toContain("Explain this call");
+    expect(detailText(draw(call("bash", { type: "shell", command: "npm test", output: "ok" }, { intent: "Hidden" }), false))).not.toContain("Hidden");
+    expect(ui.createToolCallData({ type: "tool_call", callId: "bad", name: "bash", status: "completed", error: null, detail: { type: "shell", command: "npm test" }, metadata: { intent: 7 } }).intent).toBeUndefined();
+    expect(ui.createToolCallData({ type: "tool_call", callId: "blank", name: "bash", status: "completed", error: null, detail: { type: "shell", command: "npm test" }, metadata: { intent: "   " } }).intent).toBeUndefined();
+  });
+
   it("renders subagent activity with inline markdown", () => {
     const palette = ui.resolveVividPalette(theme);
     const nodes = render({ type: ui.ProviderSubagentProgress, props: { palette, styles: styles(), children: [{ id: "a", title: "Scout", status: "running", activity: [{ id: "1", title: "Thinking", summary: "**Adding keyboard handlers**" }] }] } });

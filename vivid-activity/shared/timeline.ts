@@ -133,6 +133,17 @@ function unreadPiNotice(customType: string, raw: string, phase: PiNoticeReaderPh
   };
 }
 
+/** OMP's reason for a tool call (`metadata.intent`, Paseo 0.18.1+); longer text is cut. */
+export const TOOL_INTENT_CHARS = 500;
+
+export function readToolIntent(metadata: unknown): string | undefined {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return undefined;
+  const intent = Reflect.get(metadata, "intent");
+  if (typeof intent !== "string") return undefined;
+  const text = intent.trim();
+  return text ? text.slice(0, TOOL_INTENT_CHARS) : undefined;
+}
+
 export const toolCallItemDataSchema = z.object({
   // 本地补丁：带上 callId，行组件据此认出「等你批准」的那一行。
   callId: z.string().optional(),
@@ -148,6 +159,7 @@ export const toolCallItemDataSchema = z.object({
   status: z.enum(["running", "completed", "failed", "canceled"]),
   detail: z.json(),
   errorText: z.string().optional(),
+  intent: z.string().optional(),
   presentation: toolCallPresentationSchema,
 });
 
@@ -240,6 +252,7 @@ export function createToolCallData(
         ? { category: PI_LOOKS.other.category, icon: PI_LOOKS.other.icon, label: t("timelinePi.notice"), summary: PI_NOTICE_UNREAD[unread].summary }
         : resolveToolCallPresentation({ name: item.name, detail });
   const errorText = formatError(item.error);
+  const intent = readToolIntent(item.metadata);
   return {
     ...(item.callId ? { callId: item.callId, fold: toolKey(item.callId) } : {}),
     ...(notice && noticeText
@@ -271,6 +284,7 @@ export function createToolCallData(
     status: notice ? notice.status : pi ? piNoticeStatus(pi.state) : item.status,
     detail: toJsonValue(detail),
     ...(errorText ? { errorText } : {}),
+    ...(intent ? { intent } : {}),
     presentation: {
       category: presentation.category,
       icon: presentation.icon,

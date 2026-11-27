@@ -160,6 +160,11 @@ describe("activity settings", () => {
     expect(activitySettings.schema.safeParse({ commandColors: "never" }).success).toBe(false);
   });
 
+  it("shows OMP tool intent by default and preserves an explicit off setting", () => {
+    expect(activitySettings.schema.parse({}).showIntent).toBe(true);
+    expect(activitySettings.schema.parse({ showIntent: false }).showIntent).toBe(false);
+  });
+
   it("keeps the thought tail window off at 20 lines by default, clamped to 5–500", () => {
     const parsed = activitySettings.schema.parse({});
     expect(parsed.thoughtTailFollow).toBe(false);

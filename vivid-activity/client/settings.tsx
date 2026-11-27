@@ -437,6 +437,13 @@ function DiffControls({ settings }: { settings: ReadySettings }) {
           disabled={settings.saving}
           onValueChange={changeCommandColors}
         />
+        <SettingsSwitch
+          label={t("settings.showIntent")}
+          hint={t("settings.showIntentHint")}
+          value={settings.values.showIntent}
+          disabled={settings.saving}
+          onValueChange={(value) => { void settings.save({ ...settings.values, showIntent: value }, settings.revision); }}
+        />
       </SettingsCard>
     </SettingsSection>
   );

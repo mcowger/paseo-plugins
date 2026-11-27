@@ -24,6 +24,7 @@ in the Command Center — all three show the same page:
 - Running animation: spinner (default), sparkle, orb, or a dot grid as a snake or a twinkle, with live previews.
 - Code font: family (web, desktop), size, line spacing.
 - Command colors: when open (default) or always — the shell command in a row's title carries the theme's syntax colors.
+- OMP tool intent: on by default — shows OMP's reason for a tool call at the top of expanded details, including rows with no other details. OMP records it only when `tools.intentTracing` or `PI_INTENT_TRACING` is on.
 - Wrap diff lines: off by default (long diff lines scroll sideways); on wraps them to the width.
 - Thinking rows: follow the output live (default off) with a 5–500 line window (default 20); the per-row Expand all still shows everything.
 - Follow new output: one switch per area (command output, worktree and sub-agent logs, task lists, browser), on by default. While a row is still running, its open details stay at the newest output and long output shows its latest 20 lines; finished rows open at the top.

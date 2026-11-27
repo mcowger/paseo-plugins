@@ -93,7 +93,8 @@ describe("client mobile bundle compatibility", () => {
     // and formatter (shared/turn-time.ts), about 2.5 KiB, and the foldTime reads and stamp slots of the rows, the fold
     // summary and the settings schema, about 1.7 KiB.
     // Provider-subagent event retention and inline status add approximately 10 KiB.
-    expect(Buffer.byteLength(bundle)).toBeLessThanOrEqual(396 * 1024);
+    // 396 → 400 KiB for the OMP intent field (schema, metadata reader and style), about 0.4 KiB.
+    expect(Buffer.byteLength(bundle)).toBeLessThanOrEqual(400 * 1024);
     expect(bundle).toContain("function ChangeStat");
     expect(bundle).toContain("function TurnTokens");
     expect(bundle).not.toMatch(/function (?:RunningLoader|LoaderFrame|FoldChanges|sparkleStops|shiftStops)\b/);

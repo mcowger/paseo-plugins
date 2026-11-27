@@ -161,6 +161,11 @@ function useCommandColors(): "expanded" | "always" {
   return settings.status === "ready" ? settings.values.commandColors : "expanded";
 }
 
+function useShowIntent(): boolean {
+  const settings = useSettings(activitySettings);
+  return settings.status === "ready" ? settings.values.showIntent : true;
+}
+
 export function useActivityStyles(theme: Theme, palette: ActivityPalette, metrics: DensityMetrics) {
   const type = useTypography();
   return useMemo(() => buildActivityStyles(theme, palette, metrics, type), [metrics, palette, theme, type]);
@@ -530,7 +535,9 @@ export function ColorfulToolCall({
   const hasDetails = detail ? hasMeaningfulToolCallDetail(detail) : true;
   // A notice always has its explanation and state to show.
   const hasBody = !(isRunning && item.data.name === "wait" && detail?.type === "plain_text" && !detail.text?.trim()) && (Boolean(item.data.notice || item.data.pi) || toolCallHasBody(item.data.name, detail, item.data.presentation.summary));
-  const expandable = hasBody || Boolean(item.data.errorText);
+  const showIntent = useShowIntent();
+  const intent = showIntent && !item.data.notice && !item.data.pi ? item.data.intent : undefined;
+  const expandable = hasBody || Boolean(item.data.errorText) || Boolean(intent);
   const expanded = expandable ? baseExpanded : false;
   const [hovered, setHovered] = useState(false);
   const strength = useStrength();
@@ -624,6 +631,7 @@ export function ColorfulToolCall({
       {expandable && expanded ? (
         <View {...cmonoViewEscape} style={styles.details}>
           <ScrollView ref={detailScrollRef} style={styles.detailsScroll} contentContainerStyle={styles.detailsContent} nestedScrollEnabled showsVerticalScrollIndicator onScroll={onDetailScroll} onContentSizeChange={onDetailContentSizeChange} scrollEventThrottle={16}>
+            {intent ? <Text selectable style={styles.intentText}>{intent}</Text> : null}
             {hasBody ? (
               <DetailBody data={item.data} agentId={agentId} theme={theme} palette={palette} styles={styles} follow={follow} />
             ) : null}

@@ -136,6 +136,8 @@ export const activitySettings = defineSettings({
     strength: strengthSchema.default(DEFAULT_STRENGTH),
     // 0.11.0：「命令着色」行头 shell 命令的语法色（client/activity.tsx 行头段；chat-polish 同名设置）。
     commandColors: commandColorsSchema.default("expanded"),
+    // OMP 工具调用意图：默认在工具详情顶部显示；旧设置没有这一项，读出来取默认值。
+    showIntent: z.boolean().default(true),
     // 0.11.0：「思考行实时跟随」：开 = 展开后的思考框展示最新 N 行并跟随输出；关 = 头部 20 行冻结（现状）。
     thoughtTailFollow: z.boolean().default(false),
     // 0.11.0：尾窗大小（块模式=行数，步骤模式=步数）。UI 层钳制 5–500 后才保存。

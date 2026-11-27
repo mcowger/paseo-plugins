@@ -767,6 +767,8 @@
     "tailLinesInvalid": "请输入 5–500 的整数。",
     "commandColors": "命令着色",
     "commandColorsHint": "行头 shell 命令的语法着色（颜色来自主题）。",
+    "showIntent": "显示 OMP 工具意图",
+    "showIntentHint": "在工具调用展开详情的顶部显示 OMP 发起工具调用的原因。只有开启 OMP 的 tools.intentTracing 设置或 PI_INTENT_TRACING 时才会记录意图。",
     "whenOpen": "展开时",
     "alwaysColored": "始终",
     "foldConsecutiveThinkingAndTool": "完成后折叠连续的思考与工具行",
